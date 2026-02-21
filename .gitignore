@@ -23,3 +23,5 @@ NinePSharp.Messages.FSharp/bin/
 NinePSharp.Messages.FSharp/obj/
 NinePSharp.Generators/bin/
 NinePSharp.Generators/obj/
+build_errors.txt
+primary.ctx
