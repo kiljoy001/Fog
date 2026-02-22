@@ -12,6 +12,7 @@
     <Company>NinePSharp</Company>
     <Description>$(MSBuildProjectName) is part of NinePSharp, a modular 9P protocol toolkit and backend plugin ecosystem.</Description>
     <PackageTags>9p;plan9;filesystem;rpc;data-gateway</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.NUGET.md</PackageReadmeFile>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <IncludeSymbols>true</IncludeSymbols>
