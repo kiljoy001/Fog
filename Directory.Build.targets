@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup Condition="'$(IsNinePSharpPackage)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.NUGET.md" Pack="true" PackagePath="\" Link="README.NUGET.md" />
+  </ItemGroup>
+</Project>

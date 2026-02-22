@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <IsNinePSharpPackage>false</IsNinePSharpPackage>
+    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp'">true</IsNinePSharpPackage>
+    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.Abstractions'">true</IsNinePSharpPackage>
+    <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Backends.'))">true</IsNinePSharpPackage>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsNinePSharpPackage)' == 'true'">
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>NinePSharp Contributors</Authors>
+    <Company>NinePSharp</Company>
+    <Description>$(MSBuildProjectName) is part of NinePSharp, a modular 9P protocol toolkit and backend plugin ecosystem.</Description>
+    <PackageTags>9p;plan9;filesystem;rpc;data-gateway</PackageTags>
+    <PackageReadmeFile>README.NUGET.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>
