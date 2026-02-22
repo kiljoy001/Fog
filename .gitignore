@@ -25,3 +25,13 @@ NinePSharp.Generators/bin/
 NinePSharp.Generators/obj/
 build_errors.txt
 primary.ctx
+
+# Runtime/test artifacts
+*.log
+secret_*.vlt
+vaults/
+publish_out/
+
+# Local package outputs
+*.nupkg
+*.snupkg

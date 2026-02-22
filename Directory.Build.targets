@@ -1,7 +1,14 @@
 <Project>
   <ItemGroup Condition="'$(IsNinePSharpPackage)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" Link="LICENSE" />
-    <None Include="$(MSBuildThisFileDirectory)README.NUGET.md" Pack="true" PackagePath="\" Link="README.NUGET.md" />
     <None Include="$(MSBuildThisFileDirectory)THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="\" Link="THIRD_PARTY_NOTICES.md" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsNinePSharpPackage)' == 'true' and Exists('$(MSBuildProjectDirectory)/README.NUGET.md')">
+    <None Include="$(MSBuildProjectDirectory)/README.NUGET.md" Pack="true" PackagePath="\" Link="README.NUGET.md" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsNinePSharpPackage)' == 'true' and !Exists('$(MSBuildProjectDirectory)/README.NUGET.md')">
+    <None Include="$(MSBuildThisFileDirectory)README.NUGET.md" Pack="true" PackagePath="\" Link="README.NUGET.md" />
   </ItemGroup>
 </Project>
