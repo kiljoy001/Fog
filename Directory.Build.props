@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
     <IsNinePSharpPackage>false</IsNinePSharpPackage>
+    <BuildInParallel Condition="'$(BuildInParallel)' == ''">false</BuildInParallel>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.Abstractions'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Backends.'))">true</IsNinePSharpPackage>
