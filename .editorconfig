@@ -1,0 +1,29 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,fs}]
+indent_style = space
+indent_size = 4
+
+[*.cs]
+dotnet_analyzer_diagnostic.severity = none
+dotnet_diagnostic.CA2000.severity = warning
+dotnet_diagnostic.CA2016.severity = warning
+dotnet_diagnostic.CA2201.severity = warning
+
+[NinePSharp.Examples/**/*.cs]
+dotnet_analyzer_diagnostic.severity = none
+
+[NinePSharp.Tests/**/*.cs]
+dotnet_analyzer_diagnostic.severity = none
+
+[NinePSharp.Client.Tests/**/*.cs]
+dotnet_analyzer_diagnostic.severity = none
+
+[NinePSharp.Fuzzer/**/*.cs]
+dotnet_analyzer_diagnostic.severity = none

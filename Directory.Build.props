@@ -2,6 +2,9 @@
   <PropertyGroup>
     <IsNinePSharpPackage>false</IsNinePSharpPackage>
     <BuildInParallel Condition="'$(BuildInParallel)' == ''">false</BuildInParallel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.Abstractions'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Client'">true</IsNinePSharpPackage>
