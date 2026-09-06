@@ -28,6 +28,8 @@ primary.ctx
 
 # Runtime/test artifacts
 *.log
+*.pyc
+__pycache__/
 secret_*.vlt
 vaults/
 publish_out/
