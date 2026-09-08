@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsNinePSharpPackage)' == 'true'">
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.1.1</VersionPrefix>
     <Authors>NinePSharp Contributors</Authors>
     <Company>NinePSharp</Company>
     <Description>$(MSBuildProjectName) is part of NinePSharp, a modular 9P protocol toolkit and backend plugin ecosystem.</Description>
