@@ -46,6 +46,8 @@ step "unit, property, parser, backend, and client tests"
 coverage_test NinePSharp.Tests/NinePSharp.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Parser.Tests/NinePSharp.Parser.Tests.fsproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Server.Abstractions.Tests/NinePSharp.Server.Abstractions.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Namespaces.Tests/NinePSharp.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Namespaces.Orleans.Tests/NinePSharp.Namespaces.Orleans.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
 step "gate self-tests"
@@ -69,15 +71,20 @@ fi
 
 if [[ $FULL -eq 1 ]]; then
   step "mutation testing"
-  rm -rf .artifacts/stryker
+  rm -rf .artifacts/stryker .artifacts/stryker-namespaces
   (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-ci.json --reporter json --reporter progress --output ../.artifacts/stryker --skip-version-check --verbosity error)
+  (cd NinePSharp.Namespaces.Tests && dotnet stryker --config-file ../stryker-config-namespaces.json --reporter json --reporter progress --output ../.artifacts/stryker-namespaces --skip-version-check --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker --min-score "$MIN_MUTATION"
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-namespaces --min-score "$MIN_MUTATION"
 
   step "SharpFuzz/AFL parser campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh parser
 
   step "SharpFuzz/AFL filesystem campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh filesystem
+
+  step "SharpFuzz/AFL namespace campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace
 fi
 
 printf '\n\033[32mquality pipeline passed\033[0m\n'

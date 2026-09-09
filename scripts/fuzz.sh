@@ -28,8 +28,12 @@ case "$TARGET" in
     CORPUS="$ROOT/corpus/backend"
     INSTRUMENT=("NinePSharp.Server.Abstractions.dll" "NinePSharp.Server.dll" "NinePSharp.dll")
     ;;
+  namespace)
+    CORPUS="$ROOT/corpus/namespace"
+    INSTRUMENT=("NinePSharp.Namespaces.dll")
+    ;;
   *)
-    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory]" >&2
+    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory|namespace]" >&2
     exit 2
     ;;
 esac

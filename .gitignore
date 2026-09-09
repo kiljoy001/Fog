@@ -38,3 +38,6 @@ publish_out/
 # Local package outputs
 *.nupkg
 *.snupkg
+
+# Reqnroll-generated code-behind
+*.feature.cs
