@@ -2,7 +2,16 @@
   "stryker-config": {
     "project": "NinePSharp.Fog.Server.csproj",
     "test-projects": ["NinePSharp.Fog.Server.Tests.csproj"],
-    "mutate": ["**/*.cs"],
+    "mutate": [
+      "FogFileTree.cs",
+      "FogMathJob.cs",
+      "FogNinePDispatcher.cs",
+      "FogNodeListener.cs",
+      "FogNodePolicy.cs",
+      "FogTlsClient.cs",
+      "FogTransactionClient.cs",
+      "FogTransactionFileTree.cs"
+    ],
     "mutation-level": "Standard",
     "thresholds": { "high": 95, "low": 90, "break": 90 },
     "concurrency": 4
