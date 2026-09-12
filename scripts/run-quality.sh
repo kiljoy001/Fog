@@ -102,6 +102,9 @@ if [[ $FULL -eq 1 ]]; then
   step "SharpFuzz/AFL namespace campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace
 
+  step "SharpFuzz/AFL namespace syscall campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace-syscalls
+
   step "SharpFuzz/AFL Orleans gateway campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh orleans
 

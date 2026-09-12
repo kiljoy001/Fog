@@ -32,6 +32,10 @@ case "$TARGET" in
     CORPUS="$ROOT/corpus/namespace"
     INSTRUMENT=("NinePSharp.Namespaces.dll")
     ;;
+  namespace-syscalls)
+    CORPUS="$ROOT/corpus/namespace"
+    INSTRUMENT=("NinePSharp.Namespaces.dll")
+    ;;
   orleans)
     CORPUS="$ROOT/corpus/orleans"
     INSTRUMENT=("NinePSharp.Namespaces.Orleans.Server.dll" "NinePSharp.Namespaces.Orleans.dll" "NinePSharp.Namespaces.dll")
@@ -45,7 +49,7 @@ case "$TARGET" in
     INSTRUMENT=("NinePSharp.Fog.Server.dll" "NinePSharp.Fog.dll")
     ;;
   *)
-    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory|namespace|orleans|fog|fog-files]" >&2
+    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory|namespace|namespace-syscalls|orleans|fog|fog-files]" >&2
     exit 2
     ;;
 esac
