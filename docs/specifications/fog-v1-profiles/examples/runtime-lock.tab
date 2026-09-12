@@ -1,0 +1,23 @@
+schema=fogruntime-lock-v1
+	col=runtime
+	col=provider_version
+	col=profile
+	col=engine_version
+	col=source_revision
+	col=bundle_sha256
+	col=abi
+	col=meter
+	col=platform
+	col=syscalls_sha256
+
+runtime=math
+	provider_version=1.0.0
+	profile=fog-math-v1
+	engine_version=2.4.0
+	source_revision=ffffffffffffffffffffffffffffffffffffffff
+	bundle_sha256=0909090909090909090909090909090909090909090909090909090909090909
+	abi=angouri-expr-v1
+	meter=linux-process-cpu-v1
+	platform=linux-x64
+	syscalls_sha256=0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b
+

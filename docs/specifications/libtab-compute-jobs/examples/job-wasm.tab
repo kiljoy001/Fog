@@ -1,0 +1,19 @@
+schema=fogjob-v1
+	col=job
+	col=runtime
+	col=provider_version
+	col=source
+	col=fuel
+	col=memory_bytes
+	col=deadline_ms
+	col=output_bytes
+
+job=43
+	runtime=wasm
+	provider_version=1.0.0
+	source=/artifacts/example.wasm
+	fuel=1000000
+	memory_bytes=67108864
+	deadline_ms=2000
+	output_bytes=65536
+

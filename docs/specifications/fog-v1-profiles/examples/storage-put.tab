@@ -1,0 +1,27 @@
+schema=fogstoreop-v1
+	col=op
+	col=store_id
+	col=service_id
+	col=cluster_id
+	col=provider
+	col=state_name
+	col=grain_type
+	col=grain_key
+	col=expected
+	col=codec
+	col=payload_bytes
+	col=payload_sha256
+
+op=put
+	store_id=0606060606060606060606060606060606060606060606060606060606060606
+	service_id=fog
+	cluster_id=fog-1
+	provider=resources
+	state_name=fixture
+	grain_type=RXhhbXBsZQ==
+	grain_key=b25l
+	expected=absent
+	codec=fixture-empty-v1
+	payload_bytes=0
+	payload_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+

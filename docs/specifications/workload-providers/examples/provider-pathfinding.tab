@@ -1,0 +1,13 @@
+schema=fogprovider-v1
+	col=runtime
+	col=provider_version
+	col=provider_api
+	col=job_schema
+	col=isolation
+
+runtime=pathfinding
+	provider_version=1.0.0
+	provider_api=1
+	job_schema=fogjob-v1
+	isolation=process
+

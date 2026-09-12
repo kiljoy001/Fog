@@ -1,0 +1,27 @@
+schema=foghost-v1
+	col=node
+	col=boot
+	col=role
+	col=state
+	col=policy_epoch
+	col=revocation_pending
+	col=staging_jobs
+	col=queued_jobs
+	col=running_jobs
+	col=reserved_bytes
+	col=retained_bytes
+	col=error
+
+node=control-1
+	boot=0505050505050505050505050505050505050505050505050505050505050505
+	role=control
+	state=ready
+	policy_epoch=1
+	revocation_pending=false
+	staging_jobs=0
+	queued_jobs=0
+	running_jobs=0
+	reserved_bytes=0
+	retained_bytes=0
+	error=nil
+

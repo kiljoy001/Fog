@@ -1,0 +1,28 @@
+schema=fogstatus-v1
+	col=job
+	col=revision
+	col=runtime
+	col=provider_version
+	col=state
+	col=cancel_requested
+	col=finish_reason
+	col=error_code
+	col=error
+	col=result_bytes
+	col=elapsed_ms
+	col=memory_peak_bytes
+	col=p_cpu_ms_used
+	col=fuel_used
+
+job=42
+	revision=4
+	runtime=math
+	provider_version=1.0.0
+	state=succeeded
+	cancel_requested=false
+	finish_reason=completed
+	result_bytes=75
+	elapsed_ms=2
+	memory_peak_bytes=4096
+	p_cpu_ms_used=2
+

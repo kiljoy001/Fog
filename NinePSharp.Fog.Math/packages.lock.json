@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "AngouriMath": {
+        "type": "Direct",
+        "requested": "[2.4.0, 2.4.0]",
+        "resolved": "2.4.0",
+        "contentHash": "7mDLeBK9eV1eWoDYfGyW5bebWUr+RYfeGrKrfVQEyuGtzy/xa5tL5deFiCgARtEo6j3Q4ASDQa9TaAn3wTWRDg==",
+        "dependencies": {
+          "Antlr4.Runtime.Standard": "4.13.1",
+          "GenericTensor": "1.0.4",
+          "HonkSharp": "1.0.3",
+          "PeterO.Numbers": "1.8.0"
+        }
+      },
+      "StyleCop.Analyzers": {
+        "type": "Direct",
+        "requested": "[1.2.0-beta.556, )",
+        "resolved": "1.2.0-beta.556",
+        "contentHash": "llRPgmA1fhC0I0QyFLEcjvtM2239QzKr/tcnbsjArLMJxJlu0AA5G7Fft0OI30pHF3MW63Gf4aSSsjc5m82J1Q==",
+        "dependencies": {
+          "StyleCop.Analyzers.Unstable": "1.2.0.556"
+        }
+      },
+      "Antlr4.Runtime.Standard": {
+        "type": "Transitive",
+        "resolved": "4.13.1",
+        "contentHash": "Da5+i4kFHUseJRZGcBG5fmZGpA/Ns180ibrQMxgZzjpQOnENVvSL5gi5HZ8Ncz8/AR2WsKbOg2lMBzjz0HUQcA=="
+      },
+      "BouncyCastle.Cryptography": {
+        "type": "Transitive",
+        "resolved": "2.5.1",
+        "contentHash": "zy8TMeTP+1FH2NrLaNZtdRbBdq7u5MI+NFZQOBSM69u5RFkciinwzV2eveY6Kjf5MzgsYvvl6kTStsj3JrXqkg=="
+      },
+      "GenericTensor": {
+        "type": "Transitive",
+        "resolved": "1.0.4",
+        "contentHash": "sQsqRbJiwFH37OjriIKQx3VWKuRJ09s/SZdwqL0FreJbFSpbpY1UKeiP8RWsb88QcS2DgyicheyvdJ9YgLnUpQ=="
+      },
+      "HonkSharp": {
+        "type": "Transitive",
+        "resolved": "1.0.3",
+        "contentHash": "nV2VQhjXCuF7UC730/Pmb+CLfsdZad2J1JCNqlVCHjgBbn41LWODrJv5LDQPUKYIjZJC66pR9rSmSmyalKF7fA=="
+      },
+      "LibTab": {
+        "type": "Transitive",
+        "resolved": "0.1.0",
+        "contentHash": "omJKOZkD8dqlnOfmNmGyffc7tqLhAmUxEzR+YqwSXwj3QtbJ8ZCFBB3ETU1V4s6+uV4Mx8A7NS/jUuTBfQb74Q==",
+        "dependencies": {
+          "BouncyCastle.Cryptography": "2.5.1"
+        }
+      },
+      "PeterO.Numbers": {
+        "type": "Transitive",
+        "resolved": "1.8.0",
+        "contentHash": "N8ffDC+jwF1XcA+VfugZO1+wFClOvWjyXzXrstkpdjkgH2LgAfnEZIAFQbKgidHtTh5RAfwhCtH3MSfgZXxXwA=="
+      },
+      "StyleCop.Analyzers.Unstable": {
+        "type": "Transitive",
+        "resolved": "1.2.0.556",
+        "contentHash": "zvn9Mqs/ox/83cpYPignI8hJEM2A93s2HkHs8HYMOAQW0PkampyoErAiIyKxgTLqbbad29HX/shv/6LGSjPJNQ=="
+      },
+      "ninepsharp.fog": {
+        "type": "Project",
+        "dependencies": {
+          "LibTab": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

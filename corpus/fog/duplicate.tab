@@ -1,0 +1,10 @@
+schema=fixture-v1
+	col=id
+	col=value
+
+id=one
+	value=hello
+
+id=one
+	value=changed
+

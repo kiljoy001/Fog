@@ -1,0 +1,13 @@
+schema=fognodes-v1
+	col=node
+	col=endpoint
+	col=tls_name
+	col=spki_sha256
+	col=role
+
+node=control-1
+	endpoint=tcp!127.0.0.1!5640
+	tls_name=control.example.invalid
+	spki_sha256=0404040404040404040404040404040404040404040404040404040404040404
+	role=control
+

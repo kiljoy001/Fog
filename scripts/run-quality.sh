@@ -48,6 +48,8 @@ coverage_test NinePSharp.Parser.Tests/NinePSharp.Parser.Tests.fsproj json "$ROOT
 coverage_test NinePSharp.Server.Abstractions.Tests/NinePSharp.Server.Abstractions.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Namespaces.Tests/NinePSharp.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Namespaces.Orleans.Tests/NinePSharp.Namespaces.Orleans.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Fog.Tests/NinePSharp.Fog.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Fog.Server.Tests/NinePSharp.Fog.Server.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
 step "gate self-tests"
@@ -71,11 +73,25 @@ fi
 
 if [[ $FULL -eq 1 ]]; then
   step "mutation testing"
-  rm -rf .artifacts/stryker .artifacts/stryker-namespaces
-  (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-ci.json --reporter json --reporter progress --output ../.artifacts/stryker --skip-version-check --verbosity error)
-  (cd NinePSharp.Namespaces.Tests && dotnet stryker --config-file ../stryker-config-namespaces.json --reporter json --reporter progress --output ../.artifacts/stryker-namespaces --skip-version-check --verbosity error)
+  rm -rf .artifacts/stryker .artifacts/stryker-namespaces .artifacts/stryker-orleans .artifacts/stryker-orleans-server .artifacts/stryker-transport
+  (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-ci.json --reporter json --reporter progress --output ../.artifacts/stryker --skip-version-check --break-on-initial-test-failure --verbosity error)
+  (cd NinePSharp.Namespaces.Tests && dotnet stryker --config-file ../stryker-config-namespaces.json --reporter json --reporter progress --output ../.artifacts/stryker-namespaces --skip-version-check --break-on-initial-test-failure --verbosity error)
+  (cd NinePSharp.Namespaces.Orleans.Tests && dotnet stryker --config-file ../stryker-config-orleans.json --reporter json --reporter progress --output ../.artifacts/stryker-orleans --skip-version-check --break-on-initial-test-failure --verbosity error)
+  (cd NinePSharp.Namespaces.Orleans.Tests && dotnet stryker --config-file ../stryker-config-orleans-server.json --reporter json --reporter progress --output ../.artifacts/stryker-orleans-server --skip-version-check --break-on-initial-test-failure --verbosity error)
+  (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-transport.json --reporter json --reporter progress --output ../.artifacts/stryker-transport --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker --min-score "$MIN_MUTATION"
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-namespaces --min-score "$MIN_MUTATION"
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-orleans --min-score "$MIN_MUTATION"
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-orleans-server --min-score "$MIN_MUTATION"
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-transport --min-score "$MIN_MUTATION"
+
+  (cd NinePSharp.Fog.Tests && dotnet stryker --config-file ../stryker-config-fog.json --reporter json --reporter progress --output ../.artifacts/stryker-fog --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog --min-score "$MIN_MUTATION"
+
+  (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-fog-server.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-server --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-server --min-score "$MIN_MUTATION"
+  (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-control-client.json --reporter json --reporter progress --output ../.artifacts/stryker-control-client --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-control-client --min-score "$MIN_MUTATION"
 
   step "SharpFuzz/AFL parser campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh parser
@@ -85,6 +101,15 @@ if [[ $FULL -eq 1 ]]; then
 
   step "SharpFuzz/AFL namespace campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace
+
+  step "SharpFuzz/AFL Orleans gateway campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh orleans
+
+  step "SharpFuzz/AFL fog record and transaction campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog
+
+  step "SharpFuzz/AFL fog control-fid campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog-files
 fi
 
 printf '\n\033[32mquality pipeline passed\033[0m\n'

@@ -1,0 +1,7 @@
+schema=fogmath-result-v1
+	col=kind
+	col=value
+
+kind=expression
+	value=5/6
+

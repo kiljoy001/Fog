@@ -1,0 +1,19 @@
+schema=fogmemberop-v1
+	col=op
+	col=service_id
+	col=cluster_id
+	col=control_boot
+	col=try_init
+	col=ip
+	col=port
+	col=generation
+	col=table_version
+	col=table_etag
+	col=row_etag
+	col=before_ticks
+
+op=read-all
+	service_id=fog
+	cluster_id=fog-1
+	control_boot=0101010101010101010101010101010101010101010101010101010101010101
+

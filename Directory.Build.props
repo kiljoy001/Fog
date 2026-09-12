@@ -9,6 +9,9 @@
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Parser'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.Abstractions'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Client'">true</IsNinePSharpPackage>
+    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server'">true</IsNinePSharpPackage>
+    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Core.FSharp'">true</IsNinePSharpPackage>
+    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.FSharp'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Namespaces'))">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Backends.'))">true</IsNinePSharpPackage>
   </PropertyGroup>

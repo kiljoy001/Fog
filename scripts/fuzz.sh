@@ -10,13 +10,13 @@ OUT="$ROOT/.artifacts/fuzz/bin/$TARGET"
 FUZZ_SECONDS="${FUZZ_SECONDS:-10}"
 
 if ! command -v sharpfuzz >/dev/null 2>&1; then
-  echo "SKIP: sharpfuzz is not on PATH"
-  exit 0
+  echo "ERROR: sharpfuzz is not on PATH" >&2
+  exit 1
 fi
 
 if ! command -v afl-fuzz >/dev/null 2>&1; then
-  echo "SKIP: afl-fuzz is not on PATH"
-  exit 0
+  echo "ERROR: afl-fuzz is not on PATH" >&2
+  exit 1
 fi
 
 case "$TARGET" in
@@ -32,15 +32,27 @@ case "$TARGET" in
     CORPUS="$ROOT/corpus/namespace"
     INSTRUMENT=("NinePSharp.Namespaces.dll")
     ;;
+  orleans)
+    CORPUS="$ROOT/corpus/orleans"
+    INSTRUMENT=("NinePSharp.Namespaces.Orleans.Server.dll" "NinePSharp.Namespaces.Orleans.dll" "NinePSharp.Namespaces.dll")
+    ;;
+  fog)
+    CORPUS="$ROOT/corpus/fog"
+    INSTRUMENT=("NinePSharp.Fog.dll")
+    ;;
+  fog-files)
+    CORPUS="$ROOT/corpus/fog"
+    INSTRUMENT=("NinePSharp.Fog.Server.dll" "NinePSharp.Fog.dll")
+    ;;
   *)
-    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory|namespace]" >&2
+    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory|namespace|orleans|fog|fog-files]" >&2
     exit 2
     ;;
 esac
 
 if [ ! -d "$CORPUS" ] || [ -z "$(find "$CORPUS" -maxdepth 1 -type f -print -quit)" ]; then
-  echo "SKIP: no seed corpus files in $CORPUS"
-  exit 0
+  echo "ERROR: no seed corpus files in $CORPUS" >&2
+  exit 1
 fi
 
 echo "building fuzz target: $TARGET"
@@ -48,10 +60,8 @@ rm -rf "$OUT"
 dotnet publish "$PROJECT/NinePSharp.Fuzzer.csproj" -c Release -o "$OUT"
 
 for assembly in "${INSTRUMENT[@]}"; do
-  if [ -f "$OUT/$assembly" ]; then
-    echo "instrumenting $assembly"
-    sharpfuzz "$OUT/$assembly"
-  fi
+  echo "instrumenting $assembly"
+  sharpfuzz "$OUT/$assembly"
 done
 
 RUN_ID="${TARGET}-$(date +%Y%m%d%H%M%S)-$$"
@@ -84,6 +94,14 @@ if [ -f "$STATS" ]; then
   corpus=$(stat_value corpus_count)
   execs=$(stat_value execs_done)
   echo "afl-fuzz stats: corpus=${corpus:-?} execs=${execs:-?} crashes=${crashes:-?} hangs=${hangs:-?}"
+  if [[ "${execs:-0}" -eq 0 || "${crashes:-0}" -ne 0 || "${hangs:-0}" -ne 0 ]]; then
+    echo "ERROR: fuzz campaign must execute inputs without crashes or hangs" >&2
+    exit 1
+  fi
+else
+  tail -n 80 "$LOG" >&2
+  echo "ERROR: fuzz campaign produced no statistics" >&2
+  exit 1
 fi
 
 echo "afl-fuzz log: $LOG"

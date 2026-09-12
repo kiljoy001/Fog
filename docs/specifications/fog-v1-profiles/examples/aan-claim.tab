@@ -1,0 +1,35 @@
+schema=fogaan-v1
+	col=profile
+	col=action
+	col=server
+	col=server_boot
+	col=authdom
+	col=owner_kind
+	col=owner
+	col=key_id
+	col=logical_aname
+	col=session
+	col=base_generation
+	col=carrier
+	col=nonce
+	col=server_cert_sha256
+	col=policy_epoch
+	col=ttl_ms
+
+profile=fog-aan-v1
+	action=resume
+	server=control-1
+	server_boot=0101010101010101010101010101010101010101010101010101010101010101
+	authdom=local-fog
+	owner_kind=user
+	owner=alice
+	key_id=alice-1
+	logical_aname=fog
+	session=0202020202020202020202020202020202020202020202020202020202020202
+	base_generation=2
+	carrier=0303030303030303030303030303030303030303030303030303030303030303
+	nonce=0404040404040404040404040404040404040404040404040404040404040404
+	server_cert_sha256=0505050505050505050505050505050505050505050505050505050505050505
+	policy_epoch=1
+	ttl_ms=30000
+
