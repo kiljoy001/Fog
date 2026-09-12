@@ -1,10 +1,12 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 
 namespace NinePSharp.Fog.Server;
 
 /// <summary>Experimental direct-worker isolation using transient user services and bubblewrap.</summary>
+[ExcludeFromCodeCoverage(Justification = "Requires host systemd, bubblewrap, and cgroups; exercised by the opt-in Linux worker integration test.")]
 public sealed class LinuxMathRunner : IFogMathRunner
 {
     private readonly string bundle;
