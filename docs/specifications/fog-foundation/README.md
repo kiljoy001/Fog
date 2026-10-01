@@ -69,8 +69,13 @@ The normative feature files are `Authentication.feature`,
 `FoundationIntegration.feature`. Stable scenario IDs start with `@FOG_`.
 `ResourceAuthorization.feature` (`@NS_AUTHZ_`) specifies the resource authorization
 layer, implemented in `NinePSharp.Namespaces.Authorization` with executable bindings in
-its test project. `NamespaceViews.feature` (`@FOG_VIEW_`) specifies per-principal Fog
-views; it has no bindings yet.
+its test project. `NamespaceViews.feature` (`@FOG_VIEW_`) specifies the shared-root
+namespace export, implemented in `NinePSharp.Fog.Namespaces` with executable bindings in its
+test project. `Applications.feature` (`@FOG_APP_`, install by writing a module to
+`/bin/{app}`) and `RemoteNames.feature` (`@FOG_NAME_`, `/n/{name}` over DNS or Emercoin) are
+design only. The layout follows Plan 9 namespace(4): `/mnt/{app}` for running applications,
+`/bin/{app}` for their modules and `/n/{name}` for remote hosts; there are no per-principal
+mount profiles.
 
 [Examples](examples) illustrate canonical challenge, node configuration and host
 status documents. Their repeated-byte nonces and certificate/key digests are

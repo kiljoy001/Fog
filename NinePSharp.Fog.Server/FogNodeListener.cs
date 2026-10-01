@@ -27,7 +27,7 @@ public sealed class FogNodeListener : IAsyncDisposable
     private Task? disposal;
 
     public FogNodeListener(IPEndPoint endpoint, X509Certificate2 certificate, FogNodePolicy policy,
-        FogNinePDispatcher dispatcher, ILogger logger, int maximumConnections, TimeSpan handshakeTimeout, TimeSpan sessionLifetime)
+        INinePFSDispatcher dispatcher, ILogger logger, int maximumConnections, TimeSpan handshakeTimeout, TimeSpan sessionLifetime)
     {
         ArgumentNullException.ThrowIfNull(certificate);
         if (!certificate.HasPrivateKey || maximumConnections <= 0 || handshakeTimeout <= TimeSpan.Zero || sessionLifetime <= TimeSpan.Zero)

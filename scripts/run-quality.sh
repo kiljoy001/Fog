@@ -51,6 +51,7 @@ coverage_test NinePSharp.Namespaces.Orleans.Tests/NinePSharp.Namespaces.Orleans.
 coverage_test NinePSharp.Namespaces.Authorization.Tests/NinePSharp.Namespaces.Authorization.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Tests/NinePSharp.Fog.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Server.Tests/NinePSharp.Fog.Server.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Fog.Namespaces.Tests/NinePSharp.Fog.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
 step "gate self-tests"
@@ -95,6 +96,9 @@ if [[ $FULL -eq 1 ]]; then
 
   (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-fog-server.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-server --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-server --min-score "$MIN_MUTATION"
+  rm -rf .artifacts/stryker-fog-namespaces
+  (cd NinePSharp.Fog.Namespaces.Tests && dotnet stryker --config-file ../stryker-config-fog-namespaces.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-namespaces --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-namespaces --min-score "$MIN_MUTATION"
   (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-control-client.json --reporter json --reporter progress --output ../.artifacts/stryker-control-client --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-control-client --min-score "$MIN_MUTATION"
 
