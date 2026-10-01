@@ -96,7 +96,8 @@ public sealed class DispatcherLifecycleTests
             var flush = Send(NinePMessage.NewMsgTflush(new Tflush(102, 100)));
             await cancelled.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
             Assert.False(flush.IsCompleted);
-            Error("busy", await Send(NinePMessage.NewMsgTflush(new Tflush(103, 100))));
+            // Bounded: a second admitted flush would wait on the blocked write instead of failing.
+            Error("busy", await Send(NinePMessage.NewMsgTflush(new Tflush(103, 100))).WaitAsync(TimeSpan.FromMilliseconds(250)));
             finish.SetResult(1);
             Assert.Equal(1U, Assert.IsType<Rwrite>(await write.WaitAsync(TimeSpan.FromMilliseconds(250))).Count);
             Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromMilliseconds(250)));
@@ -371,6 +372,59 @@ public sealed class DispatcherLifecycleTests
         fixture.Time.Advance(fixture.Limits.SessionLifetime);
         Error("denied", await Send(NinePMessage.NewMsgTstat(new Tstat(9, 1))));
         Error("denied", await Send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000"))));
+        await dispatcher.CloseSessionAsync("probe");
+    }
+
+    [Fact]
+    public async Task UnsupportedRequestsAreDeniedWithTheirTagAndLeaveTheFidUsable()
+    {
+        using var fixture = new ControlFixture();
+        int opens = 0;
+        var tree = new ProbeTree { OnOpen = () => { opens++; return new(); } };
+        var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits, fixture.Time);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        await Initialize(Send);
+        var stat = new Stat(0, 0, 0, new Qid(QidType.QTFILE, 0, 2), 0, 0, 0, 0, "renamed", "fog", "fog", "fog");
+        foreach (var (tag, message) in new (ushort, NinePMessage)[]
+        {
+            (20, NinePMessage.NewMsgTauth(new Tauth(20, 1, "worker", "runtime"))),
+            (21, NinePMessage.NewMsgTcreate(new Tcreate(21, 1, "created", 0x1A4, NinePConstants.OWRITE))),
+            (22, NinePMessage.NewMsgTwstat(new Twstat(22, 1, stat))),
+            (23, NinePMessage.NewMsgTremove(new Tremove(23, 1))),
+        })
+        {
+            var error = Assert.IsType<Rerror>(await Send(message));
+            Assert.Equal(("denied", tag), (error.Ename, error.Tag));
+        }
+
+        Assert.Equal(0, opens);
+        Assert.Equal("/", Assert.IsType<Rstat>(await Send(NinePMessage.NewMsgTstat(new Tstat(24, 1)))).Stat.Name);
+        await dispatcher.CloseSessionAsync("probe");
+    }
+
+    [Fact]
+    public async Task StatReportsTheOpenedSnapshotLengthAndClunkReleasesAnUnopenedFid()
+    {
+        using var fixture = new ControlFixture();
+        var tree = new ProbeTree();
+        var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits, fixture.Time);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        ulong Length(object reply) => Assert.IsType<Rstat>(reply).Stat.Length;
+        await Initialize(Send);
+        Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"]))));
+        Assert.Equal(0UL, Length(await Send(NinePMessage.NewMsgTstat(new Tstat(3, 2)))));
+        Assert.IsType<Rclunk>(await Send(NinePMessage.NewMsgTclunk(new Tclunk(4, 2))));
+        Error("invalid-request", await Send(NinePMessage.NewMsgTstat(new Tstat(5, 2))));
+
+        tree.OnOpen = () => new(write: (_, bytes, _) => Task.FromResult((uint)bytes.Length));
+        Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(6, 1, 3, ["file"]))));
+        Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(7, 3, NinePConstants.OWRITE))));
+        Assert.Equal(0UL, Length(await Send(NinePMessage.NewMsgTstat(new Tstat(8, 3)))));
+
+        tree.OnOpen = () => new([1, 2, 3, 4, 5]);
+        Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(9, 1, 4, ["file"]))));
+        Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(10, 4, NinePConstants.OREAD))));
+        Assert.Equal(5UL, Length(await Send(NinePMessage.NewMsgTstat(new Tstat(11, 4)))));
         await dispatcher.CloseSessionAsync("probe");
     }
 

@@ -359,33 +359,14 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
     private static Stat MakeStat(FogFileNode node, ulong length = 0) => new(0, 0, 0, Qid(node),
         node.Directory ? 0x80000000U | 0x140U : 0x180U, 0, 0, length, node.Name, "fog", "fog", "fog", NinePDialect.NineP2000);
 
-    private static ISerializable? Payload(NinePMessage message)
-        => SessionPayload(message) ?? FilePayload(message);
-
-    private static ISerializable? SessionPayload(NinePMessage message)
-        => message switch
-        {
-            NinePMessage.MsgTversion m => m.Item,
-            NinePMessage.MsgTauth m => m.Item,
-            NinePMessage.MsgTattach m => m.Item,
-            NinePMessage.MsgTflush m => m.Item,
-            NinePMessage.MsgTwalk m => m.Item,
-            NinePMessage.MsgTopen m => m.Item,
-            _ => null,
-        };
-
-    private static ISerializable? FilePayload(NinePMessage message)
-        => message switch
-        {
-            NinePMessage.MsgTcreate m => m.Item,
-            NinePMessage.MsgTread m => m.Item,
-            NinePMessage.MsgTwrite m => m.Item,
-            NinePMessage.MsgTclunk m => m.Item,
-            NinePMessage.MsgTremove m => m.Item,
-            NinePMessage.MsgTstat m => m.Item,
-            NinePMessage.MsgTwstat m => m.Item,
-            _ => null,
-        };
+    private static ISerializable? Payload(NinePMessage message) => message switch
+    {
+        NinePMessage.MsgTversion m => m.Item, NinePMessage.MsgTauth m => m.Item, NinePMessage.MsgTattach m => m.Item,
+        NinePMessage.MsgTflush m => m.Item, NinePMessage.MsgTwalk m => m.Item, NinePMessage.MsgTopen m => m.Item,
+        NinePMessage.MsgTcreate m => m.Item, NinePMessage.MsgTread m => m.Item, NinePMessage.MsgTwrite m => m.Item,
+        NinePMessage.MsgTclunk m => m.Item, NinePMessage.MsgTremove m => m.Item, NinePMessage.MsgTstat m => m.Item,
+        NinePMessage.MsgTwstat m => m.Item, _ => null,
+    };
 
     private sealed class Session(long created)
     {

@@ -26,7 +26,7 @@ public static class FogTlsClient
         {
             await connection.ConnectAsync(endpoint.Address, endpoint.Port, cancellationToken);
             var tls = new SslStream(connection.GetStream(), false, (_, peer, _, _) =>
-                peer is X509Certificate2 supplied && ValidateServerCertificate(supplied, tlsName, serverSpkiSha256, DateTime.UtcNow));
+                AcceptServerCertificate(peer, tlsName, serverSpkiSha256, DateTime.UtcNow));
             await tls.AuthenticateAsClientAsync(CreateAuthenticationOptions(tlsName, nodeCertificate), cancellationToken);
             // TcpClient.GetStream owns its socket; SslStream owns that NetworkStream.
             return tls;
@@ -39,6 +39,10 @@ public static class FogTlsClient
     }
 
     internal static TcpClient CreateConnection(AddressFamily addressFamily) => new(addressFamily) { NoDelay = true };
+
+    /// <summary>A server that presents no certificate, or a non-X509 one, is never accepted.</summary>
+    internal static bool AcceptServerCertificate(X509Certificate? peer, string tlsName, string serverSpkiSha256, DateTime now) =>
+        peer is X509Certificate2 supplied && ValidateServerCertificate(supplied, tlsName, serverSpkiSha256, now);
 
     internal static bool ValidateServerCertificate(X509Certificate2 supplied, string tlsName, string serverSpkiSha256, DateTime now) =>
         supplied.MatchesHostname(tlsName, allowWildcards: false, allowCommonName: false) &&

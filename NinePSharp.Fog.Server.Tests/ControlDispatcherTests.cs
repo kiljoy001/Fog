@@ -154,6 +154,43 @@ public sealed class ControlDispatcherTests
         Assert.IsType<Rerror>(await fixture.Send(NinePMessage.NewMsgTversion(new Tversion(65535, 4096, "9P2000"))));
     }
 
+    // Version, attach fid 1, then clone one transaction: random suffixes start from a live session, not from not-ready.
+    private static readonly byte[] LiveSession = [0, 0, 2, 0, 3, 1, 0, 0, 0, 4, 1, 2, 3, 2, 3, 4, 5, 2, 0, 6, 2, 0, 4, 8, 2];
+
+    [Property(MaxTest = 300)]
+    public void GeneratedRequestSequencesAgreeWithTheSessionModel(byte[] commands) => NinePSharp.Fuzzer.FogDispatcherFuzz.Run(commands);
+
+    [Property(MaxTest = 500)]
+    public void GeneratedRequestsInALiveSessionAgreeWithTheSessionModel(byte[] commands)
+        => NinePSharp.Fuzzer.FogDispatcherFuzz.Run([.. LiveSession, .. commands]);
+
+    [Property(MaxTest = 100)]
+    public void GeneratedUploadsCommitOnceThroughTheControlFiles(byte[] input) => NinePSharp.Fuzzer.FogFileFuzz.Run(input);
+
+    [Fact]
+    public void DispatcherFuzzSeedsReachCommitsEffectsAndRejections()
+    {
+        string corpus = Path.Combine(RepositoryRoot(), "corpus", "fog-dispatcher");
+        var (commits, effects) = NinePSharp.Fuzzer.FogDispatcherFuzz.Execute(File.ReadAllBytes(Path.Combine(corpus, "session.bin")));
+        Assert.Equal((2, 1), (commits, effects));
+        foreach (string seed in Directory.GetFiles(corpus))
+        {
+            using var stream = File.OpenRead(seed);
+            NinePSharp.Fuzzer.FogDispatcherFuzz.Run(stream);
+        }
+
+        NinePSharp.Fuzzer.FogDispatcherFuzz.Run(new byte[8192]);
+        NinePSharp.Fuzzer.FogFileFuzz.Run([0]);
+        NinePSharp.Fuzzer.FogFileFuzz.Run([1, 2, 3, 4]);
+    }
+
+    private static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "NinePSharp.sln"))) return directory.FullName;
+        throw new DirectoryNotFoundException("NinePSharp.sln");
+    }
+
     [Property(MaxTest = 100)]
     public bool GeneratedPayloadFragmentsHaveOneWireCommitEffect(byte[] input, byte stride)
     {

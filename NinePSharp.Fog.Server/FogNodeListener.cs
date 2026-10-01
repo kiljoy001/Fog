@@ -74,7 +74,8 @@ public sealed class FogNodeListener : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) when (stopping.IsCancellationRequested) { }
-        catch (ObjectDisposedException) when (stopping.IsCancellationRequested) { }
+        // Disposal between accepts: a stopped TcpListener rejects the next accept before observing the token.
+        catch (InvalidOperationException) when (stopping.IsCancellationRequested) { }
     }
 
     private async Task ServeAsync(TcpClient client, TaskCompletionSource finished)
@@ -119,10 +120,12 @@ public sealed class FogNodeListener : IAsyncDisposable
 
     private async Task DisposeCoreAsync()
     {
-        var active = connections.ToArray();
         await stopping.CancelAsync();
         listener.Stop();
-        await Task.WhenAll(active.Select(connection => connection.Value));
+        // The accept loop must end before the snapshot: a client accepted during disposal is still awaited,
+        // and the loop never reads the token of a disposed source.
+        if (accepting is not null) await accepting;
+        await Task.WhenAll(connections.Values);
         stopping.Dispose();
     }
 

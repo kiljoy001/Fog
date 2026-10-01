@@ -114,6 +114,9 @@ if [[ $FULL -eq 1 ]]; then
 
   step "SharpFuzz/AFL fog control-fid campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog-files
+
+  step "SharpFuzz/AFL fog dispatcher session campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog-dispatcher
 fi
 
 printf '\n\033[32mquality pipeline passed\033[0m\n'

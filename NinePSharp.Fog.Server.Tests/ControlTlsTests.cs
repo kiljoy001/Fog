@@ -30,6 +30,9 @@ public sealed class ControlTlsTests
         Assert.False(FogTlsClient.ValidateServerCertificate(fixture.ServerCertificate, "control.test", pin, last));
         Assert.False(FogTlsClient.ValidateServerCertificate(fixture.ServerCertificate, "wrong.test", pin, first));
         Assert.False(FogTlsClient.ValidateServerCertificate(fixture.ServerCertificate, "control.test", new string('0', 64), first));
+        Assert.True(FogTlsClient.AcceptServerCertificate(fixture.ServerCertificate, "control.test", pin, first));
+        Assert.False(FogTlsClient.AcceptServerCertificate(fixture.ServerCertificate, "control.test", pin, last));
+        Assert.False(FogTlsClient.AcceptServerCertificate(null, "control.test", pin, first));
 
         SslClientAuthenticationOptions options = FogTlsClient.CreateAuthenticationOptions("control.test", fixture.NodeCertificate);
         Assert.Equal("control.test", options.TargetHost);
@@ -51,6 +54,24 @@ public sealed class ControlTlsTests
             ("control.test", pin, publicOnly) })
             Assert.Equal("Invalid pinned TLS client configuration.", (await Assert.ThrowsAsync<ArgumentException>(() =>
                 FogTlsClient.ConnectAsync(endpoint, invalid.Item1, invalid.Item2, invalid.Item3, CancellationToken.None))).Message);
+    }
+
+    [Fact]
+    public async Task DisposingTheReturnedStreamClosesItsSocket()
+    {
+        using var fixture = new ControlFixture();
+        await using var listener = fixture.Listen();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        TcpClient? created = null;
+        var tls = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate),
+            fixture.NodeCertificate, timeout.Token, family => created = FogTlsClient.CreateConnection(family));
+        Assert.NotNull(created);
+        Socket socket = created.Client;
+        Assert.True(socket.Connected);
+
+        // The caller owns only the SslStream; disposing it must release the TCP connection as well.
+        await tls.DisposeAsync();
+        Assert.Throws<ObjectDisposedException>(() => socket.Available);
     }
 
     [Fact]
