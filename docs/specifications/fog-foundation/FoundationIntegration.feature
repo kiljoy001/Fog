@@ -6,8 +6,8 @@ Feature: Foundation evidence exercises actual boundaries
   Scenario: An authenticated user submits bounded work on a second node
     Given a real control silo, a real worker silo and the configured 9P membership service
     And an independently running custom factotum with an enrolled test key
-    And an installed real AngouriMath provider forced onto the worker node
-    When its client authenticates and submits a finite AngouriMath job through the normal job files
+    And an installed real WASM provider forced onto the worker node
+    When its client authenticates and submits a finite WASM job through the normal job files
     Then the worker executes the pinned program and returns the expected result
     And the user's private key remains local to factotum
     And the recorded remote service traffic is entirely 9P inside validated TLS
@@ -21,7 +21,6 @@ Feature: Foundation evidence exercises actual boundaries
 
     Examples:
       | runtime |
-      | math    |
       | wasm    |
 
   @FOG_I03 @security

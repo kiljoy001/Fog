@@ -10,14 +10,14 @@ schema=fogruntime-lock-v1
 	col=platform
 	col=syscalls_sha256
 
-runtime=math
-	provider_version=1.0.0
-	profile=fog-math-v1
-	engine_version=2.4.0
-	source_revision=ffffffffffffffffffffffffffffffffffffffff
+runtime=wasm
+	provider_version=2.0.0
+	profile=fog-wasi-namespace-v1
+	engine_version=source-70c46c0
+	source_revision=70c46c0ee78abbdca92490a1881fe509605c5c3d
 	bundle_sha256=0909090909090909090909090909090909090909090909090909090909090909
-	abi=angouri-expr-v1
-	meter=linux-process-cpu-v1
+	abi=wasip1-namespace-v1
+	meter=fog-host-io-v1
 	platform=linux-x64
 	syscalls_sha256=0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b
 

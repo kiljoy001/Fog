@@ -34,7 +34,6 @@ Feature: A compute job is a collection of ordinary 9P files
 
     Examples:
       | runtime |
-      | math    |
       | wasm    |
 
   @JOB_F04 @fuzz

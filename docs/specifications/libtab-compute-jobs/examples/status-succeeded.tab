@@ -12,17 +12,19 @@ schema=fogstatus-v1
 	col=elapsed_ms
 	col=memory_peak_bytes
 	col=p_cpu_ms_used
-	col=fuel_used
+	col=p_host_calls_used
+	col=p_io_bytes_requested
 
 job=42
 	revision=4
-	runtime=math
-	provider_version=1.0.0
+	runtime=wasm
+	provider_version=2.0.0
 	state=succeeded
 	cancel_requested=false
 	finish_reason=completed
 	result_bytes=75
 	elapsed_ms=2
 	memory_peak_bytes=4096
-	p_cpu_ms_used=2
+	p_host_calls_used=2
+	p_io_bytes_requested=75
 

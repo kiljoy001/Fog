@@ -16,7 +16,7 @@ public sealed class FogBoundaryTests
             () => { effects++; return Task.CompletedTask; });
         FogTransactionTests.Error("snapshot-limit", () => store.CommitAsync("alice", id, _ => Plan(33)));
         Assert.Equal(0, effects);
-        await store.CommitAsync("alice", id, _ => Plan(32));
+        await FogTransactionTests.Bounded(store.CommitAsync("alice", id, _ => Plan(32)));
         Assert.Equal(1, effects);
         Assert.Equal(32, store.ReadOutput("alice", id, "extra", 0, 64).Length);
         Assert.Equal(16, store.ReadOutput("alice", id, "reply", 16, uint.MaxValue).Length);

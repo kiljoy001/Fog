@@ -18,15 +18,10 @@ services, workload execution or process containment.
   fragmented IO, lost commit/release replies and asynchronous caller contexts.
 - All **30 specification feature files** parse with Gherkin 29.0.0. This is a
   syntax check, not execution of their proposed acceptance scenarios.
-- The revised `job-math`, `math-result`, `status-succeeded` and `runtime-lock`
-  examples parse and reserialize byte-for-byte through `FogRecordSchema` and the
-  actual LibTab dependency. The status fixture's missing final record separator
-  was corrected.
-
-The AngouriMath substitution is a specification/example change. There was no
-implemented Lisp evaluator to migrate. No installed AngouriMath runner or real
-math-job execution is claimed; the provider and containment integrations remain
-future work under `fog-math-v1`.
+The symbolic-math runtime and examples referenced by the former demo have been
+removed. These dated results are historical; current validation uses the namespace
+and generic transaction tests. The current mutation target is 100%, so the older
+90% results below do not satisfy the current gate.
 
 ## Mutation evidence
 

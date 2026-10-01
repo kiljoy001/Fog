@@ -7,7 +7,10 @@ namespace NinePSharp.Fog;
 /// <summary>Closed, plain-cell LibTab schema for fog control records; never performs file IO.</summary>
 public sealed class FogRecordSchema
 {
-    private static readonly UTF8Encoding Utf8 = new(false, true);
+    private static readonly Encoding Utf8 = Encoding.GetEncoding(
+        Encoding.UTF8.CodePage,
+        EncoderFallback.ExceptionFallback,
+        DecoderFallback.ExceptionFallback);
     private readonly string name;
     private readonly string[] columns;
     private readonly string[] required;
@@ -28,7 +31,9 @@ public sealed class FogRecordSchema
 
         this.name = name;
         this.columns = (string[])columns.Clone();
-        this.required = required.Concat(keys).Append(columns[0]).Distinct(StringComparer.Ordinal).ToArray();
+        var requiredColumns = new HashSet<string>(required, StringComparer.Ordinal);
+        requiredColumns.UnionWith(keys);
+        this.required = requiredColumns.ToArray();
         this.keys = (string[])keys.Clone();
         header = NewTable().Serialize();
     }
@@ -148,20 +153,18 @@ public sealed class FogRecordSchema
 
     private void Preflight(string text, int maxRows)
     {
-        if (!text.StartsWith(header, StringComparison.Ordinal) || !text.EndsWith("\n\n", StringComparison.Ordinal) ||
-            text.Contains('\r') || text.Contains('\0'))
+        if (!text.StartsWith(header, StringComparison.Ordinal))
         {
             throw new FogException("invalid-request");
         }
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
         string body = text[header.Length..];
         if (body.Length == 0)
         {
             return;
         }
 
-        if (body.Length < 2)
+        if (body.Length == 1)
         {
             throw new FogException("invalid-request");
         }
@@ -174,18 +177,13 @@ public sealed class FogRecordSchema
 
         foreach (string block in blocks)
         {
-            if (!seen.Add(block))
-            {
-                throw new FogException("invalid-request");
-            }
-
             int previous = -1;
             foreach (string line in block.Split('\n'))
             {
                 // LibTab's guard budgets a tab and LF, including on the row head.
-                string cell = previous < 0 ? line : line.StartsWith('\t') ? line[1..] : string.Empty;
-                int equals = cell.IndexOf('=');
-                int index = equals < 0 ? -1 : Array.IndexOf(columns, cell[..equals]);
+                string cell = line.TrimStart('\t');
+                string[] pair = cell.Split('=', 2);
+                int index = Array.IndexOf(columns, pair[0]);
                 if (index <= previous)
                 {
                     throw new FogException("invalid-request");

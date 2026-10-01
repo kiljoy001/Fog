@@ -36,8 +36,8 @@ public sealed class FogControlFileTests
         FogTransactionTests.Upload(store, id, "request", []);
         int effects = 0;
         var ctl = new FogControlFile(store, _ => FogTransactionTests.Plan([], () => effects++));
-        Assert.Equal(7U, await ctl.WriteAsync("alice", id, "commit\n"u8.ToArray()));
-        Assert.Equal(7U, await ctl.WriteAsync("alice", id, "commit\n"u8.ToArray()));
+        Assert.Equal(7U, await ctl.WriteAsync("alice", id, "commit\n"u8.ToArray()).WaitAsync(TimeSpan.FromMilliseconds(100)));
+        Assert.Equal(7U, await ctl.WriteAsync("alice", id, "commit\n"u8.ToArray()).WaitAsync(TimeSpan.FromMilliseconds(100)));
         Assert.Equal(1, effects);
         Assert.Equal(8U, await ctl.WriteAsync("alice", id, "release\n"u8.ToArray()));
         Assert.Equal(1, effects);

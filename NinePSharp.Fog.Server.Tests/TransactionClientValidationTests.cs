@@ -48,13 +48,20 @@ public sealed class TransactionClientValidationTests
         string name = new string('A', 61) + "0_-";
         peer.Outputs[name] = [1, 2];
         var client = Client(peer, maximum: 2);
-        var result = await client.ExecuteAsync(name, new Dictionary<string, byte[]> { ["request"] = [3], [name] = [4] }, [name]);
+        var result = await client.ExecuteAsync(name, new Dictionary<string, byte[]> { ["request"] = [3], [name] = [4] }, [name])
+            .WaitAsync(TimeSpan.FromMilliseconds(250));
         Assert.Equal(new byte[] { 1, 2 }, result[name]);
         Assert.Equal(new byte[] { 3 }, peer.Inputs["request"].ToArray());
         Assert.Equal(new byte[] { 4 }, peer.Inputs[name].ToArray());
         Assert.Equal(1, peer.Commits);
         Assert.True(peer.Released);
         Assert.Single(peer.Fids); // Only the attached root survives until disconnect.
+        Assert.InRange(peer.MaximumReadCount, 1U, 245U);
+        Assert.Equal(new uint[] { 2, 1 }, peer.OutputReadCounts);
+
+        using var partial = new ControlPeer();
+        _ = await Client(partial, maximum: 2).ExecuteAsync("fixture", Request(), ["reply"]);
+        Assert.Equal(new uint[] { 2, 1 }, partial.OutputReadCounts);
     }
 
     public static IEnumerable<object[]> InvalidIds()
@@ -94,6 +101,38 @@ public sealed class TransactionClientValidationTests
         var error = await Assert.ThrowsAsync<IOException>(() => Client(peer, maximum: 2).ExecuteAsync("fixture", Request(), kind == "aggregate" ? ["reply", "extra"] : ["reply"]));
         Assert.Equal(diagnostic, error.Message);
         Assert.False(peer.Released);
+    }
+
+    [Fact]
+    public async Task EmptyStatusAndAReadLargerThanTheRequestedFrameAreRejected()
+    {
+        using var empty = new ControlPeer { EmptyStatus = true };
+        Assert.Equal("Invalid transaction status.",
+            (await Assert.ThrowsAsync<IOException>(() => Client(empty).ExecuteAsync("fixture", Request(), ["reply"]))).Message);
+
+        using var oversized = new ControlPeer();
+        oversized.Override = request => request is Tread read && oversized.Fids[read.Fid] == "reply" && read.Offset == 0
+            ? new Rread(read.Tag, new byte[read.Count + 1])
+            : null;
+        Assert.Equal("Oversized control file.",
+            (await Assert.ThrowsAsync<IOException>(() => Client(oversized, maximum: 2).ExecuteAsync("fixture", Request(), ["reply"]))).Message);
+    }
+
+    [Fact]
+    public async Task CancellationAfterAnIoFailureDoesNotReconnect()
+    {
+        using var canceled = new CancellationTokenSource();
+        int attempts = 0;
+        var client = new FogTransactionClient(_ =>
+        {
+            attempts++;
+            canceled.Cancel();
+            throw new IOException("offline");
+        }, "worker", 256, 1024, TimeSpan.FromSeconds(5));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.ExecuteAsync("fixture", Request(), ["reply"], canceled.Token).WaitAsync(TimeSpan.FromMilliseconds(250)));
+        Assert.Equal(1, attempts);
     }
 
     [Theory]
@@ -138,7 +177,7 @@ public sealed class TransactionClientValidationTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellation);
             throw new InvalidOperationException();
         }, "worker", 256, 1024, TimeSpan.FromMilliseconds(30));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ExecuteAsync("fixture", Request(), ["reply"]).WaitAsync(TimeSpan.FromSeconds(5)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ExecuteAsync("fixture", Request(), ["reply"]).WaitAsync(TimeSpan.FromMilliseconds(250)));
         using var peer = new ControlPeer();
         var input = Request();
         var frozen = new FogTransactionClient(_ => { input["request"][0] = 88; return Task.FromResult<Stream>(peer); }, "worker", 256, 1024, TimeSpan.FromSeconds(5));
@@ -163,6 +202,8 @@ public sealed class TransactionClientValidationTests
     [InlineData("clunk-request")]
     [InlineData("commit")]
     [InlineData("read-reply")]
+    [InlineData("probe-reply")]
+    [InlineData("clunk-reply")]
     [InlineData("release")]
     public async Task AsyncTransactionStagesDoNotRequireTheCallingSynchronizationContext(string stage)
     {
@@ -170,11 +211,12 @@ public sealed class TransactionClientValidationTests
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         peer.Resume = resume;
         peer.PauseAt = stage;
+        int maximum = stage is "probe-reply" or "clunk-reply" ? 1 : 1024;
         var client = new FogTransactionClient(async _ =>
         {
             if (stage == "connect") await resume.Task.ConfigureAwait(false);
             return peer;
-        }, "worker", 256, 1024, TimeSpan.FromSeconds(10));
+        }, "worker", 256, maximum, TimeSpan.FromSeconds(1));
         var context = new RecordingContext();
         var previous = SynchronizationContext.Current;
         Task<IReadOnlyDictionary<string, byte[]>> operation;
@@ -202,7 +244,7 @@ public sealed class TransactionClientValidationTests
     }
 
     private static FogTransactionClient Client(ControlPeer peer, int maximum = 1024) =>
-        new(_ => Task.FromResult<Stream>(peer), "worker", 256, maximum, TimeSpan.FromSeconds(5));
+        new(_ => Task.FromResult<Stream>(peer), "worker", 256, maximum, TimeSpan.FromMilliseconds(100));
 
     private sealed class ControlPeer : Stream
     {
@@ -210,6 +252,9 @@ public sealed class TransactionClientValidationTests
         internal byte[]? CloneBytes;
         internal string? StatusId;
         internal string State = "staging";
+        internal bool EmptyStatus;
+        internal uint MaximumReadCount;
+        internal readonly List<uint> OutputReadCounts = [];
         internal readonly Dictionary<string, byte[]> Outputs = new() { ["reply"] = [9] };
         internal readonly Dictionary<string, MemoryStream> Inputs = new();
         internal readonly Dictionary<uint, string> Fids = new();
@@ -243,6 +288,8 @@ public sealed class TransactionClientValidationTests
                 Tattach => "attach",
                 Twalk walk => "walk-" + walk.Wname[^1],
                 Topen open => "open-" + Fids[open.Fid],
+                Tread read when Fids[read.Fid] is string file && Outputs.TryGetValue(file, out byte[]? output) &&
+                    read.Offset == (ulong)output.Length && read.Count == 1 => "probe-" + file,
                 Tread read => "read-" + Fids[read.Fid],
                 Tclunk clunk => "clunk-" + Fids[clunk.Fid],
                 Twrite write when Fids[write.Fid] == "ctl" => Encoding.ASCII.GetString(write.Data.Span).TrimEnd('\n'),
@@ -265,11 +312,13 @@ public sealed class TransactionClientValidationTests
                 case Topen o: return new Ropen(o.Tag, default, 232);
                 case Tclunk c: Assert.True(Fids.Remove(c.Fid)); return new Rclunk(c.Tag);
                 case Tread r:
+                    MaximumReadCount = Math.Max(MaximumReadCount, r.Count);
+                    if (Outputs.ContainsKey(Fids[r.Fid])) OutputReadCounts.Add(r.Count);
                     byte[] content = Fids[r.Fid] switch
                     {
                         "clone" => CloneBytes ?? Encoding.ASCII.GetBytes(Id + "\n"),
                         "status" => new FogRecordSchema("fogtx-v1", ["id", "state", "error"], ["id", "state"], ["id"]).Serialize(
-                            [new Dictionary<string, string?> { ["id"] = StatusId ?? Id, ["state"] = State }], 1024, 1),
+                            EmptyStatus ? [] : [new Dictionary<string, string?> { ["id"] = StatusId ?? Id, ["state"] = State }], 1024, 1),
                         var outputName => Outputs[outputName],
                     };
                     return new Rread(r.Tag, content.AsMemory((int)Math.Min(r.Offset, (ulong)content.Length), (int)Math.Min(r.Count, (ulong)content.Length - Math.Min(r.Offset, (ulong)content.Length))));

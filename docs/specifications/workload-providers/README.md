@@ -1,5 +1,8 @@
 # Universal workload providers: grain adapter and authoring contract
 
+Primary workload target: dotnet-webassembly applications with WASI file access through
+the Plan 9 namespace. Production hosting remains pending.
+
 Status: proposed, specification-only, like the transport and compute-job specs.
 The C# contracts below are an authoring API proposal, not a published SDK or an
 implemented workload grain. No runtime, provider loader, or production dependency
@@ -15,23 +18,21 @@ trees can continue to implement that interface directly.
 Compute authors should not have to implement a filesystem merely to run work.
 The proposed shared workload-grain adapter implements `IMountableResourceGrain`
 and owns the [job file contract](../libtab-compute-jobs/README.md). An author supplies
-an `IWorkloadProvider` to that adapter. AngouriMath, WASM, pathfinding, rendering,
+an `IWorkloadProvider` to that adapter. WASM, pathfinding, rendering,
 and other engines are registrations of the same provider interface, not branches
 in a closed runtime enum.
 
-The initial exploratory scope is two providers: AngouriMath for explicit symbolic
-math operations and WASM applications with a defined host ABI.
-The math provider exposes a bounded subset of the library, and a WASM sandbox does
-not supply every OS/application API. Pathfinding below is only an extensibility/conformance
-example, not a third initial engine. The shared adapter should be proven with the
-two initial providers before expanding the runtime catalogue.
+The next process-file syscall slice is designed for the WASI workload as well as
+native Plan 9 callers. Pathfinding remains an extensibility example. The shared
+adapter and provider SDK are still specification-only; pinned engine compatibility
+tests provide narrower evidence, not a production host.
 
 External LLMs can use the proposed MCP gateway to invoke
 authorized fog jobs. MCP is a client-facing adapter, not a provider, hosted language
 model, or alternate inter-node protocol.
 
 The selected initial [runtime profiles](../fog-v1-profiles/Runtimes.md) define the
-AngouriMath expression/operation contract and Wasmtime WASIp1 ABI.
+dotnet-webassembly engine and Fog-owned WASIp1 namespace ABI.
 [linux-process-v1](../fog-v1-profiles/Isolation.md) defines their first concrete
 containment and private worker-9P contract. These additions remain specification-only.
 
@@ -133,8 +134,9 @@ The context contains:
 Meter charges happen before the corresponding work. Exceeding a meter latches a
 host failure, revokes further job IO as appropriate, and initiates cancellation;
 catching a charge exception and returning success cannot clear that failure. Native
-engine meters such as WASM fuel may be enforced by their runtime adapter and reconciled
-with the host's accounting. Provider-reported usage is not proof of enforcement.
+engine meters, when provided by a separately registered profile, may be reconciled
+with host accounting. The selected dotnet-webassembly profile has host-call/IO meters
+and supervised deadlines, not instruction fuel. Provider-reported usage is not proof of enforcement.
 
 Streams are host-owned; a provider must not retain them after execution disposal.
 The host invalidates the context and any opened handles at termination/release.
@@ -180,7 +182,7 @@ memory, and termination guarantees before accepting untrusted code.
 
 `fogjob-v1` now requires `provider_version` alongside `job` and `runtime`. This
 generalizes the still-proposed job schema; there is no deployed format migration.
-AngouriMath/WASM retain their documented required fields as built-in provider
+WASM retain their documented required fields as built-in provider
 profiles. New providers use the common memory/deadline/output limits plus their
 own declared fields.
 

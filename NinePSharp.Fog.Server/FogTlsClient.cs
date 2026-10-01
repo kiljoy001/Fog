@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 
@@ -12,34 +13,21 @@ public static class FogTlsClient
         Justification = "On success ownership transfers through TcpClient.GetStream (ownsSocket) to the returned SslStream; all failure paths dispose it.")]
     public static async Task<SslStream> ConnectAsync(IPEndPoint endpoint, string tlsName, string serverSpkiSha256,
         X509Certificate2 nodeCertificate, CancellationToken cancellationToken)
+        => await ConnectAsync(endpoint, tlsName, serverSpkiSha256, nodeCertificate, cancellationToken, CreateConnection);
+
+    internal static async Task<SslStream> ConnectAsync(IPEndPoint endpoint, string tlsName, string serverSpkiSha256,
+        X509Certificate2 nodeCertificate, CancellationToken cancellationToken, Func<AddressFamily, TcpClient> createConnection)
     {
         if (!nodeCertificate.HasPrivateKey || string.IsNullOrWhiteSpace(tlsName) ||
             serverSpkiSha256.Length != 64 || serverSpkiSha256.Any(c => c is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
             throw new ArgumentException("Invalid pinned TLS client configuration.");
-        var connection = new System.Net.Sockets.TcpClient(endpoint.AddressFamily) { NoDelay = true };
+        var connection = createConnection(endpoint.AddressFamily);
         try
         {
-            await connection.ConnectAsync(endpoint.Address, endpoint.Port, cancellationToken).ConfigureAwait(false);
+            await connection.ConnectAsync(endpoint.Address, endpoint.Port, cancellationToken);
             var tls = new SslStream(connection.GetStream(), false, (_, peer, _, _) =>
-                peer is X509Certificate2 supplied && supplied.MatchesHostname(tlsName, allowWildcards: false, allowCommonName: false) &&
-                supplied.NotBefore.ToUniversalTime() <= DateTime.UtcNow && DateTime.UtcNow < supplied.NotAfter.ToUniversalTime() &&
-                FogNodePolicy.SpkiPin(supplied) == serverSpkiSha256);
-            try
-            {
-                await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-                {
-                    TargetHost = tlsName,
-                    ClientCertificates = new X509CertificateCollection { nodeCertificate },
-                    EnabledSslProtocols = SslProtocols.Tls13,
-                    AllowRenegotiation = false,
-                    AllowTlsResume = false,
-                }, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                await tls.DisposeAsync().ConfigureAwait(false);
-                throw;
-            }
+                peer is X509Certificate2 supplied && ValidateServerCertificate(supplied, tlsName, serverSpkiSha256, DateTime.UtcNow));
+            await tls.AuthenticateAsClientAsync(CreateAuthenticationOptions(tlsName, nodeCertificate), cancellationToken);
             // TcpClient.GetStream owns its socket; SslStream owns that NetworkStream.
             return tls;
         }
@@ -49,4 +37,20 @@ public static class FogTlsClient
             throw;
         }
     }
+
+    internal static TcpClient CreateConnection(AddressFamily addressFamily) => new(addressFamily) { NoDelay = true };
+
+    internal static bool ValidateServerCertificate(X509Certificate2 supplied, string tlsName, string serverSpkiSha256, DateTime now) =>
+        supplied.MatchesHostname(tlsName, allowWildcards: false, allowCommonName: false) &&
+        supplied.NotBefore.ToUniversalTime() <= now && now < supplied.NotAfter.ToUniversalTime() &&
+        FogNodePolicy.SpkiPin(supplied) == serverSpkiSha256;
+
+    internal static SslClientAuthenticationOptions CreateAuthenticationOptions(string tlsName, X509Certificate2 nodeCertificate) => new()
+    {
+        TargetHost = tlsName,
+        ClientCertificates = new X509CertificateCollection { nodeCertificate },
+        EnabledSslProtocols = SslProtocols.Tls13,
+        AllowRenegotiation = false,
+        AllowTlsResume = false,
+    };
 }

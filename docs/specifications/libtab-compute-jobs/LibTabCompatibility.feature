@@ -12,8 +12,6 @@ Feature: Job text preserves the existing C and managed LibTab contract
 
     Examples:
       | document             |
-      | job-math.tab         |
-      | math-result.tab      |
       | job-wasm.tab         |
       | status-succeeded.tab |
 

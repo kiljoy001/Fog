@@ -53,6 +53,10 @@ public sealed class NodePolicyTests
         var policy = new FogNodePolicy(1, registrations);
         registrations[0] = enrollment with { Enabled = false };
         Assert.True(policy.AuthenticateCertificate(certificate));
+        Assert.Throws<ArgumentException>(() => new FogNodePolicy(1,
+            [enrollment with { Boot = new string('a', 63) + "G" }]));
+        Assert.Throws<ArgumentException>(() => new FogNodePolicy(1,
+            [enrollment with { SpkiSha256 = new string('a', 63) + "G" }]));
         Assert.Throws<ArgumentOutOfRangeException>(() => new FogNodePolicy(0, []));
         Assert.Throws<ArgumentNullException>(() => new FogNodePolicy(1, null!));
         Assert.Throws<ArgumentException>(() => new FogNodePolicy(1, [enrollment, enrollment]));

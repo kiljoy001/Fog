@@ -15,7 +15,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../NinePSharp.Fog.Math/NinePSharp.Fog.Math.csproj" />
     <ProjectReference Include="../NinePSharp.Fog.Server/NinePSharp.Fog.Server.csproj" />
     <ProjectReference Include="../NinePSharp.Client/NinePSharp.Client.csproj" />
   </ItemGroup>

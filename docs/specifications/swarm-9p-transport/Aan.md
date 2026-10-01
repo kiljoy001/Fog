@@ -17,7 +17,7 @@ stream when a permitted replacement carrier becomes available.
 This is particularly useful for intermittent fog links and roaming clients. It
 does not create connectivity during a partition, migrate sessions to another host,
 survive either endpoint losing its session state, or make external effects durable
-or exactly-once. It stores transport state, not a math execution process or WASM instance
+or exactly-once. It stores transport state, not a workload execution process or WASM instance
 context after work finishes. Ordinary job cleanup remains unchanged.
 
 Decision: use stock AAN record framing as a transport layer beneath 9P. Do not
@@ -206,7 +206,7 @@ restart the absolute lifetime. The effective deadline intersects authentication,
 operation, policy, drain and shutdown deadlines. AAN cannot delay a hard shutdown.
 
 Most importantly, AAN probes and resumes are not Orleans membership heartbeats or
-execution-lease renewals. Grain-call deadlines, math CPU allowances, WASM fuel, staging expiry, job deadlines
+execution-lease renewals. Grain-call deadlines, worker CPU allowances, WASM fuel, staging expiry, job deadlines
 and result retention continue to run. Renewals
 buffered by AAN retain their original request time and incarnation/epoch: delayed
 or duplicate replies cannot resurrect expired authority. Use separate logical

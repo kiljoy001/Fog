@@ -61,7 +61,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
                 if (message is NinePMessage.MsgTflush ? session.Flushes != 0 :
                     session.Pending.Count - session.Flushes >= limits.RequestsPerSession) throw new FogException("busy");
                 pending = new Pending();
-                session.Pending.Add(request.Tag, pending);
+                session.Pending[request.Tag] = pending;
                 if (message is NinePMessage.MsgTflush) session.Flushes++;
             }
 
@@ -71,7 +71,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
                 lock (session.Gate) operation = message is NinePMessage.MsgTflush flush ?
                     FlushAsync(session, flush.Item, pending.Cancellation.Token) :
                     DispatchCore(sessionId, session, message, certificate, pending.Cancellation.Token);
-                object response = await operation.ConfigureAwait(false);
+                object response = await operation;
                 if (response is ISerializable serializable && serializable.Size > session.MSize) throw new FogException("limit");
                 return response;
             }
@@ -98,7 +98,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         {
             if (!sessions.Remove(sessionId, out session)) return;
         }
-        await ResetAsync(sessionId, session, closing: true).ConfigureAwait(false);
+        await ResetAsync(sessionId, session);
     }
 
     private async Task<object> VersionAsync(string id, Tversion request)
@@ -113,9 +113,15 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
                 sessions.Add(id, session);
             }
         }
-        await ResetAsync(id, session, closing: false).ConfigureAwait(false);
+        await ResetAsync(id, session);
         lock (session.Gate)
         {
+            lock (gate)
+            {
+                Session? current = sessions.GetValueOrDefault(id);
+                if (!ReferenceEquals(current, session))
+                    throw new FogException("not-ready");
+            }
             if (request.MSize < 256) throw new FogException("invalid-request");
             if (time.GetElapsedTime(session.Created) >= limits.SessionLifetime) throw new FogException("denied");
             session.MSize = Math.Min(request.MSize, limits.MessageSize);
@@ -125,17 +131,16 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         }
     }
 
-    private async Task ResetAsync(string id, Session session, bool closing)
+    private async Task ResetAsync(string id, Session session)
     {
         Pending[] pending;
         lock (session.Gate)
         {
             session.Ready = false;
-            session.Closed |= closing;
             pending = session.Pending.Values.ToArray();
             foreach (var operation in pending) operation.Cancellation.Cancel();
         }
-        await Task.WhenAll(pending.Select(operation => operation.Completion.Task)).ConfigureAwait(false);
+        await Task.WhenAll(pending.Select(operation => operation.Completion.Task));
         lock (session.Gate)
         {
             foreach (var fid in session.Fids.Values) fid.Open?.Dispose();
@@ -157,14 +162,12 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
                 completion = operation.Completion.Task;
             }
         }
-        await completion.WaitAsync(cancellation).ConfigureAwait(false);
+        await completion.WaitAsync(cancellation);
         return new Rflush(request.Tag);
     }
 
     private Task<object> DispatchCore(string id, Session session, NinePMessage message, X509Certificate2? certificate, CancellationToken cancellation)
     {
-        cancellation.ThrowIfCancellationRequested();
-        CheckSession(session);
         object result = message switch
         {
             NinePMessage.MsgTattach attach => Attach(session, attach.Item, certificate),
@@ -219,24 +222,29 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         {
             if (request.Mode != NinePConstants.OREAD) throw new FogException("denied");
             using var stream = new MemoryStream();
+            long remaining = limits.SnapshotBytesPerSession - session.SnapshotBytes;
             foreach (var node in tree.List(fid.Principal, fid.Node))
             {
                 var stat = MakeStat(node);
-                if (stream.Length + stat.Size > limits.SnapshotBytesPerSession - session.SnapshotBytes) throw new FogException("snapshot-limit");
+                if (stat.Size > remaining) throw new FogException("snapshot-limit");
                 byte[] bytes = new byte[stat.Size];
                 int offset = 0;
                 stat.WriteTo(bytes, ref offset);
                 stream.Write(bytes);
+                remaining -= stat.Size;
             }
             opened = new FogOpenFile(stream.ToArray());
         }
-        else opened = tree.Open(fid.Principal, id, fid.Node, request.Mode, limits.SnapshotBytesPerSession - session.SnapshotBytes);
-        long size = opened.Snapshot?.LongLength ?? 0;
-        if (size > limits.SnapshotBytesPerSession - session.SnapshotBytes)
+        else
         {
-            opened.Dispose();
-            throw new FogException("snapshot-limit");
+            opened = tree.Open(fid.Principal, id, fid.Node, request.Mode, limits.SnapshotBytesPerSession - session.SnapshotBytes);
+            if ((opened.Snapshot?.LongLength ?? 0) > limits.SnapshotBytesPerSession - session.SnapshotBytes)
+            {
+                opened.Dispose();
+                throw new FogException("snapshot-limit");
+            }
         }
+        long size = opened.Snapshot?.LongLength ?? 0;
         session.SnapshotBytes += size;
         fid.Open = opened;
         fid.Opened = time.GetTimestamp();
@@ -253,10 +261,10 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
             throw new FogException("tx-expired");
         }
         uint count = Math.Min(request.Count, session.MSize - 11);
-        if (request.Offset >= (ulong)bytes.Length) return new Rread(request.Tag, Array.Empty<byte>());
-        int length = (int)Math.Min(count, (ulong)bytes.Length - request.Offset);
-        if (fid.Node.Directory) length = DirectoryLength(bytes, request.Offset, length);
-        return new Rread(request.Tag, bytes.AsMemory((int)request.Offset, length));
+        int offset = (int)Math.Min(request.Offset, (ulong)bytes.Length);
+        int length = (int)Math.Min(count, (ulong)(bytes.Length - offset));
+        if (fid.Node.Directory) length = DirectoryLength(bytes, (ulong)offset, length);
+        return new Rread(request.Tag, bytes.AsMemory(offset, length));
     }
 
     private async Task<object> WriteAsync(Session session, Twrite request, X509Certificate2? certificate, CancellationToken cancellation)
@@ -267,7 +275,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         fid.Writing = true;
         try
         {
-            uint count = await write(request.Offset, request.Data, cancellation).ConfigureAwait(false);
+            uint count = await write(request.Offset, request.Data, cancellation);
             lock (session.Gate) policy.Check(fid.Principal, certificate);
             return new Rwrite(request.Tag, count);
         }
@@ -314,7 +322,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
 
     private void CheckSession(Session session)
     {
-        if (!session.Ready || session.Closed) throw new FogException("not-ready");
+        if (!session.Ready) throw new FogException("not-ready");
         if (time.GetElapsedTime(session.Created) >= limits.SessionLifetime) throw new FogException("denied");
     }
 
@@ -351,14 +359,33 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
     private static Stat MakeStat(FogFileNode node, ulong length = 0) => new(0, 0, 0, Qid(node),
         node.Directory ? 0x80000000U | 0x140U : 0x180U, 0, 0, length, node.Name, "fog", "fog", "fog", NinePDialect.NineP2000);
 
-    private static ISerializable? Payload(NinePMessage message) => message switch
-    {
-        NinePMessage.MsgTversion m => m.Item, NinePMessage.MsgTauth m => m.Item, NinePMessage.MsgTattach m => m.Item,
-        NinePMessage.MsgTflush m => m.Item, NinePMessage.MsgTwalk m => m.Item, NinePMessage.MsgTopen m => m.Item,
-        NinePMessage.MsgTcreate m => m.Item, NinePMessage.MsgTread m => m.Item, NinePMessage.MsgTwrite m => m.Item,
-        NinePMessage.MsgTclunk m => m.Item, NinePMessage.MsgTremove m => m.Item, NinePMessage.MsgTstat m => m.Item,
-        NinePMessage.MsgTwstat m => m.Item, _ => null,
-    };
+    private static ISerializable? Payload(NinePMessage message)
+        => SessionPayload(message) ?? FilePayload(message);
+
+    private static ISerializable? SessionPayload(NinePMessage message)
+        => message switch
+        {
+            NinePMessage.MsgTversion m => m.Item,
+            NinePMessage.MsgTauth m => m.Item,
+            NinePMessage.MsgTattach m => m.Item,
+            NinePMessage.MsgTflush m => m.Item,
+            NinePMessage.MsgTwalk m => m.Item,
+            NinePMessage.MsgTopen m => m.Item,
+            _ => null,
+        };
+
+    private static ISerializable? FilePayload(NinePMessage message)
+        => message switch
+        {
+            NinePMessage.MsgTcreate m => m.Item,
+            NinePMessage.MsgTread m => m.Item,
+            NinePMessage.MsgTwrite m => m.Item,
+            NinePMessage.MsgTclunk m => m.Item,
+            NinePMessage.MsgTremove m => m.Item,
+            NinePMessage.MsgTstat m => m.Item,
+            NinePMessage.MsgTwstat m => m.Item,
+            _ => null,
+        };
 
     private sealed class Session(long created)
     {
@@ -370,7 +397,6 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         internal long SnapshotBytes;
         internal int Flushes;
         internal bool Ready;
-        internal bool Closed;
     }
     private sealed class Fid(FogFileNode node, FogPrincipal principal)
     {

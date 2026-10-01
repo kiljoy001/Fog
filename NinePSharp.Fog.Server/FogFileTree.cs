@@ -8,9 +8,7 @@ public abstract class FogFileTree
 
     protected ulong AllocateQid()
     {
-        long value = Interlocked.Increment(ref nextQid);
-        if (value <= 0) throw new FogException("unavailable");
-        return (ulong)value;
+        return (ulong)Interlocked.Increment(ref nextQid);
     }
 
     public abstract FogFileNode Root { get; }

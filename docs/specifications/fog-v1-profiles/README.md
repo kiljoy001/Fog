@@ -1,5 +1,9 @@
 # Concrete version-one fog profiles
 
+Primary workload target: dotnet-webassembly applications using a WASI bridge over
+Plan 9 namespace/file operations. Production execution remains pending; its requirements
+now drive the next namespace syscall slice.
+
 Status: proposed contracts, with a partial implementation tracked below. These
 contracts address the six design gaps identified after selecting stock AAN beneath
 9P. Their publication does not establish implemented services, security certification,
@@ -18,7 +22,7 @@ README for implemented boundaries, tests and remaining integration work.
 | --- | --- |
 | AAN establishment and resumption | [AanSession.md](AanSession.md): authenticated 9P bootstrap, explicit switch barrier, stock AAN data phase, fresh signed resume intent |
 | Orleans membership | [Membership.md](Membership.md): Orleans 10.3.1 API mapping to a single control-host 9P transaction service |
-| Math and WASM profiles | [Runtimes.md](Runtimes.md): bounded AngouriMath jobs and Wasmtime WASIp1 commands |
+| Primary WASM workload | [Runtimes.md](Runtimes.md): dotnet-webassembly with namespace-backed WASIp1 imports |
 | Persistent resources | [Storage.md](Storage.md): optional single-host transactional blob store over 9P, local SQLite WAL/FULL, conditional grain-state writes |
 | Worker coordination and authority | [WorkerControl.md](WorkerControl.md): pull assignments, immutable scopes, timed leases, resource-side scope attaches and fenced completion |
 | Execution-process boundary | [Isolation.md](Isolation.md): Linux process-per-job supervision, cgroup v2, namespaces, seccomp and two private 9P channels |
@@ -35,7 +39,7 @@ unsupported profile or missing required mechanism fails closed before admission.
 
 The six [example documents](examples) are canonical format fixtures, not a deployable
 configuration or a successful authentication transcript. Repeated-byte IDs/digests,
-the fictitious source revision and boottime deadlines are deliberately non-operational.
+example engine labels and boottime deadlines are deliberately non-operational.
 Storage-put also requires its sealed empty payload and an explicitly registered
 fixture codec. Never copy these examples as keys, trust pins or production lock data.
 
@@ -63,7 +67,9 @@ the internal `scope:<id>` export; neither makes arbitrary attach strings authori
 2. Bind membership to the installed Orleans 10.3.1 interfaces; form two real silos
    with no native Orleans sockets and prove fresh versus resumed session behavior.
 3. Bind worker control, scope authorization and the Linux supervisor together.
-4. Run the AngouriMath profile through the common job interface; then WASM.
+4. Implement the process file syscall/WASI bridge slice against dotnet-webassembly;
+   the isolated worker requires step 3 before production execution. Run the pinned
+   engine compatibility tests alongside the namespace quality gates.
 5. Enable durable storage only after crash/recovery and conditional-write tests pass.
 
 Stable feature IDs use `@FOG_V1_*`. Feature parsing checks syntax only. Real Reqnroll
@@ -77,7 +83,7 @@ For every new boundary use the existing regime:
   scope attenuation, gas accounting and terminal-state races.
 - Bounded SharpFuzz/AFL++ campaigns for record sequences, auth statements, runtime
   readers/modules/models and the worker protocol. Assert invariants, not just no crash.
-- The existing 90% mutation gate, including new parsers/adapters and decision code.
+- The zero-survivor/zero-uncovered mutation gate, including new parsers/adapters and decision code.
   Review surviving mutants; do not exempt authorization, deadlines or persistence.
 - Integration with actual factotum, actual silos, actual containment and an independent
   wire decoder. Storage adds process/crash fault injection at transaction boundaries.

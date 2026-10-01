@@ -213,7 +213,8 @@ public sealed class FogTransactionStore
                 throw new FogException("invalid-request");
             }
 
-            return offset >= (ulong)bytes.Length ? [] : bytes.AsSpan((int)offset, (int)Math.Min(count, (ulong)bytes.Length - offset)).ToArray();
+            int start = (int)Math.Min(offset, (ulong)bytes.Length);
+            return bytes.AsSpan(start, (int)Math.Min(count, (ulong)bytes.Length - (ulong)start)).ToArray();
         }
     }
 
@@ -304,7 +305,7 @@ public sealed class FogTransactionStore
     {
         try
         {
-            await plan.ApplyAsync().ConfigureAwait(false);
+            await plan.ApplyAsync();
             lock (gate)
             {
                 entry.Outputs = outputs;
@@ -328,7 +329,7 @@ public sealed class FogTransactionStore
 
     private async Task ObserveAsync(string owner, string id, Task outcome, CancellationToken cancellationToken)
     {
-        await outcome.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await outcome.WaitAsync(cancellationToken);
         lock (gate)
         {
             _ = Find(owner, id);

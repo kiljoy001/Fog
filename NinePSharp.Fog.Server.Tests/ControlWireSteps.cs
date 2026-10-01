@@ -27,7 +27,7 @@ public sealed class ControlWireSteps
         input = Enumerable.Range(0, 3000).Select(value => (byte)value).ToArray();
         var client = new FogTransactionClient(async cancellation => await FogTlsClient.ConnectAsync(listener.LocalEndpoint,
             "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate), fixture.NodeCertificate, cancellation),
-            "worker", 256, 4096, TimeSpan.FromSeconds(10));
+            "worker", 256, 4096, TimeSpan.FromSeconds(1));
         result = await client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = input }, ["reply"]);
     }
 
@@ -43,7 +43,7 @@ public sealed class ControlWireSteps
     [When("the node connects using an incorrect expected server name")]
     public async Task BadName()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
         rejection = await Record.ExceptionAsync(async () =>
         {
             await using var tls = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "wrong.test",

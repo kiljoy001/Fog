@@ -2,7 +2,7 @@
 
 Status: proposed first supported containment profile, not a claim that the current
 gateway can safely execute untrusted code. Installed host adapters, supervisors and
-runner binaries are trusted. Uploaded AngouriMath/WASM and input files are not.
+runner binaries are trusted. Uploaded WASM and input files are not.
 
 ## Host prerequisites and ownership
 
@@ -148,7 +148,7 @@ exports `/input`, `/artifacts/<field>` and `/ns` for the already frozen scope. N
 arbitrary user/owner/job selection is accepted. The broker associates the descriptor
 with the execution key at creation and applies scope, lease and IO limits on every
 operation. Remote namespace calls use the scope-bound node 9P attach; the child has
-no node TLS key. The initial WASM/AngouriMath guest ABIs expose only their documented
+no node TLS key. The initial WASM guest ABIs expose only their documented
 input/output/artifact operations, not raw access to either descriptor.
 
 These private channel trust exceptions are never accepted on a TCP listener. No TLS

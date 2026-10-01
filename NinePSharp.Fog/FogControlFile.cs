@@ -19,7 +19,7 @@ public sealed class FogControlFile
         cancellationToken.ThrowIfCancellationRequested();
         if (command.Span.SequenceEqual("commit\n"u8))
         {
-            await store.CommitAsync(owner, id, prepare, cancellationToken).ConfigureAwait(false);
+            await store.CommitAsync(owner, id, prepare, cancellationToken);
             return 7;
         }
 

@@ -8,6 +8,50 @@ namespace NinePSharp.Fog.Server.Tests;
 public sealed class TransactionTreeTests
 {
     [Fact]
+    public async Task CanceledWritesSessionCloseAndPruningHaveObservableLifecycleEffects()
+    {
+        using var fixture = new ControlFixture();
+        var principal = fixture.Policy.Attach("worker", fixture.NodeCertificate);
+        var tree = fixture.Tree;
+        FogFileNode control = tree.Walk(principal, tree.Root, "control");
+        FogFileNode service = tree.Walk(principal, control, "fixture");
+        Reject("tx-expired", () => tree.Walk(principal, tree.Root, "missing"));
+        using FogOpenFile clone = tree.Open(principal, "clone-session", tree.Walk(principal, service, "clone"), NinePConstants.OREAD, 86);
+        string id = Encoding.ASCII.GetString(clone.Snapshot!).TrimEnd('\n');
+        FogFileNode transaction = tree.Walk(principal, service, id);
+        FogFileNode request = tree.Walk(principal, transaction, "request");
+        FogFileNode ctl = tree.Walk(principal, transaction, "ctl");
+        using FogOpenFile upload = tree.Open(principal, "upload-session", request, NinePConstants.OWRITE, 1024);
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload.Write!(0, new byte[] { 1 }, canceled.Token));
+        using FogOpenFile controlFile = tree.Open(principal, "ctl-session", ctl, NinePConstants.OWRITE, 1024);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => controlFile.Write!(0, "release\n"u8.ToArray(), canceled.Token));
+        Assert.Equal("staging", fixture.Store.Status(principal.Owner, id).State);
+
+        tree.CloseSession("upload-session");
+        Reject("upload-open", () => upload.Write!(0, new byte[] { 1 }, CancellationToken.None).GetAwaiter().GetResult());
+        fixture.Store.Release(principal.Owner, id);
+        using FogOpenFile replacement = tree.Open(principal, "replacement", tree.Walk(principal, service, "clone"), NinePConstants.OREAD, 86);
+
+        var registrations = (System.Collections.IDictionary)typeof(FogTransactionFileTree)
+            .GetField("services", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(tree)!;
+        object serviceNodes = registrations["fixture"]!;
+        var transactions = (System.Collections.IDictionary)serviceNodes.GetType()
+            .GetField("Transactions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(serviceNodes)!;
+        Assert.Single(transactions);
+
+        using FogOpenFile abandoned = tree.Open(principal, "abandoned", tree.Walk(principal,
+            tree.Walk(principal, service, Encoding.ASCII.GetString(replacement.Snapshot!).TrimEnd('\n')), "request"), NinePConstants.OWRITE, 1024);
+        abandoned.Dispose();
+        using FogOpenFile reopened = tree.Open(principal, "reopened", tree.Walk(principal,
+            tree.Walk(principal, service, Encoding.ASCII.GetString(replacement.Snapshot!).TrimEnd('\n')), "request"), NinePConstants.OWRITE, 1024);
+    }
+
+    [Fact]
     public void RegistrationOwnsItsFileSetsAndRejectsAmbiguousNames()
     {
         using var fixture = new ControlFixture();
@@ -15,6 +59,8 @@ public sealed class TransactionTreeTests
         var outputs = new HashSet<string> { "reply" };
         var registration = Service(fixture) with { Name = new string('x', 64), InputFiles = inputs, OutputFiles = outputs };
         var tree = new FogTransactionFileTree([registration]);
+        Assert.Equal("/", tree.Root.Name);
+        Assert.True(tree.Root.QidPath > 0);
         inputs.Clear();
         outputs.Add("unexpected");
         var principal = fixture.Policy.Attach("worker", fixture.NodeCertificate);
@@ -49,6 +95,7 @@ public sealed class TransactionTreeTests
         var tree = fixture.Tree;
         var control = tree.Walk(principal, tree.Root, "control");
         var service = tree.Walk(principal, control, "fixture");
+        Reject("denied", () => tree.Open(principal, "s", tree.Walk(principal, service, "clone"), NinePConstants.OWRITE, 86));
         var transaction = tree.Walk(principal, service, id);
         var status = tree.Walk(principal, transaction, "status");
         var reply = tree.Walk(principal, transaction, "reply");
@@ -77,6 +124,7 @@ public sealed class TransactionTreeTests
         Assert.Equal(new[] { "clone" }, tree.List(principal, service).Select(node => node.Name));
         var other = fixture.Policy.Attach("other", fixture.OtherCertificate);
         Reject("denied", () => tree.Walk(other, service, id));
+        Reject("denied", () => tree.Walk(other, transaction, "reply"));
         Reject("denied", () => tree.List(other, transaction));
         fixture.Store.Release(principal.Owner, id);
         Reject("tx-expired", () => tree.Walk(principal, service, id));

@@ -19,13 +19,13 @@ public sealed class FogAtomicTransactionTests
             int observed = version;
             return new(new Dictionary<string, byte[]> { ["reply"] = [(byte)observed, inputs["request"].Span[0]] }, () => version = observed + 1);
         }
-        await Task.WhenAll(Task.Run(() => store.CommitAtomicAsync("alice", first, Prepare)),
-            Task.Run(() => store.CommitAtomicAsync("alice", second, Prepare)));
+        await Bounded(Task.WhenAll(Task.Run(() => store.CommitAtomicAsync("alice", first, Prepare)),
+            Task.Run(() => store.CommitAtomicAsync("alice", second, Prepare))));
         Assert.Equal(2, version);
         Assert.Equal(new byte[] { 0, 1 }, new[] { store.SnapshotOutput("alice", first, "reply")[0], store.SnapshotOutput("alice", second, "reply")[0] }.Order().ToArray());
         Assert.Equal(1, store.SnapshotOutput("alice", first, "reply")[1]);
         Assert.Equal(2, store.SnapshotOutput("alice", second, "reply")[1]);
-        await store.CommitAtomicAsync("alice", first, _ => throw new InvalidOperationException("reprepared"));
+        await Bounded(store.CommitAtomicAsync("alice", first, _ => throw new InvalidOperationException("reprepared")));
         Assert.Equal(2, version);
     }
 
@@ -46,7 +46,7 @@ public sealed class FogAtomicTransactionTests
             Error("upload-open", () => store.CommitAtomicAsync("alice", id, Prepare));
             upload.Seal();
         }
-        await Assert.ThrowsAsync<ArgumentNullException>(() => store.CommitAtomicAsync("alice", id, null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => Bounded(store.CommitAtomicAsync("alice", id, null!)));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.CommitAtomicAsync("alice", id, Prepare, cancellation.Token));
@@ -55,7 +55,8 @@ public sealed class FogAtomicTransactionTests
         Error("not-ready", () => store.OutputSize("alice", id, "reply"));
         Assert.Equal(0, effects);
         clock.Advance(TimeSpan.FromSeconds(9));
-        await store.CommitAtomicAsync("alice", id, Prepare);
+        await Bounded(store.CommitAtomicAsync("alice", id, Prepare));
+        Assert.Equal(0, RetainedInputCount(store, id));
         reply[0] = 99;
         byte[] snapshot = store.SnapshotOutput("alice", id, "reply");
         snapshot[1] = 99;
@@ -81,13 +82,29 @@ public sealed class FogAtomicTransactionTests
         int effects = 0;
         FogAtomicPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> _) =>
             new(new Dictionary<string, byte[]> { ["reply"] = [] }, () => { effects++; throw new IOException("private detail"); });
-        Assert.Equal("unavailable", (await Assert.ThrowsAsync<FogException>(() => store.CommitAtomicAsync("alice", id, Prepare))).Code);
+        Assert.Equal("unavailable", (await Assert.ThrowsAsync<FogException>(() => Bounded(store.CommitAtomicAsync("alice", id, Prepare)))).Code);
         clock.Advance(TimeSpan.FromDays(1));
         Assert.Contains(id, store.LiveIds());
         Assert.Equal(new FogTransactionStatus(id, "committing", "unavailable"), store.Status("alice", id));
-        await Assert.ThrowsAsync<FogException>(() => store.CommitAtomicAsync("alice", id, Prepare));
+        await Assert.ThrowsAsync<FogException>(() => Bounded(store.CommitAtomicAsync("alice", id, Prepare)));
         Error("busy", () => store.Release("alice", id));
         Error("not-ready", () => store.SnapshotOutput("alice", id, "reply"));
         Assert.Equal(1, effects);
+    }
+
+    [Fact]
+    public void AtomicPlanRequiresAnApplyDelegateBeforeChangingState()
+    {
+        var store = Store();
+        string id = store.Clone("alice");
+        Upload(store, id, "request", []);
+        Assert.Throws<ArgumentNullException>(() =>
+        {
+            _ = store.CommitAtomicAsync(
+                "alice",
+                id,
+                _ => new FogAtomicPlan(new Dictionary<string, byte[]> { ["reply"] = [] }, null!));
+        });
+        Assert.Equal("staging", store.Status("alice", id).State);
     }
 }

@@ -27,7 +27,6 @@ expected DNS identity and node certificate.
 This is the direct enrolled-node TLS profile. Factotum user authentication, AAN
 switch/resumption, a durable transaction ledger, automatic commit reconciliation,
 membership and storage services, and the full worker/supervisor protocol remain unfinished.
-The experimental math-worker implementation is described below.
 The original broader wire acceptance specifications are not certified by these tests.
 
 ## Validation
@@ -48,10 +47,3 @@ connections, fragmented messages, lost commit/release replies, generated payload
 and two executable control-wire scenarios. The full quality script includes the
 server and sequential-client mutation gates; passing the standard gate alone does
 not establish that the full mutation and fuzz matrix passes.
-
-## Direct math-worker milestone
-
-`FogJobFileTree`, `FogJobClient` and `LinuxMathRunner` now provide an experimental
-`/compute` service with asynchronous execution and retained results. The
-[demo guide](../docs/fog-math-demo.md) documents the deployable host, AngouriMath
-runner, two-machine workflow, resource limits and remaining profile work.

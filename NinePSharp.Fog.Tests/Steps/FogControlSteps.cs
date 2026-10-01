@@ -40,7 +40,7 @@ public sealed class FogControlSteps : IDisposable
         });
         try
         {
-            acknowledgements.Add(await ctl.WriteAsync("alice", id, "commit\n"u8.ToArray()));
+            acknowledgements.Add(await ctl.WriteAsync("alice", id, "commit\n"u8.ToArray()).WaitAsync(TimeSpan.FromMilliseconds(100)));
         }
         catch (FogException exception)
         {

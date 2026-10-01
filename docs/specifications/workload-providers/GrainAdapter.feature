@@ -37,7 +37,7 @@ Feature: The shared grain adapter owns the file protocol for every provider
 
   @PROV_G05 @cluster @wire
   Scenario: Built-in and third-party providers use the same conformance workflow
-    Given registered AngouriMath, WASM, and third-party fixture providers
+    Given registered WASM, and third-party fixture providers
     When the common job lifecycle and IO conformance suite is applied to each provider
     Then each obeys the same admission, cancellation, result, isolation, and cleanup rules
     And their runtime-specific budgets remain explicit

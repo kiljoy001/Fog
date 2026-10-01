@@ -38,7 +38,7 @@ Feature: Fog work remains bounded while its 9P transport is suspended
 
     Examples:
       | limit                   |
-      | Math CPU allowance     |
+      | Worker CPU allowance     |
       | WASM fuel allowance     |
       | job deadline            |
       | staging expiry          |

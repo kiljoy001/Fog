@@ -58,14 +58,19 @@ public sealed class FogNodeListener : IAsyncDisposable
     {
         try
         {
-            while (!stopping.IsCancellationRequested)
+            while (true)
             {
-                TcpClient client = await listener.AcceptTcpClientAsync(stopping.Token).ConfigureAwait(false);
-                if (connections.Count >= maximumConnections) { client.Dispose(); continue; }
-                client.NoDelay = true;
-                var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                connections.TryAdd(client, finished.Task);
-                _ = ServeAsync(client, finished);
+                TcpClient client = ConfigureAcceptedClient(await listener.AcceptTcpClientAsync(stopping.Token));
+                if (connections.Count >= maximumConnections)
+                {
+                    client.Dispose();
+                }
+                else
+                {
+                    var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    connections.TryAdd(client, finished.Task);
+                    _ = ServeAsync(client, finished);
+                }
             }
         }
         catch (OperationCanceledException) when (stopping.IsCancellationRequested) { }
@@ -89,11 +94,11 @@ public sealed class FogNodeListener : IAsyncDisposable
                 EnabledSslProtocols = SslProtocols.Tls13,
                 AllowRenegotiation = false,
                 AllowTlsResume = false,
-            }, handshake.Token).ConfigureAwait(false);
+            }, handshake.Token);
             if (tls.RemoteCertificate is not X509Certificate2 peer || !policy.AuthenticateCertificate(peer)) throw new AuthenticationException();
             var session = new NinePConnectionProcessor.ClientSession();
             session.State = TransportSessionOps.withTransport(session.Dialect, peer, session.State);
-            await processor.ProcessStreamAsync(tls, client.Client.RemoteEndPoint, session, lifetime.Token).ConfigureAwait(false);
+            await processor.ProcessStreamAsync(tls, client.Client.RemoteEndPoint, session, lifetime.Token);
         }
         catch (Exception exception) when (exception is IOException or AuthenticationException or OperationCanceledException or ObjectDisposedException or SocketException)
         {
@@ -114,12 +119,16 @@ public sealed class FogNodeListener : IAsyncDisposable
 
     private async Task DisposeCoreAsync()
     {
-        await stopping.CancelAsync().ConfigureAwait(false);
-        listener.Stop();
-        if (accepting is not null) await accepting.ConfigureAwait(false);
         var active = connections.ToArray();
-        foreach (var connection in active) connection.Key.Dispose();
-        await Task.WhenAll(active.Select(connection => connection.Value)).ConfigureAwait(false);
+        await stopping.CancelAsync();
+        listener.Stop();
+        await Task.WhenAll(active.Select(connection => connection.Value));
         stopping.Dispose();
+    }
+
+    internal static TcpClient ConfigureAcceptedClient(TcpClient client)
+    {
+        client.NoDelay = true;
+        return client;
     }
 }

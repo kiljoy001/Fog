@@ -39,15 +39,17 @@ def main() -> int:
                 name = path.split("/")[-1]
                 survivors_by_file[name] = survivors_by_file.get(name, 0) + 1
 
-    killed = counts.get("Killed", 0) + counts.get("Timeout", 0)
+    killed = counts.get("Killed", 0)
+    timed_out = counts.get("Timeout", 0)
     survived = counts.get("Survived", 0)
     no_coverage = counts.get("NoCoverage", 0)
-    total = killed + survived + no_coverage
+    total = killed + timed_out + survived + no_coverage
     score = (killed / total * 100) if total else 0.0
 
     print("## Mutation testing\n")
     print(f"- **Score:** {score:.2f}%")
     print(f"- **Killed:** {killed}")
+    print(f"- **Timed out:** {timed_out}")
     print(f"- **Survived:** {survived}")
     print(f"- **No coverage:** {no_coverage}")
 

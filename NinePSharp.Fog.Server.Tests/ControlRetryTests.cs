@@ -20,7 +20,7 @@ public sealed class ControlRetryTests
             var tls = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate),
                 fixture.NodeCertificate, cancellation);
             return ++connections == 1 ? new LoseReplyStream(tls, release ? "release\n"u8.ToArray() : "commit\n"u8.ToArray()) : tls;
-        }, "worker", 512, 4096, TimeSpan.FromSeconds(10));
+        }, "worker", 512, 4096, TimeSpan.FromSeconds(1));
         byte[] input = [1, 2, 3];
         var result = await client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = input }, ["reply"]);
         Assert.Equal(input, result["reply"]);
@@ -34,7 +34,8 @@ public sealed class ControlRetryTests
     {
         int attempts = 0;
         var client = new FogTransactionClient(_ => { attempts++; throw new IOException("offline"); }, "worker", 256, 1024, TimeSpan.FromSeconds(2));
-        await Assert.ThrowsAsync<IOException>(() => client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = [] }, ["reply"]));
+        await Assert.ThrowsAsync<IOException>(() => client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = [] }, ["reply"])
+            .WaitAsync(TimeSpan.FromMilliseconds(250)));
         Assert.Equal(3, attempts);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();

@@ -45,8 +45,8 @@ public sealed class FogTransactionTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
         source[0] = 99;
         unblock.SetResult();
-        await duplicate;
-        await store.CommitAsync("alice", id, Prepare);
+        await Bounded(duplicate);
+        await Bounded(store.CommitAsync("alice", id, Prepare));
         Assert.Equal(1, effects);
         Assert.Equal(1, preparations);
         Assert.Equal(new byte[] { 4, 5 }, store.ReadOutput("alice", id, "reply", 0, 2));
@@ -68,7 +68,7 @@ public sealed class FogTransactionTests
         Error("snapshot-limit", () => store.CommitAsync("alice", id, _ => Plan(new byte[65], () => effects++)));
         Assert.Equal("staging", store.Status("alice", id).State);
         Assert.Equal(0, effects);
-        await store.CommitAsync("alice", id, _ => Plan(new byte[64], () => effects++));
+        await Bounded(store.CommitAsync("alice", id, _ => Plan(new byte[64], () => effects++)));
         Assert.Equal(1, effects);
         Assert.Equal(64, store.ReadOutput("alice", id, "reply", 0, uint.MaxValue).Length);
     }
@@ -86,11 +86,11 @@ public sealed class FogTransactionTests
             effects++;
             throw new IOException("secret detail");
         });
-        Assert.Equal("unavailable", (await Assert.ThrowsAsync<FogException>(() => store.CommitAsync("alice", id, Prepare))).Message);
+        Assert.Equal("unavailable", (await Assert.ThrowsAsync<FogException>(() => Bounded(store.CommitAsync("alice", id, Prepare)))).Message);
         clock.Advance(TimeSpan.FromDays(1));
         store.Sweep();
         Assert.Equal(new FogTransactionStatus(id, "committing", "unavailable"), store.Status("alice", id));
-        await Assert.ThrowsAsync<FogException>(() => store.CommitAsync("alice", id, Prepare));
+        await Assert.ThrowsAsync<FogException>(() => Bounded(store.CommitAsync("alice", id, Prepare)));
         Error("busy", () => store.Release("alice", id));
         Error("not-ready", () => store.ReadOutput("alice", id, "reply", 0, 1));
         Assert.Equal(1, effects);
@@ -105,7 +105,8 @@ public sealed class FogTransactionTests
         byte[] reply = [1, 2, 3];
         byte[] payload = [4, 5];
         var outputs = new Dictionary<string, byte[]> { ["reply"] = reply, ["payload"] = payload };
-        await store.CommitAsync("alice", id, _ => new(outputs, () => Task.CompletedTask));
+        await Bounded(store.CommitAsync("alice", id, _ => new(outputs, () => Task.CompletedTask)));
+        Assert.Equal(0, RetainedInputCount(store, id));
         reply[0] = 99;
         payload[0] = 99;
         outputs.Clear();
@@ -127,7 +128,7 @@ public sealed class FogTransactionTests
         var store = new FogTransactionStore(Limits, _ => allowed);
         string id = store.Clone("alice");
         Upload(store, id, "request", []);
-        await store.CommitAsync("alice", id, _ => Plan([]));
+        await Bounded(store.CommitAsync("alice", id, _ => Plan([])));
         Error("denied", () => store.Status("bob", id));
         Error("denied", () => store.ReadOutput("bob", id, "reply", 0, 1));
         Error("denied", () => store.CommitAsync("bob", id, _ => Plan([])));
@@ -152,7 +153,7 @@ public sealed class FogTransactionTests
         Task commit = store.CommitAsync("alice", id, _ => new(new Dictionary<string, byte[]> { ["reply"] = [] }, () => unblock.Task));
         allowed = false;
         unblock.SetResult();
-        Assert.Equal("denied", (await Assert.ThrowsAsync<FogException>(() => commit)).Code);
+        Assert.Equal("denied", (await Assert.ThrowsAsync<FogException>(() => Bounded(commit))).Code);
     }
 
     [Fact]
@@ -174,11 +175,11 @@ public sealed class FogTransactionTests
         store.CloseSession("s");
         Error("upload-open", () => replacement.Write(3, [4]));
         Error("upload-open", replacement.Seal);
-        store.CommitAsync("alice", id, inputs =>
+        Bounded(store.CommitAsync("alice", id, inputs =>
         {
             Assert.Equal(new byte[] { 7 }, inputs["request"].ToArray());
             return Plan([]);
-        }).GetAwaiter().GetResult();
+        })).GetAwaiter().GetResult();
     }
 
     [Fact]
@@ -199,12 +200,12 @@ public sealed class FogTransactionTests
         Error("upload-open", () => replacement.Write(0, [9]));
         Upload(store, id, "payload", new byte[64]);
         Error("limit", () => store.OpenInput("alice", id, "s", "third"));
-        await store.CommitAsync("alice", id, inputs =>
+        await Bounded(store.CommitAsync("alice", id, inputs =>
         {
             Assert.Empty(inputs["request"].ToArray());
             Assert.Equal(64, inputs["payload"].Length);
             return Plan([]);
-        });
+        }));
     }
 
     [Fact]
@@ -245,7 +246,7 @@ public sealed class FogTransactionTests
         Assert.EndsWith("-1", first);
         Assert.Equal(first[..^1] + "2", second);
         Upload(store, second, "request", []);
-        await store.CommitAsync("alice", second, _ => Plan([]));
+        await Bounded(store.CommitAsync("alice", second, _ => Plan([])));
         clock.Advance(TimeSpan.FromSeconds(19));
         Assert.Equal("done", store.Status("alice", second).State);
         clock.Advance(TimeSpan.FromSeconds(1));
@@ -294,10 +295,10 @@ public sealed class FogTransactionTests
         var store = Store();
         string id = store.Clone("alice");
         Upload(store, id, "request", []);
-        await store.CommitAsync("alice", id, _ => new(new Dictionary<string, byte[]> { ["reply"] = [0] }, () => Task.CompletedTask, "conflict"));
+        await Bounded(store.CommitAsync("alice", id, _ => new(new Dictionary<string, byte[]> { ["reply"] = [0] }, () => Task.CompletedTask, "conflict")));
         Assert.Equal("done", store.Status("alice", id).State);
         Assert.Equal("conflict", store.Status("alice", id).Error);
-        await store.CommitAsync("alice", id, _ => throw new InvalidOperationException());
+        await Bounded(store.CommitAsync("alice", id, _ => throw new InvalidOperationException()));
         store.Release("alice", id);
         Error("tx-expired", () => store.ReadOutput("alice", id, "reply", 0, 1));
     }
@@ -382,12 +383,25 @@ public sealed class FogTransactionTests
 
         upload.Seal();
         int effects = 0;
-        store.CommitAsync("alice", id, inputs => Plan(inputs["request"].ToArray(), () => effects++)).GetAwaiter().GetResult();
-        store.CommitAsync("alice", id, _ => throw new InvalidOperationException()).GetAwaiter().GetResult();
+        Bounded(store.CommitAsync("alice", id, inputs => Plan(inputs["request"].ToArray(), () => effects++))).GetAwaiter().GetResult();
+        Bounded(store.CommitAsync("alice", id, _ => throw new InvalidOperationException())).GetAwaiter().GetResult();
         return effects == 1 && input.SequenceEqual(store.ReadOutput("alice", id, "reply", 0, uint.MaxValue));
     }
 
     internal static FogTransactionStore Store(TimeProvider? time = null) => new(Limits, _ => true, time);
+
+    internal static Task Bounded(Task task) => task.WaitAsync(TimeSpan.FromMilliseconds(100));
+
+    internal static int RetainedInputCount(FogTransactionStore store, string id)
+    {
+        var entries = (System.Collections.IDictionary)typeof(FogTransactionStore)
+            .GetField("entries", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(store)!;
+        object entry = entries[id]!;
+        return ((System.Collections.IDictionary)entry.GetType()
+            .GetField("Inputs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(entry)!).Count;
+    }
 
     internal static void Upload(FogTransactionStore store, string id, string file, byte[] bytes)
     {

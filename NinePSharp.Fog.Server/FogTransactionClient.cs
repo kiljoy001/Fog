@@ -31,14 +31,16 @@ public sealed class FogTransactionClient
         IReadOnlyList<string> outputs, CancellationToken cancellationToken = default)
     {
         if (!inputs.ContainsKey("request") || inputs.Values.Sum(bytes => (long)bytes.Length) > maximumBytes || outputs.Count == 0 ||
-            outputs.Distinct(StringComparer.Ordinal).Count() != outputs.Count ||
-            inputs.Keys.Concat(outputs).Append(service).Any(name => !SafeName(name))) throw new ArgumentException("Invalid bounded transaction request.");
+            outputs.Distinct(StringComparer.Ordinal).Count() != outputs.Count || !SafeName(service) ||
+            inputs.Keys.Any(name => !SafeName(name)) || outputs.Any(name => !SafeName(name)))
+            throw new ArgumentException("Invalid bounded transaction request.");
         // Freeze caller-owned input across reconnects. A retry never changes the request under its ID.
         var frozen = inputs.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray(), StringComparer.Ordinal);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(deadline);
         string? id = null;
-        for (int attempt = 0; ; attempt++)
+        var retries = new Queue<byte>([0, 0]);
+        while (true)
         {
             timeout.Token.ThrowIfCancellationRequested();
             try
@@ -56,8 +58,9 @@ public sealed class FogTransactionClient
 
                 return await CompleteTransactionAsync(client, service, id, frozen, outputs, timeout.Token).ConfigureAwait(false);
             }
-            catch (IOException) when (attempt < 2 && !timeout.IsCancellationRequested)
+            catch (IOException)
             {
+                if (!retries.TryDequeue(out _)) throw;
                 // New TLS/9P session, same transaction ID. Unknown clone IDs have no uploaded effect.
             }
         }
@@ -66,27 +69,29 @@ public sealed class FogTransactionClient
     private async Task<IReadOnlyDictionary<string, byte[]>> CompleteTransactionAsync(NinePSequentialClient client, string service,
         string id, IReadOnlyDictionary<string, byte[]> inputs, IReadOnlyList<string> outputs, CancellationToken cancellation)
     {
-        uint nextFid = 3;
-        byte[] statusBytes = await ReadFile(client, ["control", service, id, "status"], nextFid++, 1024, cancellation).ConfigureAwait(false);
-        var status = StatusSchema.Parse(statusBytes, 1024, 1).Single();
+        const uint temporaryFid = 2;
+        byte[] statusBytes = await ReadFile(client, ["control", service, id, "status"], temporaryFid, 1024, cancellation).ConfigureAwait(false);
+        var statusRows = StatusSchema.Parse(statusBytes, 1024, 1);
+        if (statusRows.Count != 1) throw new IOException("Invalid transaction status.");
+        var status = statusRows[0];
         if (status["id"] != id) throw new IOException("Mismatched transaction identity.");
         if (status["state"] == "staging")
         {
             foreach (var file in inputs)
-                await WriteFile(client, ["control", service, id, file.Key], nextFid++, file.Value, cancellation).ConfigureAwait(false);
+                await WriteFile(client, ["control", service, id, file.Key], temporaryFid, file.Value, cancellation).ConfigureAwait(false);
         }
         else if (status["state"] is not ("done" or "committing")) throw new IOException("Invalid transaction state.");
 
-        await WriteFile(client, ["control", service, id, "ctl"], nextFid++, "commit\n"u8.ToArray(), cancellation).ConfigureAwait(false);
+        await WriteFile(client, ["control", service, id, "ctl"], temporaryFid, "commit\n"u8.ToArray(), cancellation).ConfigureAwait(false);
         var result = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         int remaining = maximumBytes;
         foreach (string output in outputs)
         {
-            byte[] bytes = await ReadFile(client, ["control", service, id, output], nextFid++, remaining, cancellation).ConfigureAwait(false);
+            byte[] bytes = await ReadFile(client, ["control", service, id, output], temporaryFid, remaining, cancellation).ConfigureAwait(false);
             result.Add(output, bytes);
             remaining -= bytes.Length;
         }
-        await ReleaseAsync(client, service, id, nextFid, cancellation).ConfigureAwait(false);
+        await ReleaseAsync(client, service, id, temporaryFid, cancellation).ConfigureAwait(false);
         return result;
     }
 
@@ -108,14 +113,21 @@ public sealed class FogTransactionClient
         await Walk(client, path, fid, cancellation).ConfigureAwait(false);
         await client.ExchangeAsync<Ropen>(tag => new Topen(tag, fid, NinePConstants.OREAD), cancellation).ConfigureAwait(false);
         using var bytes = new MemoryStream();
-        while (true)
+        while (bytes.Length < maximum)
         {
-            uint requested = (uint)Math.Min(client.MessageSize - 11, (long)maximum - bytes.Length + 1);
+            uint requested = (uint)Math.Min(client.MessageSize - 11, maximum - bytes.Length);
             var read = await client.ExchangeAsync<Rread>(tag => new Tread(tag, fid, (ulong)bytes.Length, requested), cancellation).ConfigureAwait(false);
-            if (read.Count > requested || read.Count > maximum - bytes.Length) throw new IOException("Oversized control file.");
-            if (read.Count == 0) break;
+            if (read.Count > requested) throw new IOException("Oversized control file.");
+            if (read.Count == 0)
+            {
+                await client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, fid), cancellation).ConfigureAwait(false);
+                return bytes.ToArray();
+            }
             bytes.Write(read.Data.Span);
         }
+
+        var probe = await client.ExchangeAsync<Rread>(tag => new Tread(tag, fid, (ulong)bytes.Length, 1), cancellation).ConfigureAwait(false);
+        if (probe.Count != 0) throw new IOException("Oversized control file.");
         await client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, fid), cancellation).ConfigureAwait(false);
         return bytes.ToArray();
     }

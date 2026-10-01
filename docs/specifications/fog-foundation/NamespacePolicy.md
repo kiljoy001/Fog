@@ -61,7 +61,7 @@ New lookups use the current tree and permissions. Explicit policy revocation is
 different and invalidates retained grants as described below.
 
 The virtual namespace is not an OS security boundary. Providers running arbitrary
-native code are trusted installed host code. Untrusted AngouriMath/WASM and other guests
+native code are trusted installed host code. Untrusted WASM and other guests
 require a verified runtime or isolated process with no ambient filesystem, process,
 socket, inherited credential, or service-container escape. If that containment
 cannot be established, registration/admission fails before guest execution.

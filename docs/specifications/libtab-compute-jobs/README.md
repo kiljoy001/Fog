@@ -1,5 +1,7 @@
 # LibTab compute jobs over 9P: BDD contract
 
+Current priority: Plan 9 namespace emulation. Workload execution described here is deferred.
+
 Status: proposed, specification-only. The feature files have no bindings and are
 not passing acceptance tests. No compute runtime, service implementation, or new
 library dependency is introduced here. This extends the
@@ -110,8 +112,7 @@ pair is still rejected; there is no implicit provider loading or version fallbac
 | Provider profile | Required fields in addition to `job`, `runtime`, and `provider_version` |
 | --- | --- |
 | All | `memory_bytes`, `deadline_ms`, `output_bytes` |
-| `math` | `source`, `p_operation`, `p_cpu_ms`; `p_variable` for differentiate/solve |
-| `wasm` | `source`, `fuel` |
+| `wasm` namespace profile | `source`, `p_host_calls`, `p_io_bytes` |
 
 Common limits cannot be shadowed or weakened by provider options. Undeclared options
 remain errors even if the client includes them in its own LibTab schema.
@@ -127,12 +128,12 @@ immutable code/artifact caches have separate finite node budgets. `output_bytes`
 limits raw result bytes. Account for input loading, compilation, and artifact loading
 under finite preparation limits too; metering only the execution loop is not enough.
 
-`p_cpu_ms` is the math profile's supervised cumulative process CPU allowance,
-including preparation and result serialization. It is not deterministic CAS fuel;
-sampling overshoot is defined in [Math.md](../fog-v1-profiles/Math.md). `fuel` bounds
-WASM guest execution under a pinned runtime/metering version; imported host calls
-also need explicit capability and resource budgets. `memory_bytes`, `deadline_ms`, and `output_bytes` apply independently to both
-engines. There is no built-in language-model execution profile or token budget.
+The selected dotnet-webassembly profile meters host calls and requested IO bytes.
+It does not provide instruction fuel: a requested `fuel` contract is rejected. Guest
+loops remain bounded by independently supervised deadlines and CPU/memory limits.
+Imported calls require explicit file capabilities as well as these budgets.
+`memory_bytes`, `deadline_ms`, and `output_bytes` apply independently.
+There is no built-in language-model execution profile or token budget.
 
 Examples are in [examples](examples). They assume those job IDs have been allocated,
 their referenced files are authorized, and their requested limits fit policy. They
@@ -207,7 +208,7 @@ Choose workers by runtime/version, hardware support, available memory, and verif
 artifact availability. Reject or queue within bounded policy; never silently
 substitute an engine/artifact or expose native HTTP/RPC as a fallback to 9P.
 
-The optional [MCP gateway](../mcp-gateway/README.md) translates external tool calls
+The proposed optional MCP gateway would translate external tool calls
 into this same authorized file interface. It is not a workload provider and does
 not add an internal RPC path or host language-model inference.
 
@@ -218,7 +219,7 @@ over one cell does not sign sibling fields: bind all authority-relevant fields a
 the artifact digest inside the authenticated manifest, and compare them to the
 frozen job. Encryption is not authorization. Apply resource limits before hash/KDF
 or signature processing. Runtime sandbox host access must go through explicitly
-granted capabilities; uploading AngouriMath/WASM must not grant arbitrary CLR, filesystem,
+granted capabilities; uploading WASM must not grant arbitrary CLR, filesystem,
 process, socket, or swarm-transport access.
 
 ## Features and verification
@@ -227,7 +228,7 @@ process, socket, or swarm-transport access.
 | --- | --- |
 | [TextJobInterface.feature](TextJobInterface.feature) | Real file operations, control grammar, snapshots, and raw results |
 | [JobSubmission.feature](JobSubmission.feature) | Upload sealing, strict LibTab validation, freeze/admission, retry identity |
-| [RuntimeBudgets.feature](RuntimeBudgets.feature) | WASM/AngouriMath limits, placement, and sandbox boundaries |
+| [RuntimeBudgets.feature](RuntimeBudgets.feature) | WASM limits, placement, and sandbox boundaries |
 | [JobLifecycle.feature](JobLifecycle.feature) | Cancellation races, cleanup, reconnect, retention, and uncertain failure |
 | [LibTabCompatibility.feature](LibTabCompatibility.feature) | C/.NET agreement, escaping/nil, format limits, and trusted manifests |
 

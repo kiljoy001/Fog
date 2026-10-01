@@ -127,7 +127,7 @@ reuse of a signing primitive or passing conformance tests is not that review.
    beneath 9P, then verify live file-session recovery.
 4. Start one node using local configuration; introduce the second over 9P.
 5. Bind the selected Orleans version's membership API to the host-level 9P store.
-6. Prove one bounded AngouriMath job, then WASM, through the same path.
+6. After namespace compatibility, prove a bounded WASM job through the same path.
 
 The [concrete v1 profiles](../fog-v1-profiles/README.md) now specify the six previously
 open contracts: AAN establishment, Orleans membership records, the three runtime

@@ -11,8 +11,8 @@ Feature: Different execution engines obey one bounded job lifecycle
 
     Examples:
       | runtime | required       |
-      | math    | p_cpu_ms       |
-      | wasm    | fuel           |
+      | wasm    | p_host_calls   |
+      | wasm    | p_io_bytes     |
 
   @JOB_R02 @security
   Scenario Outline: Unsupported execution choices are not silently substituted
@@ -24,7 +24,7 @@ Feature: Different execution engines obey one bounded job lifecycle
     Examples:
       | choice                                      |
       | an unknown runtime name                     |
-      | AngouriMath with a WASM fuel field instead of p_cpu_ms |
+      | instruction fuel on the dotnet-webassembly namespace profile |
       | a WASM module with unsupported required features |
 
   @JOB_R03 @property
@@ -37,12 +37,11 @@ Feature: Different execution engines obey one bounded job lifecycle
 
     Examples:
       | runtime | budget | reason     |
-      | math    | p_cpu_ms | cpu-limit |
-      | wasm    | fuel   | fuel-limit |
+      | wasm    | deadline_ms | deadline |
 
   @JOB_R04
   Scenario: Expensive primitives and host calls cannot evade execution limits
-    Given an AngouriMath operation or WASM host call held at a controlled long-running barrier
+    Given a WASM host call held at a controlled long-running barrier
     And its job has a finite admitted deadline and host-resource allowance
     When that deadline or allowance is exhausted
     Then the job terminates without waiting indefinitely for the primitive or host call
@@ -58,11 +57,8 @@ Feature: Different execution engines obey one bounded job lifecycle
 
     Examples:
       | runtime | limit        |
-      | math    | memory_bytes |
       | wasm    | memory_bytes |
-      | math    | output_bytes |
       | wasm    | output_bytes |
-      | math    | deadline_ms  |
       | wasm    | deadline_ms  |
 
   @JOB_R08 @cluster

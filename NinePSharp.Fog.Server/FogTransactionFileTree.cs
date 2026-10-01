@@ -56,7 +56,6 @@ public sealed class FogTransactionFileTree : FogFileTree
             if (directory.Service.Length != 0)
             {
                 var service = services[directory.Service];
-                Prune(service);
                 if (directory.Transaction.Length == 0)
                 {
                     if (name == "clone") return service.CloneFile;
@@ -95,7 +94,6 @@ public sealed class FogTransactionFileTree : FogFileTree
     {
         lock (gate)
         {
-            Check(principal, node);
             var service = services[node.Service];
             if (node.File == "clone")
             {
@@ -103,18 +101,10 @@ public sealed class FogTransactionFileTree : FogFileTree
                 if (snapshotBudget < 86) throw new FogException("snapshot-limit");
                 Prune(service);
                 string id = service.Service.Store.Clone(principal.Owner);
-                try
-                {
-                    var directory = new FogFileNode(AllocateQid(), id, true, node.Service, id);
-                    var files = service.Service.InputFiles.Concat(service.Service.OutputFiles).Concat(["ctl", "status"])
-                        .ToDictionary(name => name, name => new FogFileNode(AllocateQid(), name, false, node.Service, id, name), StringComparer.Ordinal);
-                    service.Transactions.Add(id, new TransactionNodes(directory, files));
-                }
-                catch
-                {
-                    service.Service.Store.Release(principal.Owner, id);
-                    throw;
-                }
+                var directory = new FogFileNode(AllocateQid(), id, true, node.Service, id);
+                var files = service.Service.InputFiles.Concat(service.Service.OutputFiles).Concat(["ctl", "status"])
+                    .ToDictionary(name => name, name => new FogFileNode(AllocateQid(), name, false, node.Service, id, name), StringComparer.Ordinal);
+                service.Transactions.Add(id, new TransactionNodes(directory, files));
 
                 return new FogOpenFile(Encoding.ASCII.GetBytes(id + "\n"));
             }
@@ -126,7 +116,7 @@ public sealed class FogTransactionFileTree : FogFileTree
                 {
                     if (bytes.Span.SequenceEqual("commit\n"u8))
                     {
-                        await service.Service.Commit(principal, node.Transaction, cancellation).ConfigureAwait(false);
+                        await service.Service.Commit(principal, node.Transaction, cancellation);
                         return 7;
                     }
                     if (bytes.Span.SequenceEqual("release\n"u8))

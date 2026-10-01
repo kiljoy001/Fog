@@ -10,4 +10,9 @@
     <ProjectReference Include="../NinePSharp.Server/NinePSharp.Server.csproj" />
     <ProjectReference Include="../NinePSharp.Client/NinePSharp.Client.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>NinePSharp.Fog.Server.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

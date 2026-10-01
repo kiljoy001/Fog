@@ -104,6 +104,15 @@ public sealed class FogRecordTests
     }
 
     [Fact]
+    public void EveryKeyFieldIsRequiredEvenWhenNotListedSeparately()
+    {
+        var schema = new FogRecordSchema("tuples", ["id", "value"], [], ["id", "value"]);
+        byte[] missingKey = Encoding.UTF8.GetBytes("schema=tuples\n\tcol=id\n\tcol=value\n\nid=one\n\n");
+
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => schema.Parse(missingKey, 4096, 1)).Code);
+    }
+
+    [Fact]
     public void SchemaAndParsedRowsDoNotLendMutableBackingCollections()
     {
         string[] columns = ["id", "value"];
@@ -160,7 +169,9 @@ public sealed class FogRecordTests
     {
         _ = new FogRecordSchema(new string('x', 128), ["a_0-b"], [], ["a_0-b"]);
         Assert.Throws<ArgumentException>(() => new FogRecordSchema(new string('x', 129), ["id"], [], ["id"]));
-        Assert.Throws<ArgumentException>(() => new FogRecordSchema("good", [], [], ["id"]));
+        Assert.Equal(
+            "Invalid closed record schema.",
+            Assert.Throws<ArgumentException>(() => new FogRecordSchema("good", [], [], ["id"])).Message);
         Assert.Throws<ArgumentException>(() => new FogRecordSchema("good", ["id"], [], []));
         Assert.Throws<ArgumentException>(() => new FogRecordSchema("good", ["id", "id"], [], ["id"]));
         Assert.Throws<ArgumentException>(() => new FogRecordSchema("good", ["id"], ["missing"], ["id"]));

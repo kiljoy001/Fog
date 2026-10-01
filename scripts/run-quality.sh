@@ -12,7 +12,7 @@ fi
 MIN_LINE="${MIN_LINE:-25}"
 MIN_BRANCH="${MIN_BRANCH:-10}"
 CRAP_LIMIT="${CRAP_LIMIT:-30}"
-MIN_MUTATION="${MIN_MUTATION:-90}"
+MIN_MUTATION="${MIN_MUTATION:-100}"
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
@@ -55,6 +55,7 @@ coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "
 step "gate self-tests"
 python3 tools/test_crap.py
 python3 tools/test_coverage_report.py
+python3 tools/test_mutation_summary.py
 
 step "coverage thresholds"
 python3 tools/coverage_gate.py --min-line "$MIN_LINE" --min-branch "$MIN_BRANCH"
