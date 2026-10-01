@@ -48,6 +48,7 @@ coverage_test NinePSharp.Parser.Tests/NinePSharp.Parser.Tests.fsproj json "$ROOT
 coverage_test NinePSharp.Server.Abstractions.Tests/NinePSharp.Server.Abstractions.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Namespaces.Tests/NinePSharp.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Namespaces.Orleans.Tests/NinePSharp.Namespaces.Orleans.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Namespaces.Authorization.Tests/NinePSharp.Namespaces.Authorization.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Tests/NinePSharp.Fog.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Server.Tests/NinePSharp.Fog.Server.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
@@ -82,6 +83,9 @@ if [[ $FULL -eq 1 ]]; then
   (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-transport.json --reporter json --reporter progress --output ../.artifacts/stryker-transport --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker --min-score "$MIN_MUTATION"
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-namespaces --min-score "$MIN_MUTATION"
+  rm -rf .artifacts/stryker-namespaces-authorization
+  (cd NinePSharp.Namespaces.Authorization.Tests && dotnet stryker --config-file ../stryker-config-namespaces-authorization.json --reporter json --reporter progress --output ../.artifacts/stryker-namespaces-authorization --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-namespaces-authorization --min-score "$MIN_MUTATION"
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-orleans --min-score "$MIN_MUTATION"
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-orleans-server --min-score "$MIN_MUTATION"
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-transport --min-score "$MIN_MUTATION"
@@ -105,6 +109,9 @@ if [[ $FULL -eq 1 ]]; then
 
   step "SharpFuzz/AFL namespace syscall campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace-syscalls
+
+  step "SharpFuzz/AFL namespace authorization campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh authorization
 
   step "SharpFuzz/AFL Orleans gateway campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh orleans

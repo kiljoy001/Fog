@@ -67,6 +67,10 @@ The normative feature files are `Authentication.feature`,
 `NamespaceAuthorization.feature`, `PolicyLifecycle.feature`,
 `HostBootstrap.feature`, `AdmissionRecovery.feature`, and
 `FoundationIntegration.feature`. Stable scenario IDs start with `@FOG_`.
+`ResourceAuthorization.feature` (`@NS_AUTHZ_`) specifies the resource authorization
+layer, implemented in `NinePSharp.Namespaces.Authorization` with executable bindings in
+its test project. `NamespaceViews.feature` (`@FOG_VIEW_`) specifies per-principal Fog
+views; it has no bindings yet.
 
 [Examples](examples) illustrate canonical challenge, node configuration and host
 status documents. Their repeated-byte nonces and certificate/key digests are

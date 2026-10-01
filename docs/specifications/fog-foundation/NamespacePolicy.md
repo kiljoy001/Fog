@@ -27,9 +27,11 @@ Authorization is the intersection of:
 5. For jobs, the admitted job scope and remaining limits/lease.
 
 An allow at one layer does not override another layer's denial. Group membership
-is direct and explicit, not recursive. Do not infer it from matching a username
-and group name or copy lib9p's deliberately simplistic `hasperm` helper as a full
-group implementation. There is no implicit host-owner bypass for remote users.
+follows 9front gefs and hjfs `ingroup`: a user is a member of the group with the
+same name and of each group that lists it explicitly; membership is not recursive.
+Mode checks follow gefs `fsaccess`. Do not copy lib9p's deliberately simplistic
+`hasperm` helper as a full group implementation. There is no implicit host-owner
+bypass for remote users.
 
 Resource hosts check a trusted authorization context, not an untrusted serialized
 `User` string. The existing `ResourceOperationContextModel` is a routing/data model,
