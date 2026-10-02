@@ -123,6 +123,41 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
         return key;
     }
 
+    // setkey: the DES key, and the AES key unless it is zero, which recomputes the PAK hash.
+    internal bool SetKey(string name, AuthKey key)
+    {
+        lock (gate)
+        {
+            return database.Find(name) is not null && Commit(next =>
+            {
+                KeyUser user = next.Find(name)!;
+                user.DesKey = key.DesKey;
+                if (key.AesKey.Any(value => value != 0))
+                {
+                    user.AesKey = key.AesKey;
+                    user.Rehash();
+                }
+            }) is null;
+        }
+    }
+
+    internal bool SetSecret(string name, string secret)
+    {
+        lock (gate)
+        {
+            return database.Find(name) is not null && Commit(next => next.Find(name)!.Secret = Encoding.UTF8.GetBytes(secret)) is null;
+        }
+    }
+
+    // succeed: "good" to the user's log, which clears the bad-attempt count.
+    internal void Succeed(string name)
+    {
+        lock (gate)
+        {
+            database.Find(name)?.Bad = 0;
+        }
+    }
+
     private static Rversion Version(Dictionary<uint, Fid> fids, Tversion request)
     {
         fids.Clear();

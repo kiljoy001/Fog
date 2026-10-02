@@ -94,7 +94,8 @@ public sealed class AuthServerHost : IAsyncDisposable
             lifetime.CancelAfter(options.ConnectionLifetime);
             try
             {
-                await new AuthServerConnection(client.GetStream(), keys.FindKey, options.SpeaksFor).ServeAsync(lifetime.Token);
+                string remoteAddress = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
+                await new AuthServerConnection(client.GetStream(), keys, remoteAddress, options.SpeaksFor).ServeAsync(lifetime.Token);
             }
             catch (Exception)
             {

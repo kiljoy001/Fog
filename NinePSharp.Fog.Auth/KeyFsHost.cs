@@ -7,7 +7,7 @@ namespace NinePSharp.Fog.Auth;
 /// A running keyfs: its database unsealed with the TPM-held storage key and its tree served on the
 /// owner-only admin socket. Disposing stops the listener and removes the socket.
 /// </summary>
-public sealed class KeyFsHost : IAsyncDisposable
+public sealed class KeyFsHost : IAsyncDisposable, IAuthDatabase
 {
     internal const string InvalidRecoveryPhrase = "keyfs: invalid recovery phrase";
     internal const string NoSealedKey = "keyfs: no sealed storage key; recover the database with its phrase";
@@ -82,7 +82,13 @@ public sealed class KeyFsHost : IAsyncDisposable
         await listener.DisposeAsync();
     }
 
-    internal AuthKey? FindKey(string user) => Dispatcher.FindKey(user);
+    AuthKey? IAuthDatabase.FindKey(string user) => Dispatcher.FindKey(user);
+
+    bool IAuthDatabase.SetKey(string user, AuthKey key) => Dispatcher.SetKey(user, key);
+
+    bool IAuthDatabase.SetSecret(string user, string secret) => Dispatcher.SetSecret(user, secret);
+
+    void IAuthDatabase.Succeed(string user) => Dispatcher.Succeed(user);
 
     private static KeyFsHost Create(KeyFsOptions options)
     {

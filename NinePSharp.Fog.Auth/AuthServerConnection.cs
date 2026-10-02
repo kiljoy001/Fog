@@ -5,8 +5,8 @@ namespace NinePSharp.Fog.Auth;
 
 /// <summary>
 /// One connection of 9front's authsrv run with -N (sys/src/cmd/auth/authsrv.c): ticket requests in a
-/// loop, AuthPAK filling the authid, hostid and uid key slots, and AuthTreq using them once for form 1
-/// tickets. Any other request, a malformed exchange or the end of the stream ends the connection.
+/// loop, AuthPAK filling the authid, hostid and uid key slots, AuthTreq and AuthPass using them once.
+/// Any other request, a malformed exchange or the end of the stream ends the connection.
 /// </summary>
 internal sealed class AuthServerConnection
 {
@@ -15,18 +15,22 @@ internal sealed class AuthServerConnection
 
     private const int ErrorLength = 64;
 
+    // 9front's list also has "login", "guest" and "passwd", which the length check refuses first.
+    private static readonly string[] TrivialPasswords = ["change me", "no passwd", "anonymous"];
     private static readonly Org.BouncyCastle.Security.SecureRandom Random = new();
     private readonly Stream stream;
-    private readonly Func<string, AuthKey?> findKey;
+    private readonly IAuthDatabase database;
+    private readonly string remoteAddress;
     private readonly IReadOnlyList<SpeaksForRule> speaksFor;
     private Slot? authKey;
     private Slot? hostKey;
     private Slot? userKey;
 
-    internal AuthServerConnection(Stream stream, Func<string, AuthKey?> findKey, IReadOnlyList<SpeaksForRule> speaksFor)
+    internal AuthServerConnection(Stream stream, IAuthDatabase database, string remoteAddress, IReadOnlyList<SpeaksForRule> speaksFor)
     {
         this.stream = stream;
-        this.findKey = findKey;
+        this.database = database;
+        this.remoteAddress = remoteAddress;
         this.speaksFor = speaksFor;
     }
 
@@ -40,6 +44,7 @@ internal sealed class AuthServerConnection
             {
                 AuthMessageType.AuthPak => await PakAsync(request, cancellationToken),
                 AuthMessageType.AuthTreq => await TicketRequestAsync(request, cancellationToken),
+                AuthMessageType.AuthPass => await ChangePasswordAsync(request, cancellationToken),
                 _ => false,
             };
             if (!goOn)
@@ -69,6 +74,19 @@ internal sealed class AuthServerConnection
         return bytes;
     }
 
+    // okpasswd: trailing spaces do not count, and a trivial password is refused read either way round.
+    private static string? WeakPassword(string password)
+    {
+        string trimmed = password.TrimEnd(' ');
+        if (trimmed.Length < 8)
+        {
+            return "password must be at least 8 chars";
+        }
+
+        string reversed = new(trimmed.Reverse().ToArray());
+        return TrivialPasswords.Contains(trimmed) || TrivialPasswords.Contains(reversed) ? "trivial password" : null;
+    }
+
     private async Task<bool> PakAsync(TicketRequest request, CancellationToken cancellationToken)
     {
         await WriteAsync([AuthOK], cancellationToken);
@@ -88,7 +106,7 @@ internal sealed class AuthServerConnection
 
     private async Task<Slot?> PakAsync(string id, CancellationToken cancellationToken)
     {
-        AuthKey? found = findKey(id);
+        AuthKey? found = database.FindKey(id);
         AuthKey key = found is not null && found.AesKey.Any(value => value != 0) ? found : MadeUp(id);
         var state = new AuthPakState();
         await WriteAsync(state.CreatePublicValue(key, isClient: false), cancellationToken);
@@ -112,12 +130,12 @@ internal sealed class AuthServerConnection
             return false;
         }
 
-        if (await GetKeyAsync(request.AuthIdText, cancellationToken) is not AuthKey server)
+        if (await GetKeyAsync(request.AuthIdText, authKey, cancellationToken) is not AuthKey server)
         {
             return false;
         }
 
-        if (await GetKeyAsync(request.HostIdText, cancellationToken) is not AuthKey host)
+        if (await GetKeyAsync(request.HostIdText, hostKey, cancellationToken) is not AuthKey host)
         {
             return false;
         }
@@ -143,21 +161,88 @@ internal sealed class AuthServerConnection
         return true;
     }
 
-    private async Task<AuthKey?> GetKeyAsync(string id, CancellationToken cancellationToken)
+    private async Task<AuthKey?> GetKeyAsync(string id, Slot? slot, CancellationToken cancellationToken)
     {
         if (id.Length == 0)
         {
             return null;
         }
 
-        Slot? slot = new[] { authKey, hostKey, userKey }.FirstOrDefault(each => each?.Id == id);
-        if (slot is not null)
+        if (slot?.Id == id)
         {
             return slot.Key;
         }
 
         await RefuseAsync("DES is disabled", cancellationToken);
         return null;
+    }
+
+    private async Task<bool> ChangePasswordAsync(TicketRequest request, CancellationToken cancellationToken)
+    {
+        string user = request.UserIdText;
+        if (await GetKeyAsync(user, userKey, cancellationToken) is not AuthKey current)
+        {
+            return false;
+        }
+
+        var ticket = new Ticket(AuthMessageType.AuthTp, TicketEncryptionForm.Form1);
+        ticket.SetChallenge(request.Challenge);
+        ticket.SetClientUser(user);
+        ticket.SetServerUser(user);
+        ticket.SetSessionKey(RandomBytes(Dp9ikConstants.NonceLength));
+        await WriteAsync([AuthOK, .. ticket.Marshal(current)], cancellationToken);
+        while (true)
+        {
+            byte[] sealedRequest = await ReadAsync(Dp9ikConstants.MaxPasswordRequestLength, cancellationToken);
+            if (!PasswordRequest.TryUnmarshal(ticket, sealedRequest, out PasswordRequest? change, out _) || change!.Type != AuthMessageType.AuthPass)
+            {
+                await RefuseAsync($"protocol botch1: {remoteAddress}", cancellationToken);
+                return false;
+            }
+
+            if (await TryChangeAsync(user, current, change, cancellationToken))
+            {
+                break;
+            }
+        }
+
+        database.Succeed(user);
+        await WriteAsync([AuthOK], cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> TryChangeAsync(string user, AuthKey current, PasswordRequest change, CancellationToken cancellationToken)
+    {
+        AuthKey old = AuthKey.FromPassword(change.OldPasswordText);
+        string? refusal = null;
+        if (!old.DesKey.AsSpan().SequenceEqual(current.DesKey))
+        {
+            refusal = "protocol botch2:";
+        }
+        else if (current.AesKey.Any(value => value != 0) && !old.AesKey.AsSpan().SequenceEqual(current.AesKey))
+        {
+            refusal = "protocol botch3:";
+        }
+        else if (change.NewPasswordText.Length > 0 && WeakPassword(change.NewPasswordText) is string weak)
+        {
+            refusal = weak;
+        }
+        else if (change.ChangeSecret && !database.SetSecret(user, change.SecretText))
+        {
+            refusal = "can't write secret";
+        }
+        else if (change.NewPasswordText.Length > 0 && !database.SetKey(user, AuthKey.FromPassword(change.NewPasswordText)))
+        {
+            refusal = "can't write key";
+        }
+
+        if (refusal is null)
+        {
+            return true;
+        }
+
+        await RefuseAsync($"{refusal} {remoteAddress}", cancellationToken);
+        return false;
     }
 
     private bool SpeaksFor(string speaker, string user)
