@@ -11,6 +11,7 @@ public sealed class FogRecordSchema
         Encoding.UTF8.CodePage,
         EncoderFallback.ExceptionFallback,
         DecoderFallback.ExceptionFallback);
+
     private readonly string name;
     private readonly string[] columns;
     private readonly string[] required;
@@ -149,6 +150,9 @@ public sealed class FogRecordSchema
         }
     }
 
+    private static bool ValidName(string value) => !string.IsNullOrEmpty(value) && value.Length <= 128 &&
+        value.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-');
+
     private TabTable NewTable() => TabTable.Create("memory", name, columns.Select(column => new TabColumn(column)));
 
     private void Preflight(string text, int maxRows)
@@ -198,7 +202,4 @@ public sealed class FogRecordSchema
             }
         }
     }
-
-    private static bool ValidName(string value) => !string.IsNullOrEmpty(value) && value.Length <= 128 &&
-        value.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-');
 }

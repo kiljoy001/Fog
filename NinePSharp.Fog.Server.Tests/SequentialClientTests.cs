@@ -17,6 +17,7 @@ public sealed class SequentialClientTests
         await using var client = new NinePSequentialClient(stream, int.MaxValue);
         Assert.Equal((uint)int.MaxValue, client.MessageSize);
     }
+
     [Theory]
     [InlineData(0)]
     [InlineData(255)]
@@ -61,11 +62,16 @@ public sealed class SequentialClientTests
             case "trailing": reply = reply.Concat(new byte[] { 1 }).ToArray(); reply[0]++; break;
             case "mismatched": reply = Frame(new Rflush(0)); break;
         }
+
         using var stream = new PeerStream(Frame(new Rversion(65535, 512, "9P2000")).Concat(reply).ToArray());
         await using var client = new NinePSequentialClient(stream, 512);
         await client.NegotiateAsync(CancellationToken.None);
         var error = await Assert.ThrowsAnyAsync<IOException>(() => client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None));
-        if (diagnostic is not null) Assert.Equal(diagnostic, error.Message);
+        if (diagnostic is not null)
+        {
+            Assert.Equal(diagnostic, error.Message);
+        }
+
         Assert.True(stream.Disposed);
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None));
     }
@@ -78,8 +84,7 @@ public sealed class SequentialClientTests
         await using var client = new NinePSequentialClient(stream, 512);
         await client.NegotiateAsync(CancellationToken.None);
         Assert.Equal(256U, client.MessageSize);
-        Assert.Equal("denied", (await Assert.ThrowsAsync<NinePException>(() =>
-            client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None))).Message);
+        Assert.Equal("denied", (await Assert.ThrowsAsync<NinePException>(() => client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None))).Message);
         Assert.False(stream.Disposed);
         Assert.Equal((ushort)1, (await client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None)).Tag);
         Assert.Equal(Frame(new Tversion(65535, 512, "9P2000")).Concat(Frame(new Tclunk(0, 1))).Concat(Frame(new Tclunk(1, 1))), stream.Written);
@@ -90,12 +95,10 @@ public sealed class SequentialClientTests
     {
         using var stream = new PeerStream(Frame(new Rversion(65535, 256, "9P2000")));
         await using var client = new NinePSequentialClient(stream, 256);
-        Assert.Equal("Negotiate before exchanging requests.", (await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None))).Message);
+        Assert.Equal("Negotiate before exchanging requests.", (await Assert.ThrowsAsync<InvalidOperationException>(() => client.ExchangeAsync<Rclunk>(tag => new Tclunk(tag, 1), CancellationToken.None))).Message);
         Assert.Empty(stream.Written);
         await client.NegotiateAsync(CancellationToken.None);
-        Assert.Equal("Invalid request frame.", (await Assert.ThrowsAsync<ArgumentException>(() =>
-            client.ExchangeAsync<Rclunk>(_ => new Tclunk(65535, 1), CancellationToken.None))).Message);
+        Assert.Equal("Invalid request frame.", (await Assert.ThrowsAsync<ArgumentException>(() => client.ExchangeAsync<Rclunk>(_ => new Tclunk(65535, 1), CancellationToken.None))).Message);
         await Assert.ThrowsAsync<ArgumentException>(() => client.ExchangeAsync<Rwrite>(tag => new Twrite(tag, 1, 0, new byte[256]), CancellationToken.None));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
@@ -143,7 +146,11 @@ public sealed class SequentialClientTests
             SynchronizationContext.SetSynchronizationContext(context);
             negotiation = client.NegotiateAsync(CancellationToken.None);
         }
-        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
         Assert.False(negotiation.IsCompleted);
         stream.WriteResume.SetResult();
         await negotiation.WaitAsync(TimeSpan.FromSeconds(5));
@@ -161,13 +168,22 @@ public sealed class SequentialClientTests
         bool invalid = stage == "dispose";
         using var stream = new PeerStream(Frame(new Rversion(65535, invalid ? 255U : 256U, "9P2000")));
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (stage == "flush") stream.FlushResume = resume;
+        if (stage == "flush")
+        {
+            stream.FlushResume = resume;
+        }
+
         if (stage is "header" or "body")
         {
             stream.ReadResume = resume;
             stream.PauseBodyRead = stage == "body";
         }
-        if (stage == "dispose") stream.DisposeResume = resume;
+
+        if (stage == "dispose")
+        {
+            stream.DisposeResume = resume;
+        }
+
         await using var client = new NinePSequentialClient(stream, 256);
         var context = new RecordingContext();
         var previous = SynchronizationContext.Current;
@@ -177,23 +193,24 @@ public sealed class SequentialClientTests
             SynchronizationContext.SetSynchronizationContext(context);
             negotiation = client.NegotiateAsync(CancellationToken.None);
         }
-        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
         Assert.False(negotiation.IsCompleted);
 
         resume.SetResult();
-        if (invalid) await Assert.ThrowsAsync<IOException>(() => negotiation.WaitAsync(TimeSpan.FromMilliseconds(250)));
-        else await negotiation.WaitAsync(TimeSpan.FromMilliseconds(250));
-        Assert.Equal(0, context.Posts);
-    }
-
-    private sealed class RecordingContext : SynchronizationContext
-    {
-        internal int Posts;
-        public override void Post(SendOrPostCallback callback, object? state)
+        if (invalid)
         {
-            Interlocked.Increment(ref Posts);
-            ThreadPool.QueueUserWorkItem(_ => callback(state));
+            await Assert.ThrowsAsync<IOException>(() => negotiation.WaitAsync(TimeSpan.FromMilliseconds(250)));
         }
+        else
+        {
+            await negotiation.WaitAsync(TimeSpan.FromMilliseconds(250));
+        }
+
+        Assert.Equal(0, context.Posts);
     }
 
     internal static byte[] Frame(ISerializable message)
@@ -206,8 +223,11 @@ public sealed class SequentialClientTests
     private readonly struct MinimumRequest(ushort tag) : ISerializable
     {
         public uint Size => 7;
+
         public MessageTypes Type => MessageTypes.Tclunk;
+
         public ushort Tag => tag;
+
         public void WriteTo(Span<byte> data)
         {
             BinaryPrimitives.WriteUInt32LittleEndian(data, Size);
@@ -216,50 +236,111 @@ public sealed class SequentialClientTests
         }
     }
 
+    private sealed class RecordingContext : SynchronizationContext
+    {
+        private int posts;
+
+        internal int Posts => Volatile.Read(ref posts);
+
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            Interlocked.Increment(ref posts);
+            ThreadPool.QueueUserWorkItem(_ => callback(state));
+        }
+    }
+
     private sealed class PeerStream(byte[] response) : Stream
     {
         private readonly MemoryStream reads = new(response);
         private readonly MemoryStream writes = new();
-        internal bool Disposed;
-        internal int Flushes;
-        internal TaskCompletionSource? WriteResume;
-        internal TaskCompletionSource? FlushResume;
-        internal TaskCompletionSource? ReadResume;
-        internal TaskCompletionSource? DisposeResume;
-        internal bool PauseBodyRead;
-        internal byte[] Written => writes.ToArray();
+
         public override bool CanRead => !Disposed;
+
         public override bool CanWrite => !Disposed;
+
         public override bool CanSeek => false;
+
         public override long Length => throw new NotSupportedException();
+
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        internal bool Disposed { get; set; }
+
+        internal int Flushes { get; set; }
+
+        internal TaskCompletionSource? WriteResume { get; set; }
+
+        internal TaskCompletionSource? FlushResume { get; set; }
+
+        internal TaskCompletionSource? ReadResume { get; set; }
+
+        internal TaskCompletionSource? DisposeResume { get; set; }
+
+        internal bool PauseBodyRead { get; set; }
+
+        internal byte[] Written => writes.ToArray();
+
         public override int Read(byte[] buffer, int offset, int count) => reads.Read(buffer, offset, Math.Min(count, 2));
+
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (ReadResume is not null && (PauseBodyRead ? reads.Position >= 7 : reads.Position == 0))
+            {
                 await ReadResume.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return await reads.ReadAsync(buffer[..Math.Min(buffer.Length, 2)], cancellationToken).ConfigureAwait(false);
         }
+
         public override void Write(byte[] buffer, int offset, int count) => writes.Write(buffer, offset, count);
+
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            if (WriteResume is not null) await WriteResume.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (WriteResume is not null)
+            {
+                await WriteResume.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             await writes.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
         }
+
         public override void Flush() => Flushes++;
+
         public override async Task FlushAsync(CancellationToken cancellationToken)
         {
-            if (FlushResume is not null) await FlushResume.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (FlushResume is not null)
+            {
+                await FlushResume.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             Flushes++;
         }
+
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
         public override void SetLength(long value) => throw new NotSupportedException();
-        protected override void Dispose(bool disposing) { Disposed = true; if (disposing) { reads.Dispose(); writes.Dispose(); } base.Dispose(disposing); }
+
         public override async ValueTask DisposeAsync()
         {
-            if (DisposeResume is not null) await DisposeResume.Task.ConfigureAwait(false);
+            if (DisposeResume is not null)
+            {
+                await DisposeResume.Task.ConfigureAwait(false);
+            }
+
             Dispose(true);
             GC.SuppressFinalize(this);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            if (disposing)
+{
+    reads.Dispose();
+    writes.Dispose();
+}
+
+            base.Dispose(disposing);
         }
     }
 }

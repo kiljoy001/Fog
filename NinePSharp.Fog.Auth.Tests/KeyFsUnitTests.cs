@@ -34,17 +34,23 @@ public sealed class KeyFsUnitTests : IDisposable
     public void A_Secret_Buffer_Is_Zeroed_When_Released()
     {
         byte[] bytes = [1, 2, 3, 4];
-        using (var secret = new SecretBuffer(bytes)) Assert.Same(bytes, secret.Bytes);
+        using (var secret = new SecretBuffer(bytes))
+        {
+            Assert.Same(bytes, secret.Bytes);
+        }
+
         Assert.Equal(new byte[4], bytes);
     }
 
     [Fact]
     public void The_Wordlist_Must_Exist_And_Hold_2048_Words()
     {
-        Assert.Equal("The BIP-39 wordlist resource is missing.",
+        Assert.Equal(
+            "The BIP-39 wordlist resource is missing.",
             Assert.Throws<InvalidOperationException>(() => RecoveryPhrase.ParseWordlist(null)).Message);
         using var short_ = new MemoryStream("abandon\nability\n"u8.ToArray());
-        Assert.Equal("The BIP-39 wordlist must hold 2048 words.",
+        Assert.Equal(
+            "The BIP-39 wordlist must hold 2048 words.",
             Assert.Throws<InvalidOperationException>(() => RecoveryPhrase.ParseWordlist(short_)).Message);
     }
 

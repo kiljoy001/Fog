@@ -83,7 +83,9 @@ public sealed class FogTransactionStore
     /// Cancellation stops only this caller's wait. An uncertain apply stays committing,
     /// retains its reservation, and is never retried or expired by this store.
     /// </summary>
-    public Task CommitAsync(string owner, string id,
+    public Task CommitAsync(
+        string owner,
+        string id,
         Func<IReadOnlyDictionary<string, ReadOnlyMemory<byte>>, FogCommitPlan> prepare,
         CancellationToken cancellationToken = default)
     {
@@ -107,6 +109,7 @@ public sealed class FogTransactionStore
                 Dictionary<string, byte[]> outputs = FreezeOutputs(plan);
                 entry.State = "committing";
                 entry.Completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
                 // Invoke outside the store lock. Unrelated control and cleanup must remain responsive.
                 _ = Task.Run(() => ApplyAsync(entry, plan, outputs), CancellationToken.None);
             }
@@ -127,7 +130,9 @@ public sealed class FogTransactionStore
     }
 
     /// <summary>Atomically prepares, bounds, applies and records an in-memory control operation.</summary>
-    public Task CommitAtomicAsync(string owner, string id,
+    public Task CommitAtomicAsync(
+        string owner,
+        string id,
         Func<IReadOnlyDictionary<string, ReadOnlyMemory<byte>>, FogAtomicPlan> prepare,
         CancellationToken cancellationToken = default)
     {
@@ -182,8 +187,16 @@ public sealed class FogTransactionStore
         lock (gate)
         {
             Entry entry = Find(owner, id);
-            if (entry.State != "done") throw new FogException("not-ready");
-            if (!entry.Outputs.TryGetValue(file, out var bytes)) throw new FogException("invalid-request");
+            if (entry.State != "done")
+            {
+                throw new FogException("not-ready");
+            }
+
+            if (!entry.Outputs.TryGetValue(file, out var bytes))
+            {
+                throw new FogException("invalid-request");
+            }
+
             return bytes.Length;
         }
     }
@@ -301,6 +314,17 @@ public sealed class FogTransactionStore
         }
     }
 
+    private static void RequireStaging(Entry entry)
+    {
+        if (entry.State != "staging")
+        {
+            throw new FogException("busy");
+        }
+    }
+
+    private static bool ValidFile(string file) => !string.IsNullOrEmpty(file) && file.Length <= 64 &&
+        file.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-');
+
     private async Task ApplyAsync(Entry entry, FogCommitPlan plan, Dictionary<string, byte[]> outputs)
     {
         try
@@ -339,7 +363,7 @@ public sealed class FogTransactionStore
     private Dictionary<string, byte[]> FreezeOutputs(FogCommitPlan plan)
     {
         if (plan.Outputs.Count > limits.MaxFiles || !plan.Outputs.ContainsKey("reply") ||
-            plan.Outputs.Keys.Any(file => !ValidFile(file)) || plan.Error is not null && !ValidFile(plan.Error))
+            plan.Outputs.Keys.Any(file => !ValidFile(file)) || (plan.Error is not null && !ValidFile(plan.Error)))
         {
             throw new FogException("invalid-request");
         }
@@ -395,17 +419,6 @@ public sealed class FogTransactionStore
         }
     }
 
-    private static void RequireStaging(Entry entry)
-    {
-        if (entry.State != "staging")
-        {
-            throw new FogException("busy");
-        }
-    }
-
-    private static bool ValidFile(string file) => !string.IsNullOrEmpty(file) && file.Length <= 64 &&
-        file.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-');
-
     private bool Expired(Entry entry) => entry.State != "committing" &&
         time.GetElapsedTime(entry.Timestamp) >= (entry.State == "done" ? limits.RetentionLifetime : limits.StagingLifetime);
 
@@ -426,13 +439,20 @@ public sealed class FogTransactionStore
 
     private sealed class Entry(string owner, long timestamp)
     {
-        internal readonly string Owner = owner;
-        internal readonly Dictionary<string, byte[]> Inputs = new(StringComparer.Ordinal);
-        internal Dictionary<string, byte[]> Outputs = new(StringComparer.Ordinal);
-        internal long Timestamp = timestamp;
-        internal string State = "staging";
-        internal string? Error;
-        internal FogUpload? Writer;
-        internal TaskCompletionSource? Completion;
+        internal string Owner { get; } = owner;
+
+        internal Dictionary<string, byte[]> Inputs { get; } = new(StringComparer.Ordinal);
+
+        internal Dictionary<string, byte[]> Outputs { get; set; } = new(StringComparer.Ordinal);
+
+        internal long Timestamp { get; set; } = timestamp;
+
+        internal string State { get; set; } = "staging";
+
+        internal string? Error { get; set; }
+
+        internal FogUpload? Writer { get; set; }
+
+        internal TaskCompletionSource? Completion { get; set; }
     }
 }

@@ -135,6 +135,17 @@ Feature: Fog issues dp9ik tickets as 9front authsrv does
     Then the server replies AuthErr "DES is disabled"
 
   @FOG_AUTHSRV_007
+  Scenario Outline: A ticket request with an empty id ends the connection silently, as authsrv's getkey exits
+    Given a client that completed a PAK request with authid "fog", hostid "glenda" and uid "glenda"
+    When it sends a ticket request with authid "<authid>", hostid "<hostid>", uid "glenda" and a fresh challenge
+    Then the server closes the connection without replying
+
+    Examples:
+      | authid | hostid |
+      |        | glenda |
+      | fog    |        |
+
+  @FOG_AUTHSRV_007
   Scenario: A ticket request with an empty uid ends the connection
     Given a client that completed a PAK request with authid "fog", hostid "glenda" and uid "glenda"
     When it sends a ticket request with authid "fog", hostid "glenda", uid "" and a fresh challenge

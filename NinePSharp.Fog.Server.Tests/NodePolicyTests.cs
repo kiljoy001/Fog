@@ -21,7 +21,11 @@ public sealed class NodePolicyTests
             principal with { Node = "unknown" }, principal with { Node = "other" },
             principal with { Boot = new string('0', 64) }, principal with { PolicyEpoch = 0 },
             principal with { SpkiSha256 = new string('0', 64) },
-        }) Denied(() => fixture.Policy.Check(invalid, fixture.NodeCertificate));
+        })
+        {
+            Denied(() => fixture.Policy.Check(invalid, fixture.NodeCertificate));
+        }
+
         Denied(() => fixture.Policy.Check(principal, null));
         Denied(() => fixture.Policy.Check(principal, fixture.OtherCertificate));
         Denied(() => fixture.Policy.Attach("unknown", fixture.NodeCertificate));
@@ -53,9 +57,11 @@ public sealed class NodePolicyTests
         var policy = new FogNodePolicy(1, registrations);
         registrations[0] = enrollment with { Enabled = false };
         Assert.True(policy.AuthenticateCertificate(certificate));
-        Assert.Throws<ArgumentException>(() => new FogNodePolicy(1,
+        Assert.Throws<ArgumentException>(() => new FogNodePolicy(
+            1,
             [enrollment with { Boot = new string('a', 63) + "G" }]));
-        Assert.Throws<ArgumentException>(() => new FogNodePolicy(1,
+        Assert.Throws<ArgumentException>(() => new FogNodePolicy(
+            1,
             [enrollment with { SpkiSha256 = new string('a', 63) + "G" }]));
         Assert.Throws<ArgumentOutOfRangeException>(() => new FogNodePolicy(0, []));
         Assert.Throws<ArgumentNullException>(() => new FogNodePolicy(1, null!));
@@ -106,8 +112,6 @@ public sealed class NodePolicyTests
         Assert.True(policy.AuthenticateCertificate(certificate));
     }
 
-    private static void Denied(Action check) => Assert.Equal("denied", Assert.Throws<FogException>(check).Code);
-
     [Fact]
     public void ExactSanNamesAndIdentifierBoundariesAreEnforced()
     {
@@ -120,9 +124,13 @@ public sealed class NodePolicyTests
         _ = new FogNodePolicy(1, [entry]);
         Assert.Equal("Invalid node enrollment.", Assert.Throws<ArgumentException>(() => new FogNodePolicy(1, [entry with { Node = name + "a" }])).Message);
     }
+
+    private static void Denied(Action check) => Assert.Equal("denied", Assert.Throws<FogException>(check).Code);
+
     private sealed class UtcClock : TimeProvider
     {
-        internal DateTimeOffset Now;
+        internal DateTimeOffset Now { get; set; }
+
         public override DateTimeOffset GetUtcNow() => Now;
     }
 }

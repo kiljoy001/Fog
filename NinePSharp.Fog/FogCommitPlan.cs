@@ -6,5 +6,3 @@ namespace NinePSharp.Fog;
 /// This in-memory primitive is not a durable transaction manager.
 /// </summary>
 public sealed record FogCommitPlan(IReadOnlyDictionary<string, byte[]> Outputs, Func<Task> ApplyAsync, string? Error = null);
-
-public sealed record FogTransactionStatus(string Id, string State, string? Error);

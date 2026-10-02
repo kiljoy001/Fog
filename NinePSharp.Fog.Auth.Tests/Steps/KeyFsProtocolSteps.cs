@@ -2,8 +2,8 @@ using System.Globalization;
 using Dp9ik;
 using NinePSharp.Client;
 using NinePSharp.Constants;
-using NinePSharp.Interfaces;
 using NinePSharp.Fog.Auth.Tests.Support;
+using NinePSharp.Interfaces;
 using NinePSharp.Messages;
 using Reqnroll;
 using Xunit;
@@ -16,7 +16,7 @@ public sealed class KeyFsProtocolSteps
 {
     private const uint DMDIR = 0x80000000;
     private SoftwareTpm? tpm;
-    private string directory = "";
+    private string directory = string.Empty;
     private KeyFsOptions options = null!;
     private KeyFsHost? host;
     private KeyFsClient keyfs = null!;
@@ -43,7 +43,7 @@ public sealed class KeyFsProtocolSteps
         using KeyFsClient setup = await KeyFsClient.AttachAsync(options.SocketPath);
         foreach (string user in new[] { first, other })
         {
-            await setup.CreateAsync("", user, isDirectory: true);
+            await setup.CreateAsync(string.Empty, user, isDirectory: true);
             await setup.WriteAsync($"{user}/aeskey", AuthKey.FromPassword(user + "-password").AesKey);
         }
     }
@@ -56,12 +56,17 @@ public sealed class KeyFsProtocolSteps
     {
         second?.Dispose();
         keyfs?.Dispose();
-        if (host is not null) await host.DisposeAsync();
-        tpm?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
-    }
+        if (host is not null)
+        {
+            await host.DisposeAsync();
+        }
 
-    // --- Version and fids --------------------------------------------------------
+        tpm?.Dispose();
+        if (Directory.Exists(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 
     [When(@"^the client negotiates version ""(.*)"" with message size (\d+)$")]
     public async Task WhenVersion(string version, uint size) => reply = await keyfs.Raw.VersionAsync(size, version);
@@ -105,8 +110,6 @@ public sealed class KeyFsProtocolSteps
         Assert.True(failure is NinePException, failure?.ToString() ?? "the request succeeded");
         Assert.Equal(message, failure!.Message);
     }
-
-    // --- Walks -------------------------------------------------------------------
 
     [Given(@"^fid (\d+) is walked to ""(.*)""$")]
     public async Task GivenWalked(uint fid, string path) => await keyfs.Raw.WalkAsync(KeyFsClient.RootFid, fid, path.Split('/'));
@@ -157,8 +160,6 @@ public sealed class KeyFsProtocolSteps
     [Then(@"^fid (\d+) still names ""(.*)""$")]
     public async Task ThenStillNames(uint fid, string name) => Assert.Equal(name, (await keyfs.Raw.StatAsync(fid)).Stat.Name);
 
-    // --- Qids --------------------------------------------------------------------
-
     [Then(@"^the qid of ""(.*)"" is a directory with path 0$")]
     public async Task ThenRootQid(string path)
     {
@@ -184,7 +185,11 @@ public sealed class KeyFsProtocolSteps
     [When(@"^""(.*)"" is renamed to ""(.*)"" over 9P$")]
     public async Task WhenRenamed(string path, string name)
     {
-        if (path.Length > 0 && !path.Contains('/', StringComparison.Ordinal)) renamedQid = await QidOf(path);
+        if (path.Length > 0 && !path.Contains('/', StringComparison.Ordinal))
+        {
+            renamedQid = await QidOf(path);
+        }
+
         failure = await CatchAsync(() => keyfs.RenameAsync(path, name));
     }
 
@@ -194,8 +199,6 @@ public sealed class KeyFsProtocolSteps
         Assert.Null(failure);
         Assert.Equal(renamedQid, await QidOf(path));
     }
-
-    // --- Open and create -----------------------------------------------------------
 
     [When(@"^""(.*)"" is opened for (reading|writing|truncation)$")]
     public async Task WhenOpened(string path, string mode)
@@ -217,7 +220,7 @@ public sealed class KeyFsProtocolSteps
     [When(@"^the client creates the directory ""(.*)"" in the root$")]
     public async Task WhenCreated(string name)
     {
-        uint fid = await keyfs.WalkAsync("");
+        uint fid = await keyfs.WalkAsync(string.Empty);
         failure = await CatchAsync(async () => reply = await keyfs.Raw.CreateAsync(fid, name, DMDIR | 0x1FF, 0));
     }
 
@@ -230,11 +233,9 @@ public sealed class KeyFsProtocolSteps
         Assert.Equal(iounit, created.Iounit);
     }
 
-    // --- Directory reads and stat ----------------------------------------------------
-
     [Then(@"^the root lists ""(.*)""$")]
     public async Task ThenRootLists(string names)
-        => Assert.Equal(names.Split(", "), (await keyfs.ListAsync("")).Select(entry => entry.Name).ToArray());
+        => Assert.Equal(names.Split(", "), (await keyfs.ListAsync(string.Empty)).Select(entry => entry.Name).ToArray());
 
     [When("the root is read with a count one byte smaller than its first entry")]
     public async Task WhenReadSmall()
@@ -275,13 +276,13 @@ public sealed class KeyFsProtocolSteps
         Assert.Equal(await QidOf(path), stat.Qid);
     }
 
-    // --- Other requests and connections -------------------------------------------
-
     [When(@"^a raw connection sends a 9P2000\.L getattr with tag (\d+)$")]
     public async Task WhenRawGetattr(ushort tag)
     {
-        using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix,
-            System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
+        using var socket = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.Unix,
+            System.Net.Sockets.SocketType.Stream,
+            System.Net.Sockets.ProtocolType.Unspecified);
         await socket.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(options.SocketPath));
         await using var stream = new System.Net.Sockets.NetworkStream(socket);
         await SendRawAsync(stream, new Tversion(NinePConstants.NoTag, 8192, "9P2000"));
@@ -324,7 +325,7 @@ public sealed class KeyFsProtocolSteps
         for (int index = 0; index < count; index++)
         {
             using KeyFsClient transient = await KeyFsClient.AttachAsync(options.SocketPath);
-            await transient.ListAsync("");
+            await transient.ListAsync(string.Empty);
         }
     }
 
@@ -332,20 +333,24 @@ public sealed class KeyFsProtocolSteps
     public async Task ThenOneSession()
     {
         // Closing is noticed asynchronously by the connection loop.
-        for (int attempt = 0; attempt < 100 && host!.Dispatcher.SessionCount != 1; attempt++) await Task.Delay(50);
+        for (int attempt = 0; attempt < 100 && host!.Dispatcher.SessionCount != 1; attempt++)
+        {
+            await Task.Delay(50);
+        }
+
         Assert.Equal(1, host!.Dispatcher.SessionCount);
     }
 
     [Then("the admin listener tracks only the open connection")]
     public async Task ThenOneConnection()
     {
-        for (int attempt = 0; attempt < 100 && host!.AdminConnections != 1; attempt++) await Task.Delay(50);
+        for (int attempt = 0; attempt < 100 && host!.AdminConnections != 1; attempt++)
+        {
+            await Task.Delay(50);
+        }
+
         Assert.Equal(1, host!.AdminConnections);
     }
-
-    // --- Helpers -------------------------------------------------------------------
-
-    private async Task<Qid> QidOf(string path) => (await keyfs.StatAsync(path)).Qid;
 
     private static async Task SendRawAsync(Stream stream, ISerializable message)
     {
@@ -366,21 +371,6 @@ public sealed class KeyFsProtocolSteps
 
     private static ulong UserNumber(Qid qid) => qid.Path / 256;
 
-    private async Task MeasureRoot()
-    {
-        rootListing = await keyfs.ReadAsync("");
-        int offset = 0;
-        _ = new Stat(rootListing, ref offset);
-        firstEntryLength = offset;
-    }
-
-    private async Task<Rread> ReadRoot(ulong offset, uint count)
-    {
-        uint fid = await keyfs.WalkAsync("");
-        await keyfs.Raw.OpenAsync(fid, 0);
-        return await keyfs.Raw.ReadAsync(fid, offset, count);
-    }
-
     private static async Task<Exception?> CatchAsync(Func<Task> action)
     {
         try
@@ -392,5 +382,22 @@ public sealed class KeyFsProtocolSteps
         {
             return caught;
         }
+    }
+
+    private async Task<Qid> QidOf(string path) => (await keyfs.StatAsync(path)).Qid;
+
+    private async Task MeasureRoot()
+    {
+        rootListing = await keyfs.ReadAsync(string.Empty);
+        int offset = 0;
+        _ = new Stat(rootListing, ref offset);
+        firstEntryLength = offset;
+    }
+
+    private async Task<Rread> ReadRoot(ulong offset, uint count)
+    {
+        uint fid = await keyfs.WalkAsync(string.Empty);
+        await keyfs.Raw.OpenAsync(fid, 0);
+        return await keyfs.Raw.ReadAsync(fid, offset, count);
     }
 }

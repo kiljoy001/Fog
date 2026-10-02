@@ -4,11 +4,6 @@ namespace NinePSharp.Fog;
 public sealed class FogUpload : IDisposable
 {
     private readonly FogTransactionStore store;
-    internal readonly string Owner;
-    internal readonly string Transaction;
-    internal readonly string Session;
-    internal readonly string File;
-    internal readonly MemoryStream Buffer = new();
 
     internal FogUpload(FogTransactionStore store, string owner, string transaction, string session, string file)
     {
@@ -18,6 +13,16 @@ public sealed class FogUpload : IDisposable
         Session = session;
         File = file;
     }
+
+    internal string Owner { get; }
+
+    internal string Transaction { get; }
+
+    internal string Session { get; }
+
+    internal string File { get; }
+
+    internal MemoryStream Buffer { get; } = new();
 
     public void Write(ulong offset, ReadOnlySpan<byte> bytes) => store.Write(this, offset, bytes);
 

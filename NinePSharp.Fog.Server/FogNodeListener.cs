@@ -26,12 +26,22 @@ public sealed class FogNodeListener : IAsyncDisposable
     private Task? accepting;
     private Task? disposal;
 
-    public FogNodeListener(IPEndPoint endpoint, X509Certificate2 certificate, FogNodePolicy policy,
-        INinePFSDispatcher dispatcher, ILogger logger, int maximumConnections, TimeSpan handshakeTimeout, TimeSpan sessionLifetime)
+    public FogNodeListener(
+        IPEndPoint endpoint,
+        X509Certificate2 certificate,
+        FogNodePolicy policy,
+        INinePFSDispatcher dispatcher,
+        ILogger logger,
+        int maximumConnections,
+        TimeSpan handshakeTimeout,
+        TimeSpan sessionLifetime)
     {
         ArgumentNullException.ThrowIfNull(certificate);
         if (!certificate.HasPrivateKey || maximumConnections <= 0 || handshakeTimeout <= TimeSpan.Zero || sessionLifetime <= TimeSpan.Zero)
+        {
             throw new ArgumentException("Invalid TLS node listener configuration.");
+        }
+
         this.certificate = certificate;
         this.policy = policy;
         this.maximumConnections = maximumConnections;
@@ -48,10 +58,28 @@ public sealed class FogNodeListener : IAsyncDisposable
         lock (lifecycleGate)
         {
             ObjectDisposedException.ThrowIf(disposal is not null, this);
-            if (accepting is not null) throw new InvalidOperationException("Listener already started.");
+            if (accepting is not null)
+            {
+                throw new InvalidOperationException("Listener already started.");
+            }
+
             listener.Start();
             accepting = AcceptAsync();
         }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        lock (lifecycleGate)
+        {
+            return new ValueTask(disposal ??= DisposeCoreAsync());
+        }
+    }
+
+    internal static TcpClient ConfigureAcceptedClient(TcpClient client)
+    {
+        client.NoDelay = true;
+        return client;
     }
 
     private async Task AcceptAsync()
@@ -73,9 +101,14 @@ public sealed class FogNodeListener : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) when (stopping.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+        {
+        }
+
         // Disposal between accepts: a stopped TcpListener rejects the next accept before observing the token.
-        catch (InvalidOperationException) when (stopping.IsCancellationRequested) { }
+        catch (InvalidOperationException) when (stopping.IsCancellationRequested)
+        {
+        }
     }
 
     private async Task ServeAsync(TcpClient client, TaskCompletionSource finished)
@@ -88,15 +121,21 @@ public sealed class FogNodeListener : IAsyncDisposable
                 peer is X509Certificate2 supplied && policy.AuthenticateCertificate(supplied));
             using var handshake = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             handshake.CancelAfter(handshakeTimeout);
-            await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+            await tls.AuthenticateAsServerAsync(
+                new SslServerAuthenticationOptions
             {
                 ServerCertificate = certificate,
                 ClientCertificateRequired = true,
                 EnabledSslProtocols = SslProtocols.Tls13,
                 AllowRenegotiation = false,
                 AllowTlsResume = false,
-            }, handshake.Token);
-            if (tls.RemoteCertificate is not X509Certificate2 peer || !policy.AuthenticateCertificate(peer)) throw new AuthenticationException();
+            },
+                handshake.Token);
+            if (tls.RemoteCertificate is not X509Certificate2 peer || !policy.AuthenticateCertificate(peer))
+            {
+                throw new AuthenticationException();
+            }
+
             var session = new NinePConnectionProcessor.ClientSession();
             session.State = TransportSessionOps.withTransport(session.Dialect, peer, session.State);
             await processor.ProcessStreamAsync(tls, client.Client.RemoteEndPoint, session, lifetime.Token);
@@ -113,25 +152,19 @@ public sealed class FogNodeListener : IAsyncDisposable
         }
     }
 
-    public ValueTask DisposeAsync()
-    {
-        lock (lifecycleGate) return new ValueTask(disposal ??= DisposeCoreAsync());
-    }
-
     private async Task DisposeCoreAsync()
     {
         await stopping.CancelAsync();
         listener.Stop();
+
         // The accept loop must end before the snapshot: a client accepted during disposal is still awaited,
         // and the loop never reads the token of a disposed source.
-        if (accepting is not null) await accepting;
+        if (accepting is not null)
+        {
+            await accepting;
+        }
+
         await Task.WhenAll(connections.Values);
         stopping.Dispose();
-    }
-
-    internal static TcpClient ConfigureAcceptedClient(TcpClient client)
-    {
-        client.NoDelay = true;
-        return client;
     }
 }

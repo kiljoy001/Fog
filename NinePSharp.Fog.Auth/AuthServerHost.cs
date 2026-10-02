@@ -25,19 +25,19 @@ public sealed class AuthServerHost : IAsyncDisposable
         accepting = AcceptAsync();
     }
 
-    /// <summary>Gets the number of connections being served.</summary>
+    public IPEndPoint LocalEndPoint { get; }
+
     internal int ConnectionCount
     {
         get
         {
-            lock (connections) return connections.Count;
+            lock (connections)
+            {
+                return connections.Count;
+            }
         }
     }
 
-    /// <summary>Gets the endpoint the server listens on.</summary>
-    public IPEndPoint LocalEndPoint { get; }
-
-    /// <summary>Starts listening.</summary>
     public static AuthServerHost Start(AuthServerOptions options, KeyFsHost keys)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -47,19 +47,20 @@ public sealed class AuthServerHost : IAsyncDisposable
         return new AuthServerHost(listener, options, keys);
     }
 
-    /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
         using CancellationTokenSource stop = stopping;
         await Task.WhenAll(await StopAcceptingAsync());
     }
 
-    /// <summary>Cancels every connection and stops listening, returning what is still running.</summary>
     private async Task<Task[]> StopAcceptingAsync()
     {
         await stopping.CancelAsync();
         listener.Stop();
-        lock (connections) return [accepting, .. connections];
+        lock (connections)
+        {
+            return [accepting, .. connections];
+        }
     }
 
     private async Task AcceptAsync()
@@ -70,7 +71,11 @@ public sealed class AuthServerHost : IAsyncDisposable
             {
                 TcpClient client = await listener.AcceptTcpClientAsync(stopping.Token);
                 Task connection = ServeAsync(client);
-                lock (connections) connections.Add(connection);
+                lock (connections)
+                {
+                    connections.Add(connection);
+                }
+
                 _ = connection.ContinueWith(Forget, TaskScheduler.Default);
             }
         }
@@ -91,17 +96,18 @@ public sealed class AuthServerHost : IAsyncDisposable
             {
                 await new AuthServerConnection(client.GetStream(), keys.FindKey, options.SpeaksFor).ServeAsync(lifetime.Token);
             }
-#pragma warning disable CA1031 // However a connection fails, only that connection ends.
             catch (Exception)
-#pragma warning restore CA1031
             {
-                // The connection's time ran out, the client went away or misbehaved, or the server is shutting down.
+                // Any failure ends only this connection.
             }
         }
     }
 
     private void Forget(Task connection)
     {
-        lock (connections) connections.Remove(connection);
+        lock (connections)
+        {
+            connections.Remove(connection);
+        }
     }
 }

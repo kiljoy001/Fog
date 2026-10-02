@@ -18,16 +18,6 @@ using Xunit;
 namespace NinePSharp.Fog.Namespaces.Tests.Steps;
 
 [Binding]
-public static class FogNamespaceHooks
-{
-    [BeforeTestRun]
-    public static void StartCluster() => FogNamespaceCluster.Start();
-
-    [AfterTestRun]
-    public static void StopCluster() => FogNamespaceCluster.Stop();
-}
-
-[Binding]
 [Scope(Feature = "Enrolled nodes attach to their own copy of the shared namespace")]
 public sealed class NamespaceViewSteps : IAsyncDisposable
 {
@@ -38,8 +28,13 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     private readonly List<ResourceGrant> grants = new();
     private readonly Dictionary<string, Session> sessions = new(StringComparer.Ordinal);
     private readonly ManualTime time = new();
-    private FogNamespaceLimits limits = new(Sessions: 8, FidsPerSession: 32, RequestsPerSession: 8, MessageSize: 8192,
+    private FogNamespaceLimits limits = new(
+        Sessions: 8,
+        FidsPerSession: 32,
+        RequestsPerSession: 8,
+        MessageSize: 8192,
         SessionLifetime: TimeSpan.FromMinutes(10));
+
     private FogSharedRoot? root;
     private FogNodePolicy? nodes;
     private FogAuthorizationAuthority? authority;
@@ -68,13 +63,19 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     {
         string[] parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         for (int index = 1; index <= parts.Length; index++)
+        {
             await root!.CreateEntryAsync("/" + string.Join('/', parts.Take(index)), directory: index < parts.Length);
+        }
     }
 
     [Given(@"^enrolled nodes ""([^""]*)"" and ""([^""]*)""$")]
     public void GivenNodes(string first, string second)
     {
-        foreach (string name in new[] { first, second, "stranger" }) certificates[name] = FogNamespaceCluster.Certificate($"{name}.test");
+        foreach (string name in new[] { first, second, "stranger" })
+        {
+            certificates[name] = FogNamespaceCluster.Certificate($"{name}.test");
+        }
+
         nodes = new FogNodePolicy(1, new[] { first, second }.Select(name =>
             new FogNodeEnrollment(name, new string('1', 64), FogNodePolicy.SpkiPin(certificates[name]), $"{name}.test")));
     }
@@ -83,7 +84,9 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     public void GivenGroup(string group, string members)
     {
         foreach (string member in members.Split(',', StringSplitOptions.TrimEntries))
+        {
             memberships.Add(new GroupMembership(group, member));
+        }
     }
 
     [Given(@"^the policy generation is (\d+) with grants$")]
@@ -155,7 +158,9 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
         string expected = Mounts(await grains.GetGrain<IVProcessGroupGrain>(root!.ProcessGroupId).GetSnapshotAsync());
         Assert.Contains(applications["mail"].Identity.Device, expected, StringComparison.Ordinal);
         foreach (DistributedNamespaceAttach descriptor in attaches!.Descriptors)
+        {
             Assert.Equal(expected, Mounts(await grains.GetGrain<IVProcessGroupGrain>(descriptor.ProcessGroupId).GetSnapshotAsync()));
+        }
     }
 
     [When(@"^""(\w+)"" mounts ""([^""]*)"" on ""([^""]*)"" in its own namespace$")]
@@ -206,7 +211,8 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
 
     [Then("the walk reports not found")]
     public void WalkNotFound()
-        => Assert.True(response is Rerror || (walk is { } partial && partial.Wqid.Length < walkLength),
+        => Assert.True(
+            response is Rerror || (walk is { } partial && partial.Wqid.Length < walkLength),
             $"expected a failed walk, got {Describe(response)}");
 
     [Then("the walk ends at the shared root's directory")]
@@ -226,9 +232,16 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
         for (ulong offset = 0; ;)
         {
             Rread read = Assert.IsType<Rread>(await Send(user, NinePMessage.NewMsgTread(new Tread(0, fid, offset, 4096))));
-            if (read.Count == 0) break;
+            if (read.Count == 0)
+            {
+                break;
+            }
+
             for (int position = 0; position < read.Data.Length;)
+            {
                 records.Add(new Stat(read.Data.Span, ref position).Name);
+            }
+
             offset += read.Count;
         }
 
@@ -248,7 +261,8 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
 
     [Then(@"^the (mail|notes) application recorded (one|no) writes?$")]
     public async Task Recorded(string application, string count)
-        => Assert.Equal(count == "one" ? 1 : 0,
+        => Assert.Equal(
+            count == "one" ? 1 : 0,
             await grains.GetGrain<ITestApplicationGrain>(applications[application].Identity.Device).GetWritesAsync());
 
     [Then(@"^the request fails with ""([^""]*)""$")]
@@ -282,8 +296,15 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     public void GivenListener()
     {
         serverCertificate = FogNamespaceCluster.Certificate("fog.test");
-        listener = new FogNodeListener(new IPEndPoint(IPAddress.Loopback, 0), serverCertificate, nodes!, Export(),
-            NullLogger.Instance, 4, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(1));
+        listener = new FogNodeListener(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            serverCertificate,
+            nodes!,
+            Export(),
+            NullLogger.Instance,
+            4,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMinutes(1));
         listener.Start();
     }
 
@@ -291,8 +312,12 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     public async Task ConnectsAndReads(string user, string path)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await using var tls = await FogTlsClient.ConnectAsync(listener!.LocalEndpoint, "fog.test",
-            FogNodePolicy.SpkiPin(serverCertificate!), certificates[user], timeout.Token);
+        await using var tls = await FogTlsClient.ConnectAsync(
+            listener!.LocalEndpoint,
+            "fog.test",
+            FogNodePolicy.SpkiPin(serverCertificate!),
+            certificates[user],
+            timeout.Token);
         using var client = new NinePClient(tls);
         await client.VersionAsync(8192, "9P2000").WaitAsync(timeout.Token);
         await client.AttachAsync(1, NinePConstants.NoFid, user, "/").WaitAsync(timeout.Token);
@@ -308,8 +333,12 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
         Exception? failure = null;
         try
         {
-            await using var tls = await FogTlsClient.ConnectAsync(listener!.LocalEndpoint, "fog.test",
-                FogNodePolicy.SpkiPin(serverCertificate!), certificates["stranger"], timeout.Token);
+            await using var tls = await FogTlsClient.ConnectAsync(
+                listener!.LocalEndpoint,
+                "fog.test",
+                FogNodePolicy.SpkiPin(serverCertificate!),
+                certificates["stranger"],
+                timeout.Token);
             using var client = new NinePClient(tls);
             await client.VersionAsync(8192, "9P2000").WaitAsync(timeout.Token);
         }
@@ -324,12 +353,36 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (listener is not null) await listener.DisposeAsync();
+        if (listener is not null)
+        {
+            await listener.DisposeAsync();
+        }
+
         if (export is not null)
-            foreach (Session session in sessions.Values) await export.CloseSessionAsync(session.Id);
-        foreach (X509Certificate2 certificate in certificates.Values) certificate.Dispose();
+        {
+            foreach (Session session in sessions.Values)
+            {
+                await export.CloseSessionAsync(session.Id);
+            }
+        }
+
+        foreach (X509Certificate2 certificate in certificates.Values)
+        {
+            certificate.Dispose();
+        }
+
         serverCertificate?.Dispose();
     }
+
+    private static string Mounts(NamespaceSnapshotModel snapshot)
+        => string.Join(";", snapshot.MountHeads
+            .Select(head => $"{head.From.Identity.Device}/{head.From.Identity.Path}=" +
+                string.Join(",", head.Mounts.Select(mount => $"{mount.Target.Identity.Device}/{mount.Target.Identity.Path}")))
+            .Order(StringComparer.Ordinal));
+
+    private static string[] Parts(string path) => path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+    private static string Describe(object? value) => value is Rerror error ? $"Rerror {error.Ename}" : value?.GetType().Name ?? "null";
 
     private async Task MountApplication(string name, string file, string contents)
     {
@@ -345,14 +398,24 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
 
     private BoundedNamespaceExport Export()
     {
-        if (export is not null) return export;
-        var registered = new RegisteredMountableResourceResolver(grains,
-        [
+        if (export is not null)
+        {
+            return export;
+        }
+
+        var registered = new RegisteredMountableResourceResolver(
+            grains,
+            [
             ResourceProviderRegistration.For<IFogRootGrain>(FogSharedRoot.Provider),
             ResourceProviderRegistration.For<ITestApplicationGrain>(TestApplicationGrain.Provider),
         ]);
         var resources = new OrleansResourceOperations(registered);
-        attaches = new RecordingResolver(new FogNamespaceAttachResolver(grains, root!, nodes!, authority!, resources,
+        attaches = new RecordingResolver(new FogNamespaceAttachResolver(
+            grains,
+            root!,
+            nodes!,
+            authority!,
+            resources,
             new OrleansResourceAncestry(registered)));
         var inner = new DistributedNamespaceDispatcher(new DistributedNamespaceOperations(grains, resources), attaches);
         export = new BoundedNamespaceExport(inner, limits, time);
@@ -371,13 +434,19 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
         }
 
         response = await Send(sessionName, NinePMessage.NewMsgTattach(new Tattach(0, 1, NinePConstants.NoFid, uname, aname)));
-        if (expectSuccess) session.RootQid = Assert.IsType<Rattach>(response).Qid;
+        if (expectSuccess)
+        {
+            session.RootQid = Assert.IsType<Rattach>(response).Qid;
+        }
     }
 
     private async Task<object> Send(string sessionName, NinePMessage message)
     {
         Session session = sessions[sessionName];
-        return await Export().DispatchAsync(session.Id, session.Tagged(message), NinePDialect.NineP2000,
+        return await Export().DispatchAsync(
+            session.Id,
+            session.Tagged(message),
+            NinePDialect.NineP2000,
             certificates[session.Certificate]);
     }
 
@@ -403,11 +472,23 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     {
         uint fid = sessions[user].NextFid();
         response = await Send(user, NinePMessage.NewMsgTwalk(new Twalk(0, 1, fid, Parts(path))));
-        if (response is not Rwalk) return;
+        if (response is not Rwalk)
+        {
+            return;
+        }
+
         response = await Send(user, NinePMessage.NewMsgTopen(new Topen(0, fid, (byte)(NinePConstants.OWRITE | NinePConstants.OTRUNC))));
-        if (response is not Ropen) return;
+        if (response is not Ropen)
+        {
+            return;
+        }
+
         response = await Send(user, NinePMessage.NewMsgTwrite(new Twrite(0, fid, 0, data)));
-        if (response is not Rwrite) return;
+        if (response is not Rwrite)
+        {
+            return;
+        }
+
         await Send(user, NinePMessage.NewMsgTclunk(new Tclunk(0, fid)));
     }
 
@@ -422,23 +503,15 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     private string GroupOf(string user)
         => attaches!.Descriptors.Single(descriptor => descriptor.User == user).ProcessGroupId;
 
-    private static string Mounts(NamespaceSnapshotModel snapshot)
-        => string.Join(";", snapshot.MountHeads
-            .Select(head => $"{head.From.Identity.Device}/{head.From.Identity.Path}=" +
-                string.Join(",", head.Mounts.Select(mount => $"{mount.Target.Identity.Device}/{mount.Target.Identity.Path}")))
-            .Order(StringComparer.Ordinal));
-
-    private static string[] Parts(string path) => path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-    private static string Describe(object? value) => value is Rerror error ? $"Rerror {error.Ename}" : value?.GetType().Name ?? "null";
-
     private sealed class Session(string certificate, string id)
     {
         private ushort tag;
         private uint fid = 1;
 
         internal string Certificate { get; } = certificate;
+
         internal string Id { get; } = id;
+
         internal Qid RootQid { get; set; }
 
         internal uint NextFid() => ++fid;
@@ -463,8 +536,12 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     {
         internal List<DistributedNamespaceAttach> Descriptors { get; } = new();
 
-        public async ValueTask<DistributedNamespaceAttach> ResolveAsync(string sessionId, Tattach request, NinePDialect dialect,
-            X509Certificate2? certificate, CancellationToken cancellationToken)
+        public async ValueTask<DistributedNamespaceAttach> ResolveAsync(
+            string sessionId,
+            Tattach request,
+            NinePDialect dialect,
+            X509Certificate2? certificate,
+            CancellationToken cancellationToken)
         {
             DistributedNamespaceAttach descriptor = await inner.ResolveAsync(sessionId, request, dialect, certificate, cancellationToken);
             Descriptors.Add(descriptor);
@@ -475,8 +552,11 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     private sealed class ManualTime : TimeProvider
     {
         private long timestamp;
+
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
         public override long GetTimestamp() => timestamp;
+
         internal void Advance(TimeSpan duration) => timestamp += duration.Ticks;
     }
 }

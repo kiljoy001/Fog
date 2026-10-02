@@ -40,15 +40,29 @@ public sealed class TransactionTreeTests
             .GetValue(tree)!;
         object serviceNodes = registrations["fixture"]!;
         var transactions = (System.Collections.IDictionary)serviceNodes.GetType()
-            .GetField("Transactions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetProperty("Transactions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(serviceNodes)!;
         Assert.Single(transactions);
 
-        using FogOpenFile abandoned = tree.Open(principal, "abandoned", tree.Walk(principal,
-            tree.Walk(principal, service, Encoding.ASCII.GetString(replacement.Snapshot!).TrimEnd('\n')), "request"), NinePConstants.OWRITE, 1024);
+        using FogOpenFile abandoned = tree.Open(
+            principal,
+            "abandoned",
+            tree.Walk(
+            principal,
+            tree.Walk(principal, service, Encoding.ASCII.GetString(replacement.Snapshot!).TrimEnd('\n')),
+            "request"),
+            NinePConstants.OWRITE,
+            1024);
         abandoned.Dispose();
-        using FogOpenFile reopened = tree.Open(principal, "reopened", tree.Walk(principal,
-            tree.Walk(principal, service, Encoding.ASCII.GetString(replacement.Snapshot!).TrimEnd('\n')), "request"), NinePConstants.OWRITE, 1024);
+        using FogOpenFile reopened = tree.Open(
+            principal,
+            "reopened",
+            tree.Walk(
+            principal,
+            tree.Walk(principal, service, Encoding.ASCII.GetString(replacement.Snapshot!).TrimEnd('\n')),
+            "request"),
+            NinePConstants.OWRITE,
+            1024);
     }
 
     [Fact]
@@ -71,17 +85,22 @@ public sealed class TransactionTreeTests
         Assert.Equal(new[] { "Payload_09-z", "ctl", "reply", "request", "status" }, tree.List(principal, transaction).Select(node => node.Name).Order(StringComparer.Ordinal).ToArray());
         foreach (var invalid in new[]
         {
-            Service(fixture) with { Name = "" }, Service(fixture) with { Name = new string('x', 65) },
+            Service(fixture) with { Name = string.Empty }, Service(fixture) with { Name = new string('x', 65) },
             Service(fixture) with { Name = "bad/name" }, Service(fixture) with { Name = "é" },
             Service(fixture) with { InputFiles = new HashSet<string>() },
             Service(fixture) with { OutputFiles = new HashSet<string>() },
             Service(fixture) with { InputFiles = new HashSet<string> { "request", "reply" } },
-        }) Invalid(() => new FogTransactionFileTree([invalid]));
-        foreach (string name in new[] { "", "ctl", "status", "clone", ".", "..", "a/b", "é", new string('x', 65) })
+        })
+        {
+            Invalid(() => new FogTransactionFileTree([invalid]));
+        }
+
+        foreach (string name in new[] { string.Empty, "ctl", "status", "clone", ".", "..", "a/b", "é", new string('x', 65) })
         {
             Invalid(() => new FogTransactionFileTree([Service(fixture) with { InputFiles = new HashSet<string> { "request", name } }]));
             Invalid(() => new FogTransactionFileTree([Service(fixture) with { OutputFiles = new HashSet<string> { "reply", name } }]));
         }
+
         Invalid(() => new FogTransactionFileTree([Service(fixture), Service(fixture)]));
     }
 
@@ -134,8 +153,12 @@ public sealed class TransactionTreeTests
         Assert.NotEqual(transaction.QidPath, tree.Walk(principal, service, replacement).QidPath);
     }
 
-    private static FogTransactionService Service(ControlFixture fixture) => new("fixture", fixture.Store,
-        new HashSet<string> { "request" }, new HashSet<string> { "reply" }, (_, _, _) => Task.CompletedTask);
+    private static FogTransactionService Service(ControlFixture fixture) => new(
+        "fixture",
+        fixture.Store,
+        new HashSet<string> { "request" },
+        new HashSet<string> { "reply" },
+        (_, _, _) => Task.CompletedTask);
 
     private static void Invalid(Action action) =>
         Assert.Equal("Invalid transaction service registration.", Assert.Throws<ArgumentException>(action).Message);

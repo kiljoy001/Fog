@@ -25,25 +25,14 @@ internal sealed class KeyFsAdminListener : IAsyncDisposable
         accepting = AcceptAsync();
     }
 
-    internal static KeyFsAdminListener Start(string path, INinePFSDispatcher dispatcher)
-    {
-        if (Path.Exists(path))
-        {
-            if (Directory.Exists(path)) throw new KeyFsException($"keyfs: {path} is a directory");
-            if (IsServed(path)) throw new KeyFsException($"keyfs: another keyfs is serving {path}");
-            // Left by a host that did not shut down; the path is inside the keyfs's own state directory.
-            File.Delete(path);
-        }
-
-        return new KeyFsAdminListener(Listen(path), dispatcher);
-    }
-
-    /// <summary>Gets the number of connections being served.</summary>
     internal int ConnectionCount
     {
         get
         {
-            lock (connections) return connections.Count;
+            lock (connections)
+            {
+                return connections.Count;
+            }
         }
     }
 
@@ -53,13 +42,25 @@ internal sealed class KeyFsAdminListener : IAsyncDisposable
         await Task.WhenAll(await StopAcceptingAsync());
     }
 
-    /// <summary>Cancels every connection and closes the socket, returning what is still running.</summary>
-    private async Task<Task[]> StopAcceptingAsync()
+    internal static KeyFsAdminListener Start(string path, INinePFSDispatcher dispatcher)
     {
-        await stopping.CancelAsync();
-        // Closing the socket ends the accept loop; disposing it also removes its file.
-        socket.Dispose();
-        lock (connections) return [accepting, .. connections];
+        if (Path.Exists(path))
+        {
+            if (Directory.Exists(path))
+            {
+                throw new KeyFsException($"keyfs: {path} is a directory");
+            }
+
+            if (IsServed(path))
+            {
+                throw new KeyFsException($"keyfs: another keyfs is serving {path}");
+            }
+
+            // Left by a host that did not shut down; the path is inside the keyfs's own state directory.
+            File.Delete(path);
+        }
+
+        return new KeyFsAdminListener(Listen(path), dispatcher);
     }
 
     private static Socket Listen(string path)
@@ -81,6 +82,32 @@ internal sealed class KeyFsAdminListener : IAsyncDisposable
         }
     }
 
+    private static bool IsServed(string path)
+    {
+        using var probe = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        try
+        {
+            probe.Connect(new UnixDomainSocketEndPoint(path));
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<Task[]> StopAcceptingAsync()
+    {
+        await stopping.CancelAsync();
+
+        // Closing the socket ends the accept loop; disposing it also removes its file.
+        socket.Dispose();
+        lock (connections)
+        {
+            return [accepting, .. connections];
+        }
+    }
+
     private async Task AcceptAsync()
     {
         try
@@ -89,8 +116,11 @@ internal sealed class KeyFsAdminListener : IAsyncDisposable
             {
                 Socket client = await socket.AcceptAsync(stopping.Token);
                 Task connection = ServeAsync(client);
-                lock (connections) connections.Add(connection);
-                // A finished connection stops being tracked.
+                lock (connections)
+                {
+                    connections.Add(connection);
+                }
+
                 _ = connection.ContinueWith(Forget, TaskScheduler.Default);
             }
         }
@@ -115,20 +145,9 @@ internal sealed class KeyFsAdminListener : IAsyncDisposable
 
     private void Forget(Task connection)
     {
-        lock (connections) connections.Remove(connection);
-    }
-
-    private static bool IsServed(string path)
-    {
-        using var probe = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        try
+        lock (connections)
         {
-            probe.Connect(new UnixDomainSocketEndPoint(path));
-            return true;
-        }
-        catch (SocketException)
-        {
-            return false;
+            connections.Remove(connection);
         }
     }
 }

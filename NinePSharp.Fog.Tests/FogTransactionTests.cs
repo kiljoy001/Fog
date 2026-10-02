@@ -8,6 +8,18 @@ public sealed class FogTransactionTests
 {
     internal static FogTransactionLimits Limits => new(4, 2, 64, 64, 512, 2, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20));
 
+    public static IEnumerable<object[]> InvalidLimits()
+    {
+        yield return [Limits with { MaxTransactions = 0 }];
+        yield return [Limits with { MaxPerOwner = 0 }];
+        yield return [Limits with { MaxInputBytes = 0 }];
+        yield return [Limits with { MaxSnapshotBytes = 0 }];
+        yield return [Limits with { MaxReservedBytes = 127 }];
+        yield return [Limits with { MaxFiles = 0 }];
+        yield return [Limits with { StagingLifetime = TimeSpan.Zero }];
+        yield return [Limits with { RetentionLifetime = TimeSpan.Zero }];
+    }
+
     [Fact]
     public async Task FrozenCommitRunsOnceAcrossConcurrentCallsAndLostReplies()
     {
@@ -81,7 +93,7 @@ public sealed class FogTransactionTests
         string id = store.Clone("alice");
         Upload(store, id, "request", []);
         int effects = 0;
-        FogCommitPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> _) => Plan([], () =>
+        FogCommitPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> inputs) => Plan([], () =>
         {
             effects++;
             throw new IOException("secret detail");
@@ -339,22 +351,10 @@ public sealed class FogTransactionTests
         Error("invalid-request", () => store.CommitAsync("alice", id, _ => new(new Dictionary<string, byte[]> { ["reply"] = [], ["a"] = [], ["b"] = [] }, () => Task.CompletedTask)));
         Assert.Throws<ArgumentNullException>(() => { _ = store.CommitAsync("alice", id, _ => new(new Dictionary<string, byte[]> { ["reply"] = [] }, null!)); });
         Assert.Throws<ArgumentNullException>(() => { _ = store.CommitAsync("alice", id, null!); });
-        Assert.Throws<ArgumentException>(() => store.OpenInput("alice", id, "", "request"));
-        Error("denied", () => store.Clone(""));
+        Assert.Throws<ArgumentException>(() => store.OpenInput("alice", id, string.Empty, "request"));
+        Error("denied", () => store.Clone(string.Empty));
         Assert.ThrowsAny<OperationCanceledException>(() => { _ = store.CommitAsync("alice", id, _ => throw new InvalidOperationException(), new CancellationToken(true)); });
         Assert.Equal("staging", store.Status("alice", id).State);
-    }
-
-    public static IEnumerable<object[]> InvalidLimits()
-    {
-        yield return [Limits with { MaxTransactions = 0 }];
-        yield return [Limits with { MaxPerOwner = 0 }];
-        yield return [Limits with { MaxInputBytes = 0 }];
-        yield return [Limits with { MaxSnapshotBytes = 0 }];
-        yield return [Limits with { MaxReservedBytes = 127 }];
-        yield return [Limits with { MaxFiles = 0 }];
-        yield return [Limits with { StagingLifetime = TimeSpan.Zero }];
-        yield return [Limits with { RetentionLifetime = TimeSpan.Zero }];
     }
 
     [Theory]
@@ -399,7 +399,7 @@ public sealed class FogTransactionTests
             .GetValue(store)!;
         object entry = entries[id]!;
         return ((System.Collections.IDictionary)entry.GetType()
-            .GetField("Inputs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetProperty("Inputs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(entry)!).Count;
     }
 
@@ -411,15 +411,22 @@ public sealed class FogTransactionTests
     }
 
     internal static FogCommitPlan Plan(byte[] reply, Action? effect = null) => new(
-        new Dictionary<string, byte[]> { ["reply"] = reply }, () => { effect?.Invoke(); return Task.CompletedTask; });
+        new Dictionary<string, byte[]> { ["reply"] = reply }, () =>
+        {
+            effect?.Invoke();
+            return Task.CompletedTask;
+        });
 
     internal static void Error(string code, Action action) => Assert.Equal(code, Assert.Throws<FogException>(action).Code);
 
     internal sealed class ManualTime : TimeProvider
     {
         private long ticks;
+
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
         public override long GetTimestamp() => ticks;
+
         public void Advance(TimeSpan duration) => ticks += duration.Ticks;
     }
 }

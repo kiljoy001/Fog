@@ -4,38 +4,50 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace NinePSharp.Fog.Server;
 
-/// <summary>Operator-enrolled node identity. The SPKI pin is not learned from an attach request.</summary>
-public sealed record FogNodeEnrollment(string Node, string Boot, string SpkiSha256, string TlsName, bool Enabled = true);
-
-public sealed record FogPrincipal(string Node, string Boot, ulong PolicyEpoch, string SpkiSha256)
-{
-    public string Owner => $"node:{Node}:{Boot}:{PolicyEpoch}";
-}
-
 /// <summary>Immutable policy replacement fences old roots; credentials still require a verified TLS transport.</summary>
 public sealed class FogNodePolicy
 {
     private readonly object gate = new();
+    private readonly TimeProvider time;
     private IReadOnlyDictionary<string, FogNodeEnrollment> nodes;
     private ulong epoch;
-    private readonly TimeProvider time;
 
     public FogNodePolicy(ulong epoch, IEnumerable<FogNodeEnrollment> nodes, TimeProvider? time = null)
     {
-        if (epoch == 0) throw new ArgumentOutOfRangeException(nameof(epoch));
+        if (epoch == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(epoch));
+        }
+
         this.epoch = epoch;
         this.nodes = Validate(nodes);
         this.time = time ?? TimeProvider.System;
     }
 
-    public ulong Epoch { get { lock (gate) return epoch; } }
+    public ulong Epoch
+    {
+        get
+        {
+            lock (gate)
+            {
+                return epoch;
+            }
+        }
+    }
+
+    public static string SpkiPin(X509Certificate2 certificate) =>
+        Convert.ToHexStringLower(SHA256.HashData(certificate.PublicKey.ExportSubjectPublicKeyInfo()));
 
     public void Replace(ulong nextEpoch, IEnumerable<FogNodeEnrollment> nextNodes)
     {
         var validated = Validate(nextNodes);
         lock (gate)
         {
-            if (nextEpoch <= epoch) throw new ArgumentOutOfRangeException(nameof(nextEpoch));
+            if (nextEpoch <= epoch)
+            {
+                throw new ArgumentOutOfRangeException(nameof(nextEpoch));
+            }
+
             nodes = validated;
             epoch = nextEpoch;
         }
@@ -46,7 +58,11 @@ public sealed class FogNodePolicy
         lock (gate)
         {
             if (!nodes.TryGetValue(node, out var enrolled) || !enrolled.Enabled || certificate is null ||
-                !CertificateMatches(certificate, enrolled)) throw new FogException("denied");
+                !CertificateMatches(certificate, enrolled))
+            {
+                throw new FogException("denied");
+            }
+
             return new FogPrincipal(node, enrolled.Boot, epoch, enrolled.SpkiSha256);
         }
     }
@@ -57,7 +73,10 @@ public sealed class FogNodePolicy
         {
             if (principal.PolicyEpoch != epoch || !nodes.TryGetValue(principal.Node, out var node) || !node.Enabled ||
                 node.Boot != principal.Boot || node.SpkiSha256 != principal.SpkiSha256 || certificate is null ||
-                !CertificateMatches(certificate, node)) throw new FogException("denied");
+                !CertificateMatches(certificate, node))
+            {
+                throw new FogException("denied");
+            }
         }
     }
 
@@ -69,18 +88,13 @@ public sealed class FogNodePolicy
         }
     }
 
-    public static string SpkiPin(X509Certificate2 certificate) =>
-        Convert.ToHexStringLower(SHA256.HashData(certificate.PublicKey.ExportSubjectPublicKeyInfo()));
-
     public bool AuthenticateCertificate(X509Certificate2 certificate)
     {
-        lock (gate) return nodes.Values.Any(node => node.Enabled && CertificateMatches(certificate, node));
+        lock (gate)
+        {
+            return nodes.Values.Any(node => node.Enabled && CertificateMatches(certificate, node));
+        }
     }
-
-    private bool CertificateMatches(X509Certificate2 certificate, FogNodeEnrollment node) =>
-        certificate.NotBefore.ToUniversalTime() <= time.GetUtcNow().UtcDateTime &&
-        time.GetUtcNow().UtcDateTime < certificate.NotAfter.ToUniversalTime() && SpkiPin(certificate) == node.SpkiSha256 &&
-        certificate.MatchesHostname(node.TlsName, allowWildcards: false, allowCommonName: false);
 
     private static IReadOnlyDictionary<string, FogNodeEnrollment> Validate(IEnumerable<FogNodeEnrollment> enrollments)
     {
@@ -91,7 +105,10 @@ public sealed class FogNodePolicy
         {
             if (!Identifier(node.Node) || !Hex(node.Boot) || !Hex(node.SpkiSha256) ||
                 string.IsNullOrEmpty(node.TlsName) || node.TlsName.Length > 253 ||
-                !result.TryAdd(node.Node, node) || !pins.Add(node.SpkiSha256)) throw new ArgumentException("Invalid node enrollment.");
+                !result.TryAdd(node.Node, node) || !pins.Add(node.SpkiSha256))
+            {
+                throw new ArgumentException("Invalid node enrollment.");
+            }
         }
 
         return new ReadOnlyDictionary<string, FogNodeEnrollment>(result);
@@ -99,5 +116,11 @@ public sealed class FogNodePolicy
 
     private static bool Identifier(string value) => value is { Length: > 0 and <= 64 } && value is not ("." or "..") &&
         value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
+
     private static bool Hex(string value) => value is { Length: 64 } && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+
+    private bool CertificateMatches(X509Certificate2 certificate, FogNodeEnrollment node) =>
+        certificate.NotBefore.ToUniversalTime() <= time.GetUtcNow().UtcDateTime &&
+        time.GetUtcNow().UtcDateTime < certificate.NotAfter.ToUniversalTime() && SpkiPin(certificate) == node.SpkiSha256 &&
+        certificate.MatchesHostname(node.TlsName, allowWildcards: false, allowCommonName: false);
 }

@@ -4,56 +4,6 @@ using Orleans.Runtime;
 
 namespace NinePSharp.Fog.Namespaces;
 
-/// <summary>
-/// The host's shared root directory tree. As in Plan 9 namespace(4), its directories are
-/// unwritable placeholders for mounts; only the host adds entries, never a 9P client.
-/// </summary>
-public interface IFogRootGrain : IAncestryResourceGrain
-{
-    /// <summary>Creates /, /mnt, /bin and /n once.</summary>
-    Task InitializeAsync();
-
-    /// <summary>Adds a directory or file whose parent exists, or returns the existing entry of that kind.</summary>
-    Task<ResourceHandleModel> CreateEntryAsync(string path, bool directory);
-
-    /// <summary>Returns the entry at an absolute path, or null.</summary>
-    Task<ResourceHandleModel?> LookupAsync(string path);
-}
-
-/// <summary>Durable entries of one shared root.</summary>
-[GenerateSerializer]
-public sealed class FogRootState
-{
-    /// <summary>Gets the entries by path number; the root is 1.</summary>
-    [Id(0)]
-    public Dictionary<ulong, FogRootEntry> Entries { get; set; } = new();
-
-    /// <summary>Gets or sets the last allocated path number.</summary>
-    [Id(1)]
-    public ulong LastPath { get; set; }
-}
-
-/// <summary>One durable directory or file of the shared root.</summary>
-[GenerateSerializer]
-public sealed class FogRootEntry
-{
-    /// <summary>Gets or sets the entry's name; the root is "/".</summary>
-    [Id(0)]
-    public string Name { get; set; } = null!;
-
-    /// <summary>Gets or sets the parent path number, or 0 for the root.</summary>
-    [Id(1)]
-    public ulong Parent { get; set; }
-
-    /// <summary>Gets or sets whether the entry is a directory.</summary>
-    [Id(2)]
-    public bool Directory { get; set; }
-
-    /// <summary>Gets the children by name.</summary>
-    [Id(3)]
-    public Dictionary<string, ulong> Children { get; set; } = new(StringComparer.Ordinal);
-}
-
 /// <summary>Serves a shared root keyed by its device name.</summary>
 public sealed class FogRootGrain : Grain, IFogRootGrain
 {
@@ -61,16 +11,23 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
     private const ulong RootPath = 1;
     private readonly IPersistentState<FogRootState> state;
 
-    /// <summary>Initializes the grain with its durable state.</summary>
     public FogRootGrain([PersistentState("fog-root")] IPersistentState<FogRootState> state) => this.state = state;
 
     /// <inheritdoc/>
     public async Task InitializeAsync()
     {
-        if (state.State.Entries.ContainsKey(RootPath)) return;
+        if (state.State.Entries.ContainsKey(RootPath))
+        {
+            return;
+        }
+
         state.State.LastPath = RootPath;
         state.State.Entries[RootPath] = new FogRootEntry { Name = "/", Directory = true };
-        foreach (string name in new[] { "mnt", "bin", "n" }) Add(RootPath, name, directory: true);
+        foreach (string name in new[] { "mnt", "bin", "n" })
+        {
+            Add(RootPath, name, directory: true);
+        }
+
         await state.WriteStateAsync();
     }
 
@@ -78,12 +35,24 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
     public async Task<ResourceHandleModel> CreateEntryAsync(string path, bool directory)
     {
         string[] names = Names(path);
-        if (names.Length == 0) throw new ArgumentException("The root already exists.", nameof(path));
+        if (names.Length == 0)
+        {
+            throw new ArgumentException("The root already exists.", nameof(path));
+        }
+
         ulong parent = Find(names[..^1]) ?? throw new DirectoryNotFoundException($"The parent of '{path}' does not exist.");
-        if (!state.State.Entries[parent].Directory) throw new DirectoryNotFoundException($"The parent of '{path}' is not a directory.");
+        if (!state.State.Entries[parent].Directory)
+        {
+            throw new DirectoryNotFoundException($"The parent of '{path}' is not a directory.");
+        }
+
         if (state.State.Entries[parent].Children.TryGetValue(names[^1], out ulong existing))
         {
-            if (state.State.Entries[existing].Directory != directory) throw new IOException($"'{path}' exists with a different kind.");
+            if (state.State.Entries[existing].Directory != directory)
+            {
+                throw new IOException($"'{path}' exists with a different kind.");
+            }
+
             return Handle(existing);
         }
 
@@ -119,7 +88,10 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
     {
         _ = Entry(resource);
         if ((mode & 3) is NinePConstants.OWRITE or NinePConstants.ORDWR || (mode & (NinePConstants.OTRUNC | NinePConstants.ORCLOSE)) != 0)
+        {
             throw new UnauthorizedAccessException("permission denied");
+        }
+
         return Task.FromResult(new ResourceOpenHandleModel(resource, $"{context.OperationId.SessionId}:{context.OperationId.Sequence}", mode, 0));
     }
 
@@ -139,7 +111,11 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
     }
 
     /// <inheritdoc/>
-    public Task<ResourceOpenHandleModel> CreateAndOpenAsync(ResourceHandleModel directory, string name, uint permissions, byte mode,
+    public Task<ResourceOpenHandleModel> CreateAndOpenAsync(
+        ResourceHandleModel directory,
+        string name,
+        uint permissions,
+        byte mode,
         ResourceOperationContextModel context)
         => throw new ResourceCreateRejectedGrainException("permission denied");
 
@@ -153,9 +129,17 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
     private static string[] Names(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (path[0] != '/') throw new ArgumentException("Shared root paths are absolute.", nameof(path));
+        if (path[0] != '/')
+        {
+            throw new ArgumentException("Shared root paths are absolute.", nameof(path));
+        }
+
         string[] names = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (names.Any(name => name is "." or "..")) throw new ArgumentException("Shared root paths are normalized.", nameof(path));
+        if (names.Any(name => name is "." or ".."))
+        {
+            throw new ArgumentException("Shared root paths are normalized.", nameof(path));
+        }
+
         return names;
     }
 
@@ -164,7 +148,10 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
         ulong current = RootPath;
         foreach (string name in names)
         {
-            if (!state.State.Entries[current].Children.TryGetValue(name, out current)) return null;
+            if (!state.State.Entries[current].Children.TryGetValue(name, out current))
+            {
+                return null;
+            }
         }
 
         return current;
@@ -184,6 +171,8 @@ public sealed class FogRootGrain : Grain, IFogRootGrain
             : throw new FileNotFoundException("file does not exist");
 
     private ResourceHandleModel Handle(ulong path)
-        => new(new ResourceIdentityModel(FogSharedRoot.Provider, this.GetPrimaryKeyString(), path),
-            state.State.Entries[path].Directory ? QidType.QTDIR : QidType.QTFILE, 0);
+        => new(
+            new ResourceIdentityModel(FogSharedRoot.Provider, this.GetPrimaryKeyString(), path),
+            state.State.Entries[path].Directory ? QidType.QTDIR : QidType.QTFILE,
+            0);
 }

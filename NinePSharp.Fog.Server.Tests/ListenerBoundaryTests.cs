@@ -128,10 +128,18 @@ public sealed class ListenerBoundaryTests
             Assert.True(await RejectedAsync(tls, presentCertificate ? stranger : null, timeout.Token));
         }
 
-        while (connections.Count != 0) await Task.Delay(10, timeout.Token);
+        while (connections.Count != 0)
+        {
+            await Task.Delay(10, timeout.Token);
+        }
+
         // One admission slot: a leaked rejected connection would make this enrolled handshake fail.
-        await using var enrolled = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "control.test",
-            FogNodePolicy.SpkiPin(fixture.ServerCertificate), fixture.NodeCertificate, timeout.Token);
+        await using var enrolled = await FogTlsClient.ConnectAsync(
+            listener.LocalEndpoint,
+            "control.test",
+            FogNodePolicy.SpkiPin(fixture.ServerCertificate),
+            fixture.NodeCertificate,
+            timeout.Token);
         Assert.Equal(0, fixture.Effects);
         Assert.Empty(fixture.Store.LiveIds());
     }
@@ -144,6 +152,7 @@ public sealed class ListenerBoundaryTests
         const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var socket = (TcpListener)typeof(FogNodeListener).GetField("listener", Private)!.GetValue(listener)!;
         var stopping = (CancellationTokenSource)typeof(FogNodeListener).GetField("stopping", Private)!.GetValue(listener)!;
+
         // The order DisposeCoreAsync uses, observed by a loop that is between two accepts.
         socket.Start();
         await stopping.CancelAsync();
@@ -169,6 +178,7 @@ public sealed class ListenerBoundaryTests
             .GetField("connections", Private)!.GetValue(listener)!;
 
         Task disposal = listener.DisposeAsync().AsTask();
+
         // A client accepted while the loop is still running must be awaited too.
         Assert.True(connections.TryAdd(accepted, connection.Task));
         await Task.Delay(50);
@@ -192,6 +202,7 @@ public sealed class ListenerBoundaryTests
         using var fixture = new ControlFixture();
         var listener = Create(fixture, fixture.ServerCertificate);
         const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+
         // A listener that was never started is not a disposal race; its failure must surface.
         var loop = (Task)typeof(FogNodeListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
         await Assert.ThrowsAsync<InvalidOperationException>(() => loop.WaitAsync(TimeSpan.FromSeconds(1)));
@@ -202,12 +213,20 @@ public sealed class ListenerBoundaryTests
     public async Task EnrollmentThatLapsesAfterTheHandshakeCallbackIsRecheckedBeforeServing()
     {
         using var fixture = new ControlFixture();
+
         // Valid for the handshake callback's two clock reads, expired for the post-handshake recheck.
         var clock = new LapsingClock(fixture.NodeCertificate.NotAfter.ToUniversalTime(), validReads: 2);
         var policy = new FogNodePolicy(1, [new("worker", new string('1', 64), FogNodePolicy.SpkiPin(fixture.NodeCertificate), "worker.test")], clock);
         var dispatcher = new FogNinePDispatcher(fixture.Tree, policy, fixture.Limits, fixture.Time);
-        await using var listener = new FogNodeListener(new IPEndPoint(IPAddress.Loopback, 0), fixture.ServerCertificate, policy, dispatcher,
-            NullLogger.Instance, 1, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(20));
+        await using var listener = new FogNodeListener(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            fixture.ServerCertificate,
+            policy,
+            dispatcher,
+            NullLogger.Instance,
+            1,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(20));
         listener.Start();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var client = new TcpClient();
@@ -218,24 +237,18 @@ public sealed class ListenerBoundaryTests
         Assert.Empty(fixture.Store.LiveIds());
     }
 
-    private sealed class LapsingClock(DateTime expired, int validReads) : TimeProvider
-    {
-        private int reads;
-        internal int Reads => Volatile.Read(ref reads);
-        public override DateTimeOffset GetUtcNow() =>
-            Interlocked.Increment(ref reads) <= validReads ? DateTimeOffset.UtcNow : new DateTimeOffset(expired, TimeSpan.Zero);
-    }
-
     private static async Task<bool> RejectedAsync(SslStream tls, X509Certificate2? certificate, CancellationToken cancellation)
     {
         try
         {
-            await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+            await tls.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions
             {
                 TargetHost = "control.test",
                 ClientCertificates = certificate is null ? null : new X509CertificateCollection { certificate },
                 EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls13,
-            }, cancellation);
+            },
+                cancellation);
         }
         catch (Exception exception) when (exception is System.Security.Authentication.AuthenticationException or IOException)
         {
@@ -254,6 +267,23 @@ public sealed class ListenerBoundaryTests
     }
 
     private static FogNodeListener Create(ControlFixture fixture, X509Certificate2 certificate, TimeSpan? handshake = null, TimeSpan? lifetime = null) =>
-        new(new IPEndPoint(IPAddress.Loopback, 0), certificate, fixture.Policy, fixture.Dispatcher, NullLogger.Instance,
-            1, handshake ?? TimeSpan.FromSeconds(5), lifetime ?? TimeSpan.FromSeconds(20));
+        new(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            certificate,
+            fixture.Policy,
+            fixture.Dispatcher,
+            NullLogger.Instance,
+            1,
+            handshake ?? TimeSpan.FromSeconds(5),
+            lifetime ?? TimeSpan.FromSeconds(20));
+
+    private sealed class LapsingClock(DateTime expired, int validReads) : TimeProvider
+    {
+        private int reads;
+
+        internal int Reads => Volatile.Read(ref reads);
+
+        public override DateTimeOffset GetUtcNow() =>
+            Interlocked.Increment(ref reads) <= validReads ? DateTimeOffset.UtcNow : new DateTimeOffset(expired, TimeSpan.Zero);
+    }
 }

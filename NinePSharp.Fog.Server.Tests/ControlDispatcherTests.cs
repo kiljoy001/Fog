@@ -9,6 +9,9 @@ namespace NinePSharp.Fog.Server.Tests;
 
 public sealed class ControlDispatcherTests
 {
+    // Version, attach fid 1, then clone one transaction: random suffixes start from a live session, not from not-ready.
+    private static readonly byte[] LiveSession = [0, 0, 2, 0, 3, 1, 0, 0, 0, 4, 1, 2, 3, 2, 3, 4, 5, 2, 0, 6, 2, 0, 4, 8, 2];
+
     [Fact]
     public async Task StandardFilesCommitOnceAndReturnImmutableResults()
     {
@@ -69,7 +72,11 @@ public sealed class ControlDispatcherTests
         using var fixture = new ControlFixture();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.Apply = () => { entered.TrySetResult(); return finish.Task; };
+        fixture.Apply = () =>
+        {
+            entered.TrySetResult();
+            return finish.Task;
+        };
         await fixture.Initialize();
         string id = await fixture.Clone();
         await fixture.Upload(id, [1]);
@@ -116,9 +123,16 @@ public sealed class ControlDispatcherTests
             new Tattach(1, 1, NinePConstants.NoFid, "worker", "fog"),
             new Tattach(2, 1, 10, "worker", "runtime"),
             new Tattach(3, 1, NinePConstants.NoFid, "unknown", "runtime"),
-        }) Assert.Equal("denied", Assert.IsType<Rerror>(await fixture.Send(NinePMessage.NewMsgTattach(request))).Ename);
-        Assert.Equal("denied", Assert.IsType<Rerror>(await fixture.Dispatcher.DispatchAsync("s",
-            NinePMessage.NewMsgTattach(new Tattach(4, 1, NinePConstants.NoFid, "worker", "runtime")), NinePDialect.NineP2000)).Ename);
+        })
+        {
+            Assert.Equal("denied", Assert.IsType<Rerror>(await fixture.Send(NinePMessage.NewMsgTattach(request))).Ename);
+        }
+
+        object reply = await fixture.Dispatcher.DispatchAsync(
+            "s",
+            NinePMessage.NewMsgTattach(new Tattach(4, 1, NinePConstants.NoFid, "worker", "runtime")),
+            NinePDialect.NineP2000);
+        Assert.Equal("denied", Assert.IsType<Rerror>(reply).Ename);
     }
 
     [Fact]
@@ -154,9 +168,6 @@ public sealed class ControlDispatcherTests
         Assert.IsType<Rerror>(await fixture.Send(NinePMessage.NewMsgTversion(new Tversion(65535, 4096, "9P2000"))));
     }
 
-    // Version, attach fid 1, then clone one transaction: random suffixes start from a live session, not from not-ready.
-    private static readonly byte[] LiveSession = [0, 0, 2, 0, 3, 1, 0, 0, 0, 4, 1, 2, 3, 2, 3, 4, 5, 2, 0, 6, 2, 0, 4, 8, 2];
-
     [Property(MaxTest = 300)]
     public void GeneratedRequestSequencesAgreeWithTheSessionModel(byte[] commands) => NinePSharp.Fuzzer.FogDispatcherFuzz.Run(commands);
 
@@ -184,13 +195,6 @@ public sealed class ControlDispatcherTests
         NinePSharp.Fuzzer.FogFileFuzz.Run([1, 2, 3, 4]);
     }
 
-    private static string RepositoryRoot()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-            if (File.Exists(Path.Combine(directory.FullName, "NinePSharp.sln"))) return directory.FullName;
-        throw new DirectoryNotFoundException("NinePSharp.sln");
-    }
-
     [Property(MaxTest = 100)]
     public bool GeneratedPayloadFragmentsHaveOneWireCommitEffect(byte[] input, byte stride)
     {
@@ -201,12 +205,28 @@ public sealed class ControlDispatcherTests
         _ = fixture.Walk(1, 3, "control", "fixture", id, "request").GetAwaiter().GetResult();
         _ = fixture.Open(3, NinePConstants.OWRITE).GetAwaiter().GetResult();
         for (int offset = 0; offset < bytes.Length; offset += stride + 1)
+        {
             Assert.IsType<Rwrite>(fixture.Write(3, bytes.Skip(offset).Take(stride + 1).ToArray(), (ulong)offset).GetAwaiter().GetResult());
+        }
+
         Assert.Equal(0, fixture.Effects);
         _ = fixture.Clunk(3).GetAwaiter().GetResult();
         _ = fixture.Walk(1, 4, "control", "fixture", id, "ctl").GetAwaiter().GetResult();
         _ = fixture.Open(4, NinePConstants.OWRITE).GetAwaiter().GetResult();
         Assert.IsType<Rwrite>(fixture.Write(4, "commit\n"u8.ToArray()).GetAwaiter().GetResult());
         return fixture.Effects == 1 && fixture.Store.ReadOutput(fixture.Owner, id, "reply", 0, 4096).SequenceEqual(bytes);
+    }
+
+    private static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "NinePSharp.sln")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("NinePSharp.sln");
     }
 }

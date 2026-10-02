@@ -16,10 +16,15 @@ namespace NinePSharp.Fog.Auth.Tests.Steps;
 [Scope(Feature = "Fog keeps its authentication database as 9front keyfs does")]
 public sealed class KeyFsSteps
 {
+    private const UnixFileMode ReadableByAll = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+        | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+
     private const string UserFiles = "key, aeskey, pakhash, secret, log, status, expire, warnings";
     private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero));
     private readonly List<SoftwareTpm> tpms = new();
     private readonly List<string> directories = new();
+    private readonly Dictionary<string, byte[]> reads = new(StringComparer.Ordinal);
+    private readonly List<byte[]> keptFiles = new();
     private SoftwareTpm tpm = null!;
     private KeyFsOptions options = null!;
     private KeyFsHost? host;
@@ -28,11 +33,9 @@ public sealed class KeyFsSteps
     private string? attemptedPhrase;
     private Exception? failure;
     private IReadOnlyList<Stat> listing = [];
-    private readonly Dictionary<string, byte[]> reads = new(StringComparer.Ordinal);
     private byte[]? writtenKey;
     private byte[]? databaseFile;
     private uint staleFid;
-    private readonly List<byte[]> keptFiles = new();
     private string? otherPhrase;
     private Socket? otherServer;
     private KeyFsClient? secondClient;
@@ -41,7 +44,11 @@ public sealed class KeyFsSteps
     private KeyFsDispatcher? stoppedDispatcher;
     private int socketsBeforeStart;
 
-    // --- Background and host lifecycle -------------------------------------
+    [When("a keyfs is initialised on an empty software TPM")]
+    public static void WhenInitialised()
+    {
+        // The background initialised this scenario's keyfs on a fresh software TPM.
+    }
 
     [Given("a keyfs whose storage key is sealed by a software TPM")]
     public async Task GivenKeyFs()
@@ -56,7 +63,7 @@ public sealed class KeyFsSteps
     public async Task GivenUser(string user, string password)
     {
         AuthKey key = AuthKey.FromPassword(password);
-        await keyfs!.CreateAsync("", user, isDirectory: true);
+        await keyfs!.CreateAsync(string.Empty, user, isDirectory: true);
         await keyfs.WriteAsync($"{user}/key", key.DesKey);
         await keyfs.WriteAsync($"{user}/aeskey", key.AesKey);
     }
@@ -73,10 +80,8 @@ public sealed class KeyFsSteps
     public void ThenRefusesToStart(string message)
         => Assert.Equal(message, Assert.IsType<KeyFsException>(failure).Message);
 
-    // --- The tree -----------------------------------------------------------
-
     [When("the keyfs root is listed")]
-    public async Task WhenRootListed() => listing = await keyfs!.ListAsync("");
+    public async Task WhenRootListed() => listing = await keyfs!.ListAsync(string.Empty);
 
     [When(@"^""([^""/]+)"" is listed$")]
     public async Task WhenUserListed(string user) => listing = await keyfs!.ListAsync(user);
@@ -92,7 +97,7 @@ public sealed class KeyFsSteps
     [Then(@"^every entry is owned by ""(.*)"", directories with mode 0777 and files with mode 0666$")]
     public async Task ThenOwnership(string owner)
     {
-        var entries = (await keyfs!.ListAsync("")).Concat(await keyfs.ListAsync("glenda")).ToList();
+        var entries = (await keyfs!.ListAsync(string.Empty)).Concat(await keyfs.ListAsync("glenda")).ToList();
         foreach (Stat entry in entries)
         {
             Assert.Equal(owner, entry.Uid);
@@ -104,7 +109,10 @@ public sealed class KeyFsSteps
     [When(@"^""(.*)"", ""(.*)"" and ""(.*)"" are read$")]
     public async Task WhenFilesRead(string first, string second, string third)
     {
-        foreach (string path in new[] { first, second, third }) reads[path] = await keyfs!.ReadAsync(path);
+        foreach (string path in new[] { first, second, third })
+        {
+            reads[path] = await keyfs!.ReadAsync(path);
+        }
     }
 
     [Then(@"^they equal the Dp9ik passtokey DES and AES keys and authpak_hash for ""(.*)"" and ""(.*)""$")]
@@ -135,11 +143,9 @@ public sealed class KeyFsSteps
     [Then(@"^the write fails with ""(.*)""$")]
     public void ThenWriteFails(string message) => AssertNinePError(message);
 
-    // --- Users ----------------------------------------------------------------
-
     [When(@"^the directory ""(.*)"" is made in the keyfs root$")]
     public async Task WhenDirectoryMade(string name)
-        => failure = await CatchAsync(() => keyfs!.CreateAsync("", Unescape(name), isDirectory: true));
+        => failure = await CatchAsync(() => keyfs!.CreateAsync(string.Empty, Unescape(name), isDirectory: true));
 
     [Then(@"^making it fails with ""(.*)""$")]
     public void ThenMakingFails(string message) => AssertNinePError(message);
@@ -148,7 +154,7 @@ public sealed class KeyFsSteps
     public async Task ThenRootContains(string name)
     {
         Assert.Null(failure);
-        Assert.Contains(name, (await keyfs!.ListAsync("")).Select(entry => entry.Name));
+        Assert.Contains(name, (await keyfs!.ListAsync(string.Empty)).Select(entry => entry.Name));
     }
 
     [When(@"^""(.*)"" is renamed to ""(.*)""$")]
@@ -156,17 +162,21 @@ public sealed class KeyFsSteps
 
     [Then(@"^the keyfs root contains exactly the directory ""(.*)""$")]
     public async Task ThenRootContainsExactly(string name)
-        => Assert.Equal([name], (await keyfs!.ListAsync("")).Select(entry => entry.Name).ToArray());
+        => Assert.Equal([name], (await keyfs!.ListAsync(string.Empty)).Select(entry => entry.Name).ToArray());
 
     [When(@"^""([^""]+)"" is removed$")]
     public async Task WhenRemoved(string path)
     {
-        if (!path.Contains('/', StringComparison.Ordinal)) staleFid = await keyfs!.WalkAsync($"{path}/key");
+        if (!path.Contains('/', StringComparison.Ordinal))
+        {
+            staleFid = await keyfs!.WalkAsync($"{path}/key");
+        }
+
         failure = await CatchAsync(() => keyfs!.RemoveAsync(path));
     }
 
     [Then("the keyfs root is empty")]
-    public async Task ThenRootEmpty() => Assert.Empty(await keyfs!.ListAsync(""));
+    public async Task ThenRootEmpty() => Assert.Empty(await keyfs!.ListAsync(string.Empty));
 
     [Then(@"^reading ""(.*)"" through a fid walked before the removal still fails$")]
     public async Task ThenStaleFidFails(string path)
@@ -175,7 +185,7 @@ public sealed class KeyFsSteps
     [Then(@"^making the file ""(.*)"" in the keyfs root fails with ""(.*)""$")]
     public async Task ThenMakingFileFails(string name, string message)
     {
-        failure = await CatchAsync(() => keyfs!.CreateAsync("", name, isDirectory: false));
+        failure = await CatchAsync(() => keyfs!.CreateAsync(string.Empty, name, isDirectory: false));
         AssertNinePError(message);
     }
 
@@ -195,8 +205,6 @@ public sealed class KeyFsSteps
         failure = await CatchAsync(() => keyfs!.RemoveAsync(path));
         AssertNinePError(message);
     }
-
-    // --- Account state -----------------------------------------------------
 
     [Given(@"^""([^""/]+)"" is (disabled|in purgatory after 10 bad attempts|expired)$")]
     public async Task GivenState(string user, string state)
@@ -273,7 +281,7 @@ public sealed class KeyFsSteps
     [Then(@"^removing the keyfs root fails with ""(.*)""$")]
     public async Task ThenRemovingRootFails(string message)
     {
-        failure = await CatchAsync(() => keyfs!.RemoveAsync(""));
+        failure = await CatchAsync(() => keyfs!.RemoveAsync(string.Empty));
         AssertNinePError(message);
     }
 
@@ -285,7 +293,7 @@ public sealed class KeyFsSteps
     }
 
     [Then(@"^writing to the keyfs root fails with ""(.*)""$")]
-    public Task ThenWritingRootFails(string message) => ThenWritingFails("", message);
+    public Task ThenWritingRootFails(string message) => ThenWritingFails(string.Empty, message);
 
     [Given(@"^a fid walked to ""(.*)""$")]
     public async Task GivenWalkedFid(string path) => staleFid = await keyfs!.WalkAsync(path.TrimEnd('/'));
@@ -336,13 +344,11 @@ public sealed class KeyFsSteps
     public async Task WhenWritten(string text, string path)
         => failure = await CatchAsync(() => keyfs!.WriteTextAsync(path, Unescape(text)));
 
-    // --- Persistence -----------------------------------------------------------
-
     [When(@"^the directory ""(.*)"" is made, ""(.*)"" is written and ""(.*)"" is set to ""(.*)""$")]
     public async Task WhenSeveralChanges(string user, string aesPath, string statusPath, string status)
     {
         writtenKey = AuthKey.FromPassword("scott-password").AesKey;
-        await keyfs!.CreateAsync("", user, isDirectory: true);
+        await keyfs!.CreateAsync(string.Empty, user, isDirectory: true);
         await keyfs.WriteAsync(aesPath, writtenKey);
         await keyfs.WriteTextAsync(statusPath, status);
     }
@@ -389,9 +395,7 @@ public sealed class KeyFsSteps
     [Given("the state directory has mode 0755")]
     [When("that host's state directory has mode 0755")]
     public void GivenOpenStateDirectory()
-        => File.SetUnixFileMode(options.StateDirectory,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead |
-            UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        => File.SetUnixFileMode(options.StateDirectory, ReadableByAll);
 
     [When("a keyfs is initialised in a state directory that does not exist yet")]
     public async Task WhenInitialisedInNewDirectory()
@@ -416,7 +420,7 @@ public sealed class KeyFsSteps
     public async Task ThenOtherRootEmpty()
     {
         using KeyFsClient other = await KeyFsClient.AttachAsync(otherOptions!.SocketPath);
-        Assert.Empty(await other.ListAsync(""));
+        Assert.Empty(await other.ListAsync(string.Empty));
     }
 
     [Then("the failed start leaves no socket open")]
@@ -433,7 +437,9 @@ public sealed class KeyFsSteps
     public void ThenFileModes()
     {
         foreach (string file in new[] { options.DatabasePath, options.SealedKeyPath })
+        {
             Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(file));
+        }
     }
 
     [When(@"^the database file is cut to (\d+) bytes$")]
@@ -454,6 +460,7 @@ public sealed class KeyFsSteps
             "given another magic" => [.. "FOGSEAL2"u8, .. blob[8..]],
             "extended by one byte" => [.. blob, 0],
             "cut short" => blob[..^1],
+
             // Keep the framing and lengths, but replace the public area's contents.
             _ => [.. blob[..10], .. Enumerable.Repeat((byte)0xFF, (blob[8] << 8) | blob[9]), .. blob[(10 + ((blob[8] << 8) | blob[9]))..]],
         };
@@ -490,7 +497,7 @@ public sealed class KeyFsSteps
     [Then(@"^""([^""/]+)"" is unchanged$")]
     public async Task ThenUserUnchanged(string user)
     {
-        Assert.Equal([user], (await keyfs!.ListAsync("")).Select(entry => entry.Name).ToArray());
+        Assert.Equal([user], (await keyfs!.ListAsync(string.Empty)).Select(entry => entry.Name).ToArray());
         Assert.Equal("2", await keyfs.ReadTextAsync($"{user}/warnings"));
         Assert.Equal("ok", await keyfs.ReadTextAsync($"{user}/status"));
         Assert.Equal(AuthKey.FromPassword("glenda-password").AesKey, await keyfs.ReadAsync($"{user}/aeskey"));
@@ -515,7 +522,9 @@ public sealed class KeyFsSteps
     {
         AuthKey key = AuthKey.FromPassword("glenda-password");
         foreach (byte[] secret in new[] { Encoding.UTF8.GetBytes(user), key.DesKey, key.AesKey })
+        {
             Assert.False(Contains(databaseFile!, secret), $"database contains {Convert.ToHexString(secret)}");
+        }
     }
 
     [When("any single byte of the database file is changed")]
@@ -529,7 +538,8 @@ public sealed class KeyFsSteps
             tampered[index] ^= 0x01;
             File.WriteAllBytes(options.DatabasePath, tampered);
             Exception? refused = await CatchAsync(StartAsync);
-            Assert.True(refused is KeyFsException { Message: "keyfs: database authentication failed" },
+            Assert.True(
+                refused is KeyFsException { Message: "keyfs: database authentication failed" },
                 $"byte {index}: {refused?.Message ?? "started"}");
         }
 
@@ -550,7 +560,10 @@ public sealed class KeyFsSteps
     public async Task WhenPcrsExtended()
     {
         await StopAsync();
-        foreach (int pcr in Enumerable.Range(0, 17).Append(23)) tpm.ExtendPcr(pcr);
+        foreach (int pcr in Enumerable.Range(0, 17).Append(23))
+        {
+            tpm.ExtendPcr(pcr);
+        }
     }
 
     [When(@"^the keyfs is started and restarted (\d+) times$")]
@@ -568,14 +581,6 @@ public sealed class KeyFsSteps
     {
         Assert.Equal(0, tpm.PersistentHandles());
         Assert.Equal(0, tpm.TransientHandles());
-    }
-
-    // --- Recovery ----------------------------------------------------------
-
-    [When("a keyfs is initialised on an empty software TPM")]
-    public static void WhenInitialised()
-    {
-        // The background initialised this scenario's keyfs on a fresh software TPM.
     }
 
     [Then("it reports a 24-word BIP-39 recovery phrase for its storage key")]
@@ -661,19 +666,21 @@ public sealed class KeyFsSteps
         Assert.Equal(AuthKey.FromPassword("glenda-password").AesKey, await keyfs!.ReadAsync("glenda/aeskey"));
     }
 
-    // --- The admin socket ----------------------------------------------------
-
     [When("the keyfs admin listener starts")]
     public async Task WhenListenerStarts()
     {
         // The background already started one; after a shutdown this starts it again.
-        if (host is null) await StartAsync();
+        if (host is null)
+        {
+            await StartAsync();
+        }
     }
 
     [Then("it listens on a Unix-domain socket and on no network address")]
     public void ThenUnixOnly()
     {
         Assert.Equal("socket", Stat("%F", options.SocketPath));
+
         // No TCP or UDP endpoint of this process is in the listening state.
         var listening = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners()
             .Concat(IPGlobalProperties.GetIPGlobalProperties().GetActiveUdpListeners());
@@ -691,18 +698,24 @@ public sealed class KeyFsSteps
     public async Task ThenClientLists(string user)
     {
         using KeyFsClient other = await KeyFsClient.AttachAsync(options.SocketPath);
-        Assert.Contains(user, (await other.ListAsync("")).Select(entry => entry.Name));
+        Assert.Contains(user, (await other.ListAsync(string.Empty)).Select(entry => entry.Name));
     }
 
     [Given("a socket file left at the admin socket path by a process that was killed")]
     public async Task GivenStaleSocket()
     {
         await StopAsync();
+
         // .NET removes a socket file it bound when the socket is disposed, so the stale file comes
         // from a process that binds, listens and dies without cleaning up.
-        var bind = new System.Diagnostics.ProcessStartInfo("python3",
+        var bind = new System.Diagnostics.ProcessStartInfo(
+            "python3",
             ["-c", "import os, socket, sys; s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(); os._exit(0)", options.SocketPath]);
-        using (var process = System.Diagnostics.Process.Start(bind)!) process.WaitForExit();
+        using (var process = System.Diagnostics.Process.Start(bind)!)
+        {
+            process.WaitForExit();
+        }
+
         Assert.Equal("socket", Stat("%F", options.SocketPath));
     }
 
@@ -739,7 +752,7 @@ public sealed class KeyFsSteps
     [Then("the second client's next request fails")]
     public async Task ThenSecondClientFails()
     {
-        Exception? next = await CatchAsync(() => secondClient!.ListAsync("").WaitAsync(TimeSpan.FromSeconds(10)));
+        Exception? next = await CatchAsync(() => secondClient!.ListAsync(string.Empty).WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.True(next is not null and not TimeoutException, next?.ToString() ?? "the request succeeded");
     }
 
@@ -759,7 +772,7 @@ public sealed class KeyFsSteps
     public async Task WhenTauth()
     {
         using KeyFsClient other = await KeyFsClient.ConnectAsync(options.SocketPath);
-        failure = await CatchAsync(() => other.Raw.AuthAsync(7, Environment.UserName, ""));
+        failure = await CatchAsync(() => other.Raw.AuthAsync(7, Environment.UserName, string.Empty));
     }
 
     [Then(@"^it receives ""(.*)""$")]
@@ -769,7 +782,7 @@ public sealed class KeyFsSteps
     public async Task ThenNofidAttach()
     {
         using KeyFsClient other = await KeyFsClient.AttachAsync(options.SocketPath);
-        Assert.NotEmpty(await other.ListAsync(""));
+        Assert.NotEmpty(await other.ListAsync(string.Empty));
     }
 
     // Reqnroll does not dispose IAsyncDisposable bindings, so cleanup is an explicit hook.
@@ -778,14 +791,105 @@ public sealed class KeyFsSteps
     {
         secondClient?.Dispose();
         otherServer?.Dispose();
-        if (otherHost is not null) await otherHost.DisposeAsync();
+        if (otherHost is not null)
+        {
+            await otherHost.DisposeAsync();
+        }
+
         await StopAsync();
-        foreach (SoftwareTpm each in tpms) each.Dispose();
+        foreach (SoftwareTpm each in tpms)
+        {
+            each.Dispose();
+        }
+
         foreach (string directory in directories)
-            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
 
-    // --- Helpers -----------------------------------------------------------------
+    private static AuthKey HashedKey(string user, string password)
+    {
+        AuthKey key = AuthKey.FromPassword(password);
+        key.ApplyAuthPakHash(user);
+        return key;
+    }
+
+    private static bool IsDirectory(Stat entry) => (entry.Mode & 0x80000000u) != 0;
+
+    private static string[] Split(string list) => list.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    private static string Unescape(string text) => text.Replace("\\t", "\t", StringComparison.Ordinal).Replace("\\n", "\n", StringComparison.Ordinal);
+
+    private static bool Contains(byte[] haystack, byte[] needle)
+        => needle.Length > 0 && haystack.AsSpan().IndexOf(needle) >= 0;
+
+    private static string WrongChecksumWord(string[] words)
+    {
+        foreach (string candidate in new[] { "abandon", "ability", "able", "about", "above" })
+        {
+            string phrase = string.Join(' ', words[..^1].Append(candidate));
+            if (candidate != words[^1] && !RecoveryPhrase.TryDecode(phrase, out _))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException("no word with a wrong checksum among the candidates");
+    }
+
+    private static bool OwnedByThisProcess(int port) => SocketInodes().Overlaps(ListeningInodes(port));
+
+    private static HashSet<string> SocketInodes()
+        => Directory.EnumerateFileSystemEntries("/proc/self/fd")
+            .Select(fd => new FileInfo(fd).LinkTarget ?? string.Empty)
+            .Where(target => target.StartsWith("socket:[", StringComparison.Ordinal))
+            .Select(target => target[8..^1])
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static HashSet<string> ListeningInodes(int port)
+    {
+        var inodes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string table in new[] { "/proc/net/tcp", "/proc/net/tcp6", "/proc/net/udp", "/proc/net/udp6" })
+        {
+            foreach (string line in File.ReadLines(table).Skip(1))
+            {
+                string[] fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                int localPort = Convert.ToInt32(fields[1].Split(':')[1], 16);
+                if (localPort == port)
+                {
+                    inodes.Add(fields[9]);
+                }
+            }
+        }
+
+        return inodes;
+    }
+
+    private static string Stat(string format, string path)
+    {
+        var stat = new System.Diagnostics.ProcessStartInfo("stat", ["-c", format, path]) { RedirectStandardOutput = true };
+        using var process = System.Diagnostics.Process.Start(stat)!;
+        string owner = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+        return owner;
+    }
+
+    private static async Task<Exception?> CatchAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            return null;
+        }
+        catch (Exception caught)
+        {
+            return caught;
+        }
+    }
 
     private async Task StartAsync()
     {
@@ -809,13 +913,22 @@ public sealed class KeyFsSteps
     private async Task ArrangeReads(string path, string expected)
     {
         string file = path[(path.IndexOf('/') + 1)..];
-        if (file == "log") await WriteRepeatedly(path, "bad", int.Parse(expected, CultureInfo.InvariantCulture));
-        else await keyfs!.WriteTextAsync(path, expected);
+        if (file == "log")
+        {
+            await WriteRepeatedly(path, "bad", int.Parse(expected, CultureInfo.InvariantCulture));
+        }
+        else
+        {
+            await keyfs!.WriteTextAsync(path, expected);
+        }
     }
 
     private async Task WriteRepeatedly(string path, string text, int count)
     {
-        for (int index = 0; index < count; index++) await keyfs!.WriteTextAsync(path, text);
+        for (int index = 0; index < count; index++)
+        {
+            await keyfs!.WriteTextAsync(path, text);
+        }
     }
 
     private void MoveToNewHost(bool includeSealedKey)
@@ -824,7 +937,10 @@ public sealed class KeyFsSteps
         tpm = NewTpm();
         options = Options(tpm, NewDirectory());
         File.Copy(previous.DatabasePath, options.DatabasePath);
-        if (includeSealedKey) File.Copy(previous.SealedKeyPath, options.SealedKeyPath);
+        if (includeSealedKey)
+        {
+            File.Copy(previous.SealedKeyPath, options.SealedKeyPath);
+        }
     }
 
     private SoftwareTpm NewTpm()
@@ -852,79 +968,4 @@ public sealed class KeyFsSteps
 
     private void AssertNinePError(string message)
         => Assert.Equal(message, Assert.IsType<NinePException>(failure).Message);
-
-    private static AuthKey HashedKey(string user, string password)
-    {
-        AuthKey key = AuthKey.FromPassword(password);
-        key.ApplyAuthPakHash(user);
-        return key;
-    }
-
-    private static bool IsDirectory(Stat entry) => (entry.Mode & 0x80000000u) != 0;
-
-    private static string[] Split(string list) => list.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-
-    private static string Unescape(string text) => text.Replace("\\t", "\t", StringComparison.Ordinal).Replace("\\n", "\n", StringComparison.Ordinal);
-
-    private static bool Contains(byte[] haystack, byte[] needle)
-        => needle.Length > 0 && haystack.AsSpan().IndexOf(needle) >= 0;
-
-    private static string WrongChecksumWord(string[] words)
-    {
-        foreach (string candidate in new[] { "abandon", "ability", "able", "about", "above" })
-        {
-            string phrase = string.Join(' ', words[..^1].Append(candidate));
-            if (candidate != words[^1] && !RecoveryPhrase.TryDecode(phrase, out _)) return candidate;
-        }
-
-        throw new InvalidOperationException("no word with a wrong checksum among the candidates");
-    }
-
-    private static bool OwnedByThisProcess(int port) => SocketInodes().Overlaps(ListeningInodes(port));
-
-    private static HashSet<string> SocketInodes()
-        => Directory.EnumerateFileSystemEntries("/proc/self/fd")
-            .Select(fd => new FileInfo(fd).LinkTarget ?? "")
-            .Where(target => target.StartsWith("socket:[", StringComparison.Ordinal))
-            .Select(target => target[8..^1])
-            .ToHashSet(StringComparer.Ordinal);
-
-    private static HashSet<string> ListeningInodes(int port)
-    {
-        var inodes = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string table in new[] { "/proc/net/tcp", "/proc/net/tcp6", "/proc/net/udp", "/proc/net/udp6" })
-        {
-            foreach (string line in File.ReadLines(table).Skip(1))
-            {
-                string[] fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                int localPort = Convert.ToInt32(fields[1].Split(':')[1], 16);
-                if (localPort == port) inodes.Add(fields[9]);
-            }
-        }
-
-        return inodes;
-    }
-
-    /// <summary>One field of stat(1) for a path, such as %F (file type) or %U (owner).</summary>
-    private static string Stat(string format, string path)
-    {
-        var stat = new System.Diagnostics.ProcessStartInfo("stat", ["-c", format, path]) { RedirectStandardOutput = true };
-        using var process = System.Diagnostics.Process.Start(stat)!;
-        string owner = process.StandardOutput.ReadToEnd().Trim();
-        process.WaitForExit();
-        return owner;
-    }
-
-    private static async Task<Exception?> CatchAsync(Func<Task> action)
-    {
-        try
-        {
-            await action();
-            return null;
-        }
-        catch (Exception caught)
-        {
-            return caught;
-        }
-    }
 }

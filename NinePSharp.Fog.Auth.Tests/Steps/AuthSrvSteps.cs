@@ -24,8 +24,9 @@ public sealed class AuthSrvSteps
     private readonly Dictionary<string, string> passwords = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AuthKey> clientKeys = new(StringComparer.Ordinal);
     private readonly List<byte[]> ticketKeys = new();
+    private readonly List<AuthClient> others = new();
     private SoftwareTpm? tpm;
-    private string directory = "";
+    private string directory = string.Empty;
     private KeyFsHost? keyfsHost;
     private KeyFsClient? admin;
     private AuthServerHost? server;
@@ -34,9 +35,8 @@ public sealed class AuthSrvSteps
     private AuthClient? client;
     private byte[] challenge = [];
     private byte[]? tickets;
-    private readonly List<AuthClient> others = new();
 
-    // --- Hosts -------------------------------------------------------------------
+    private bool[] concurrentResults = [];
 
     [Given("a keyfs with the users")]
     public async Task GivenKeyFs(Table table)
@@ -51,7 +51,10 @@ public sealed class AuthSrvSteps
         };
         keyfsHost = await KeyFsHost.StartAsync(options, CancellationToken.None);
         admin = await KeyFsClient.AttachAsync(options.SocketPath);
-        foreach (DataTableRow row in table.Rows) await AddUser(row["user"], row["password"]);
+        foreach (DataTableRow row in table.Rows)
+        {
+            await AddUser(row["user"], row["password"]);
+        }
     }
 
     [Given("an auth server on that keyfs")]
@@ -92,7 +95,11 @@ public sealed class AuthSrvSteps
                 await admin!.WriteAsync($"{user}/aeskey", new byte[Dp9ikConstants.AesKeyLength]);
                 break;
             default:
-                for (int attempt = 0; attempt < 10; attempt++) await admin!.WriteTextAsync($"{user}/log", "bad");
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    await admin!.WriteTextAsync($"{user}/log", "bad");
+                }
+
                 break;
         }
     }
@@ -105,8 +112,6 @@ public sealed class AuthSrvSteps
         await admin.WriteAsync($"{user}/aeskey", key.AesKey);
         passwords[user] = password;
     }
-
-    // --- AuthPAK -------------------------------------------------------------------
 
     [When(@"^a client sends a PAK request with authid ""(.*)"", hostid ""(.*)"" and uid ""(.*)""$")]
     public async Task WhenPakRequest(string authid, string hostid, string uid)
@@ -128,7 +133,10 @@ public sealed class AuthSrvSteps
     [Then(@"^the client completes an AuthPAK exchange as each of ""(.*)""$")]
     public async Task ThenExchanges(string ids)
     {
-        foreach (string id in ids.Split(',', StringSplitOptions.TrimEntries)) await Exchange(id);
+        foreach (string id in ids.Split(',', StringSplitOptions.TrimEntries))
+        {
+            await Exchange(id);
+        }
     }
 
     [Then("the server is ready for the next request")]
@@ -145,7 +153,7 @@ public sealed class AuthSrvSteps
         for (int round = 0; round < 2; round++)
         {
             using AuthClient probe = await AuthClient.ConnectAsync(server!.LocalEndPoint);
-            await probe.SendAsync(AuthClient.Request(AuthMessageType.AuthPak, "", id, id));
+            await probe.SendAsync(AuthClient.Request(AuthMessageType.AuthPak, string.Empty, id, id));
             Assert.Equal(AuthClient.AuthOK, await probe.ReadByteAsync());
             values.Add(await probe.ReadAsync(Dp9ikConstants.PakPublicValueLength));
         }
@@ -165,7 +173,11 @@ public sealed class AuthSrvSteps
     [When("those clients disconnect")]
     public void WhenClientsDisconnect()
     {
-        foreach (AuthClient each in others) each.Dispose();
+        foreach (AuthClient each in others)
+        {
+            each.Dispose();
+        }
+
         others.Clear();
     }
 
@@ -176,7 +188,11 @@ public sealed class AuthSrvSteps
     public async Task ThenTracks(int count)
     {
         // Connections are noticed and forgotten asynchronously.
-        for (int attempt = 0; attempt < 100 && server!.ConnectionCount != count; attempt++) await Task.Delay(50);
+        for (int attempt = 0; attempt < 100 && server!.ConnectionCount != count; attempt++)
+        {
+            await Task.Delay(50);
+        }
+
         Assert.Equal(count, server!.ConnectionCount);
     }
 
@@ -195,7 +211,11 @@ public sealed class AuthSrvSteps
         await ThenAuthOk();
         if (hostid.Length > 0)
         {
-            if (authid.Length > 0) await Exchange(authid);
+            if (authid.Length > 0)
+            {
+                await Exchange(authid);
+            }
+
             await Exchange(hostid);
         }
         else
@@ -212,8 +232,6 @@ public sealed class AuthSrvSteps
         byte[] value = (P - 1).ToByteArray(isUnsigned: true, isBigEndian: true);
         await client.SendAsync(value);
     }
-
-    // --- AuthTreq ------------------------------------------------------------------
 
     [When(@"^it sends a ticket request with authid ""(.*)"", hostid ""(.*)"", uid ""(.*)"" and a fresh challenge$")]
     [When(@"^a client sends a ticket request with authid ""(.*)"", hostid ""(.*)"", uid ""(.*)"" and a fresh challenge$")]
@@ -255,7 +273,10 @@ public sealed class AuthSrvSteps
     public async Task ThenTcOutcome(string outcome, string id)
     {
         Ticket? opened = await Open(clientTicket: true, id, expectOpen: outcome == "opens");
-        if (opened is not null) Assert.Equal(AuthMessageType.AuthTc, opened.Type);
+        if (opened is not null)
+        {
+            Assert.Equal(AuthMessageType.AuthTc, opened.Type);
+        }
     }
 
     [Then(@"^the AuthTs ticket opens with the PAK key the client shares as ""(.*)""$")]
@@ -294,8 +315,6 @@ public sealed class AuthSrvSteps
 
     [Then(@"^the AuthTc ticket's client user is ""(.*)""$")]
     public async Task ThenTcClientUser(string user) => Assert.Equal(user, (await Open(clientTicket: true, user))!.ClientUserText);
-
-    // --- Errors and the connection -----------------------------------------------------
 
     [Then(@"^the server replies AuthErr ""(.*)""$")]
     public async Task ThenAuthErr(string message)
@@ -362,7 +381,11 @@ public sealed class AuthSrvSteps
         var rounds = Enumerable.Range(0, count).Select(async round =>
         {
             AuthClient each = await AuthClient.ConnectAsync(server!.LocalEndPoint);
-            lock (others) others.Add(each);
+            lock (others)
+            {
+                others.Add(each);
+            }
+
             await each.SendAsync(AuthClient.Request(AuthMessageType.AuthPak, "fog", user, user));
             Assert.Equal(AuthClient.AuthOK, await each.ReadByteAsync());
             await each.PakAsync(AuthClient.Key(passwords["fog"], "fog"));
@@ -399,22 +422,33 @@ public sealed class AuthSrvSteps
     public async Task CleanUpAsync()
     {
         client?.Dispose();
-        foreach (AuthClient each in others) each.Dispose();
-        if (server is not null) await server.DisposeAsync();
+        foreach (AuthClient each in others)
+        {
+            each.Dispose();
+        }
+
+        if (server is not null)
+        {
+            await server.DisposeAsync();
+        }
+
         admin?.Dispose();
-        if (keyfsHost is not null) await keyfsHost.DisposeAsync();
+        if (keyfsHost is not null)
+        {
+            await keyfsHost.DisposeAsync();
+        }
+
         tpm?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
-
-    // --- Helpers -----------------------------------------------------------------------
-
-    private bool[] concurrentResults = [];
 
     private async Task AddUser(string user, string password)
     {
         AuthKey key = AuthKey.FromPassword(password);
-        await admin!.CreateAsync("", user, isDirectory: true);
+        await admin!.CreateAsync(string.Empty, user, isDirectory: true);
         await admin.WriteAsync($"{user}/key", key.DesKey);
         await admin.WriteAsync($"{user}/aeskey", key.AesKey);
         passwords[user] = password;
@@ -429,7 +463,11 @@ public sealed class AuthSrvSteps
     {
         client?.Dispose();
         client = null;
-        if (server is not null) await server.DisposeAsync();
+        if (server is not null)
+        {
+            await server.DisposeAsync();
+        }
+
         StartServer();
     }
 
@@ -439,12 +477,15 @@ public sealed class AuthSrvSteps
 
     private async Task ReadTickets()
     {
-        if (tickets is not null) return;
+        if (tickets is not null)
+        {
+            return;
+        }
+
         Assert.Equal(AuthClient.AuthOK, await client!.ReadByteAsync());
         tickets = await client.ReadTicketsAsync();
     }
 
-    /// <summary>Opens the AuthTc ticket (the first) or the AuthTs ticket (the second) with an id's PAK key.</summary>
     private async Task<Ticket?> Open(bool clientTicket, string id, bool expectOpen = true)
     {
         await ReadTickets();

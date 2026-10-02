@@ -11,14 +11,20 @@ public sealed class FogAuthorizationAuthority
     private readonly object gate = new();
     private AuthorizationPolicy current;
 
-    /// <summary>Starts with the given policy.</summary>
+    /// <summary>Initializes a new instance of the <see cref="FogAuthorizationAuthority"/> class. It starts with the given policy.</summary>
     public FogAuthorizationAuthority(AuthorizationPolicy initial)
         => current = initial ?? throw new ArgumentNullException(nameof(initial));
 
     /// <summary>Gets the current policy.</summary>
     public AuthorizationPolicy Current
     {
-        get { lock (gate) return current; }
+        get
+        {
+            lock (gate)
+            {
+                return current;
+            }
+        }
     }
 
     /// <summary>Gets the current policy generation.</summary>
@@ -30,7 +36,11 @@ public sealed class FogAuthorizationAuthority
         ArgumentNullException.ThrowIfNull(next);
         lock (gate)
         {
-            if (next.Generation <= current.Generation) throw new ArgumentOutOfRangeException(nameof(next));
+            if (next.Generation <= current.Generation)
+            {
+                throw new ArgumentOutOfRangeException(nameof(next));
+            }
+
             current = next;
         }
     }

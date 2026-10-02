@@ -19,7 +19,9 @@ public sealed class FogAtomicTransactionTests
             int observed = version;
             return new(new Dictionary<string, byte[]> { ["reply"] = [(byte)observed, inputs["request"].Span[0]] }, () => version = observed + 1);
         }
-        await Bounded(Task.WhenAll(Task.Run(() => store.CommitAtomicAsync("alice", first, Prepare)),
+
+        await Bounded(Task.WhenAll(
+            Task.Run(() => store.CommitAtomicAsync("alice", first, Prepare)),
             Task.Run(() => store.CommitAtomicAsync("alice", second, Prepare))));
         Assert.Equal(2, version);
         Assert.Equal(new byte[] { 0, 1 }, new[] { store.SnapshotOutput("alice", first, "reply")[0], store.SnapshotOutput("alice", second, "reply")[0] }.Order().ToArray());
@@ -37,7 +39,7 @@ public sealed class FogAtomicTransactionTests
         string id = store.Clone("alice");
         int effects = 0;
         byte[] reply = [1, 2];
-        FogAtomicPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> _) =>
+        FogAtomicPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> inputs) =>
             new(new Dictionary<string, byte[]> { ["reply"] = reply }, () => effects++, "conflict");
         Error("upload-open", () => store.CommitAtomicAsync("alice", id, Prepare));
         using (var upload = store.OpenInput("alice", id, "s", "request"))
@@ -46,6 +48,7 @@ public sealed class FogAtomicTransactionTests
             Error("upload-open", () => store.CommitAtomicAsync("alice", id, Prepare));
             upload.Seal();
         }
+
         await Assert.ThrowsAsync<ArgumentNullException>(() => Bounded(store.CommitAtomicAsync("alice", id, null!)));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
@@ -80,8 +83,12 @@ public sealed class FogAtomicTransactionTests
         string id = store.Clone("alice");
         Upload(store, id, "request", []);
         int effects = 0;
-        FogAtomicPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> _) =>
-            new(new Dictionary<string, byte[]> { ["reply"] = [] }, () => { effects++; throw new IOException("private detail"); });
+        FogAtomicPlan Prepare(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> inputs) =>
+            new(new Dictionary<string, byte[]> { ["reply"] = [] }, () =>
+            {
+                effects++;
+                throw new IOException("private detail");
+            });
         Assert.Equal("unavailable", (await Assert.ThrowsAsync<FogException>(() => Bounded(store.CommitAtomicAsync("alice", id, Prepare)))).Code);
         clock.Advance(TimeSpan.FromDays(1));
         Assert.Contains(id, store.LiveIds());

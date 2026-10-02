@@ -28,11 +28,13 @@ public sealed class FogSharedRootTests
 
         FogSharedRoot fresh = await FogSharedRoot.CreateAsync(Grains, $"fresh-{Guid.NewGuid():N}");
         await Grains.GetGrain<IManagementGrain>(0).ForceActivationCollection(TimeSpan.Zero);
+
         // Read directly after reactivation: nothing re-initializes the tree on this path.
         Assert.Equal("/", (await Grains.GetGrain<IFogRootGrain>(fresh.ProcessGroupId).StatAsync(fresh.Root.ToModel())).Name);
         await (await FogSharedRoot.CreateAsync(Grains, root.ProcessGroupId)).CreateEntryAsync("/admin", directory: true);
 
-        Assert.Equal(new[] { "admin", "bin", "mnt", "n" },
+        Assert.Equal(
+            new[] { "admin", "bin", "mnt", "n" },
             (await grain.ReadDirectoryAsync(root.Root.ToModel())).Select(entry => entry.Name).ToArray());
         ResourceStatModel rootStat = await grain.StatAsync(root.Root.ToModel());
         Assert.Equal(("/", (uint)NinePConstants.FileMode9P.DMDIR | 0x16D, "fog"), (rootStat.Name, rootStat.Mode, rootStat.User));
@@ -42,6 +44,7 @@ public sealed class FogSharedRootTests
         Assert.Equal(admin, (await grain.GetParentAsync(ctl.ToModel()))!.ToDomain());
         Assert.Equal(root.Root, (await grain.GetParentAsync(admin.ToModel()))!.ToDomain());
         Assert.Null(await grain.GetParentAsync(root.Root.ToModel()));
+
         // /mnt is the first entry after the root; its children must still name it as their parent.
         ResourceHandle mountPoint = await root.CreateEntryAsync("/mnt/x", directory: true);
         Assert.Equal(await root.ResolveAsync("/mnt"), (await grain.GetParentAsync(mountPoint.ToModel()))!.ToDomain());
@@ -55,8 +58,11 @@ public sealed class FogSharedRootTests
         FogSharedRoot root = await FogSharedRoot.CreateAsync(Grains, $"refuse-{Guid.NewGuid():N}");
         IFogRootGrain grain = Grains.GetGrain<IFogRootGrain>(root.ProcessGroupId);
         ResourceHandleModel mnt = (await root.ResolveAsync("/mnt")).ToModel();
-        foreach (byte mode in new[] { NinePConstants.OWRITE, NinePConstants.ORDWR, (byte)(NinePConstants.OREAD | NinePConstants.OTRUNC),
-                     (byte)(NinePConstants.OREAD | NinePConstants.ORCLOSE) })
+        foreach (byte mode in new[]
+        {
+            NinePConstants.OWRITE, NinePConstants.ORDWR, (byte)(NinePConstants.OREAD | NinePConstants.OTRUNC),
+            (byte)(NinePConstants.OREAD | NinePConstants.ORCLOSE),
+        })
         {
             Assert.Equal("permission denied", (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => grain.OpenAsync(mnt, mode, Context))).Message);
         }
@@ -69,8 +75,7 @@ public sealed class FogSharedRootTests
         Assert.Equal("permission denied", (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => grain.WriteAsync(opened, 0, [1], Context))).Message);
         Assert.Equal("permission denied", (await Assert.ThrowsAsync<UnauthorizedAccessException>(() => grain.RemoveAsync(mnt, null, Context))).Message);
         Assert.Equal("permission denied", (await Assert.ThrowsAsync<ResourceCreateRejectedGrainException>(() => grain.CreateAsync(mnt, "x", true))).Message);
-        Assert.Equal("permission denied", (await Assert.ThrowsAsync<ResourceCreateRejectedGrainException>(() =>
-            grain.CreateAndOpenAsync(mnt, "x", 0x1A4, NinePConstants.OWRITE, Context))).Message);
+        Assert.Equal("permission denied", (await Assert.ThrowsAsync<ResourceCreateRejectedGrainException>(() => grain.CreateAndOpenAsync(mnt, "x", 0x1A4, NinePConstants.OWRITE, Context))).Message);
         var missing = new ResourceHandleModel(new ResourceIdentityModel(FogSharedRoot.Provider, root.ProcessGroupId, 999), QidType.QTFILE, 0);
         Assert.Equal("file does not exist", (await Assert.ThrowsAsync<FileNotFoundException>(() => grain.StatAsync(missing))).Message);
     }
@@ -84,9 +89,10 @@ public sealed class FogSharedRootTests
         Assert.Equal("Shared root paths are absolute. (Parameter 'path')", (await Assert.ThrowsAsync<ArgumentException>(() => root.CreateEntryAsync("mnt/x", true))).Message);
         Assert.Equal("Shared root paths are normalized. (Parameter 'path')", (await Assert.ThrowsAsync<ArgumentException>(() => root.CreateEntryAsync("/mnt/../x", true))).Message);
         await Assert.ThrowsAsync<ArgumentException>(() => root.CreateEntryAsync("/./x", true));
+
         // The grain boundary keeps the message, not ParamName.
         Assert.EndsWith("(Parameter 'path')", (await Assert.ThrowsAsync<ArgumentException>(() => root.CreateEntryAsync(" ", true))).Message);
-        Assert.EndsWith("(Parameter 'path')", (await Assert.ThrowsAsync<ArgumentException>(() => root.CreateEntryAsync("", true))).Message);
+        Assert.EndsWith("(Parameter 'path')", (await Assert.ThrowsAsync<ArgumentException>(() => root.CreateEntryAsync(string.Empty, true))).Message);
         Assert.EndsWith("(Parameter 'path')", (await Assert.ThrowsAsync<ArgumentNullException>(() => root.CreateEntryAsync(null!, true))).Message);
         Assert.Equal("The parent of '/a/b' does not exist.", (await Assert.ThrowsAsync<DirectoryNotFoundException>(() => root.CreateEntryAsync("/a/b", true))).Message);
         Assert.Equal("The parent of '/file/x' is not a directory.", (await Assert.ThrowsAsync<DirectoryNotFoundException>(() => root.CreateEntryAsync("/file/x", true))).Message);
@@ -101,15 +107,21 @@ public sealed class FogSharedRootTests
         var app = new ResourceHandle(new ResourceIdentity("test-app", Guid.NewGuid().ToString("N"), 1), QidType.QTDIR);
         var file = new ResourceHandle(new ResourceIdentity("test-app", "file", 2), QidType.QTFILE);
         foreach (string invalid in new[] { "a/b", ".", ".." })
-            Assert.Equal("An application name is one path element. (Parameter 'name')",
+        {
+            Assert.Equal(
+                "An application name is one path element. (Parameter 'name')",
                 (await Assert.ThrowsAsync<ArgumentException>(() => root.MountApplicationAsync(invalid, app))).Message);
+        }
+
         await Assert.ThrowsAsync<ArgumentException>(() => root.MountApplicationAsync(" ", app));
         await Assert.ThrowsAsync<ArgumentNullException>(() => root.MountApplicationAsync("mail", null!));
-        Assert.Equal("An application's root is a directory. (Parameter 'applicationRoot')",
+        Assert.Equal(
+            "An application's root is a directory. (Parameter 'applicationRoot')",
             (await Assert.ThrowsAsync<ArgumentException>(() => root.MountApplicationAsync("mail", file))).Message);
 
         await root.MountApplicationAsync("mail", app);
         await root.MountApplicationAsync("mail", app);
+
         // Reopening a root whose process group already holds mounts keeps them.
         root = await FogSharedRoot.CreateAsync(Grains, root.ProcessGroupId);
         ResourceHandle point = await root.ResolveAsync("/mnt/mail");

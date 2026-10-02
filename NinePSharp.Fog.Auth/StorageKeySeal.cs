@@ -11,28 +11,42 @@ namespace NinePSharp.Fog.Auth;
 internal static class StorageKeySeal
 {
     internal const string CannotUnseal = "keyfs: cannot unseal storage key";
+
+    private const ObjectAttr StorageAttributes = ObjectAttr.Restricted | ObjectAttr.Decrypt | ObjectAttr.FixedTPM
+        | ObjectAttr.FixedParent | ObjectAttr.SensitiveDataOrigin | ObjectAttr.UserWithAuth | ObjectAttr.NoDA;
+
     private static readonly byte[] Magic = "FOGSEAL1"u8.ToArray();
 
-    private static readonly TpmPublic PrimaryTemplate = new(TpmAlgId.Sha256,
-        ObjectAttr.Restricted | ObjectAttr.Decrypt | ObjectAttr.FixedTPM | ObjectAttr.FixedParent |
-        ObjectAttr.SensitiveDataOrigin | ObjectAttr.UserWithAuth | ObjectAttr.NoDA,
+    private static readonly TpmPublic PrimaryTemplate = new(
+        TpmAlgId.Sha256,
+        StorageAttributes,
         null,
         new EccParms(new SymDefObject(TpmAlgId.Aes, 128, TpmAlgId.Cfb), new NullAsymScheme(), EccCurve.TpmEccNistP256, new NullKdfScheme()),
         new EccPoint());
 
-    private static readonly TpmPublic SealedTemplate = new(TpmAlgId.Sha256,
+    private static readonly TpmPublic SealedTemplate = new(
+        TpmAlgId.Sha256,
         ObjectAttr.FixedTPM | ObjectAttr.FixedParent | ObjectAttr.UserWithAuth | ObjectAttr.NoDA,
-        null, new KeyedhashParms(new NullSchemeKeyedhash()), new Tpm2bDigestKeyedhash());
+        null,
+        new KeyedhashParms(new NullSchemeKeyedhash()),
+        new Tpm2bDigestKeyedhash());
 
-    /// <summary>Seals a key and returns the blob to store.</summary>
     internal static byte[] Seal(Func<Tpm2Device> openTpm, ReadOnlySpan<byte> storageKey)
     {
         using Tpm2 tpm = Connect(openTpm);
         TpmHandle primary = CreatePrimary(tpm);
         try
         {
-            TpmPrivate sealedPrivate = tpm.Create(primary, new SensitiveCreate([], storageKey.ToArray()), SealedTemplate, null, [],
-                out TpmPublic sealedPublic, out _, out _, out _);
+            TpmPrivate sealedPrivate = tpm.Create(
+                primary,
+                new SensitiveCreate([], storageKey.ToArray()),
+                SealedTemplate,
+                null,
+                [],
+                out TpmPublic sealedPublic,
+                out _,
+                out _,
+                out _);
             byte[] publicBlob = sealedPublic.GetTpmRepresentation();
             byte[] privateBlob = sealedPrivate.GetTpmRepresentation();
             var blob = new byte[Magic.Length + 2 + publicBlob.Length + 2 + privateBlob.Length];
@@ -49,7 +63,6 @@ internal static class StorageKeySeal
         }
     }
 
-    /// <summary>Unseals a stored blob, throwing <see cref="CannotUnseal"/> when the blob is unusable or this TPM cannot unseal it.</summary>
     internal static byte[] Unseal(Func<Tpm2Device> openTpm, ReadOnlySpan<byte> blob)
     {
         (TpmPublic Public, TpmPrivate Private) sealedKey;
@@ -57,9 +70,7 @@ internal static class StorageKeySeal
         {
             sealedKey = Parse(blob);
         }
-#pragma warning disable CA1031 // TSS.NET's unmarshaller throws plain Exception for malformed areas; any failure means the file is unusable.
         catch (Exception exception)
-#pragma warning restore CA1031
         {
             throw new KeyFsException(CannotUnseal, exception);
         }
@@ -91,17 +102,24 @@ internal static class StorageKeySeal
         }
     }
 
-    /// <summary>Reads a stored blob: the magic, then the public and private areas, each with a 2-byte length, and nothing after.</summary>
     internal static (TpmPublic Public, TpmPrivate Private) Parse(ReadOnlySpan<byte> blob)
     {
-        if (!blob.StartsWith(Magic)) throw new InvalidDataException();
+        if (!blob.StartsWith(Magic))
+        {
+            throw new InvalidDataException();
+        }
+
         int offset = Magic.Length;
         int publicLength = BinaryPrimitives.ReadUInt16BigEndian(blob[offset..]);
         byte[] publicBlob = blob.Slice(offset + 2, publicLength).ToArray();
         offset += 2 + publicLength;
         int privateLength = BinaryPrimitives.ReadUInt16BigEndian(blob[offset..]);
         byte[] privateBlob = blob.Slice(offset + 2, privateLength).ToArray();
-        if (offset + 2 + privateLength != blob.Length) throw new InvalidDataException();
+        if (offset + 2 + privateLength != blob.Length)
+        {
+            throw new InvalidDataException();
+        }
+
         return (Marshaller.FromTpmRepresentation<TpmPublic>(publicBlob), Marshaller.FromTpmRepresentation<TpmPrivate>(privateBlob));
     }
 

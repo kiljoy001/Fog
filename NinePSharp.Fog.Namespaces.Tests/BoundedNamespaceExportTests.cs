@@ -10,7 +10,11 @@ namespace NinePSharp.Fog.Namespaces.Tests;
 
 public sealed class BoundedNamespaceExportTests
 {
-    private static readonly FogNamespaceLimits Limits = new(Sessions: 2, FidsPerSession: 3, RequestsPerSession: 1, MessageSize: 512,
+    private static readonly FogNamespaceLimits Limits = new(
+        Sessions: 2,
+        FidsPerSession: 3,
+        RequestsPerSession: 1,
+        MessageSize: 512,
         SessionLifetime: TimeSpan.FromMinutes(1));
 
     [Fact]
@@ -82,7 +86,9 @@ public sealed class BoundedNamespaceExportTests
         }
 
         foreach (Type type in new[] { typeof(Tauth), typeof(Topen), typeof(Tcreate), typeof(Tread), typeof(Tstat), typeof(Twstat) })
+        {
             Assert.Equal(1, inner.Forwarded(type));
+        }
     }
 
     [Fact]
@@ -175,6 +181,7 @@ public sealed class BoundedNamespaceExportTests
         await inner.Entered.Task.WaitAsync(TimeSpan.FromSeconds(1));
         Assert.Equal("busy", Error(await Send(export, "a", Walk(2, 1, 2, "x"))));
         Task<object> flush = Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(3, 1)));
+
         // Bounded: a second admitted flush would wait on the blocked request instead of failing.
         Assert.Equal("busy", Error(await Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(4, 1))).WaitAsync(TimeSpan.FromSeconds(1))));
         gate.SetResult();
@@ -214,24 +221,31 @@ public sealed class BoundedNamespaceExportTests
     {
         private readonly List<Type> forwarded = new();
 
-        internal uint LastVersionSize { get; private set; }
-        internal List<string> Closed { get; } = new();
-        internal bool PartialWalks { get; set; }
-        internal bool FailClunk { get; set; }
-        internal bool Throw { get; set; }
-        internal uint? ReportedSize { get; set; }
-        internal Task? Gate { get; set; }
         private Task? blocking;
-        internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        internal int Forwarded(Type type)
-        {
-            lock (forwarded) return forwarded.Count(item => item == type);
-        }
+        internal uint LastVersionSize { get; private set; }
+
+        internal List<string> Closed { get; } = new();
+
+        internal bool PartialWalks { get; set; }
+
+        internal bool FailClunk { get; set; }
+
+        internal bool Throw { get; set; }
+
+        internal uint? ReportedSize { get; set; }
+
+        internal Task? Gate { get; set; }
+
+        internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<object> DispatchAsync(string sessionId, NinePMessage message, NinePDialect dialect, X509Certificate2? certificate = null)
         {
-            if (Throw) throw new InvalidOperationException("inner failure");
+            if (Throw)
+            {
+                throw new InvalidOperationException("inner failure");
+            }
+
             if (Gate is { } gate && message is not NinePMessage.MsgTflush)
             {
                 Gate = null;
@@ -241,7 +255,10 @@ public sealed class BoundedNamespaceExportTests
             }
 
             // Like flush(5), a flush waits for the request it flushes.
-            if (message is NinePMessage.MsgTflush && blocking is { } pending) await pending;
+            if (message is NinePMessage.MsgTflush && blocking is { } pending)
+            {
+                await pending;
+            }
 
             object request = message switch
             {
@@ -260,7 +277,11 @@ public sealed class BoundedNamespaceExportTests
                 NinePMessage.MsgTwstat m => m.Item,
                 _ => throw new NotSupportedException(),
             };
-            lock (forwarded) forwarded.Add(request.GetType());
+            lock (forwarded)
+            {
+                forwarded.Add(request.GetType());
+            }
+
             return request switch
             {
                 Tversion version => Version(version),
@@ -281,6 +302,14 @@ public sealed class BoundedNamespaceExportTests
             return Task.CompletedTask;
         }
 
+        internal int Forwarded(Type type)
+        {
+            lock (forwarded)
+            {
+                return forwarded.Count(item => item == type);
+            }
+        }
+
         private Rversion Version(Tversion version)
         {
             LastVersionSize = version.MSize;
@@ -291,8 +320,11 @@ public sealed class BoundedNamespaceExportTests
     private sealed class ManualTime : TimeProvider
     {
         private long timestamp;
+
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
         public override long GetTimestamp() => timestamp;
+
         internal void Advance(TimeSpan duration) => timestamp += duration.Ticks;
     }
 }

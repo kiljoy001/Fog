@@ -10,33 +10,6 @@ public sealed class FogRecordTests
     private const string Header = "schema=fixture-v1\n\tcol=id\n\tcol=value\n\n";
     private const string Valid = Header + "id=one\n\tvalue=hello\n\n";
 
-    [Theory]
-    [InlineData("", 0)]
-    [InlineData("id=one\n\n", 1)]
-    [InlineData("id=one\n\tvalue=\n\n", 1)]
-    [InlineData("id=one\n\tvalue=hello\n\nid=two\n\n", 2)]
-    public void CanonicalEmptyAndNonemptyTablesRoundTrip(string body, int count)
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes(Header + body);
-        var rows = Schema.Parse(bytes, bytes.Length, Math.Max(1, count));
-        Assert.Equal(count, rows.Count);
-        Assert.Equal(bytes, Schema.Serialize(rows, bytes.Length, Math.Max(1, count)));
-    }
-
-    [Fact]
-    public void NilEmptyAndLiteralNilRemainDistinct()
-    {
-        var rows = new[] { Row("absent", null), Row("empty", ""), Row("literal", "nil") };
-        byte[] bytes = Schema.Serialize(rows, 4096, 3);
-        string text = Encoding.UTF8.GetString(bytes);
-        Assert.Contains("id=absent\n\n", text);
-        Assert.Contains("id=empty\n\tvalue=\n\n", text);
-        var parsed = Schema.Parse(bytes, 4096, 3);
-        Assert.Null(parsed[0]["value"]);
-        Assert.Equal("", parsed[1]["value"]);
-        Assert.Equal("nil", parsed[2]["value"]);
-    }
-
     public static IEnumerable<object[]> MalformedRecords()
     {
         yield return ["\ufeff" + Valid];
@@ -64,6 +37,33 @@ public sealed class FogRecordTests
         yield return [Valid.Replace("id=one", "\tid=one")];
         yield return [Valid.Replace("id=one", "missing-equals")];
         yield return [Valid.Replace("value=hello", "value=hello extra=tuple")];
+    }
+
+    [Theory]
+    [InlineData("", 0)]
+    [InlineData("id=one\n\n", 1)]
+    [InlineData("id=one\n\tvalue=\n\n", 1)]
+    [InlineData("id=one\n\tvalue=hello\n\nid=two\n\n", 2)]
+    public void CanonicalEmptyAndNonemptyTablesRoundTrip(string body, int count)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(Header + body);
+        var rows = Schema.Parse(bytes, bytes.Length, Math.Max(1, count));
+        Assert.Equal(count, rows.Count);
+        Assert.Equal(bytes, Schema.Serialize(rows, bytes.Length, Math.Max(1, count)));
+    }
+
+    [Fact]
+    public void NilEmptyAndLiteralNilRemainDistinct()
+    {
+        var rows = new[] { Row("absent", null), Row("empty", string.Empty), Row("literal", "nil") };
+        byte[] bytes = Schema.Serialize(rows, 4096, 3);
+        string text = Encoding.UTF8.GetString(bytes);
+        Assert.Contains("id=absent\n\n", text);
+        Assert.Contains("id=empty\n\tvalue=\n\n", text);
+        var parsed = Schema.Parse(bytes, 4096, 3);
+        Assert.Null(parsed[0]["value"]);
+        Assert.Equal(string.Empty, parsed[1]["value"]);
+        Assert.Equal("nil", parsed[2]["value"]);
     }
 
     [Theory]
@@ -98,7 +98,7 @@ public sealed class FogRecordTests
     public void CompositeKeysAreNotJoinedWithAnAmbiguousSeparator()
     {
         var schema = new FogRecordSchema("tuples", ["id", "value"], ["value"], ["id", "value"]);
-        var rows = new[] { Row("a:b", "c"), Row("a", "b:c"), Row("a", "") };
+        var rows = new[] { Row("a:b", "c"), Row("a", "b:c"), Row("a", string.Empty) };
         Assert.Equal(3, schema.Parse(schema.Serialize(rows, 4096, 3), 4096, 3).Count);
         Assert.Throws<FogException>(() => schema.Serialize([Row("a", null)], 4096, 1));
     }
@@ -131,7 +131,7 @@ public sealed class FogRecordTests
     {
         Assert.Throws<FogException>(() => Schema.Serialize([new Dictionary<string, string?> { ["id"] = "a", ["unknown"] = "x" }], 4096, 1));
         Assert.Throws<FogException>(() => Schema.Serialize([new Dictionary<string, string?>()], 4096, 1));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row("", "x")], 4096, 1));
+        Assert.Throws<FogException>(() => Schema.Serialize([Row(string.Empty, "x")], 4096, 1));
         Assert.Throws<FogException>(() => Schema.Serialize([Row("one", "a"), Row("one", "b")], 4096, 2));
         Assert.Throws<FogException>(() => Schema.Serialize([Row("one", "a"), Row("one", "a")], 4096, 2));
         Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "\0")], 4096, 1));

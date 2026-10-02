@@ -20,9 +20,11 @@ public sealed class KeyFsDispatcherTests
     public async Task A_Walk_Of_More_Than_16_Names_Is_Refused()
     {
         var dispatcher = new KeyFsDispatcher(new KeyDatabase(), _ => { }, TimeProvider.System);
-        await dispatcher.DispatchAsync("session", NinePMessage.NewMsgTattach(new Messages.Tattach(1, 0, uint.MaxValue, "admin", "")), NinePDialect.NineP2000);
-        object reply = await dispatcher.DispatchAsync("session",
-            NinePMessage.NewMsgTwalk(new Messages.Twalk(2, 0, 1, Enumerable.Repeat("..", 17).ToArray())), NinePDialect.NineP2000);
+        await dispatcher.DispatchAsync("session", NinePMessage.NewMsgTattach(new Messages.Tattach(1, 0, uint.MaxValue, "admin", string.Empty)), NinePDialect.NineP2000);
+        object reply = await dispatcher.DispatchAsync(
+            "session",
+            NinePMessage.NewMsgTwalk(new Messages.Twalk(2, 0, 1, Enumerable.Repeat("..", 17).ToArray())),
+            NinePDialect.NineP2000);
         Assert.Equal("too many path name elements", Assert.IsType<Messages.Rerror>(reply).Ename);
     }
 }

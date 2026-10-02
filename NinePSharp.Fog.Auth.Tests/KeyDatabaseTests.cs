@@ -65,7 +65,11 @@ public sealed class KeyDatabaseTests
     public void Users_Are_Encoded_And_Listed_In_The_Order_They_Were_Made()
     {
         var database = new KeyDatabase();
-        foreach (string name in new[] { "zed", "amy", "mid" }) database.Add(name);
+        foreach (string name in new[] { "zed", "amy", "mid" })
+        {
+            database.Add(name);
+        }
+
         Assert.Equal(["zed", "amy", "mid"], database.Users.Select(user => user.Name));
         Assert.Equal(["zed", "amy", "mid"], KeyDatabase.Decode(database.Encode()).Users.Select(user => user.Name));
         Assert.Equal(3, database.Users.Select(user => user.Uniq).Distinct().Count());
@@ -92,7 +96,8 @@ public sealed class KeyDatabaseTests
     [InlineData(88)]
     [InlineData(90)]
     public void A_Partial_Record_Is_Refused(int length)
-        => Assert.Equal("The database holds a partial record.",
+        => Assert.Equal(
+            "The database holds a partial record.",
             Assert.Throws<InvalidDataException>(() => KeyDatabase.Decode(new byte[length])).Message);
 
     [Theory]
@@ -100,7 +105,8 @@ public sealed class KeyDatabaseTests
     [InlineData("has space")]
     [InlineData(".")]
     public void A_Record_With_An_Invalid_Name_Is_Refused(string name)
-        => Assert.Equal("The database holds an invalid user name.",
+        => Assert.Equal(
+            "The database holds an invalid user name.",
             Assert.Throws<InvalidDataException>(() => KeyDatabase.Decode(Record(name))).Message);
 
     [Fact]

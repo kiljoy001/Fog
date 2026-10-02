@@ -19,6 +19,7 @@ public static class FogDispatcherFuzz
     private static readonly X509Certificate2[] Certificates = [Worker, Other, Stranger];
     private static readonly string[] Names =
         [".", "..", "control", "fixture", "clone", "request", "payload", "ctl", "status", "reply", "extra", "missing"];
+
     private static readonly string[] Unames = ["worker", "other", "nobody"];
     private static readonly string[] Versions = ["9P2000", "9P2000.L", "bad"];
     private static readonly uint[] MessageSizes = [255, 256, 4096, 65535];
@@ -39,21 +40,34 @@ public static class FogDispatcherFuzz
     {
         var bytes = new Cursor(source[..Math.Min(source.Length, 4096)].ToArray());
         var time = new ManualTime();
-        var policy = new FogNodePolicy(1,
-        [
+        var policy = new FogNodePolicy(
+            1,
+            [
             new("worker", new string('1', 64), FogNodePolicy.SpkiPin(Worker), "worker.test"),
             new("other", new string('2', 64), FogNodePolicy.SpkiPin(Other), "other.test"),
         ]);
         var store = new FogTransactionStore(new(4, 4, 256, 256, 4096, 2, TimeSpan.FromHours(1), TimeSpan.FromHours(1)), policy.IsCurrentOwner, time);
         var effects = new Dictionary<string, int>(StringComparer.Ordinal);
-        var service = new FogTransactionService("fixture", store, new HashSet<string> { "request", "payload" }, new HashSet<string> { "reply", "extra" },
-            (principal, id, cancellation) => store.CommitAsync(principal.Owner, id, inputs => new FogCommitPlan(
+        var service = new FogTransactionService(
+            "fixture",
+            store,
+            new HashSet<string> { "request", "payload" },
+            new HashSet<string> { "reply", "extra" },
+            (principal, id, cancellation) => store.CommitAsync(
+                principal.Owner,
+                id,
+                inputs => new FogCommitPlan(
                 new Dictionary<string, byte[]> { ["reply"] = inputs["request"].ToArray(), ["extra"] = [1] },
                 () =>
                 {
-                    lock (effects) effects[id] = effects.GetValueOrDefault(id) + 1;
+                    lock (effects)
+                    {
+                        effects[id] = effects.GetValueOrDefault(id) + 1;
+                    }
+
                     return Task.CompletedTask;
-                }), cancellation));
+                }),
+                cancellation));
         var limits = new FogNinePLimits(1, 6, 4, 4096, 2048, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(10));
         var dispatcher = new FogNinePDispatcher(new FogTransactionFileTree([service]), policy, limits, time);
 
@@ -77,7 +91,11 @@ public static class FogDispatcherFuzz
                 bool trusted = ReferenceEquals(certificate, Worker);
                 bool other = ReferenceEquals(certificate, Other);
                 ushort tag = (operation & 0x80) != 0 && bytes.Next() == 0 ? NinePConstants.NoTag : nextTag++;
-                if (nextTag == NinePConstants.NoTag) nextTag = 0;
+                if (nextTag == NinePConstants.NoTag)
+                {
+                    nextTag = 0;
+                }
+
                 uint fid = Fid(bytes.Next());
 
                 switch (kind)
@@ -86,14 +104,24 @@ public static class FogDispatcherFuzz
                     {
                         uint size = MessageSizes[bytes.Next() % MessageSizes.Length];
                         string version = Versions[bytes.Next() % Versions.Length];
-                        if (!exists) created = time.GetTimestamp();
+                        if (!exists)
+                            {
+                                created = time.GetTimestamp();
+                            }
+
                         exists = true;
                         object reply = Send(dispatcher, NinePMessage.NewMsgTversion(new Tversion(tag, size, version)), certificate);
                         ready = false;
                         owners.Clear();
-                        if (size < 256) Rejected(reply, tag, "invalid-request");
-                        else if (Expired()) Rejected(reply, tag, "denied");
-                        else
+                        if (size < 256)
+                            {
+                                Rejected(reply, tag, "invalid-request");
+                            }
+                            else if (Expired())
+                            {
+                                Rejected(reply, tag, "denied");
+                            }
+                            else
                         {
                             var accepted = Expect<Rversion>(reply, tag);
                             messageSize = Math.Min(size, limits.MessageSize);
@@ -104,6 +132,7 @@ public static class FogDispatcherFuzz
 
                         continue;
                     }
+
                     case 1:
                         dispatcher.CloseSessionAsync(Session).GetAwaiter().GetResult();
                         exists = ready = false;
@@ -116,8 +145,12 @@ public static class FogDispatcherFuzz
 
                 NinePMessage message = kind switch
                 {
-                    3 => NinePMessage.NewMsgTattach(new Tattach(tag, fid, (bytes.Next() & 1) == 0 ? NinePConstants.NoFid : 0,
-                        Unames[bytes.Next() % Unames.Length], (bytes.Next() & 1) == 0 ? "runtime" : "")),
+                    3 => NinePMessage.NewMsgTattach(new Tattach(
+                        tag,
+                        fid,
+                        (bytes.Next() & 1) == 0 ? NinePConstants.NoFid : 0,
+                        Unames[bytes.Next() % Unames.Length],
+                        (bytes.Next() & 1) == 0 ? "runtime" : string.Empty)),
                     4 => NinePMessage.NewMsgTwalk(new Twalk(tag, fid, Fid(bytes.Next()), Path(bytes, store))),
                     5 => NinePMessage.NewMsgTopen(new Topen(tag, fid, (byte)(bytes.Next() % 4))),
                     6 => NinePMessage.NewMsgTread(new Tread(tag, fid, bytes.Next(), (uint)bytes.Next() * 32)),
@@ -160,8 +193,15 @@ public static class FogDispatcherFuzz
                 if (flush)
                 {
                     var request = ((NinePMessage.MsgTflush)message).Item;
-                    if (request.OldTag == request.Tag) Rejected(response, tag, "invalid-request");
-                    else Expect<Rflush>(response, tag);
+                    if (request.OldTag == request.Tag)
+                    {
+                        Rejected(response, tag, "invalid-request");
+                    }
+                    else
+                    {
+                        Expect<Rflush>(response, tag);
+                    }
+
                     continue;
                 }
 
@@ -174,19 +214,24 @@ public static class FogDispatcherFuzz
                 else
                 {
                     Check(((ISerializable)response).Tag == tag, "reply tag differs from request");
-                    Check(response is Rattach || (owners.TryGetValue(fid, out var owner) && ReferenceEquals(owner, certificate)),
+                    Check(
+                        response is Rattach || (owners.TryGetValue(fid, out var owner) && ReferenceEquals(owner, certificate)),
                         "a fid was used without its attaching certificate");
                 }
 
                 // Clunk releases the fid even when the policy check fails (clunk(5): the fid is always gone).
-                if (message is NinePMessage.MsgTclunk && !(response is Rerror { Ename: "invalid-request" })) owners.Remove(fid);
+                if (message is NinePMessage.MsgTclunk && !(response is Rerror { Ename: "invalid-request" }))
+                {
+                    owners.Remove(fid);
+                }
 
                 switch (response)
                 {
                     case Rattach:
                         Check(!owners.ContainsKey(fid), "attach replaced a live fid");
                         owners[fid] = certificate;
-                        Check(message is NinePMessage.MsgTattach attach && attach.Item.Aname == "runtime" &&
+                        Check(
+                            message is NinePMessage.MsgTattach attach && attach.Item.Aname == "runtime" &&
                             attach.Item.Afid == NinePConstants.NoFid && (trusted ? attach.Item.Uname == "worker" : other && attach.Item.Uname == "other"),
                             "attach accepted an unenrolled identity");
                         break;
@@ -194,14 +239,22 @@ public static class FogDispatcherFuzz
                         var names = ((NinePMessage.MsgTwalk)message).Item.Wname;
                         Check(walk.Wqid.Length <= names.Length && (names.Length == 0 || walk.Wqid.Length != 0), "walk qid count");
                         uint newFid = ((NinePMessage.MsgTwalk)message).Item.NewFid;
-                        if (walk.Wqid.Length == names.Length) owners[newFid] = certificate;
+                        if (walk.Wqid.Length == names.Length)
+                        {
+                            owners[newFid] = certificate;
+                        }
+
                         break;
                     case Rread read:
                         Check(read.Count <= ((NinePMessage.MsgTread)message).Item.Count && read.Count == read.Data.Length, "read exceeds request");
                         break;
                     case Rwrite written:
                         Check(written.Count <= ((NinePMessage.MsgTwrite)message).Item.Data.Length, "write count exceeds data");
-                        if (written.Count == 7 && ((NinePMessage.MsgTwrite)message).Item.Data.Span.SequenceEqual("commit\n"u8)) commits++;
+                        if (written.Count == 7 && ((NinePMessage.MsgTwrite)message).Item.Data.Span.SequenceEqual("commit\n"u8))
+                        {
+                            commits++;
+                        }
+
                         break;
                 }
 
@@ -233,7 +286,9 @@ public static class FogDispatcherFuzz
         0 => NinePMessage.NewMsgTauth(new Tauth(tag, fid, "worker", "runtime")),
         1 => NinePMessage.NewMsgTcreate(new Tcreate(tag, fid, "created", 0x1A4, NinePConstants.OWRITE)),
         2 => NinePMessage.NewMsgTremove(new Tremove(tag, fid)),
-        _ => NinePMessage.NewMsgTwstat(new Twstat(tag, fid,
+        _ => NinePMessage.NewMsgTwstat(new Twstat(
+            tag,
+            fid,
             new Stat(0, 0, 0, new Qid(QidType.QTFILE, 0, 0), 0, 0, 0, 0, "renamed", "fog", "fog", "fog"))),
     };
 
@@ -263,12 +318,16 @@ public static class FogDispatcherFuzz
 
     private static int TotalEffects(Dictionary<string, int> effects)
     {
-        lock (effects) return effects.Values.Sum();
+        lock (effects)
+        {
+            return effects.Values.Sum();
+        }
     }
 
-    private static T Expect<T>(object value, ushort tag) where T : ISerializable
+    private static T Expect<T>(object value, ushort tag)
+        where T : ISerializable
     {
-        Check(value is T, "unexpected response: " + value.GetType().Name + (value is Rerror error ? ":" + error.Ename : ""));
+        Check(value is T, "unexpected response: " + value.GetType().Name + (value is Rerror error ? ":" + error.Ename : string.Empty));
         Check(((T)value).Tag == tag, "reply tag differs from request");
         return (T)value;
     }
@@ -278,7 +337,10 @@ public static class FogDispatcherFuzz
 
     private static void Check(bool condition, string invariant)
     {
-        if (!condition) throw new InvalidOperationException(invariant);
+        if (!condition)
+        {
+            throw new InvalidOperationException(invariant);
+        }
     }
 
     private static X509Certificate2 MakeCertificate(string name)
@@ -310,8 +372,11 @@ public static class FogDispatcherFuzz
     private sealed class ManualTime : TimeProvider
     {
         private long timestamp;
+
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
         public override long GetTimestamp() => timestamp;
+
         internal void Advance(TimeSpan duration) => timestamp += duration.Ticks;
     }
 }

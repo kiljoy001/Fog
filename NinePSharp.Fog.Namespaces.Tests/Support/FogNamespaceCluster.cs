@@ -18,7 +18,11 @@ internal static class FogNamespaceCluster
     {
         lock (Gate)
         {
-            if (cluster is not null) return;
+            if (cluster is not null)
+            {
+                return;
+            }
+
             var builder = new TestClusterBuilder(2);
             builder.AddSiloBuilderConfigurator<SiloConfigurator>();
             cluster = builder.Build();

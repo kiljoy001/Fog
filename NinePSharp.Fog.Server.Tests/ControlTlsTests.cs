@@ -1,7 +1,7 @@
-using System.Security.Authentication;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,11 +49,15 @@ public sealed class ControlTlsTests
         using var publicOnly = X509CertificateLoader.LoadCertificate(fixture.NodeCertificate.Export(X509ContentType.Cert));
         var endpoint = new IPEndPoint(IPAddress.Loopback, 1);
         string pin = FogNodePolicy.SpkiPin(fixture.ServerCertificate);
-        foreach (var invalid in new[] { ("", pin, fixture.NodeCertificate), (" ", pin, fixture.NodeCertificate),
+        foreach (var invalid in new[]
+        {
+            (string.Empty, pin, fixture.NodeCertificate), (" ", pin, fixture.NodeCertificate),
             ("control.test", "a", fixture.NodeCertificate), ("control.test", "g" + pin[1..], fixture.NodeCertificate),
-            ("control.test", pin, publicOnly) })
-            Assert.Equal("Invalid pinned TLS client configuration.", (await Assert.ThrowsAsync<ArgumentException>(() =>
-                FogTlsClient.ConnectAsync(endpoint, invalid.Item1, invalid.Item2, invalid.Item3, CancellationToken.None))).Message);
+            ("control.test", pin, publicOnly),
+        })
+        {
+            Assert.Equal("Invalid pinned TLS client configuration.", (await Assert.ThrowsAsync<ArgumentException>(() => FogTlsClient.ConnectAsync(endpoint, invalid.Item1, invalid.Item2, invalid.Item3, CancellationToken.None))).Message);
+        }
     }
 
     [Fact]
@@ -63,8 +67,13 @@ public sealed class ControlTlsTests
         await using var listener = fixture.Listen();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         TcpClient? created = null;
-        var tls = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate),
-            fixture.NodeCertificate, timeout.Token, family => created = FogTlsClient.CreateConnection(family));
+        var tls = await FogTlsClient.ConnectAsync(
+            listener.LocalEndpoint,
+            "control.test",
+            FogNodePolicy.SpkiPin(fixture.ServerCertificate),
+            fixture.NodeCertificate,
+            timeout.Token,
+            family => created = FogTlsClient.CreateConnection(family));
         Assert.NotNull(created);
         Socket socket = created.Client;
         Assert.True(socket.Connected);
@@ -81,8 +90,12 @@ public sealed class ControlTlsTests
         TcpClient? created = null;
 
         await Assert.ThrowsAnyAsync<SocketException>(() => FogTlsClient.ConnectAsync(
-            new IPEndPoint(IPAddress.Loopback, 1), "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate),
-            fixture.NodeCertificate, CancellationToken.None, family => created = FogTlsClient.CreateConnection(family)));
+            new IPEndPoint(IPAddress.Loopback, 1),
+            "control.test",
+            FogNodePolicy.SpkiPin(fixture.ServerCertificate),
+            fixture.NodeCertificate,
+            CancellationToken.None,
+            family => created = FogTlsClient.CreateConnection(family)));
 
         Assert.NotNull(created);
         Assert.Null(created.Client);
@@ -96,16 +109,28 @@ public sealed class ControlTlsTests
     public async Task MatchingPinDoesNotOverrideTheExactSanAndValidityRequirements(string kind)
     {
         using var fixture = new ControlFixture();
-        using var certificate = ControlFixture.Certificate(kind == "wildcard" ? "*.example.test" : "control.test",
+        using var certificate = ControlFixture.Certificate(
+            kind == "wildcard" ? "*.example.test" : "control.test",
             includeSan: kind != "common-name",
             notBefore: DateTimeOffset.UtcNow.AddHours(kind == "future" ? 1 : -2),
             notAfter: DateTimeOffset.UtcNow.AddHours(kind == "expired" ? -1 : 2));
-        await using var listener = new FogNodeListener(new IPEndPoint(IPAddress.Loopback, 0), certificate, fixture.Policy,
-            fixture.Dispatcher, NullLogger.Instance, 1, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10));
+        await using var listener = new FogNodeListener(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            certificate,
+            fixture.Policy,
+            fixture.Dispatcher,
+            NullLogger.Instance,
+            1,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10));
         listener.Start();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-        await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(listener.LocalEndpoint,
-            kind == "wildcard" ? "control.example.test" : "control.test", FogNodePolicy.SpkiPin(certificate), fixture.NodeCertificate, timeout.Token));
+        await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(
+            listener.LocalEndpoint,
+            kind == "wildcard" ? "control.example.test" : "control.test",
+            FogNodePolicy.SpkiPin(certificate),
+            fixture.NodeCertificate,
+            timeout.Token));
         Assert.Empty(fixture.Store.LiveIds());
     }
 
@@ -114,9 +139,17 @@ public sealed class ControlTlsTests
     {
         using var fixture = new ControlFixture();
         await using var listener = fixture.Listen();
-        var client = new FogTransactionClient(async cancellation => await FogTlsClient.ConnectAsync(listener.LocalEndpoint,
-            "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate), fixture.NodeCertificate, cancellation),
-            "worker", 256, 4096, TimeSpan.FromSeconds(1));
+        var client = new FogTransactionClient(
+            async cancellation => await FogTlsClient.ConnectAsync(
+                listener.LocalEndpoint,
+                "control.test",
+                FogNodePolicy.SpkiPin(fixture.ServerCertificate),
+                fixture.NodeCertificate,
+                cancellation),
+            "worker",
+            256,
+            4096,
+            TimeSpan.FromSeconds(1));
         byte[] input = Enumerable.Range(0, 3000).Select(n => (byte)n).ToArray();
         for (int iteration = 0; iteration < 5; iteration++)
         {
@@ -125,6 +158,7 @@ public sealed class ControlTlsTests
             Assert.Equal(new byte[] { 9 }, result["extra"]);
             Assert.Empty(fixture.Store.LiveIds());
         }
+
         Assert.Equal(5, fixture.Effects);
     }
 
@@ -165,9 +199,12 @@ public sealed class ControlTlsTests
         using var fixture = new ControlFixture();
         await using var listener = fixture.Listen();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-        await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(listener.LocalEndpoint,
-            wrongName ? "imposter.test" : "control.test", wrongName ? FogNodePolicy.SpkiPin(fixture.ServerCertificate) : new string('0', 64),
-            fixture.NodeCertificate, timeout.Token));
+        await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(
+            listener.LocalEndpoint,
+            wrongName ? "imposter.test" : "control.test",
+            wrongName ? FogNodePolicy.SpkiPin(fixture.ServerCertificate) : new string('0', 64),
+            fixture.NodeCertificate,
+            timeout.Token));
         Assert.Equal(0, fixture.Effects);
     }
 }

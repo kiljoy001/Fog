@@ -20,7 +20,11 @@ public sealed class ControlLimitsTests
             valid with { Sessions = 0 }, valid with { FidsPerSession = 0 }, valid with { RequestsPerSession = 0 },
             valid with { MessageSize = 255 }, valid with { MessageSize = (uint)int.MaxValue + 1 },
             valid with { SnapshotBytesPerSession = 0 }, valid with { SnapshotLifetime = TimeSpan.Zero }, valid with { SessionLifetime = TimeSpan.Zero },
-        }) Assert.Throws<ArgumentOutOfRangeException>(() => new FogNinePDispatcher(fixture.Tree, fixture.Policy, invalid));
+        })
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new FogNinePDispatcher(fixture.Tree, fixture.Policy, invalid));
+        }
+
         Assert.Throws<ArgumentNullException>(() => new FogNinePDispatcher(null!, fixture.Policy, valid));
         Assert.Throws<ArgumentNullException>(() => new FogNinePDispatcher(fixture.Tree, null!, valid));
         Assert.Throws<ArgumentNullException>(() => new FogNinePDispatcher(fixture.Tree, fixture.Policy, null!));
@@ -68,6 +72,7 @@ public sealed class ControlLimitsTests
         Assert.IsType<Ropen>(await fixture.Open(3, NinePConstants.OREAD));
         await fixture.Walk(1, 4, "control", "fixture", "clone");
         fixture.Time.Advance(TimeSpan.FromSeconds(30));
+
         // Expired read snapshot is freed; the transaction count is a separate limit.
         Assert.Equal("limit", Assert.IsType<Rerror>(await fixture.Open(4, NinePConstants.OREAD)).Ename);
         Assert.Equal("denied", Assert.IsType<Rerror>(await fixture.Read(3)).Ename);
@@ -89,14 +94,21 @@ public sealed class ControlLimitsTests
         await fixture.Walk(1, 4, "control", "fixture", id, "ctl");
         Assert.Equal("denied", Assert.IsType<Rerror>(await fixture.Open(4, NinePConstants.OREAD)).Ename);
         Assert.IsType<Ropen>(await fixture.Open(4, NinePConstants.OWRITE));
-        foreach (string invalid in new[] { "commit", "commit\nrelease\n", "release\r\n", "" })
+        foreach (string invalid in new[] { "commit", "commit\nrelease\n", "release\r\n", string.Empty })
+        {
             Assert.Equal("invalid-request", Assert.IsType<Rerror>(await fixture.Write(4, System.Text.Encoding.UTF8.GetBytes(invalid))).Ename);
+        }
+
         await fixture.Walk(1, 5, "control", "fixture", id);
         Assert.IsType<Ropen>(await fixture.Open(5, NinePConstants.OREAD));
         var read = Assert.IsType<Rread>(await fixture.Read(5));
         int position = 0;
         var names = new List<string>();
-        while (position < read.Data.Length) names.Add(new Stat(read.Data.Span, ref position).Name);
+        while (position < read.Data.Length)
+        {
+            names.Add(new Stat(read.Data.Span, ref position).Name);
+        }
+
         Assert.Equal(new[] { "ctl", "extra", "payload", "reply", "request", "status" }, names.Order().ToArray());
         var stat = Assert.IsType<Rstat>(await fixture.Send(NinePMessage.NewMsgTstat(new Tstat(90, 5)))).Stat;
         Assert.Equal(0x80000140U, stat.Mode);
@@ -111,8 +123,17 @@ public sealed class ControlLimitsTests
     {
         using var fixture = new ControlFixture();
         foreach (var limits in new[] { (0, 1, 1), (1, 0, 1), (1, 1, 0) })
-            Assert.Throws<ArgumentException>(() => new FogNodeListener(new IPEndPoint(IPAddress.Loopback, 0), fixture.ServerCertificate,
-                fixture.Policy, fixture.Dispatcher, NullLogger.Instance, limits.Item1, TimeSpan.FromSeconds(limits.Item2), TimeSpan.FromSeconds(limits.Item3)));
+        {
+            Assert.Throws<ArgumentException>(() => new FogNodeListener(
+                new IPEndPoint(IPAddress.Loopback, 0),
+                fixture.ServerCertificate,
+                fixture.Policy,
+                fixture.Dispatcher,
+                NullLogger.Instance,
+                limits.Item1,
+                TimeSpan.FromSeconds(limits.Item2),
+                TimeSpan.FromSeconds(limits.Item3)));
+        }
     }
 
     [Fact]

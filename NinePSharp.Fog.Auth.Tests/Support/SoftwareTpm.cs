@@ -24,6 +24,19 @@ internal sealed class SoftwareTpm : IDisposable
 
     internal string StateDirectory { get; }
 
+    public void Dispose()
+    {
+        process.StandardInput.Close();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(10)))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+        }
+
+        process.Dispose();
+        Directory.Delete(StateDirectory, recursive: true);
+    }
+
     internal static SoftwareTpm Start()
     {
         string state = Directory.CreateTempSubdirectory("swtpm-").FullName;
@@ -45,10 +58,8 @@ internal sealed class SoftwareTpm : IDisposable
         return tpm;
     }
 
-    /// <summary>Opens a device for one connection; each keyfs start opens its own.</summary>
     internal Tpm2Device OpenDevice() => new RawTcpDevice(port);
 
-    /// <summary>Counts the persistent object handles the TPM holds.</summary>
     internal int PersistentHandles()
     {
         using Tpm2 tpm = Connect();
@@ -56,7 +67,6 @@ internal sealed class SoftwareTpm : IDisposable
         return ((HandleArray)capabilities).handle.Length;
     }
 
-    /// <summary>Counts the transient object handles loaded in the TPM.</summary>
     internal int TransientHandles()
     {
         using Tpm2 tpm = Connect();
@@ -64,24 +74,17 @@ internal sealed class SoftwareTpm : IDisposable
         return ((HandleArray)capabilities).handle.Length;
     }
 
-    /// <summary>Extends a PCR with a fixed SHA-256 digest.</summary>
     internal void ExtendPcr(int index)
     {
         using Tpm2 tpm = Connect();
         tpm.PcrExtend(TpmHandle.Pcr(index), [new TpmHash(TpmAlgId.Sha256, Enumerable.Repeat((byte)index, 32).ToArray())]);
     }
 
-    public void Dispose()
+    private static int FreePort()
     {
-        process.StandardInput.Close();
-        if (!process.WaitForExit(TimeSpan.FromSeconds(10)))
-        {
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit();
-        }
-
-        process.Dispose();
-        Directory.Delete(StateDirectory, recursive: true);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private Tpm2 Connect()
@@ -105,7 +108,11 @@ internal sealed class SoftwareTpm : IDisposable
             }
             catch (SocketException)
             {
-                if (process.HasExited) throw new InvalidOperationException("swtpm exited: " + process.StandardError.ReadToEnd());
+                if (process.HasExited)
+                {
+                    throw new InvalidOperationException("swtpm exited: " + process.StandardError.ReadToEnd());
+                }
+
                 Thread.Sleep(50);
             }
         }
@@ -113,14 +120,6 @@ internal sealed class SoftwareTpm : IDisposable
         throw new InvalidOperationException("swtpm did not start listening");
     }
 
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
-
-    /// <summary>Sends raw TPM commands over swtpm's TCP command port.</summary>
     private sealed class RawTcpDevice(int port) : Tpm2Device
     {
         private TcpClient? client;
@@ -143,7 +142,11 @@ internal sealed class SoftwareTpm : IDisposable
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) client?.Dispose();
+            if (disposing)
+            {
+                client?.Dispose();
+            }
+
             base.Dispose(disposing);
         }
     }

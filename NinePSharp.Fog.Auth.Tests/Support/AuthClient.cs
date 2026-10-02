@@ -23,6 +23,8 @@ internal sealed class AuthClient : IDisposable
         stream = client.GetStream();
     }
 
+    public void Dispose() => client.Dispose();
+
     internal static async Task<AuthClient> ConnectAsync(IPEndPoint endPoint)
     {
         var client = new TcpClient();
@@ -41,6 +43,13 @@ internal sealed class AuthClient : IDisposable
         return request;
     }
 
+    internal static AuthKey Key(string password, string id)
+    {
+        AuthKey key = AuthKey.FromPassword(password);
+        key.ApplyAuthPakHash(id);
+        return key;
+    }
+
     internal Task SendAsync(TicketRequest request) => SendAsync(request.Marshal());
 
     internal async Task SendAsync(byte[] bytes)
@@ -49,7 +58,6 @@ internal sealed class AuthClient : IDisposable
         await stream.FlushAsync();
     }
 
-    /// <summary>Stops sending, as a client that gives up part way does.</summary>
     internal void StopSending() => client.Client.Shutdown(SocketShutdown.Send);
 
     internal async Task<byte> ReadByteAsync() => (await ReadAsync(1))[0];
@@ -61,7 +69,6 @@ internal sealed class AuthClient : IDisposable
         return Encoding.UTF8.GetString(error, 0, end < 0 ? error.Length : end);
     }
 
-    /// <summary>One AuthPAK exchange as the client: the server's public value arrives first.</summary>
     internal async Task<AuthKey> PakAsync(AuthKey key)
     {
         byte[] serverValue = await ReadAsync(Dp9ikConstants.PakPublicValueLength);
@@ -73,7 +80,6 @@ internal sealed class AuthClient : IDisposable
 
     internal Task<byte[]> ReadTicketsAsync() => ReadAsync(2 * Dp9ikConstants.MaxTicketLength);
 
-    /// <summary>Reads exactly <paramref name="length"/> bytes, failing after 10 seconds rather than waiting forever.</summary>
     internal async Task<byte[]> ReadAsync(int length)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -82,7 +88,6 @@ internal sealed class AuthClient : IDisposable
         return buffer;
     }
 
-    /// <summary>Reads until the server closes the connection, returning how many bytes arrived first.</summary>
     internal async Task<int> DrainUntilClosedAsync(TimeSpan timeout)
     {
         using var cancel = new CancellationTokenSource(timeout);
@@ -100,18 +105,13 @@ internal sealed class AuthClient : IDisposable
                 return total;
             }
 
-            if (read == 0) return total;
+            if (read == 0)
+            {
+                return total;
+            }
+
             total += read;
         }
-    }
-
-    public void Dispose() => client.Dispose();
-
-    internal static AuthKey Key(string password, string id)
-    {
-        AuthKey key = AuthKey.FromPassword(password);
-        key.ApplyAuthPakHash(id);
-        return key;
     }
 
     private static byte[] RandomBytes(int length)

@@ -113,8 +113,13 @@ public static class FogControlFuzz
                         {
                             Check(!done, "completed transaction prepared twice");
                             Check(inputs["request"].Span.SequenceEqual(sealedBytes), "sealed input differs from model");
-                            return new FogCommitPlan(new Dictionary<string, byte[]> { ["reply"] = inputs["request"].ToArray() },
-                                () => { effects++; return System.Threading.Tasks.Task.CompletedTask; });
+                            return new FogCommitPlan(
+                                new Dictionary<string, byte[]> { ["reply"] = inputs["request"].ToArray() },
+                                () =>
+                                {
+                                    effects++;
+                                    return System.Threading.Tasks.Task.CompletedTask;
+                                });
                         });
                         Check(control.WriteAsync("owner", id, "commit\n"u8.ToArray()).GetAwaiter().GetResult() == 7, "commit byte count");
                         if (!done)

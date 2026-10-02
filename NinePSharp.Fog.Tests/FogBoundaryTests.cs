@@ -12,8 +12,13 @@ public sealed class FogBoundaryTests
         string id = store.Clone("alice");
         FogTransactionTests.Upload(store, id, "request", []);
         int effects = 0;
-        FogCommitPlan Plan(int second) => new(new Dictionary<string, byte[]> { ["reply"] = new byte[32], ["extra"] = new byte[second] },
-            () => { effects++; return Task.CompletedTask; });
+        FogCommitPlan Plan(int second) => new(
+            new Dictionary<string, byte[]> { ["reply"] = new byte[32], ["extra"] = new byte[second] },
+            () =>
+            {
+                effects++;
+                return Task.CompletedTask;
+            });
         FogTransactionTests.Error("snapshot-limit", () => store.CommitAsync("alice", id, _ => Plan(33)));
         Assert.Equal(0, effects);
         await FogTransactionTests.Bounded(store.CommitAsync("alice", id, _ => Plan(32)));
@@ -34,6 +39,7 @@ public sealed class FogBoundaryTests
     public void CounterExhaustionFailsBeforeReusingAnIdentityOrReservation()
     {
         var store = FogTransactionTests.Store();
+
         // Fault injection at an otherwise unreachable uint64 boundary, not a production escape hatch.
         FieldInfo sequence = typeof(FogTransactionStore).GetField("sequence", BindingFlags.Instance | BindingFlags.NonPublic)!;
         sequence.SetValue(store, ulong.MaxValue - 1);
@@ -98,5 +104,5 @@ public sealed class FogBoundaryTests
     }
 
     private static MemoryStream Buffer(FogUpload upload) =>
-        (MemoryStream)typeof(FogUpload).GetField("Buffer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(upload)!;
+        (MemoryStream)typeof(FogUpload).GetProperty("Buffer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(upload)!;
 }

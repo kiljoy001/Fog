@@ -32,15 +32,27 @@ public sealed class FogNamespaceResolverTests
         Assert.Equal("denied", (await Denied(new Tattach(1, 1, 0, "worker", "/"), certificate)).Code);
         Assert.Equal("denied", (await Denied(new Tattach(1, 1, NinePConstants.NoFid, "worker", "runtime"), certificate)).Code);
         Assert.Equal("denied", (await Denied(new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"), null)).Code);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await resolver.ResolveAsync("s",
-            new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"), NinePDialect.NineP2000, certificate, new CancellationToken(true)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await resolver.ResolveAsync(
+            "s",
+            new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"),
+            NinePDialect.NineP2000,
+            certificate,
+            new CancellationToken(true)));
 
-        var attach = await resolver.ResolveAsync("s", new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"), NinePDialect.NineP2000,
-            certificate, CancellationToken.None);
+        var attach = await resolver.ResolveAsync(
+            "s",
+            new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"),
+            NinePDialect.NineP2000,
+            certificate,
+            CancellationToken.None);
         Assert.Equal("worker", attach.User);
         Assert.IsType<AuthorizedResourceOperations>(attach.Resources);
-        var second = await resolver.ResolveAsync("t", new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"), NinePDialect.NineP2000,
-            certificate, CancellationToken.None);
+        var second = await resolver.ResolveAsync(
+            "t",
+            new Tattach(1, 1, NinePConstants.NoFid, "worker", "/"),
+            NinePDialect.NineP2000,
+            certificate,
+            CancellationToken.None);
         Assert.Equal(attach.ProcessId + 1, second.ProcessId);
         Assert.NotEqual(attach.ProcessGroupId, second.ProcessGroupId);
     }
@@ -64,8 +76,9 @@ public sealed class FogNamespaceResolverTests
     [Fact]
     public async Task OnlyAncestryProvidersReportParentsAndCancellationIsHonoured()
     {
-        var registered = new RegisteredMountableResourceResolver(Grains,
-        [
+        var registered = new RegisteredMountableResourceResolver(
+            Grains,
+            [
             ResourceProviderRegistration.For<ITestApplicationGrain>(TestApplicationGrain.Provider),
             ResourceProviderRegistration.For<IPlainResourceGrain>("plain"),
         ]);
@@ -103,8 +116,12 @@ public sealed class FogNamespaceResolverTests
         return (new FogNamespaceAttachResolver(Grains, root, nodes, authority, dependencies.Resources, dependencies.Ancestry), dependencies);
     }
 
-    private sealed record Dependencies(FogSharedRoot Root, FogNodePolicy Nodes, FogAuthorizationAuthority Authority,
-        IResourceDataOperations Resources, IResourceAncestry Ancestry);
+    private sealed record Dependencies(
+        FogSharedRoot Root,
+        FogNodePolicy Nodes,
+        FogAuthorizationAuthority Authority,
+        IResourceDataOperations Resources,
+        IResourceAncestry Ancestry);
 
     private sealed class FixedAncestry : Dictionary<ResourceIdentity, ResourceHandle>, IResourceAncestry
     {

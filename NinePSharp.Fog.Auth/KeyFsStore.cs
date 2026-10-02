@@ -30,19 +30,21 @@ internal static class KeyFsStore
         return output;
     }
 
-    /// <summary>Opens a database file, throwing <see cref="AuthenticationFailed"/> for any change or wrong key.</summary>
     internal static KeyDatabase Open(ReadOnlySpan<byte> storageKey, ReadOnlySpan<byte> file)
     {
         using var records = new SecretBuffer(Decrypt(storageKey, file));
         return KeyDatabase.Decode(records.Bytes);
     }
 
-    /// <summary>Decrypts the records; a wrong magic, a short file or a failed tag are all the same failure.</summary>
     private static byte[] Decrypt(ReadOnlySpan<byte> storageKey, ReadOnlySpan<byte> file)
     {
         try
         {
-            if (!file.StartsWith(Magic)) throw new InvalidCipherTextException();
+            if (!file.StartsWith(Magic))
+            {
+                throw new InvalidCipherTextException();
+            }
+
             ChaCha20Poly1305 cipher = Cipher(encrypting: false, storageKey, file.Slice(Magic.Length, NonceLength));
             byte[] body = file[(Magic.Length + NonceLength)..].ToArray();
             var records = new byte[cipher.GetOutputSize(body.Length)];

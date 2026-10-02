@@ -13,7 +13,8 @@ namespace NinePSharp.Fuzzer;
 public static class FogFileFuzz
 {
     private static readonly X509Certificate2 Certificate = MakeCertificate();
-    private static readonly FogNodePolicy Policy = new(1,
+    private static readonly FogNodePolicy Policy = new(
+        1,
         [new("worker", new string('1', 64), FogNodePolicy.SpkiPin(Certificate), "worker.test")]);
 
     public static void Run(Stream input)
@@ -29,10 +30,20 @@ public static class FogFileFuzz
         int stride = bytes.Length == 0 ? 1 : bytes[0] + 1;
         var store = new FogTransactionStore(new(2, 2, 4096, 4096, 16384, 2, TimeSpan.FromHours(1), TimeSpan.FromHours(1)), Policy.IsCurrentOwner);
         int effects = 0;
-        var service = new FogTransactionService("fixture", store, new HashSet<string> { "request" }, new HashSet<string> { "reply" },
-            (principal, id, cancellation) => store.CommitAtomicAsync(principal.Owner, id, files =>
-                new(new Dictionary<string, byte[]> { ["reply"] = files["request"].ToArray() }, () => effects++), cancellation));
-        var dispatcher = new FogNinePDispatcher(new FogTransactionFileTree([service]), Policy,
+        var service = new FogTransactionService(
+            "fixture",
+            store,
+            new HashSet<string> { "request" },
+            new HashSet<string> { "reply" },
+            (principal, id, cancellation) => store.CommitAtomicAsync(
+                principal.Owner,
+                id,
+                files =>
+                new(new Dictionary<string, byte[]> { ["reply"] = files["request"].ToArray() }, () => effects++),
+                cancellation));
+        var dispatcher = new FogNinePDispatcher(
+            new FogTransactionFileTree([service]),
+            Policy,
             new(1, 8, 2, 4096, 16384, TimeSpan.FromHours(1), TimeSpan.FromHours(1)));
         ushort tag = 0;
         object Send(NinePMessage message) => dispatcher.DispatchAsync("fuzz", message, NinePDialect.NineP2000, Certificate).GetAwaiter().GetResult();
@@ -51,7 +62,11 @@ public static class FogFileFuzz
         {
             Initialize();
             Reject("tx-expired", Walk(2, "missing"));
-            if (store.LiveIds().Count != 0) throw new InvalidOperationException("walk allocated a transaction");
+            if (store.LiveIds().Count != 0)
+            {
+                throw new InvalidOperationException("walk allocated a transaction");
+            }
+
             Expect<Rwalk>(Walk(2, "control", "fixture", "clone"));
             Reject("denied", Open(2, NinePConstants.OWRITE));
             Expect<Ropen>(Open(2, NinePConstants.OREAD));
@@ -67,10 +82,18 @@ public static class FogFileFuzz
             for (int offset = 0; offset < bytes.Length; offset += stride)
             {
                 byte[] fragment = bytes.Skip(offset).Take(stride).ToArray();
-                if (Expect<Rwrite>(Write(3, (ulong)offset, fragment)).Count != fragment.Length) throw new InvalidOperationException("partial upload");
+                if (Expect<Rwrite>(Write(3, (ulong)offset, fragment)).Count != fragment.Length)
+                {
+                    throw new InvalidOperationException("partial upload");
+                }
             }
+
             Reject("upload-open", Write(4, 0, "commit\n"u8.ToArray()));
-            if (effects != 0) throw new InvalidOperationException("effect before seal");
+            if (effects != 0)
+            {
+                throw new InvalidOperationException("effect before seal");
+            }
+
             Expect<Rclunk>(Clunk(3));
             if (bytes.Length != 0 && (bytes[0] & 1) != 0)
             {
@@ -81,34 +104,73 @@ public static class FogFileFuzz
                 Expect<Rwalk>(Walk(4, "control", "fixture", id, "ctl"));
                 Expect<Ropen>(Open(4, NinePConstants.OWRITE));
             }
+
             for (int retry = 0; retry < 2; retry++)
-                if (Expect<Rwrite>(Write(4, 0, "commit\n"u8.ToArray())).Count != 7) throw new InvalidOperationException("commit count");
-            if (effects != 1) throw new InvalidOperationException("repeated effect");
+            {
+                if (Expect<Rwrite>(Write(4, 0, "commit\n"u8.ToArray())).Count != 7)
+                {
+                    throw new InvalidOperationException("commit count");
+                }
+            }
+
+            if (effects != 1)
+            {
+                throw new InvalidOperationException("repeated effect");
+            }
+
             Expect<Rwalk>(Walk(5, "control", "fixture", id, "reply"));
             Expect<Ropen>(Open(5, NinePConstants.OREAD));
             using var result = new MemoryStream();
             while (true)
             {
                 var read = Expect<Rread>(Read(5, (ulong)result.Length, (uint)stride));
-                if (read.Count == 0) break;
-                if (result.Length + read.Count > bytes.Length) throw new InvalidOperationException("unbounded result");
+                if (read.Count == 0)
+                {
+                    break;
+                }
+
+                if (result.Length + read.Count > bytes.Length)
+                {
+                    throw new InvalidOperationException("unbounded result");
+                }
+
                 result.Write(read.Data.Span);
             }
-            if (!bytes.SequenceEqual(result.ToArray())) throw new InvalidOperationException("snapshot differs from independent input model");
-            if (Expect<Rread>(Read(5, ulong.MaxValue, uint.MaxValue)).Count != 0) throw new InvalidOperationException("invalid EOF");
+
+            if (!bytes.SequenceEqual(result.ToArray()))
+            {
+                throw new InvalidOperationException("snapshot differs from independent input model");
+            }
+
+            if (Expect<Rread>(Read(5, ulong.MaxValue, uint.MaxValue)).Count != 0)
+            {
+                throw new InvalidOperationException("invalid EOF");
+            }
+
             Expect<Rwrite>(Write(4, 0, "release\n"u8.ToArray()));
             Reject("tx-expired", Read(5, 0, 1));
-            if (store.LiveIds().Count != 0) throw new InvalidOperationException("reservation leaked");
+            if (store.LiveIds().Count != 0)
+            {
+                throw new InvalidOperationException("reservation leaked");
+            }
         }
-        finally { dispatcher.CloseSessionAsync("fuzz").GetAwaiter().GetResult(); }
+        finally
+        {
+            dispatcher.CloseSessionAsync("fuzz").GetAwaiter().GetResult();
+        }
     }
 
-    private static T Expect<T>(object value) where T : struct => value is T expected ? expected :
-        throw new InvalidOperationException("unexpected response: " + value.GetType().Name + (value is Rerror error ? ":" + error.Ename : ""));
+    private static T Expect<T>(object value)
+        where T : struct
+        => value is T expected ? expected :
+        throw new InvalidOperationException("unexpected response: " + value.GetType().Name + (value is Rerror error ? ":" + error.Ename : string.Empty));
 
     private static void Reject(string code, object value)
     {
-        if (Expect<Rerror>(value).Ename != code) throw new InvalidOperationException("unexpected rejection");
+        if (Expect<Rerror>(value).Ename != code)
+        {
+            throw new InvalidOperationException("unexpected rejection");
+        }
     }
 
     private static X509Certificate2 MakeCertificate()

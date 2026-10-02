@@ -13,7 +13,7 @@ public sealed class DispatcherLifecycleTests
     {
         using var fixture = new ControlFixture();
         _ = new FogNinePDispatcher(fixture.Tree, fixture.Policy, fixture.Limits with { MessageSize = int.MaxValue });
-        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Dispatcher.DispatchAsync("", NinePMessage.NewMsgTflush(new Tflush(1, 2)), NinePDialect.NineP2000));
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Dispatcher.DispatchAsync(string.Empty, NinePMessage.NewMsgTflush(new Tflush(1, 2)), NinePDialect.NineP2000));
         await Assert.ThrowsAsync<ArgumentNullException>(() => fixture.Dispatcher.DispatchAsync("s", null!, NinePDialect.NineP2000));
         Error("invalid-request", await fixture.Dispatcher.DispatchAsync("s", NinePMessage.NewMsgRflush(new Rflush(1)), NinePDialect.NineP2000));
     }
@@ -43,6 +43,7 @@ public sealed class DispatcherLifecycleTests
         dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { SnapshotBytesPerSession = bytes.Length * 2 });
         await Initialize(Send);
         Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(9, 1, NinePConstants.OREAD))));
+
         // Attach additional roots because walking an opened directory is forbidden.
         Assert.IsType<Rattach>(await Send(NinePMessage.NewMsgTattach(new Tattach(10, 2, NinePConstants.NoFid, "worker", "runtime"))));
         Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(11, 2, NinePConstants.OREAD))));
@@ -81,7 +82,7 @@ public sealed class DispatcherLifecycleTests
         {
             token.Register(() => cancelled.TrySetResult());
             return finish.Task;
-        })
+        }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { RequestsPerSession = 1 });
         Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
@@ -96,6 +97,7 @@ public sealed class DispatcherLifecycleTests
             var flush = Send(NinePMessage.NewMsgTflush(new Tflush(102, 100)));
             await cancelled.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
             Assert.False(flush.IsCompleted);
+
             // Bounded: a second admitted flush would wait on the blocked write instead of failing.
             Error("busy", await Send(NinePMessage.NewMsgTflush(new Tflush(103, 100))).WaitAsync(TimeSpan.FromMilliseconds(250)));
             finish.SetResult(1);
@@ -154,21 +156,6 @@ public sealed class DispatcherLifecycleTests
         await dispatcher.CloseSessionAsync("probe");
     }
 
-    private static CancellationTokenSource PendingCancellation(FogNinePDispatcher dispatcher, string sessionId, ushort tag)
-    {
-        var sessions = (System.Collections.IDictionary)typeof(FogNinePDispatcher)
-            .GetField("sessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .GetValue(dispatcher)!;
-        object session = sessions[sessionId]!;
-        var pending = (System.Collections.IDictionary)session.GetType()
-            .GetField("Pending", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .GetValue(session)!;
-        object operation = pending[tag]!;
-        return (CancellationTokenSource)operation.GetType()
-            .GetField("Cancellation", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .GetValue(operation)!;
-    }
-
     [Fact]
     public async Task InFlightWritesRejectConcurrentWriteAndClunkAndRecheckRevocation()
     {
@@ -205,11 +192,13 @@ public sealed class DispatcherLifecycleTests
         int disposed = 0;
         var tree = new ProbeTree
         {
-            OnOpen = () => new(write: async (_, _, token) =>
+            OnOpen = () => new(
+                write: async (_, _, token) =>
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
             return 1;
-        }, close: _ => disposed++)
+        },
+                close: _ => disposed++),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
         Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
@@ -241,7 +230,7 @@ public sealed class DispatcherLifecycleTests
                 await finish.Task;
                 token.ThrowIfCancellationRequested();
                 return 1;
-            })
+            }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
         Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
@@ -273,7 +262,7 @@ public sealed class DispatcherLifecycleTests
                 await finish.Task;
                 token.ThrowIfCancellationRequested();
                 return 1;
-            })
+            }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
         Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
@@ -307,7 +296,7 @@ public sealed class DispatcherLifecycleTests
                 await finish.Task;
                 token.ThrowIfCancellationRequested();
                 return 1;
-            })
+            }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
         Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
@@ -380,7 +369,14 @@ public sealed class DispatcherLifecycleTests
     {
         using var fixture = new ControlFixture();
         int opens = 0;
-        var tree = new ProbeTree { OnOpen = () => { opens++; return new(); } };
+        var tree = new ProbeTree
+        {
+            OnOpen = () =>
+        {
+            opens++;
+            return new();
+        },
+        };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits, fixture.Time);
         Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
@@ -428,6 +424,21 @@ public sealed class DispatcherLifecycleTests
         await dispatcher.CloseSessionAsync("probe");
     }
 
+    private static CancellationTokenSource PendingCancellation(FogNinePDispatcher dispatcher, string sessionId, ushort tag)
+    {
+        var sessions = (System.Collections.IDictionary)typeof(FogNinePDispatcher)
+            .GetField("sessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(dispatcher)!;
+        object session = sessions[sessionId]!;
+        var pending = (System.Collections.IDictionary)session.GetType()
+            .GetProperty("Pending", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(session)!;
+        object operation = pending[tag]!;
+        return (CancellationTokenSource)operation.GetType()
+            .GetProperty("Cancellation", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(operation)!;
+    }
+
     private static async Task Initialize(Func<NinePMessage, Task<object>> send)
     {
         Assert.IsType<Rversion>(await send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000"))));
@@ -439,16 +450,28 @@ public sealed class DispatcherLifecycleTests
     private sealed class ProbeTree : FogFileTree
     {
         public override FogFileNode Root { get; } = new(1, "/", true);
-        internal FogFileNode Walked = new(2, "file", false);
-        internal IReadOnlyList<FogFileNode>? Listed;
-        internal Func<FogOpenFile> OnOpen = () => new();
-        internal readonly HashSet<string> RejectedNames = [];
-        internal readonly List<string> ClosedSessions = new();
+
+        internal FogFileNode Walked { get; set; } = new(2, "file", false);
+
+        internal IReadOnlyList<FogFileNode>? Listed { get; set; }
+
+        internal Func<FogOpenFile> OnOpen { get; set; } = () => new();
+
+        internal HashSet<string> RejectedNames { get; } = [];
+
+        internal List<string> ClosedSessions { get; } = new();
+
         public override FogFileNode Walk(FogPrincipal principal, FogFileNode directory, string name) =>
             RejectedNames.Contains(name) ? throw new FogException("tx-expired") : name == "." ? directory : Walked;
+
         public override IReadOnlyList<FogFileNode> List(FogPrincipal principal, FogFileNode directory) => Listed ?? [Walked];
-        public override void Check(FogPrincipal principal, FogFileNode node) { }
+
+        public override void Check(FogPrincipal principal, FogFileNode node)
+        {
+        }
+
         public override FogOpenFile Open(FogPrincipal principal, string session, FogFileNode node, byte mode, long snapshotBudget) => OnOpen();
+
         public override void CloseSession(string session) => ClosedSessions.Add(session);
     }
 }

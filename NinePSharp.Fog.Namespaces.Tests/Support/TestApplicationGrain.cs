@@ -4,14 +4,6 @@ using NinePSharp.Namespaces.Orleans;
 
 namespace NinePSharp.Fog.Namespaces.Tests.Support;
 
-/// <summary>An application grain for tests: one root directory of seeded files, owned by "app".</summary>
-public interface ITestApplicationGrain : IAncestryResourceGrain
-{
-    Task SeedAsync(string name, string contents);
-
-    Task<int> GetWritesAsync();
-}
-
 public sealed class TestApplicationGrain : Grain, ITestApplicationGrain
 {
     internal const string Provider = "test-app";
@@ -48,13 +40,21 @@ public sealed class TestApplicationGrain : Grain, ITestApplicationGrain
 
     public Task<ResourceOpenHandleModel> OpenAsync(ResourceHandleModel resource, byte mode, ResourceOperationContextModel context)
     {
-        if ((mode & NinePConstants.OTRUNC) != 0) files[resource.Identity.Path] = (files[resource.Identity.Path].Name, Array.Empty<byte>());
+        if ((mode & NinePConstants.OTRUNC) != 0)
+        {
+            files[resource.Identity.Path] = (files[resource.Identity.Path].Name, Array.Empty<byte>());
+        }
+
         return Task.FromResult(new ResourceOpenHandleModel(resource, $"open-{Interlocked.Increment(ref nextHandle)}", mode, 8192));
     }
 
     public Task<byte[]> ReadAsync(ResourceOpenHandleModel openHandle, ulong offset, uint count)
     {
-        if (openHandle.Resource.Identity.Path == RootPath) return Task.FromResult(Array.Empty<byte>());
+        if (openHandle.Resource.Identity.Path == RootPath)
+        {
+            return Task.FromResult(Array.Empty<byte>());
+        }
+
         byte[] data = files[openHandle.Resource.Identity.Path].Data;
         int start = (int)Math.Min(offset, (ulong)data.Length);
         return Task.FromResult(data.AsSpan(start, (int)Math.Min(count, (uint)(data.Length - start))).ToArray());
@@ -80,7 +80,11 @@ public sealed class TestApplicationGrain : Grain, ITestApplicationGrain
         return Task.FromResult(new ResourceStatModel(resource, name, mode, 0, 0, length, "app", "app", "app"));
     }
 
-    public Task<ResourceOpenHandleModel> CreateAndOpenAsync(ResourceHandleModel directory, string name, uint permissions, byte mode,
+    public Task<ResourceOpenHandleModel> CreateAndOpenAsync(
+        ResourceHandleModel directory,
+        string name,
+        uint permissions,
+        byte mode,
         ResourceOperationContextModel context)
         => throw new NotSupportedException("The test application has a fixed file set.");
 
@@ -92,37 +96,4 @@ public sealed class TestApplicationGrain : Grain, ITestApplicationGrain
     private ResourceHandleModel Root() => new(new ResourceIdentityModel(Provider, this.GetPrimaryKeyString(), RootPath), QidType.QTDIR, 0);
 
     private ResourceHandleModel File(ulong path) => new(new ResourceIdentityModel(Provider, this.GetPrimaryKeyString(), path), QidType.QTFILE, 0);
-}
-
-/// <summary>A provider without the parent capability; it is never called by the tests that use it.</summary>
-public interface IPlainResourceGrain : IMountableResourceGrain
-{
-}
-
-public sealed class PlainResourceGrain : Grain, IPlainResourceGrain
-{
-    public Task<ResourceHandleModel?> WalkAsync(ResourceHandleModel directory, string name) => throw new NotSupportedException();
-
-    public Task<ResourceDirectoryEntryModel[]> ReadDirectoryAsync(ResourceHandleModel directory) => throw new NotSupportedException();
-
-    public Task<ResourceHandleModel> CreateAsync(ResourceHandleModel directory, string name, bool directoryEntry) => throw new NotSupportedException();
-
-    public Task<ResourceOpenHandleModel> OpenAsync(ResourceHandleModel resource, byte mode, ResourceOperationContextModel context)
-        => throw new NotSupportedException();
-
-    public Task<byte[]> ReadAsync(ResourceOpenHandleModel openHandle, ulong offset, uint count) => throw new NotSupportedException();
-
-    public Task<uint> WriteAsync(ResourceOpenHandleModel openHandle, ulong offset, byte[] data, ResourceOperationContextModel context)
-        => throw new NotSupportedException();
-
-    public Task<ResourceStatModel> StatAsync(ResourceHandleModel resource) => throw new NotSupportedException();
-
-    public Task<ResourceOpenHandleModel> CreateAndOpenAsync(ResourceHandleModel directory, string name, uint permissions, byte mode,
-        ResourceOperationContextModel context)
-        => throw new NotSupportedException();
-
-    public Task ClunkAsync(ResourceOpenHandleModel openHandle, ResourceOperationContextModel context) => throw new NotSupportedException();
-
-    public Task RemoveAsync(ResourceHandleModel resource, ResourceOpenHandleModel? openHandle, ResourceOperationContextModel context)
-        => throw new NotSupportedException();
 }

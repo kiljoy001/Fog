@@ -29,6 +29,8 @@ public sealed class FogSharedRoot
     /// <summary>Gets the root directory every attach starts from.</summary>
     public ResourceHandle Root { get; }
 
+    private IFogRootGrain Directory => grains.GetGrain<IFogRootGrain>(ProcessGroupId);
+
     /// <summary>Creates, or reopens, the shared root with the given identity.</summary>
     public static async Task<FogSharedRoot> CreateAsync(IGrainFactory grains, string id)
     {
@@ -54,8 +56,16 @@ public sealed class FogSharedRoot
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(applicationRoot);
-        if (name.Contains('/') || name is "." or "..") throw new ArgumentException("An application name is one path element.", nameof(name));
-        if (!applicationRoot.IsDirectory) throw new ArgumentException("An application's root is a directory.", nameof(applicationRoot));
+        if (name.Contains('/') || name is "." or "..")
+        {
+            throw new ArgumentException("An application name is one path element.", nameof(name));
+        }
+
+        if (!applicationRoot.IsDirectory)
+        {
+            throw new ArgumentException("An application's root is a directory.", nameof(applicationRoot));
+        }
+
         ResourceHandle mountPoint = await CreateEntryAsync($"/mnt/{name}", directory: true);
         await grains.GetGrain<IVProcessGroupGrain>(ProcessGroupId)
             .MountAsync(applicationRoot.ToModel(), mountPoint.ToModel(), MountFlags.Replace);
@@ -78,10 +88,13 @@ public sealed class FogSharedRoot
         NamespaceSnapshotModel snapshot = await grains.GetGrain<IVProcessGroupGrain>(ProcessGroupId).GetSnapshotAsync();
         var parents = new Dictionary<ResourceIdentity, ResourceIdentity>();
         foreach (MountHeadModel head in snapshot.MountHeads)
+        {
             foreach (MountBindingModel mount in head.Mounts)
+            {
                 parents.TryAdd(mount.Target.Identity.ToDomain(), head.From.Identity.ToDomain());
+            }
+        }
+
         return parents;
     }
-
-    private IFogRootGrain Directory => grains.GetGrain<IFogRootGrain>(ProcessGroupId);
 }
