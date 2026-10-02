@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dp9ik" Version="0.2.0" />
+    <PackageReference Include="Microsoft.TSS" Version="2.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NinePSharp.Server\NinePSharp.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- BIP-39 English wordlist, bitcoin/bips bip-0039/english.txt (MIT), SHA-256 2f5eed53...b24dbda. -->
+    <EmbeddedResource Include="Resources/bip39-english.txt" LogicalName="NinePSharp.Fog.Auth.bip39-english.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NinePSharp.Fog.Auth.Tests" />
+  </ItemGroup>
+
+</Project>

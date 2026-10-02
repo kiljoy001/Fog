@@ -142,3 +142,14 @@ Feature: Enrolled nodes attach to their own copy of the shared namespace
     When "worker" connects with its certificate and reads "/mnt/mail/inbox"
     Then the read returns "hello mail"
     And a connection without an enrolled certificate is rejected before any 9P request
+
+  @FOG_VIEW_012
+  Scenario: The keyfs tree is not part of a node's namespace
+    Given "worker" has attached
+    When "worker" walks to "/mnt/keys"
+    Then the walk reports not found
+
+  @FOG_VIEW_012
+  Scenario: No attach name other than the shared root reaches the export
+    When "worker" attaches with attach name "keys"
+    Then the attach fails

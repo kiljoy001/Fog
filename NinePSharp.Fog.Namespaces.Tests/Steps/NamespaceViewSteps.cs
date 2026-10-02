@@ -125,6 +125,10 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     [When(@"^""(\w+)"" attaches again$")]
     public Task AttachesAgain(string user) => AttachAs(user, user, user, 8192, expectSuccess: true);
 
+    [When(@"^""(\w+)"" attaches with attach name ""([^""]*)""$")]
+    public Task AttachesWithName(string user, string aname)
+        => AttachAs($"{user}-aname", user, user, 8192, expectSuccess: false, aname);
+
     [When(@"^the certificate of ""(\w+)"" attaches as ""(\w+)""$")]
     public Task CertificateAttachesAs(string certificate, string uname)
         => AttachAs($"{certificate}-as-{uname}", certificate, uname, 8192, expectSuccess: false);
@@ -355,7 +359,7 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
         return export;
     }
 
-    private async Task AttachAs(string sessionName, string certificate, string uname, uint messageSize, bool expectSuccess)
+    private async Task AttachAs(string sessionName, string certificate, string uname, uint messageSize, bool expectSuccess, string aname = "/")
     {
         var session = new Session(certificate, $"{sessionName}-{Guid.NewGuid():N}");
         sessions[sessionName] = session;
@@ -366,7 +370,7 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
             return;
         }
 
-        response = await Send(sessionName, NinePMessage.NewMsgTattach(new Tattach(0, 1, NinePConstants.NoFid, uname, "/")));
+        response = await Send(sessionName, NinePMessage.NewMsgTattach(new Tattach(0, 1, NinePConstants.NoFid, uname, aname)));
         if (expectSuccess) session.RootQid = Assert.IsType<Rattach>(response).Qid;
     }
 
