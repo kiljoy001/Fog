@@ -1,3 +1,4 @@
+using Dp9ik;
 using Org.BouncyCastle.Security;
 
 namespace NinePSharp.Fog.Auth;
@@ -25,6 +26,9 @@ public sealed class KeyFsHost : IAsyncDisposable
     }
 
     internal KeyFsDispatcher Dispatcher { get; }
+
+    /// <summary>Looks up a user's keys as authsrv's findkey reads them from keyfs.</summary>
+    internal AuthKey? FindKey(string user) => Dispatcher.FindKey(user);
 
     /// <summary>Gets the number of admin connections being served.</summary>
     internal int AdminConnections => listener.ConnectionCount;

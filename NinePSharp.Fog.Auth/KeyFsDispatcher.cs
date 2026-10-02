@@ -82,6 +82,25 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
         }
     }
 
+    /// <summary>
+    /// authsrv's findkey: a user's DES and AES keys and PAK hash, or null when the user does not
+    /// exist or keyfs would refuse to read its keys (disabled, in purgatory or expired).
+    /// </summary>
+    internal AuthKey? FindKey(string name)
+    {
+        KeyUser? user;
+        lock (gate)
+        {
+            user = database.Find(name);
+            if (user is null || ReadRefusal(user) is not null) return null;
+            user = user.Copy();
+        }
+
+        AuthKey key = AuthKey.FromKeys(user.DesKey, user.AesKey);
+        key.ApplyAuthPakHash(user.Name);
+        return key;
+    }
+
     /// <summary>Gets the number of connections whose fids the keyfs holds.</summary>
     internal int SessionCount
     {
@@ -205,9 +224,7 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
         switch (fid.Node)
         {
             case Node.Key or Node.AesKey or Node.PakHash or Node.Secret:
-                if (user.Disabled) return new Rerror(request.Tag, "user disabled");
-                if (user.PurgatoryEnds > now) return new Rerror(request.Tag, "user in purgatory");
-                if (user.Expire != 0 && user.Expire < now) return new Rerror(request.Tag, "user expired");
+                if (ReadRefusal(user) is string refusal) return new Rerror(request.Tag, refusal);
                 data = fid.Node switch
                 {
                     Node.Key => user.DesKey,
@@ -387,6 +404,15 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
         => new(node is Node.Root or Node.User ? QidType.QTDIR : QidType.QTFILE, 0, (ulong)node | (uniq * 0x100));
 
     private long Now() => time.GetUtcNow().ToUnixTimeSeconds();
+
+    /// <summary>Why keyfs refuses to read a user's keys and secret, or null when it reads them.</summary>
+    private string? ReadRefusal(KeyUser user)
+    {
+        long now = Now();
+        if (user.Disabled) return "user disabled";
+        if (user.PurgatoryEnds > now) return "user in purgatory";
+        return user.Expire != 0 && user.Expire < now ? "user expired" : null;
+    }
 
     private static byte[] Text(string value) => Encoding.UTF8.GetBytes(value + "\n");
 
