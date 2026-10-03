@@ -197,6 +197,42 @@ public sealed class AuthFidExport : INinePFSDispatcher, INinePSessionLifecycle
         return (null, new Rwrite(request.Tag, request.Count));
     }
 
+    private static uint? FidOf(NinePMessage message) => message switch
+    {
+        NinePMessage.MsgTopen m => m.Item.Fid,
+        NinePMessage.MsgTcreate m => m.Item.Fid,
+        NinePMessage.MsgTread m => m.Item.Fid,
+        NinePMessage.MsgTwrite m => m.Item.Fid,
+        NinePMessage.MsgTclunk m => m.Item.Fid,
+        NinePMessage.MsgTremove m => m.Item.Fid,
+        NinePMessage.MsgTstat m => m.Item.Fid,
+        NinePMessage.MsgTwstat m => m.Item.Fid,
+        _ => null,
+    };
+
+    private static (string? Refusal, object? Reply) ServeAfid(Connection connection, uint fid, Afid afid, NinePMessage message)
+    {
+        switch (message)
+        {
+            case NinePMessage.MsgTread read:
+                return Read(afid, read.Item);
+            case NinePMessage.MsgTwrite write:
+                return Write(afid, write.Item);
+            case NinePMessage.MsgTclunk clunk:
+                connection.Afids.Remove(fid);
+                return (null, new Rclunk(clunk.Item.Tag));
+            case NinePMessage.MsgTremove:
+                connection.Afids.Remove(fid);
+                return ("remove prohibited", null);
+            case NinePMessage.MsgTstat:
+                return ("stat prohibited", null);
+            case NinePMessage.MsgTwstat:
+                return ("wstat prohibited", null);
+            default:
+                return ("9P protocol botch", null);
+        }
+    }
+
     private (string? Refusal, object? Reply) Serve(Connection connection, NinePMessage message)
     {
         switch (message)
@@ -209,42 +245,9 @@ public sealed class AuthFidExport : INinePFSDispatcher, INinePSessionLifecycle
                 return (Walk(connection, walk.Item), null);
         }
 
-        uint? fid = message switch
-        {
-            NinePMessage.MsgTopen m => m.Item.Fid,
-            NinePMessage.MsgTcreate m => m.Item.Fid,
-            NinePMessage.MsgTread m => m.Item.Fid,
-            NinePMessage.MsgTwrite m => m.Item.Fid,
-            NinePMessage.MsgTclunk m => m.Item.Fid,
-            NinePMessage.MsgTremove m => m.Item.Fid,
-            NinePMessage.MsgTstat m => m.Item.Fid,
-            NinePMessage.MsgTwstat m => m.Item.Fid,
-            _ => null,
-        };
-        if (fid is not uint number || !connection.Afids.TryGetValue(number, out Afid? afid))
-        {
-            return (null, null);
-        }
-
-        switch (message)
-        {
-            case NinePMessage.MsgTread read:
-                return Read(afid, read.Item);
-            case NinePMessage.MsgTwrite write:
-                return Write(afid, write.Item);
-            case NinePMessage.MsgTclunk clunk:
-                connection.Afids.Remove(number);
-                return (null, new Rclunk(clunk.Item.Tag));
-            case NinePMessage.MsgTremove:
-                connection.Afids.Remove(number);
-                return ("remove prohibited", null);
-            case NinePMessage.MsgTstat:
-                return ("stat prohibited", null);
-            case NinePMessage.MsgTwstat:
-                return ("wstat prohibited", null);
-            default:
-                return ("9P protocol botch", null);
-        }
+        return FidOf(message) is uint fid && connection.Afids.TryGetValue(fid, out Afid? afid)
+            ? ServeAfid(connection, fid, afid, message)
+            : (null, null);
     }
 
     private (string? Refusal, object? Reply) Auth(Connection connection, Tauth request)

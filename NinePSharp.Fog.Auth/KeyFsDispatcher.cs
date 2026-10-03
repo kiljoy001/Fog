@@ -218,6 +218,45 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
         return unchecked((byte)value);
     }
 
+    private static string? WriteRefusal(Node node, byte[] data, string line) => node switch
+    {
+        Node.Key when data.Length != Dp9ikConstants.DesKeyLength => "garbled write data",
+        Node.AesKey when data.Length != Dp9ikConstants.AesKeyLength => "garbled write data",
+        Node.Secret when data.Length >= KeyDatabase.SecretLength => "garbled write data",
+        Node.Status when line is not ("ok" or "disabled") => "unknown status",
+        Node.Expire when line != "never" && !uint.TryParse(line, NumberStyles.None, CultureInfo.InvariantCulture, out _) => "bad expiration date",
+        Node.PakHash => "permission denied",
+        _ => null,
+    };
+
+    private static void Apply(KeyUser user, Node node, byte[] data, string line)
+    {
+        switch (node)
+        {
+            case Node.Key:
+                user.DesKey = data;
+                break;
+            case Node.AesKey:
+                user.AesKey = data;
+                user.Rehash();
+                break;
+            case Node.Secret:
+                user.Secret = data;
+                break;
+            case Node.Status:
+                user.Disabled = line == "disabled";
+                user.Bad = 0;
+                break;
+            case Node.Expire:
+                user.Expire = line == "never" ? 0 : uint.Parse(line, NumberStyles.None, CultureInfo.InvariantCulture);
+                user.Warnings = 0;
+                break;
+            default:
+                user.Warnings = LeadingNumber(line);
+                break;
+        }
+    }
+
     private Dictionary<uint, Fid> Fids(string sessionId)
     {
         if (!sessions.TryGetValue(sessionId, out Dictionary<uint, Fid>? fids))
@@ -389,42 +428,28 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
             return DirectoryRead(request, FileNames.Select((_, index) => StatOf(Node.Key + index, user)));
         }
 
-        long now = Now();
-        byte[] data;
-        switch (fid.Node)
+        if (fid.Node is Node.Key or Node.AesKey or Node.PakHash or Node.Secret && ReadRefusal(user) is string refusal)
         {
-            case Node.Key or Node.AesKey or Node.PakHash or Node.Secret:
-                if (ReadRefusal(user) is string refusal)
-                {
-                    return new Rerror(request.Tag, refusal);
-                }
-
-                data = fid.Node switch
-                {
-                    Node.Key => user.DesKey,
-                    Node.AesKey => user.AesKey,
-                    Node.PakHash => user.PakHash,
-                    _ => user.Secret,
-                };
-                break;
-            case Node.Status:
-                data = Text(!user.Disabled && user.Expire != 0 && user.Expire < now ? "expired" : user.Disabled ? "disabled" : "ok");
-                break;
-            case Node.Expire:
-                data = Text(user.Expire == 0 ? "never" : user.Expire.ToString(CultureInfo.InvariantCulture));
-                break;
-            case Node.Log:
-                data = Text(user.Bad.ToString(CultureInfo.InvariantCulture));
-                break;
-            default:
-                data = Text(user.Warnings.ToString(CultureInfo.InvariantCulture));
-                break;
+            return new Rerror(request.Tag, refusal);
         }
 
+        byte[] data = Contents(fid.Node, user);
         int offset = (int)Math.Min(request.Offset, (ulong)data.Length);
         int count = (int)Math.Min(request.Count, (uint)(data.Length - offset));
         return new Rread(request.Tag, data.AsMemory(offset, count));
     }
+
+    private byte[] Contents(Node node, KeyUser user) => node switch
+    {
+        Node.Key => user.DesKey,
+        Node.AesKey => user.AesKey,
+        Node.PakHash => user.PakHash,
+        Node.Secret => user.Secret,
+        Node.Status => Text(!user.Disabled && user.Expire != 0 && user.Expire < Now() ? "expired" : user.Disabled ? "disabled" : "ok"),
+        Node.Expire => Text(user.Expire == 0 ? "never" : user.Expire.ToString(CultureInfo.InvariantCulture)),
+        Node.Log => Text(user.Bad.ToString(CultureInfo.InvariantCulture)),
+        _ => Text(user.Warnings.ToString(CultureInfo.InvariantCulture)),
+    };
 
     private object Write(Dictionary<uint, Fid> fids, Twrite request)
     {
@@ -447,61 +472,23 @@ internal sealed class KeyFsDispatcher : INinePFSDispatcher, INinePSessionLifecyc
         byte[] data = request.Data.ToArray();
         if (fid.Node == Node.Log)
         {
-            // The bad-attempt count is kept in memory only, as in keyfs.
-            current.Bad = Encoding.UTF8.GetString(data) == "good" ? 0 : current.Bad + 1;
-            if (current.Bad != 0 && current.Bad % MaxBadAttempts == 0)
-            {
-                current.PurgatoryEnds = Now() + (long)current.Bad;
-            }
-
+            Log(current, data);
             return new Rwrite(request.Tag, (uint)data.Length);
         }
 
         string line = FirstLine(data);
-        string? error = fid.Node switch
-        {
-            Node.Key when data.Length != Dp9ikConstants.DesKeyLength => "garbled write data",
-            Node.AesKey when data.Length != Dp9ikConstants.AesKeyLength => "garbled write data",
-            Node.Secret when data.Length >= KeyDatabase.SecretLength => "garbled write data",
-            Node.Status when line is not ("ok" or "disabled") => "unknown status",
-            Node.Expire when line != "never" && !uint.TryParse(line, NumberStyles.None, CultureInfo.InvariantCulture, out _) => "bad expiration date",
-            Node.PakHash => "permission denied",
-            _ => null,
-        };
-        if (error is not null)
-        {
-            return new Rerror(request.Tag, error);
-        }
-
-        error = Commit(next =>
-        {
-            KeyUser user = next.FindByUniq(fid.Uniq)!;
-            switch (fid.Node)
-            {
-                case Node.Key:
-                    user.DesKey = data;
-                    break;
-                case Node.AesKey:
-                    user.AesKey = data;
-                    user.Rehash();
-                    break;
-                case Node.Secret:
-                    user.Secret = data;
-                    break;
-                case Node.Status:
-                    user.Disabled = line == "disabled";
-                    user.Bad = 0;
-                    break;
-                case Node.Expire:
-                    user.Expire = line == "never" ? 0 : uint.Parse(line, NumberStyles.None, CultureInfo.InvariantCulture);
-                    user.Warnings = 0;
-                    break;
-                default:
-                    user.Warnings = LeadingNumber(line);
-                    break;
-            }
-        });
+        string? error = WriteRefusal(fid.Node, data, line) ?? Commit(next => Apply(next.FindByUniq(fid.Uniq)!, fid.Node, data, line));
         return error is null ? new Rwrite(request.Tag, (uint)data.Length) : new Rerror(request.Tag, error);
+    }
+
+    // The bad-attempt count is kept in memory only, as in keyfs.
+    private void Log(KeyUser user, byte[] data)
+    {
+        user.Bad = Encoding.UTF8.GetString(data) == "good" ? 0 : user.Bad + 1;
+        if (user.Bad != 0 && user.Bad % MaxBadAttempts == 0)
+        {
+            user.PurgatoryEnds = Now() + (long)user.Bad;
+        }
     }
 
     private object Remove(Dictionary<uint, Fid> fids, Tremove request)
