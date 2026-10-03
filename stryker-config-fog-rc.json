@@ -1,0 +1,19 @@
+{
+  "stryker-config": {
+    "project": "NinePSharp.Fog.Rc.csproj",
+    "test-projects": [
+      "NinePSharp.Fog.Rc.Tests.csproj"
+    ],
+    "mutate": [
+      "**/*.cs"
+    ],
+    "mutation-level": "Standard",
+    "additional-timeout": 3000,
+    "thresholds": {
+      "high": 100,
+      "low": 100,
+      "break": 100
+    },
+    "concurrency": 4
+  }
+}

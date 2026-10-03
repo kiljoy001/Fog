@@ -99,7 +99,20 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
         return echo < 0 ? string.Empty : printed[(echo + 1)..];
     }
 
-    internal async Task SendLineAsync(string line) => await console.SendAsync(Encoding.UTF8.GetBytes(line + "\n"));
+    // The serial line has no flow control, so text sent faster than 9front echoes it loses bytes:
+    // each line waits for its echo before the next is sent.
+    internal async Task SendLineAsync(string text)
+    {
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            await console.SendAsync(Encoding.UTF8.GetBytes(lines[i] + "\n"));
+            if (i < lines.Length - 1)
+            {
+                await ExpectAsync(lines[i] + "\n", TimeSpan.FromSeconds(10));
+            }
+        }
+    }
 
     // Waits for text the console has not yet shown past, and returns everything before it.
     internal async Task<string> ExpectAsync(string text, TimeSpan timeout)
@@ -170,6 +183,8 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
     private async Task ReadAsync()
     {
         var buffer = new byte[4096];
+        var chars = new char[Encoding.UTF8.GetMaxCharCount(buffer.Length)];
+        Decoder decoder = Encoding.UTF8.GetDecoder();
         try
         {
             while (true)
@@ -182,7 +197,7 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
 
                 lock (output)
                 {
-                    output.Append(Encoding.Latin1.GetString(buffer, 0, read));
+                    output.Append(chars, 0, decoder.GetChars(buffer, 0, read, chars, 0));
                 }
             }
         }

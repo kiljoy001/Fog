@@ -53,6 +53,7 @@ coverage_test NinePSharp.Fog.Tests/NinePSharp.Fog.Tests.csproj json "$ROOT/.arti
 coverage_test NinePSharp.Fog.Server.Tests/NinePSharp.Fog.Server.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Namespaces.Tests/NinePSharp.Fog.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Auth.Tests/NinePSharp.Fog.Auth.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+coverage_test NinePSharp.Fog.Rc.Tests/NinePSharp.Fog.Rc.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
 step "gate self-tests"
@@ -104,6 +105,9 @@ if [[ $FULL -eq 1 ]]; then
   rm -rf .artifacts/stryker-fog-auth
   (cd NinePSharp.Fog.Auth.Tests && dotnet stryker --config-file ../stryker-config-fog-auth.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-auth --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-auth --min-score "$MIN_MUTATION"
+  rm -rf .artifacts/stryker-fog-rc
+  (cd NinePSharp.Fog.Rc.Tests && dotnet stryker --config-file ../stryker-config-fog-rc.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-rc --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-rc --min-score "$MIN_MUTATION"
   (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-control-client.json --reporter json --reporter progress --output ../.artifacts/stryker-control-client --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-control-client --min-score "$MIN_MUTATION"
 
