@@ -24,8 +24,13 @@ The bootstrap 9P session is disposable and separate from the retained logical
 session. Its msize is negotiated independently, at least 256, at most the normal
 host limit. Bootstrap fids/tags/afids never become logical fids/tags/afids.
 
-For users, extend `fog-auth-v1` to permit `Tauth.aname=aan` **on this bootstrap
-profile only**. All fields, exact-byte signing, proof limits and validation remain
+The user parts of this profile were written against `fog-auth-v1`, the signed-cell
+login that [Authentication.md](../fog-foundation/Authentication.md) has since replaced
+with dp9ik on the afid. They must be redesigned for dp9ik before user AAN sessions are
+supported; the node parts are unaffected.
+
+As written: for users, extend `fog-auth-v1` to permit `Tauth.aname=aan` **on this
+bootstrap profile only**. All fields, exact-byte signing, proof limits and validation remain
 as in Authentication.md, with `aname=aan` included in the signed body. A `fog`
 proof cannot attach `aan` or vice versa. The client's factotum policy must explicitly
 permit both purposes; do not broaden its key selection silently.

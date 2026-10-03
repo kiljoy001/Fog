@@ -3,7 +3,7 @@ Feature: Fog keeps its authentication database as 9front keyfs does
   The host is the auth server for its authdom. Its user database is served as the
   keyfs(4) two-level tree, /mnt/keys/{user}/{key,aeskey,pakhash,secret,log,status,
   expire,warnings}, with the semantics of 9front sys/src/cmd/auth/keyfs.c, so
-  auth/changeuser, auth/passwd and authsrv use it unchanged. The database file is
+  auth/changeuser and authsrv use it unchanged. The database file is
   sealed by a storage key held by the host's TPM, as keyfs's file is by the key in
   nvram. The goal is protecting the keys at rest: the seal has no PCR policy and makes
   no claim against a compromised host. Keys are compared with the Dp9ik package, whose

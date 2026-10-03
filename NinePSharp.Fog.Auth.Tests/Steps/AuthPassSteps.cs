@@ -8,7 +8,7 @@ using Xunit;
 namespace NinePSharp.Fog.Auth.Tests.Steps;
 
 [Binding]
-[Scope(Feature = "Users change their password and secret as 9front auth/passwd does")]
+[Scope(Feature = "Users change their password and secret as 9front passwd does")]
 public sealed class AuthPassSteps
 {
     private static readonly string ZeroBytePassword = Enumerable.Range(0, 10_000).Select(index => $"zero-byte-{index}")

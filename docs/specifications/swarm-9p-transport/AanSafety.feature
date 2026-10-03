@@ -17,7 +17,7 @@ Feature: Resumption cannot bypass authority or retain unlimited session state
       | another user's otherwise valid credentials |
       | a user proof for an internal node session  |
       | a previously accepted resume exchange      |
-      | an old fog-auth-v1 afid proof as a resume proof |
+      | a dp9ik afid authentication as a resume proof |
       | a claim for a different server boot        |
 
   @SW9P_AS02 @property

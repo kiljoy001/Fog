@@ -17,13 +17,15 @@ Version one has:
 
 - One operator, one explicitly configured control node, and explicitly enrolled
   worker nodes. The control node can also execute work.
-- User-owned factotum processes. The fog stores enrolled public keys, not users'
-  passwords or private signing keys. Secstore is optional client infrastructure.
-- Server-authenticated TLS for user connections; mutually authenticated TLS and
-  separately enrolled node identities for internal connections. All remote service
-  RPC is 9P; configured stock AAN framing sits between TLS and logical 9P.
-- Standard authentication fids for user proofs; no login HTTP endpoint, bearer
-  login token, private 9P opcode, or automatic dp9ik/p9sk1 fallback.
+- Fog is the authentication server of its auth domain, as a 9front auth server is:
+  keyfs holds users' keys sealed by the host's TPM, the ticket service speaks
+  authsrv's protocol, and 9P attaches authenticate with dp9ik on the afid. Users'
+  own factotums hold their passwords. Secstore is later work.
+- Plain 9P for users, as a 9front file server serves it; mutually authenticated TLS
+  and separately enrolled node identities for internal connections. All remote
+  service RPC is 9P; configured stock AAN framing sits between TLS and logical 9P.
+- Standard authentication fids with dp9ik; no login HTTP endpoint, bearer login
+  token, private 9P opcode, p9sk1 or DES.
 - Operator-controlled LibTab configuration, per-principal exported namespaces,
   resource-side authorization, and aggregate admission limits.
 - Disposable execution with bounded retained outcomes. No automatic failover,
@@ -42,8 +44,9 @@ guest programs and network clients are not. A signature is not remote attestatio
 
 | Owner | Responsibility |
 | --- | --- |
-| User's factotum | Select an approved key and sign a verified authentication statement |
-| Local 9P host | TLS, authentication fids, principal binding, bootstrap node admission, connection limits |
+| User's factotum | Hold the user's password and run p9any and dp9ik as the client |
+| Fog auth server | keyfs, the ticket service and password changes for the auth domain |
+| Local 9P host | Listeners, authentication fids, principal binding, bootstrap node admission, connection limits |
 | Client and host AAN transport | Bounded replay state, physical reconnect and same-session continuity, independent of grains |
 | Control node | Active policy, membership provider, admission reservations, job records, scheduling |
 | Resource host | Enforce effective resource grants, handle lifetime, current execution lease |
@@ -59,11 +62,12 @@ Orleans activation.
 
 | Design | Contract |
 | --- | --- |
-| [Authentication](Authentication.md) | Factotum proof profile, TLS identity, auth-fid byte protocol, enrollment |
+| [Authentication](Authentication.md) | keyfs, the ticket service, dp9ik on the afid, user and node attaches |
 | [Namespace policy](NamespacePolicy.md) | LibTab policy tables, roots, groups, rights, revocation and worker authority |
 | [Host lifecycle](HostLifecycle.md) | Bootstrap, membership boundary, scheduling, leases, restart and operations |
 
-The normative feature files are `Authentication.feature`,
+Authentication's executable features are listed in
+[Authentication.md](Authentication.md#verification). The other normative feature files are
 `NamespaceAuthorization.feature`, `PolicyLifecycle.feature`,
 `HostBootstrap.feature`, `AdmissionRecovery.feature`, and
 `FoundationIntegration.feature`. Stable scenario IDs start with `@FOG_`.
@@ -77,10 +81,9 @@ design only. The layout follows Plan 9 namespace(4): `/mnt/{app}` for running ap
 `/bin/{app}` for their modules and `/n/{name}` for remote hosts; there are no per-principal
 mount profiles.
 
-[Examples](examples) illustrate canonical challenge, node configuration and host
-status documents. Their repeated-byte nonces and certificate/key digests are
-non-operational fixtures, not deployable credentials, randomness or trust pins.
-They are not a complete policy bundle or a successful authentication transcript.
+[Examples](examples) illustrate node configuration and host status documents. Their
+certificate and key digests are non-operational fixtures, not deployable credentials
+or trust pins. They are not a complete policy bundle.
 
 ## Plan 9 reuse and deliberate differences
 
@@ -88,8 +91,8 @@ Local source references are relative to the repository root:
 
 | Reuse | Source | Adaptation |
 | --- | --- | --- |
-| Auth fids and attach matching | `../9front/sys/man/5/attach`, `sys/src/lib9p/auth.c` | Preserve fid lifecycle; replace the p9any/AuthInfo driver with the explicit proof verifier |
-| User-side signing | `../factotum-dp9ik/src/cmd/auth/factotum/monocypherproto.c` and `monokey.c` | Reuse `role=sigcell`; do not reinterpret `tpm9p-user-auth-v1` |
+| Auth fids and attach matching | `../9front/sys/man/5/attach`, `sys/src/lib9p/auth.c` | Preserve lib9p's afid lifecycle and errors; run factotum's p9any/dp9ik server role in-process |
+| Authentication server | `../9front/sys/src/cmd/auth/keyfs.c`, `authsrv.c`, `factotum/p9sk1.c` | Same protocols and files; DES disabled; database under ChaCha20-Poly1305 with a TPM-sealed key |
 | Namespace groups and construction | `../9front/sys/man/6/namespace`, existing `docs/plan9-namespace-semantics.md` | Build authorized views from existing mount/handle machinery, with LibTab configuration |
 | User/group and open permissions | `../9front/sys/man/6/users`, `sys/man/5/open` | Implement actual group membership; lib9p's small uid helper is not a complete group database |
 | Limited exports | `../9front/sys/man/4/exportfs` | Explicit roots and read-only projections; not a substitute for sandboxing |
@@ -106,31 +109,32 @@ These features must acquire real Reqnroll bindings as implementation proceeds.
 Parsing them successfully is syntax validation only. No skipped/no-op scenarios
 count as completion. Preserve the existing unit, property, fuzz and mutation gates:
 
-1. Unit/BDD: deterministic clocks and synchronization barriers, exact proof bytes,
-   known enrolled public keys, explicit policy generations, observable execution
+1. Unit/BDD: deterministic clocks and synchronization barriers, exact ticket and
+   authenticator bytes, known keyfs users, explicit policy generations, observable execution
    counts, permissions and resource ownership.
 2. Property: fragmented auth reads/writes; auth/attach/reset races; aliases and
    mount changes; generated policy intersections; concurrent reservations; lease
    renewal, expiry and stale completion sequences against small reference models.
-3. Fuzz: bounded LibTab/UTF-8/signed-cell inputs, duplicate fields/rows, algorithm
-   confusion, huge lengths, auth-fid misuse, hostile namespace and policy commands.
+3. Fuzz: bounded LibTab/UTF-8 inputs, ticket and password-request bytes, duplicate
+   fields/rows, huge lengths, auth-fid misuse, hostile namespace and policy commands.
    Assert no unauthorized attach/effect, privilege widening, quota overrun, leaked
    secret, or unbounded allocation, not just no crash.
-4. Mutation: retain the existing 90% threshold. Target principal/export matching,
-   signature verification, challenge consumption, permission intersections,
+4. Mutation: 100%, with timeouts treated as findings. Target principal/export matching,
+   ticket and authenticator checks, PAK key use, permission intersections,
    generations, deadlines, reservation accounting and cleanup. Investigate
    survivors; do not exclude these decisions to obtain a green run.
-5. Integration: real custom factotum, C/.NET LibTab agreement, real TLS and two
+5. Integration: a stock 9front terminal, C/.NET LibTab agreement, real TLS and two
    silos, the selected membership adapter, and a separately isolated runtime.
    Capture all service traffic and reject undeclared non-9P connections.
 
-Acceptance includes rejection of valid-but-wrong-context signatures. Cryptographic
-review of the complete new authentication profile is required before production;
-reuse of a signing primitive or passing conformance tests is not that review.
+Acceptance includes rejection of tickets and authenticators for the wrong challenge,
+server or user. Security review of the complete authentication design is required
+before production; reusing 9front's protocols or passing conformance tests is not
+that review.
 
 ## Implementation sequence and remaining bounded design work
 
-1. Prove actual factotum-to-.NET signed-cell verification and auth-fid integration.
+1. Authentication: done, see [Authentication.md](Authentication.md).
 2. Bind principals to resource permissions and private namespace groups.
 3. Implement and review AAN resume authentication for the selected stock framing
    beneath 9P, then verify live file-session recovery.

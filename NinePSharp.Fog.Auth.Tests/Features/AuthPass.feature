@@ -1,6 +1,6 @@
 @fog_authpass
-Feature: Users change their password and secret as 9front auth/passwd does
-  The auth server answers AuthPass as 9front authsrv's changepasswd does, for auth/passwd:
+Feature: Users change their password and secret as 9front passwd does
+  The auth server answers AuthPass as 9front authsrv's changepasswd does, for passwd(1):
   after an AuthPAK exchange for the uid alone, it sends an AuthTp ticket under that PAK key and
   takes password requests sealed with the ticket until one is accepted. A refusal names the
   client's address, as authsrv's raddr does. Changes are written to the keyfs. In passwords,

@@ -1,195 +1,204 @@
-# User-side factotum authentication
+# Authentication
 
-Status: proposed protocol profile, not an implemented or security-reviewed login.
+Status: implemented in `NinePSharp.Fog.Auth`, `NinePSharp.Fog.Namespaces` and
+`NinePSharp.Fog.Server`, with executable scenarios and an interoperability test against a
+stock 9front terminal. Not yet security-reviewed.
 
-## Transport and trust
+Fog is the authentication server of its own auth domain. It keeps users' keys as 9front's
+keyfs(4) does, issues tickets as 9front's authsrv (auth(8), protocol in authsrv(6)) does with `-N`, and authenticates 9P
+attaches with dp9ik on the afid as 9front's lib9p does with factotum(4). A 9front terminal
+logs in with its own factotum, `srv`, `mount` and `passwd`, unchanged. The 9front sources at
+`../9front` (`front` branch) define every wire format, file format and error string here
+unless this document says otherwise.
 
-The initial user profile is named `fog-auth-v1`, on standard `9P2000` protected by
-TLS 1.3. The direct profile carries 9P immediately inside TLS; the selected AAN
-extension carries stock AAN records inside TLS and reconstructs logical 9P from
-their payloads. It does not change the afid proof format. TLS completes before any
-AAN record or 9P request. Disable early application data. A configured
-server identity maps a `server` ID to an expected DNS identity and one or more
-explicitly pinned SHA-256 SubjectPublicKeyInfo digests. Verify the certificate
-identity, validity period and pin; pins are provisioned out of band, never learned
-from the authentication challenge. No plaintext or weaker-profile fallback.
+This replaces the earlier `fog-auth-v1` profile, which proposed signed LibTab challenges
+over TLS. That profile was never implemented.
 
-The user listener does not require a TLS client certificate: the factotum proof
-authenticates the user. This is a new explicit transport profile, not a weakening
-of the mutually authenticated internal-node profile in the transport specs.
-TLS terminates at the host that verifies the proof, not an untrusted forwarding
-proxy. Bootstrap server pins and local node credentials do not require grains.
+## Pieces
 
-V1 binds proofs to the authenticated server certificate plus server-side session
-state. This is endpoint binding, not the RFC 9266 TLS-exporter channel binding.
-It does not claim protection after an enrolled server's TLS private key or trusted
-host is compromised. Different enrolled nodes must not share TLS private keys.
-An exporter-based profile can be separately specified later; silently claiming a
-certificate hash is a unique TLS exporter is forbidden.
+| Piece | 9front counterpart | Implementation |
+| --- | --- | --- |
+| Key database | keyfs(4), `/adm/keys` | `KeyFsHost`, `KeyDatabase`, `KeyFsStore`, `StorageKeySeal` |
+| Ticket service | authsrv `-N`, auth(8) | `AuthServerHost`, `AuthServerConnection` |
+| Password change | passwd(1) against authsrv | `AuthServerConnection` (AuthPass) |
+| Afid authentication | lib9p `auth9p`, `authread`, `authwrite`, `authattach` with factotum's p9any/dp9ik server role | `AuthFidExport`, `P9anyServer` |
+| User attach | file server attach as the ticket's user | `FogNamespaceAttachResolver` |
+| User listener | a file server on `tcp!*!564` | `FogUserListener` |
 
-## Enrollment
+The dp9ik primitives (AuthPAK, form 1 tickets and authenticators, password requests) come
+from the `Dp9ik` package (`../dp9ik.net`), which is checked against drawterm's C code.
 
-An operator enrolls `(authdom, user, key_id, algorithm, public_key)` out of band.
-`algorithm` is exactly `libtab-eddsa-blake2b-v1`; its 32-byte public key verifies
-Monocypher `crypto_eddsa_*` signatures, not RFC 8032 Ed25519/SHA-512 signatures.
-Key bytes use canonical padded base64url. A principal may have several active
-keys during rotation. A key ID is unique within the policy bundle and never
-reassigned to different key bytes. The same public key cannot identify two
-different principals. Disabled principals and disabled keys cannot authenticate.
+## The key database
 
-User, domain, server and key identifiers are 1..64 ASCII characters from
-`A-Z a-z 0-9 . _ -`, excluding the complete names `.` and `..`. No case folding,
-Unicode normalization, domain suffix inference or authentication by display name.
-The listener has one configured auth domain. `Tauth.uname` is the enrolled user;
-`Tauth.aname` is exactly `fog` for logical job/resource access. The explicitly
-configured [AAN bootstrap profile](../fog-v1-profiles/AanSession.md) additionally
-permits `aan`, signed as that exact distinct export and usable only for bootstrap.
-Numeric attach identities do not substitute for this proof. V1's acceptance baseline
-does not require other 9P dialects.
+The database holds one record per user in keyfs's 89-byte layout: a NUL-terminated name of
+at most 27 bytes, the DES key, status, warnings, expiry, secret and AES key. A user is
+read and changed through keyfs's file tree, `/{user}/{key,aeskey,pakhash,secret,log,status,expire,warnings}`,
+with keyfs's semantics: disabled and expired users, the bad-attempt log with purgatory at
+every tenth failure, and keyfs's error strings.
 
-## Authentication-fid exchange
+The tree is served only on a Unix-domain socket, mode 0600, in the keyfs state directory.
+Whoever can open that socket administers every user, so the host account that runs Fog is
+the administrator. There is no remote administration.
 
-1. `Tauth` reserves an unused connection-local fid and returns `Rauth` with a
-   `QTAUTH` Qid. A used fid is rejected without disturbing its existing owner.
-   The server retains the requested user/export, policy generation and a monotonic
-   expiry. Pre-auth limits apply even to unknown users.
-2. Ordinary `Tread` operations on that afid return a pinned canonical LibTab
-   challenge with byte offsets. No `Topen` is required. Positive reads return
-   available challenge bytes, EOF only at its end; zero reads consume nothing.
-3. The client validates the complete challenge against local configuration and
-   the actual TLS connection, then asks its local factotum to sign its exact bytes.
-4. `Twrite` operations upload one proof document to the same afid. Successful
-   completion authenticates the afid, not a grain and not an arbitrary export.
-5. `Tattach` supplies that afid and exactly the same `uname` and `aname` to obtain
-   the authorized root. `NOFID`, incomplete authentication or a different user or
-   export is denied on the user listener. The principal comes from verification,
-   not from the raw attach string.
+On disk the records are sealed differently from 9front, whose keyfile is AES-CBC without
+integrity:
 
-The same verified afid can authorize repeated attaches for that user/export on
-that connection while valid, as in Plan 9. Each root fid gets an independent
-namespace group by default. Challenge consumption is single-use proof verification,
-not a prohibition on repeated authorized attaches. Clunking the afid prevents new
-attaches through it but does not alone revoke roots already attached through it.
-The challenge deadline applies until verification commits; the verified afid then
-shares the connection's fixed maximum session lifetime and policy epoch. Neither
-a new attach nor another authentication attempt resets that connection lifetime.
-Identity is attached to each verified afid/root, not to an arbitrary User field on
-the whole multiplexed connection.
+- The file is `FOGKEYS1`, a 12-byte nonce, and the records under ChaCha20-Poly1305 with
+  a 32-byte storage key, the magic as associated data. Any change to the file is detected.
+- The storage key is sealed to the host's TPM as a keyed-hash object under a transient
+  ECC P-256 primary in the owner hierarchy. No persistent TPM handle is used.
+- There is no PCR policy. The aim is to keep the key off the disk, not to detect host
+  tampering: if the host is compromised, so is Fog.
+- At creation keyfs gives out the storage key once as a 24-word BIP-39 phrase. The phrase
+  recovers the database on another TPM, and is checked against the database before
+  anything is sealed.
 
-Version reset, terminal session loss or host restart invalidates every old afid. A new
-authentication conversation gets fresh random identifiers even if a fid number
-is reused. No authentication or open-handle state migrates to another logical session.
-A direct connection terminates on disconnect. The proposed
-[AAN extension](../swarm-9p-transport/Aan.md) distinguishes physical carrier loss
-from logical-session loss; its authenticated resume binding is defined by fog-aan-v1
-and must be verified before retaining authority over a replacement carrier. This afid proof is not a
-resume credential, and suspension cannot extend any authentication deadline.
+## The ticket service
 
-## Exact documents and local signing
+`AuthServerHost` serves authsrv's ticket protocol over TCP for the keys keyfs holds:
 
-The challenge is one `fogauth-v1` schema and one explicit row, in this column order:
+- **AuthPAK** runs the PAK exchanges for the request's authid and hostid, or for the uid
+  alone, filling the slots authsrv calls akey, hkey and ukey. Each PAK key serves one
+  request.
+- **AuthTreq** returns an AuthTc and an AuthTs ticket, both form 1, under the PAK keys.
+  DES is disabled, as with `-N`. A request whose keys have no PAK key is refused with
+  "DES is disabled".
+- **Speaks-for.** A host may ask for tickets for another user only as the configured
+  speaks-for rules allow. They have `/lib/ndb/auth`'s meaning, including `*` and `!user`.
+- **Unusable users.** An unknown, disabled, expired or purgatory user gets a random key,
+  so the client receives a ticket that nobody can open, as authsrv's `mkkey` does.
+- **Lifetime.** A connection's whole lifetime is bounded, as authsrv's alarm bounds it
+  (10 minutes by default).
+- **AuthPass**, after a PAK exchange for the uid, sends an AuthTp ticket and accepts
+  password requests until one succeeds.
+  - Each request is checked as `changepasswd` and `okpasswd` check it: at least 8
+    characters after trailing spaces are removed, and not trivial forwards or backwards.
+  - A refusal names the client's address.
+  - Success clears the user's bad attempts.
 
-| Column | Meaning |
+The service listens where it is configured. A 9front client finds it through ndb's
+`authdom=… auth=…` entry. The `auth` value may be a full dial string such as
+`tcp!host!port`, since `authdial` leaves a complete address unchanged.
+
+## Afid authentication
+
+`AuthFidExport` wraps a 9P export. It is configured with an auth id (the keyfs user whose
+key the server holds, as a 9front file server's factotum holds its hostowner's key) and an
+auth domain.
+
+1. **Tauth** opens an afid with a QTAUTH qid, from the connection's fid space. A fid in use
+   is a "duplicate fid". An empty uname is refused.
+2. **Reads and writes on the afid** speak factotum's p9any server role:
+   - The offer is `dp9ik@{authdom}` followed by a NUL, without p9any's `v.2` prefix, as a
+     9front server sends it. p9sk1 is never offered.
+   - The dp9ik exchange is p9sk1.c's server role: the client's challenge, an AuthPAK
+     ticket request with the server's PAK value, the PAK value from the auth server, the
+     AuthTs ticket with an AuthAc authenticator, and the server's AuthAs authenticator.
+     The ticket must be form 1 and the challenges must match.
+   - As in factotum, a failed write leaves the exchange where it was, so the client can
+     write again.
+3. **Errors follow lib9p.**
+   - A read the count cannot hold is still consumed and fails with "authread count too
+     small".
+   - Every failed read is "authrpc botch".
+   - A write in the wrong phase is "phase error …" with factotum's phase name.
+   - Where lib9p would report a stale errstr, Fog says what happened: "no uname", "rpc too
+     small", "authentication already done".
+4. **Tattach** with an afid follows `authattach`:
+   - "unknown fid", "not an auth fid", "auth uname mismatch: … vs …" and "auth aname
+     mismatch: … vs …".
+   - An afid whose exchange is unfinished fails as a zero-count `authread`.
+   - A finished afid whose ticket names another client user fails with "auth uname
+     mismatch".
+5. **An authenticated afid** serves any number of matching attaches on its connection
+   until it is clunked or removed.
+   - Tversion and closing the connection end every afid.
+   - An afid is not a file: walk, open, create, stat, wstat and remove fail as lib9p's do
+     for a server without those operations, and remove also clunks it.
+   - Afids count against the connection's fid limit.
+
+An attach without an afid passes to the export underneath unchanged.
+
+## Who attaches
+
+`FogNamespaceAttachResolver` resolves two kinds of attach to a copy of the shared root, the
+one namespace every principal shares.
+
+| Attach | Principal | Transport |
+| --- | --- | --- |
+| With an afid | The client user of the afid's ticket | `FogUserListener`: plain 9P, as a 9front file server listens |
+| Without an afid | The enrolled node named by its certificate | `FogNodeListener`: TLS 1.3 with client certificates |
+
+The attach name must be `/` or empty. 9front's `srv` and `mount` attach with an empty name.
+
+The principal is what the authorization policy grants to; see
+[NamespacePolicy.md](NamespacePolicy.md). Users and nodes share one name space of
+principals, as Plan 9 has one name space of users, so an operator must not give a keyfs
+user the name of an enrolled node.
+
+dp9ik authenticates both ends and gives each a session secret. The user listener does not
+use that secret to encrypt, exactly as a 9front file server on port 564 does not. Traffic
+between a user and Fog is therefore readable on the network. A confidential user transport
+(9front's `tlssrv`/`tlsclient`, or AAN inside TLS) is future work and must be negotiated
+explicitly, never by fallback.
+
+## Names
+
+A keyfs user name is 1 to 27 bytes of UTF-8 (ANAMELEN − 1, for parity with 9front tickets).
+It has no space, `/`, control character or invalid UTF-8, and is not `.` or `..`.
+Comparison is exact: no case folding or normalization.
+
+Policy identifiers have their own grammar: 1 to 64 ASCII characters from
+`A-Z a-z 0-9 . _ -`, excluding `.` and `..`. A user who is to be granted anything must have
+a name that satisfies both.
+
+## Unfinished work
+
+Nothing waits without a bound. Closing a session, Tversion and Tflush cancel in-flight
+requests and wait at most the drain limit (5 seconds by default).
+
+- **Abandoned requests.** A request still running after the drain limit is abandoned. It is
+  answered with Rerror `unknown` and logged with an unknown outcome, because its effect
+  may still happen; flush(5) asks the same of a client whose flushed request had no reply.
+- **Connections.** A connection that has ended releases its socket and admission slot
+  within the drain limit.
+- **Listeners.** A listener being disposed force-closes connections still open after twice
+  the drain limit.
+
+## Verification
+
+Executable scenarios:
+
+| Feature | Covers |
 | --- | --- |
-| `server` | Configured server ID, checked by the client |
-| `authdom` | Listener authentication domain, checked by the client |
-| `user` | Requested enrolled principal |
-| `aname` | Exactly `fog` |
-| `session` | 32 fresh CSPRNG bytes, lowercase hexadecimal, unique to this 9P session |
-| `afid` | Unsigned decimal authentication-fid number |
-| `nonce` | 32 fresh CSPRNG bytes, lowercase hexadecimal, unique to this attempt |
-| `server_cert_sha256` | Lowercase hexadecimal SHA-256 of the actual TLS leaf certificate DER bytes |
-| `policy_epoch` | Active positive policy generation |
-| `ttl_ms` | Configured positive challenge lifetime, informational to the client |
+| `NinePSharp.Fog.Auth.Tests/Features/KeyFs.feature`, `KeyFsProtocol.feature` (`@FOG_KEYFS_`) | Records, files, sealing, recovery, the admin socket, 9P behaviour |
+| `AuthSrv.feature` (`@FOG_AUTHSRV_`) | PAK exchanges, tickets, speaks-for, unusable users, lifetime |
+| `AuthPass.feature` (`@FOG_AUTHPASS_`) | Password and secret changes, `okpasswd`, refusals, retries |
+| `AuthFid.feature` (`@FOG_AUTHFID_`) | p9any/dp9ik on the afid, lib9p's afid rules and errors |
+| `NinePSharp.Fog.Namespaces.Tests/Features/NamespaceViews.feature` (`@FOG_VIEW_012`, `@FOG_VIEW_013`) | User attach, empty attach name |
+| `NinePSharp.Fog.Server.Tests/Features/Draining.feature` (`@FOG_DRAIN_`) | Bounded drains and unknown outcomes |
+| `NinePSharp.Fog.Namespaces.Tests/Features/NineFrontInterop.feature` (`@FOG_INTEROP_`) | A stock 9front terminal in QEMU: `srv` and mount with dp9ik, grants, writes, a wrong password retried through factotum, `passwd` |
 
-The session and nonce are independent. The server measures expiry using its own
-monotonic timer starting at Tauth, not a client-supplied date or timer reset by IO.
-The client computes the certificate digest from its own TLS peer certificate,
-checks all identity/export fields, validates the strict schema, and only then
-requests signing. It must not pass arbitrary server-provided bytes blindly to
-factotum. It chooses a locally approved key for this service and principal.
+The interoperability scenarios run when `FOG_9FRONT_ISO` names a 9front amd64 ISO and
+`qemu-system-x86_64` is installed. The ISO is changed only by rewriting `plan9.ini` for a
+serial console.
 
-Existing local factotum conversation:
+Each auth project has a 100% Stryker mutation gate (`stryker-config-fog-auth.json`, and
+the configs for Fog.Namespaces, Fog.Server, the Orleans server and the transport), with
+timeouts treated as findings.
 
-```text
-start proto=monocypher role=sigcell user=alice
-write <exact validated fogauth-v1 document bytes>
-read
-```
+## Not yet done
 
-The angle-bracket line describes a binary-length RPC payload, not text to send
-literally. Production key selection must also constrain the enrolled key ID/public
-key and service through approved factotum attributes; `user=alice` alone is merely
-illustrative. Respect `needkey`/confirmation/vault errors; do not fall back to
-extracting a seed. The local socket must be protected by the user's OS permissions.
-No request to the fog opens or exports the user's factotum namespace.
+- A security review of the whole design.
+- Secstore, and running these services in the WASM runtime.
+- A confidential user transport, and binding AAN resumption for users to dp9ik. The AAN
+  documents still describe the retired `fog-auth-v1` binding.
 
-The result cell is carried as the `proof` field of one `fogproof-v1` row, with
-columns `key_id`, `proof`, in that order; `proof` is declared `SIGNED`. The key ID
-only selects an already enrolled verification key for the requested principal.
-Its label confers no authority. The signed body must equal the exact retained
-challenge bytes; verify the signature over those bytes, not over reparsed or
-reserialized input. The server never accepts a public key supplied in the proof.
-The `fogauth-v1` body provides protocol separation; a `tpm9p-user-auth-v1` proof
-is not accepted even if its signature and user/domain are valid.
+## Sources
 
-Documents use the same strict UTF-8, LF, nil/entity and duplicate-field checks as
-the job contract. Canonical files end in a single empty line. Reject unknown
-columns, extra schemas/rows, raw NUL, and noncanonical encodings before verification.
-Reject duplicate rows before LibTab deduplication. Challenge size is at most 2048
-bytes; proof document at most 4096 bytes. The resulting signed cell fits the existing
-4096-byte libauth RPC reply buffer including RPC status overhead. Actual factotum
-integration must test this bound rather than assuming arbitrary-size signing works.
-
-Proof writes use contiguous offsets starting at zero. Split UTF-8 sequences may be
-buffered within the total byte bound; decode strictly after document completion.
-The schema/row empty-line separators identify the end of the one-row document;
-the final empty line seals it. Extra bytes in that Twrite or any later proof write
-are rejected. Intermediate Rwrites acknowledge only buffered bytes. The final
-Rwrite succeeds only after validation, signature verification, current enrollment
-check and atomic challenge consumption succeed. Failed or malformed completed
-proofs invalidate the attempt; retry uses a new Tauth. Offsets, gaps, overlaps and
-overflow are checked before mutation. Treads continue to return the same challenge,
-not a changing status stream.
-
-A lost final Rwrite can leave authentication uncertain. Try the known afid in
-Tattach on the same connection; do not replay a potentially accepted proof write.
-Tflush observes the usual reply barrier. A flush that wins before verification
-commit invalidates the attempt; one after commit does not undo authentication.
-The commit and flush winner is serialized per afid. No reply follows its Rflush.
-
-## Limits, failures and remaining server policy
-
-Configure finite connection, afid, outstanding-authentication, buffered-proof,
-signature-check concurrency, attempt-rate and authentication-time limits. Fair
-admission and per-source limits precede expensive verification. Unknown users,
-unknown keys and bad signatures return the same bounded `auth-failed` error;
-logs may distinguish causes for operators without storing proofs or secrets.
-Abandoned attempts are reclaimed without a client clunk.
-
-Authenticated sessions have a finite maximum lifetime that IO does not extend.
-Expiry denies further operations and tears down handles, but does not cancel an
-already admitted job merely because its submitting client expired. Explicit policy
-revocation has the additional job behavior in NamespacePolicy.md. New authentication
-is required for a replacement logical session; the owner's retained job ID remains
-usable if policy still permits it. AAN cannot turn expired authentication into a
-resumable session or preserve handles across explicit revocation.
-
-Public-key enrollment, proof verification and access grants are distinct. Successful
-authentication alone never grants node membership, `/transport/orleans`, provider
-installation, unrestricted namespace changes, or access to another user's jobs.
-
-## Sources and compatibility review
-
-- [Plan 9 auth and attach](https://9p.io/magic/man2html/5/attach): afid exchange and
-  reuse for matching attaches. This profile defines its payload, not new 9P messages.
-- `../9front/sys/src/lib9p/auth.c`: lifecycle reference, not a drop-in driver for
-  signed cells; it expects p9any/AuthInfo protocol completion.
-- `../factotum-dp9ik/src/cmd/auth/factotum/{monocypherproto,monokey,tpm9p}.c`:
-  actual signing algorithm, signed-cell encoding and existing domain-separated proof.
-- [Monocypher signatures](https://monocypher.org/manual/eddsa): BLAKE2b EdDSA is
-  distinct from Ed25519. Cross-language vectors must exercise the exact algorithm.
-
-The protected TLS connection supplies server authentication and confidentiality;
-the signature proves possession of an enrolled user key. No TPM backing is implied
-by the name `tpm9p`; hardware-bound keys need their own explicitly supported profile.
+- `../9front/sys/src/cmd/auth/keyfs.c`, `authsrv.c`, `passwd.c`, `lib/okpasswd.c`
+- `../9front/sys/src/cmd/auth/factotum/p9any.c`, `p9sk1.c`, `rpc.c`
+- `../9front/sys/src/lib9p/auth.c`, `srv.c`
+- `../9front/sys/src/libauthsrv/authdial.c`, `convM2T.c`, `convM2A.c`, `form1.c`
+- `../9front/sys/src/cmd/srv.c`; manual pages keyfs(4), auth(8), authsrv(6), factotum(4),
+  passwd(1), ndb(6), attach(5), flush(5)

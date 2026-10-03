@@ -160,7 +160,8 @@ owner. Additional user principals require separate resumable sessions; otherwise
 resuming one principal could recover another principal's fids. Ordinary direct 9P
 multi-principal attach semantics are not removed.
 
-The current `fog-auth-v1` statement authenticates an afid, not a resume request.
+A dp9ik afid authentication (see the foundation's Authentication.md) authenticates
+an attach, not a resume request.
 Do not reinterpret or replay it to authorize a new carrier. The session profile's
 fogaan-v1 statement binds the fresh bootstrap carrier, original logical session
 and server identity; its node proof is bound to the enrolled TLS peer. TLS alone
