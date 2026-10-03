@@ -47,6 +47,7 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     private int walkLength;
     private string? text;
     private IReadOnlyList<string>? names;
+    private Dictionary<(string Session, uint Afid), string>? afidUsers;
     private uint retainedFid;
     private string retainedUser = string.Empty;
 
@@ -131,6 +132,9 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     [When(@"^""(\w+)"" attaches with attach name ""([^""]*)""$")]
     public Task AttachesWithName(string user, string aname)
         => AttachAs($"{user}-aname", user, user, 8192, expectSuccess: false, aname);
+
+    [When(@"^""(\w+)"" attaches with the empty attach name$")]
+    public Task AttachesWithEmptyName(string user) => AttachAs(user, user, user, 8192, expectSuccess: true, string.Empty);
 
     [When(@"^the certificate of ""(\w+)"" attaches as ""(\w+)""$")]
     public Task CertificateAttachesAs(string certificate, string uname)
@@ -292,6 +296,27 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     [When("the session lifetime elapses")]
     public void LifetimeElapses() => time.Advance(limits.SessionLifetime);
 
+    [Given("the export takes users from the afid layer")]
+    public void GivenAfidUsers() => afidUsers = new();
+
+    [Given("the export takes no users")]
+    public void GivenNoUsers()
+    {
+    }
+
+    [When(@"^""(\w+)"" attaches as a user authenticated on afid (\d+)$")]
+    public async Task AttachesAsUser(string user, uint afid)
+    {
+        await AttachWithAfid(user, afid, authenticated: true);
+        sessions[user].RootQid = Assert.IsType<Rattach>(response).Qid;
+    }
+
+    [When(@"^""(\w+)"" attaches with afid (\d+) that the afid layer has not authenticated$")]
+    public Task AttachesWithUnauthenticatedAfid(string user, uint afid) => AttachWithAfid(user, afid, authenticated: false);
+
+    [Then(@"^the attach is for the user ""(\w+)""$")]
+    public void AttachIsFor(string user) => Assert.Equal(user, attaches!.Descriptors[^1].User);
+
     [Given("the export behind the TLS node listener")]
     public void GivenListener()
     {
@@ -416,7 +441,8 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
             nodes!,
             authority!,
             resources,
-            new OrleansResourceAncestry(registered)));
+            new OrleansResourceAncestry(registered),
+            afidUsers is null ? null : (session, afid) => afidUsers.GetValueOrDefault((session, afid))));
         var inner = new DistributedNamespaceDispatcher(new DistributedNamespaceOperations(grains, resources), attaches);
         export = new BoundedNamespaceExport(inner, limits, time);
         return export;
@@ -440,6 +466,19 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
         }
     }
 
+    private async Task AttachWithAfid(string user, uint afid, bool authenticated)
+    {
+        var session = new Session(null, $"{user}-user-{Guid.NewGuid():N}");
+        sessions[user] = session;
+        if (authenticated)
+        {
+            afidUsers![(session.Id, afid)] = user;
+        }
+
+        Assert.IsType<Rversion>(await Send(user, NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 8192, "9P2000"))));
+        response = await Send(user, NinePMessage.NewMsgTattach(new Tattach(0, 1, afid, user, "/")));
+    }
+
     private async Task<object> Send(string sessionName, NinePMessage message)
     {
         Session session = sessions[sessionName];
@@ -447,7 +486,7 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
             session.Id,
             session.Tagged(message),
             NinePDialect.NineP2000,
-            certificates[session.Certificate]);
+            session.Certificate is null ? null : certificates[session.Certificate]);
     }
 
     private async Task<uint> OpenPath(string user, string path, byte mode)
@@ -503,12 +542,12 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
     private string GroupOf(string user)
         => attaches!.Descriptors.Single(descriptor => descriptor.User == user).ProcessGroupId;
 
-    private sealed class Session(string certificate, string id)
+    private sealed class Session(string? certificate, string id)
     {
         private ushort tag;
         private uint fid = 1;
 
-        internal string Certificate { get; } = certificate;
+        internal string? Certificate { get; } = certificate;
 
         internal string Id { get; } = id;
 

@@ -153,3 +153,27 @@ Feature: Enrolled nodes attach to their own copy of the shared namespace
   Scenario: No attach name other than the shared root reaches the export
     When "worker" attaches with attach name "keys"
     Then the attach fails
+
+  @FOG_VIEW_012
+  Scenario: The empty attach name 9front's srv and mount send names the shared root
+    When "worker" attaches with the empty attach name
+    Then "worker" reads "/mnt/mail/inbox" as "hello mail"
+
+  @FOG_VIEW_013
+  Scenario: A user authenticated on an afid attaches without a certificate and sees their grants
+    Given the export takes users from the afid layer
+    When "worker" attaches as a user authenticated on afid 9
+    Then the attach is for the user "worker"
+    When "worker" lists "/mnt"
+    Then the listing contains exactly "mail"
+
+  @FOG_VIEW_013
+  Scenario Outline: An attach with an afid is denied unless the afid layer authenticated it
+    Given <export>
+    When "worker" attaches with afid 9 that the afid layer has not authenticated
+    Then the attach fails
+
+    Examples:
+      | export                                     |
+      | the export takes users from the afid layer |
+      | the export takes no users                  |

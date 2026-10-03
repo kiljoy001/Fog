@@ -169,6 +169,25 @@ public sealed class BoundedNamespaceExportTests
         Assert.IsType<Rwalk>(await Send(export, "a", Walk(17, 1, 3, "x")));
     }
 
+    // lib9p's sauth allocates the afid from the same fid pool as attach and walk.
+    [Fact]
+    public async Task AfidsAreCountedAsFidsOnceAuthAnswers()
+    {
+        var inner = new FakeDispatcher();
+        var export = new BoundedNamespaceExport(inner, Limits);
+        await Version(export, "a");
+        Assert.IsType<Rerror>(await Send(export, "a", Auth(1, 1)));
+        inner.AcceptAuth = true;
+        Assert.IsType<Rauth>(await Send(export, "a", Auth(2, 1)));
+        Assert.IsType<Rattach>(await Send(export, "a", Attach(3, 2)));
+        Assert.IsType<Rwalk>(await Send(export, "a", Walk(4, 2, 3, "x")));
+        Assert.Equal("limit", Error(await Send(export, "a", Auth(5, 4))));
+        Assert.Equal("limit", Error(await Send(export, "a", Walk(6, 2, 4, "x"))));
+        Assert.Equal(2, inner.Forwarded(typeof(Tauth)));
+        Assert.IsType<Rclunk>(await Send(export, "a", NinePMessage.NewMsgTclunk(new Tclunk(7, 1))));
+        Assert.IsType<Rauth>(await Send(export, "a", Auth(8, 4)));
+    }
+
     [Fact]
     public async Task OneRequestIsAdmittedAtATimeButAFlushStillHasItsSlot()
     {
@@ -212,6 +231,9 @@ public sealed class BoundedNamespaceExportTests
     private static NinePMessage Attach(ushort tag, uint fid)
         => NinePMessage.NewMsgTattach(new Tattach(tag, fid, NinePConstants.NoFid, "worker", "/"));
 
+    private static NinePMessage Auth(ushort tag, uint afid)
+        => NinePMessage.NewMsgTauth(new Tauth(tag, afid, "glenda", "/"));
+
     private static NinePMessage Walk(ushort tag, uint fid, uint newFid, params string[] names)
         => NinePMessage.NewMsgTwalk(new Twalk(tag, fid, newFid, names));
 
@@ -230,6 +252,8 @@ public sealed class BoundedNamespaceExportTests
         internal bool PartialWalks { get; set; }
 
         internal bool FailClunk { get; set; }
+
+        internal bool AcceptAuth { get; set; }
 
         internal bool Throw { get; set; }
 
@@ -286,6 +310,7 @@ public sealed class BoundedNamespaceExportTests
             {
                 Tversion version => Version(version),
                 Tattach attach => new Rattach(attach.Tag, new Qid(QidType.QTDIR, 0, 1)),
+                Tauth auth when AcceptAuth => new Rauth(auth.Tag, new Qid(QidType.QTAUTH, 0, 1)),
                 Twalk walk => new Rwalk(walk.Tag, Enumerable.Repeat(new Qid(QidType.QTDIR, 0, 1), PartialWalks ? walk.Wname.Length - 1 : walk.Wname.Length).ToArray()),
                 Tclunk clunk => FailClunk ? new Rerror(clunk.Tag, "unknown fid") : new Rclunk(clunk.Tag),
                 Tremove remove => new Rerror(remove.Tag, "permission denied"),

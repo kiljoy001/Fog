@@ -10,9 +10,9 @@ using NinePSharp.Namespaces.Orleans.Server;
 namespace NinePSharp.Fog.Namespaces;
 
 /// <summary>
-/// Resolves an enrolled node's attach: the principal comes only from its certificate, its
-/// namespace is a process-group grain copied from the shared root, and its session's resource
-/// operations are that principal's authorization view.
+/// Resolves an attach to a process-group grain copied from the shared root, whose resource
+/// operations are the principal's authorization view. Without an afid the principal is the enrolled
+/// node its certificate names; with one, it is the user the afid layer authenticated on that afid.
 /// </summary>
 public sealed class FogNamespaceAttachResolver : IDistributedNamespaceAttachResolver
 {
@@ -22,6 +22,7 @@ public sealed class FogNamespaceAttachResolver : IDistributedNamespaceAttachReso
     private readonly FogAuthorizationAuthority authority;
     private readonly IResourceDataOperations resources;
     private readonly IResourceAncestry ancestry;
+    private readonly Func<string, uint, string?>? authenticatedUser;
     private long nextProcess;
 
     public FogNamespaceAttachResolver(
@@ -30,7 +31,8 @@ public sealed class FogNamespaceAttachResolver : IDistributedNamespaceAttachReso
         FogNodePolicy nodes,
         FogAuthorizationAuthority authority,
         IResourceDataOperations resources,
-        IResourceAncestry ancestry)
+        IResourceAncestry ancestry,
+        Func<string, uint, string?>? authenticatedUser = null)
     {
         this.grains = grains ?? throw new ArgumentNullException(nameof(grains));
         this.root = root ?? throw new ArgumentNullException(nameof(root));
@@ -38,6 +40,7 @@ public sealed class FogNamespaceAttachResolver : IDistributedNamespaceAttachReso
         this.authority = authority ?? throw new ArgumentNullException(nameof(authority));
         this.resources = resources ?? throw new ArgumentNullException(nameof(resources));
         this.ancestry = ancestry ?? throw new ArgumentNullException(nameof(ancestry));
+        this.authenticatedUser = authenticatedUser;
     }
 
     /// <inheritdoc/>
@@ -49,20 +52,24 @@ public sealed class FogNamespaceAttachResolver : IDistributedNamespaceAttachReso
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (request.Afid != NinePConstants.NoFid || request.Aname != "/")
+
+        // 9front's srv and mount attach with an empty name.
+        if (request.Aname is not ("/" or ""))
         {
             throw new FogException("denied");
         }
 
-        FogPrincipal principal = nodes.Attach(request.Uname, certificate);
+        string principal = request.Afid == NinePConstants.NoFid
+            ? nodes.Attach(request.Uname, certificate).Node
+            : authenticatedUser?.Invoke(sessionId, request.Afid) ?? throw new FogException("denied");
         string group = $"{root.ProcessGroupId}/attach/{Guid.NewGuid():N}";
         await grains.GetGrain<IVProcessGroupGrain>(root.ProcessGroupId).CloneToAsync(group);
         var view = new AuthorizedResourceOperations(
             resources,
             new SharedRootAncestry(ancestry, await root.MountParentsAsync()),
             authority.Current,
-            principal.Node,
+            principal,
             () => authority.Generation);
-        return new DistributedNamespaceAttach(group, Interlocked.Increment(ref nextProcess), principal.Node, root.Root) { Resources = view };
+        return new DistributedNamespaceAttach(group, Interlocked.Increment(ref nextProcess), principal, root.Root) { Resources = view };
     }
 }

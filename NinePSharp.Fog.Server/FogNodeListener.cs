@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -11,20 +10,12 @@ using NinePSharp.Server;
 namespace NinePSharp.Fog.Server;
 
 /// <summary>Explicit direct TLS 1.3 node listener; never enables plaintext or claims AAN support.</summary>
-public sealed class FogNodeListener : IAsyncDisposable
+public sealed class FogNodeListener : FogListener
 {
-    private readonly TcpListener listener;
     private readonly X509Certificate2 certificate;
     private readonly FogNodePolicy policy;
     private readonly NinePConnectionProcessor processor;
-    private readonly int maximumConnections;
     private readonly TimeSpan handshakeTimeout;
-    private readonly TimeSpan sessionLifetime;
-    private readonly ConcurrentDictionary<TcpClient, Task> connections = new();
-    private readonly CancellationTokenSource stopping = new();
-    private readonly object lifecycleGate = new();
-    private Task? accepting;
-    private Task? disposal;
 
     public FogNodeListener(
         IPEndPoint endpoint,
@@ -35,6 +26,41 @@ public sealed class FogNodeListener : IAsyncDisposable
         int maximumConnections,
         TimeSpan handshakeTimeout,
         TimeSpan sessionLifetime)
+        : base(endpoint, logger, Checked(certificate, maximumConnections, handshakeTimeout, sessionLifetime), sessionLifetime)
+    {
+        this.certificate = certificate;
+        this.policy = policy;
+        this.handshakeTimeout = handshakeTimeout;
+        processor = new NinePConnectionProcessor(logger, dispatcher);
+    }
+
+    private protected override async Task ServeAsync(TcpClient client, CancellationToken lifetime)
+    {
+        await using var tls = new SslStream(client.GetStream(), false, (_, peer, _, _) =>
+            peer is X509Certificate2 supplied && policy.AuthenticateCertificate(supplied));
+        using var handshake = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        handshake.CancelAfter(handshakeTimeout);
+        await tls.AuthenticateAsServerAsync(
+            new SslServerAuthenticationOptions
+        {
+            ServerCertificate = certificate,
+            ClientCertificateRequired = true,
+            EnabledSslProtocols = SslProtocols.Tls13,
+            AllowRenegotiation = false,
+            AllowTlsResume = false,
+        },
+            handshake.Token);
+        if (tls.RemoteCertificate is not X509Certificate2 peer || !policy.AuthenticateCertificate(peer))
+        {
+            throw new AuthenticationException();
+        }
+
+        var session = new NinePConnectionProcessor.ClientSession();
+        session.State = TransportSessionOps.withTransport(session.Dialect, peer, session.State);
+        await processor.ProcessStreamAsync(tls, client.Client.RemoteEndPoint, session, lifetime);
+    }
+
+    private static int Checked(X509Certificate2 certificate, int maximumConnections, TimeSpan handshakeTimeout, TimeSpan sessionLifetime)
     {
         ArgumentNullException.ThrowIfNull(certificate);
         if (!certificate.HasPrivateKey || maximumConnections <= 0 || handshakeTimeout <= TimeSpan.Zero || sessionLifetime <= TimeSpan.Zero)
@@ -42,129 +68,6 @@ public sealed class FogNodeListener : IAsyncDisposable
             throw new ArgumentException("Invalid TLS node listener configuration.");
         }
 
-        this.certificate = certificate;
-        this.policy = policy;
-        this.maximumConnections = maximumConnections;
-        this.handshakeTimeout = handshakeTimeout;
-        this.sessionLifetime = sessionLifetime;
-        listener = new TcpListener(endpoint);
-        processor = new NinePConnectionProcessor(logger, dispatcher);
-    }
-
-    public IPEndPoint LocalEndpoint => (IPEndPoint)listener.LocalEndpoint;
-
-    public void Start()
-    {
-        lock (lifecycleGate)
-        {
-            ObjectDisposedException.ThrowIf(disposal is not null, this);
-            if (accepting is not null)
-            {
-                throw new InvalidOperationException("Listener already started.");
-            }
-
-            listener.Start();
-            accepting = AcceptAsync();
-        }
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        lock (lifecycleGate)
-        {
-            return new ValueTask(disposal ??= DisposeCoreAsync());
-        }
-    }
-
-    internal static TcpClient ConfigureAcceptedClient(TcpClient client)
-    {
-        client.NoDelay = true;
-        return client;
-    }
-
-    private async Task AcceptAsync()
-    {
-        try
-        {
-            while (true)
-            {
-                TcpClient client = ConfigureAcceptedClient(await listener.AcceptTcpClientAsync(stopping.Token));
-                if (connections.Count >= maximumConnections)
-                {
-                    client.Dispose();
-                }
-                else
-                {
-                    var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                    connections.TryAdd(client, finished.Task);
-                    _ = ServeAsync(client, finished);
-                }
-            }
-        }
-        catch (OperationCanceledException) when (stopping.IsCancellationRequested)
-        {
-        }
-
-        // Disposal between accepts: a stopped TcpListener rejects the next accept before observing the token.
-        catch (InvalidOperationException) when (stopping.IsCancellationRequested)
-        {
-        }
-    }
-
-    private async Task ServeAsync(TcpClient client, TaskCompletionSource finished)
-    {
-        try
-        {
-            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
-            lifetime.CancelAfter(sessionLifetime);
-            await using var tls = new SslStream(client.GetStream(), false, (_, peer, _, _) =>
-                peer is X509Certificate2 supplied && policy.AuthenticateCertificate(supplied));
-            using var handshake = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
-            handshake.CancelAfter(handshakeTimeout);
-            await tls.AuthenticateAsServerAsync(
-                new SslServerAuthenticationOptions
-            {
-                ServerCertificate = certificate,
-                ClientCertificateRequired = true,
-                EnabledSslProtocols = SslProtocols.Tls13,
-                AllowRenegotiation = false,
-                AllowTlsResume = false,
-            },
-                handshake.Token);
-            if (tls.RemoteCertificate is not X509Certificate2 peer || !policy.AuthenticateCertificate(peer))
-            {
-                throw new AuthenticationException();
-            }
-
-            var session = new NinePConnectionProcessor.ClientSession();
-            session.State = TransportSessionOps.withTransport(session.Dialect, peer, session.State);
-            await processor.ProcessStreamAsync(tls, client.Client.RemoteEndPoint, session, lifetime.Token);
-        }
-        catch (Exception exception) when (exception is IOException or AuthenticationException or OperationCanceledException or ObjectDisposedException or SocketException)
-        {
-            // No unauthenticated request, certificate data, proof or private exception is sent on the wire.
-        }
-        finally
-        {
-            client.Dispose();
-            connections.TryRemove(client, out _);
-            finished.TrySetResult();
-        }
-    }
-
-    private async Task DisposeCoreAsync()
-    {
-        await stopping.CancelAsync();
-        listener.Stop();
-
-        // The accept loop must end before the snapshot: a client accepted during disposal is still awaited,
-        // and the loop never reads the token of a disposed source.
-        if (accepting is not null)
-        {
-            await accepting;
-        }
-
-        await Task.WhenAll(connections.Values);
-        stopping.Dispose();
+        return maximumConnections;
     }
 }

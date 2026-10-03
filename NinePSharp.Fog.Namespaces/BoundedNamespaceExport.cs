@@ -129,6 +129,7 @@ public sealed class BoundedNamespaceExport : INinePFSDispatcher, INinePSessionLi
 
     private static uint? NewFid(ISerializable request) => request switch
     {
+        Tauth auth => auth.Afid,
         Tattach attach => attach.Fid,
         Twalk walk when walk.NewFid != walk.Fid => walk.NewFid,
         _ => null,
@@ -138,6 +139,9 @@ public sealed class BoundedNamespaceExport : INinePFSDispatcher, INinePSessionLi
     {
         switch (request)
         {
+            case Tauth auth when response is Rauth:
+                session.Fids.Add(auth.Afid);
+                break;
             case Tattach attach when response is Rattach:
                 session.Fids.Add(attach.Fid);
                 break;

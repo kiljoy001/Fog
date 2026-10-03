@@ -31,10 +31,10 @@ public sealed class ListenerBoundaryTests
         using var extra = new TcpClient();
         await extra.ConnectAsync(endpoint, timeout.Token);
         Assert.Equal(0, await extra.GetStream().ReadAsync(new byte[1], timeout.Token).AsTask().WaitAsync(TimeSpan.FromMilliseconds(250)));
-        Task? accepting = (Task?)typeof(FogNodeListener)
+        Task? accepting = (Task?)typeof(FogListener)
             .GetField("accepting", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(listener);
-        var connections = (System.Collections.IDictionary)typeof(FogNodeListener)
+        var connections = (System.Collections.IDictionary)typeof(FogListener)
             .GetField("connections", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(listener)!;
         await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(250));
@@ -98,7 +98,7 @@ public sealed class ListenerBoundaryTests
     {
         using var fixture = new ControlFixture();
         var listener = Create(fixture, fixture.ServerCertificate);
-        var source = (CancellationTokenSource)typeof(FogNodeListener)
+        var source = (CancellationTokenSource)typeof(FogListener)
             .GetField("stopping", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(listener)!;
 
@@ -116,7 +116,7 @@ public sealed class ListenerBoundaryTests
         using var stranger = ControlFixture.Certificate("stranger.test");
         await using var listener = Create(fixture, fixture.ServerCertificate);
         listener.Start();
-        var connections = (System.Collections.IDictionary)typeof(FogNodeListener)
+        var connections = (System.Collections.IDictionary)typeof(FogListener)
             .GetField("connections", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(listener)!;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -150,14 +150,14 @@ public sealed class ListenerBoundaryTests
         using var fixture = new ControlFixture();
         var listener = Create(fixture, fixture.ServerCertificate);
         const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var socket = (TcpListener)typeof(FogNodeListener).GetField("listener", Private)!.GetValue(listener)!;
-        var stopping = (CancellationTokenSource)typeof(FogNodeListener).GetField("stopping", Private)!.GetValue(listener)!;
+        var socket = (TcpListener)typeof(FogListener).GetField("listener", Private)!.GetValue(listener)!;
+        var stopping = (CancellationTokenSource)typeof(FogListener).GetField("stopping", Private)!.GetValue(listener)!;
 
         // The order DisposeCoreAsync uses, observed by a loop that is between two accepts.
         socket.Start();
         await stopping.CancelAsync();
         socket.Stop();
-        var loop = (Task)typeof(FogNodeListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
+        var loop = (Task)typeof(FogListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
         await loop.WaitAsync(TimeSpan.FromSeconds(1));
         Assert.True(loop.IsCompletedSuccessfully);
         await listener.DisposeAsync();
@@ -171,10 +171,10 @@ public sealed class ListenerBoundaryTests
         const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var loop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var connection = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var stopping = (CancellationTokenSource)typeof(FogNodeListener).GetField("stopping", Private)!.GetValue(listener)!;
-        typeof(FogNodeListener).GetField("accepting", Private)!.SetValue(listener, loop.Task);
+        var stopping = (CancellationTokenSource)typeof(FogListener).GetField("stopping", Private)!.GetValue(listener)!;
+        typeof(FogListener).GetField("accepting", Private)!.SetValue(listener, loop.Task);
         using var accepted = new TcpClient();
-        var connections = (System.Collections.Concurrent.ConcurrentDictionary<TcpClient, Task>)typeof(FogNodeListener)
+        var connections = (System.Collections.Concurrent.ConcurrentDictionary<TcpClient, Task>)typeof(FogListener)
             .GetField("connections", Private)!.GetValue(listener)!;
 
         Task disposal = listener.DisposeAsync().AsTask();
@@ -204,7 +204,7 @@ public sealed class ListenerBoundaryTests
         const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
 
         // A listener that was never started is not a disposal race; its failure must surface.
-        var loop = (Task)typeof(FogNodeListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
+        var loop = (Task)typeof(FogListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
         await Assert.ThrowsAsync<InvalidOperationException>(() => loop.WaitAsync(TimeSpan.FromSeconds(1)));
         await listener.DisposeAsync();
     }
