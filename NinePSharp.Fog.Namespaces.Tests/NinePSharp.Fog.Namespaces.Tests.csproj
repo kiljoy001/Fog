@@ -21,6 +21,12 @@
   <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog.Namespaces\NinePSharp.Fog.Namespaces.csproj" />
     <ProjectReference Include="..\NinePSharp.Client\NinePSharp.Client.csproj" />
+    <ProjectReference Include="..\NinePSharp.Fog.Auth\NinePSharp.Fog.Auth.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\NinePSharp.Fog.Auth.Tests\Support\SoftwareTpm.cs" Link="Support\SoftwareTpm.cs" />
+    <Compile Include="..\NinePSharp.Fog.Auth.Tests\Support\KeyFsClient.cs" Link="Support\KeyFsClient.cs" />
   </ItemGroup>
 
   <ItemGroup>
