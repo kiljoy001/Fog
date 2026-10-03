@@ -1,4 +1,6 @@
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NinePSharp.Constants;
 using NinePSharp.Interfaces;
 using NinePSharp.Messages;
@@ -17,15 +19,16 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
     private readonly FogNodePolicy policy;
     private readonly FogNinePLimits limits;
     private readonly TimeProvider time;
+    private readonly ILogger logger;
 
-    public FogNinePDispatcher(FogFileTree tree, FogNodePolicy policy, FogNinePLimits limits, TimeProvider? time = null)
+    public FogNinePDispatcher(FogFileTree tree, FogNodePolicy policy, FogNinePLimits limits, TimeProvider? time = null, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(limits);
         if (limits.Sessions <= 0 || limits.FidsPerSession <= 0 || limits.RequestsPerSession <= 0 ||
             limits.MessageSize < 256 || limits.MessageSize > int.MaxValue || limits.SnapshotBytesPerSession <= 0 ||
-            limits.SnapshotLifetime <= TimeSpan.Zero || limits.SessionLifetime <= TimeSpan.Zero)
+            limits.SnapshotLifetime <= TimeSpan.Zero || limits.SessionLifetime <= TimeSpan.Zero || limits.Drain <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(limits));
         }
@@ -34,6 +37,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         this.policy = policy;
         this.limits = limits;
         this.time = time ?? TimeProvider.System;
+        this.logger = logger ?? NullLogger.Instance;
     }
 
     public async Task<object> DispatchAsync(string sessionId, NinePMessage message, NinePDialect dialect, X509Certificate2? certificate = null)
@@ -101,6 +105,13 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
                     DispatchCore(sessionId, session, message, certificate, pending.Cancellation.Token);
                 }
 
+                // A request abandoned by a drain is answered now; its operation may still finish later.
+                if (await Task.WhenAny(operation, pending.Abandoned.Task) != operation)
+                {
+                    logger.LogWarning("Request {Tag} was abandoned after the drain limit; its outcome is unknown.", request.Tag);
+                    throw new FogException("unknown");
+                }
+
                 object response = await operation;
                 if (response is ISerializable serializable && serializable.Size > session.MSize)
                 {
@@ -150,27 +161,6 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         }
 
         await ResetAsync(sessionId, session);
-    }
-
-    private static async Task<object> FlushAsync(Session session, Tflush request, CancellationToken cancellation)
-    {
-        Task completion = Task.CompletedTask;
-        lock (session.Gate)
-        {
-            if (request.Tag == request.OldTag)
-            {
-                throw new FogException("invalid-request");
-            }
-
-            if (session.Pending.TryGetValue(request.OldTag, out var operation))
-            {
-                operation.Cancellation.Cancel();
-                completion = operation.Completion.Task;
-            }
-        }
-
-        await completion.WaitAsync(cancellation);
-        return new Rflush(request.Tag);
     }
 
     private static void DropSnapshot(Session session, Fid fid)
@@ -236,6 +226,31 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         NinePMessage.MsgTwstat m => m.Item, _ => null,
     };
 
+    private async Task<object> FlushAsync(Session session, Tflush request, CancellationToken cancellation)
+    {
+        Pending? flushed = null;
+        lock (session.Gate)
+        {
+            if (request.Tag == request.OldTag)
+            {
+                throw new FogException("invalid-request");
+            }
+
+            if (session.Pending.TryGetValue(request.OldTag, out var operation))
+            {
+                operation.Cancellation.Cancel();
+                flushed = operation;
+            }
+        }
+
+        if (flushed is not null)
+        {
+            await DrainAsync([flushed]).WaitAsync(cancellation);
+        }
+
+        return new Rflush(request.Tag);
+    }
+
     private async Task<object> VersionAsync(string id, Tversion request)
     {
         Session session;
@@ -295,7 +310,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
             }
         }
 
-        await Task.WhenAll(pending.Select(operation => operation.Completion.Task));
+        await DrainAsync(pending);
         lock (session.Gate)
         {
             foreach (var fid in session.Fids.Values)
@@ -306,6 +321,25 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
             session.Fids.Clear();
             session.SnapshotBytes = 0;
             tree.CloseSession(id);
+        }
+    }
+
+    // Waits at most the drain limit for cancelled requests, then abandons those still running.
+    private async Task DrainAsync(IReadOnlyCollection<Pending> operations)
+    {
+        Task all = Task.WhenAll(operations.Select(operation => operation.Completion.Task));
+        try
+        {
+            await all.WaitAsync(limits.Drain);
+        }
+        catch (TimeoutException)
+        {
+            foreach (Pending operation in operations)
+            {
+                operation.Abandoned.TrySetResult();
+            }
+
+            await all;
         }
     }
 
@@ -597,5 +631,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         internal CancellationTokenSource Cancellation { get; } = new();
 
         internal TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal TaskCompletionSource Abandoned { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

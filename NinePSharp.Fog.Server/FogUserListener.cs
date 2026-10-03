@@ -14,17 +14,17 @@ public sealed class FogUserListener : FogListener
 {
     private readonly NinePConnectionProcessor processor;
 
-    public FogUserListener(IPEndPoint endpoint, INinePFSDispatcher dispatcher, ILogger logger, int maximumConnections, TimeSpan sessionLifetime)
-        : base(endpoint, logger, Checked(maximumConnections, sessionLifetime), sessionLifetime)
+    public FogUserListener(IPEndPoint endpoint, INinePFSDispatcher dispatcher, ILogger logger, int maximumConnections, TimeSpan sessionLifetime, TimeSpan? drain = null)
+        : base(endpoint, logger, Checked(maximumConnections, sessionLifetime, drain), sessionLifetime, drain)
     {
-        processor = new NinePConnectionProcessor(logger, dispatcher);
+        processor = new NinePConnectionProcessor(logger, dispatcher) { Drain = Drain };
     }
 
     private protected override Task ServeAsync(TcpClient client, CancellationToken lifetime) =>
         processor.ProcessStreamAsync(client.GetStream(), client.Client.RemoteEndPoint, new NinePConnectionProcessor.ClientSession(), lifetime);
 
-    private static int Checked(int maximumConnections, TimeSpan sessionLifetime) =>
-        maximumConnections <= 0 || sessionLifetime <= TimeSpan.Zero
+    private static int Checked(int maximumConnections, TimeSpan sessionLifetime, TimeSpan? drain) =>
+        maximumConnections <= 0 || sessionLifetime <= TimeSpan.Zero || drain <= TimeSpan.Zero
             ? throw new ArgumentException("Invalid user listener configuration.")
             : maximumConnections;
 }

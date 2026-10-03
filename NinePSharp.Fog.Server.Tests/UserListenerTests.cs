@@ -18,11 +18,14 @@ public sealed class UserListenerTests
     [Fact]
     public void ConnectionsAndLifetimeMustBePositive()
     {
-        foreach ((int connections, TimeSpan lifetime) in new[] { (0, TimeSpan.FromMinutes(1)), (1, TimeSpan.Zero) })
+        foreach ((int connections, TimeSpan lifetime, TimeSpan drain) in new[]
+        {
+            (0, TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(1)), (1, TimeSpan.Zero, TimeSpan.FromSeconds(1)), (1, TimeSpan.FromMinutes(1), TimeSpan.Zero),
+        })
         {
             Assert.Equal(
                 "Invalid user listener configuration.",
-                Assert.Throws<ArgumentException>(() => Create(new Recorder(), connections, lifetime)).Message);
+                Assert.Throws<ArgumentException>(() => new FogUserListener(new IPEndPoint(IPAddress.Loopback, 0), new Recorder(), NullLogger.Instance, connections, lifetime, drain)).Message);
         }
     }
 
@@ -79,7 +82,7 @@ public sealed class UserListenerTests
     }
 
     private static FogUserListener Create(INinePFSDispatcher dispatcher, int connections, TimeSpan lifetime, ILogger? logger = null) =>
-        new(new IPEndPoint(IPAddress.Loopback, 0), dispatcher, logger ?? NullLogger.Instance, connections, lifetime);
+        new(new IPEndPoint(IPAddress.Loopback, 0), dispatcher, logger ?? NullLogger.Instance, connections, lifetime, TimeSpan.FromMilliseconds(200));
 
     private sealed class Recorder : INinePFSDispatcher, INinePSessionLifecycle
     {

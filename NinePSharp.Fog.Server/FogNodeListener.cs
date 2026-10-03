@@ -25,13 +25,14 @@ public sealed class FogNodeListener : FogListener
         ILogger logger,
         int maximumConnections,
         TimeSpan handshakeTimeout,
-        TimeSpan sessionLifetime)
-        : base(endpoint, logger, Checked(certificate, maximumConnections, handshakeTimeout, sessionLifetime), sessionLifetime)
+        TimeSpan sessionLifetime,
+        TimeSpan? drain = null)
+        : base(endpoint, logger, Checked(certificate, maximumConnections, handshakeTimeout, sessionLifetime, drain), sessionLifetime, drain)
     {
         this.certificate = certificate;
         this.policy = policy;
         this.handshakeTimeout = handshakeTimeout;
-        processor = new NinePConnectionProcessor(logger, dispatcher);
+        processor = new NinePConnectionProcessor(logger, dispatcher) { Drain = Drain };
     }
 
     private protected override async Task ServeAsync(TcpClient client, CancellationToken lifetime)
@@ -60,10 +61,10 @@ public sealed class FogNodeListener : FogListener
         await processor.ProcessStreamAsync(tls, client.Client.RemoteEndPoint, session, lifetime);
     }
 
-    private static int Checked(X509Certificate2 certificate, int maximumConnections, TimeSpan handshakeTimeout, TimeSpan sessionLifetime)
+    private static int Checked(X509Certificate2 certificate, int maximumConnections, TimeSpan handshakeTimeout, TimeSpan sessionLifetime, TimeSpan? drain)
     {
         ArgumentNullException.ThrowIfNull(certificate);
-        if (!certificate.HasPrivateKey || maximumConnections <= 0 || handshakeTimeout <= TimeSpan.Zero || sessionLifetime <= TimeSpan.Zero)
+        if (!certificate.HasPrivateKey || maximumConnections <= 0 || handshakeTimeout <= TimeSpan.Zero || sessionLifetime <= TimeSpan.Zero || drain <= TimeSpan.Zero)
         {
             throw new ArgumentException("Invalid TLS node listener configuration.");
         }

@@ -20,6 +20,7 @@ public sealed class ControlLimitsTests
             valid with { Sessions = 0 }, valid with { FidsPerSession = 0 }, valid with { RequestsPerSession = 0 },
             valid with { MessageSize = 255 }, valid with { MessageSize = (uint)int.MaxValue + 1 },
             valid with { SnapshotBytesPerSession = 0 }, valid with { SnapshotLifetime = TimeSpan.Zero }, valid with { SessionLifetime = TimeSpan.Zero },
+            valid with { Drain = TimeSpan.Zero },
         })
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new FogNinePDispatcher(fixture.Tree, fixture.Policy, invalid));
@@ -122,7 +123,7 @@ public sealed class ControlLimitsTests
     public void ListenerRejectsInvalidLimitsBeforeOpeningASocket()
     {
         using var fixture = new ControlFixture();
-        foreach (var limits in new[] { (0, 1, 1), (1, 0, 1), (1, 1, 0) })
+        foreach (var limits in new[] { (0, 1, 1, 1), (1, 0, 1, 1), (1, 1, 0, 1), (1, 1, 1, 0) })
         {
             Assert.Throws<ArgumentException>(() => new FogNodeListener(
                 new IPEndPoint(IPAddress.Loopback, 0),
@@ -132,7 +133,8 @@ public sealed class ControlLimitsTests
                 NullLogger.Instance,
                 limits.Item1,
                 TimeSpan.FromSeconds(limits.Item2),
-                TimeSpan.FromSeconds(limits.Item3)));
+                TimeSpan.FromSeconds(limits.Item3),
+                TimeSpan.FromSeconds(limits.Item4)));
         }
     }
 

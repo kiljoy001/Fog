@@ -329,7 +329,8 @@ public sealed class NamespaceViewSteps : IAsyncDisposable
             NullLogger.Instance,
             4,
             TimeSpan.FromSeconds(5),
-            TimeSpan.FromMinutes(1));
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromMilliseconds(200));
         listener.Start();
     }
 

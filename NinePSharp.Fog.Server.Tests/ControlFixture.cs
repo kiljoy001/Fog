@@ -145,7 +145,8 @@ internal sealed class ControlFixture : IDisposable
             NullLogger.Instance,
             4,
             TimeSpan.FromSeconds(5),
-            TimeSpan.FromMinutes(1));
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromMilliseconds(200));
         listener.Start();
         return listener;
     }

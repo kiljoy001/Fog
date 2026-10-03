@@ -122,7 +122,8 @@ public sealed class ControlTlsTests
             NullLogger.Instance,
             1,
             TimeSpan.FromSeconds(5),
-            TimeSpan.FromSeconds(10));
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMilliseconds(200));
         listener.Start();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
         await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(

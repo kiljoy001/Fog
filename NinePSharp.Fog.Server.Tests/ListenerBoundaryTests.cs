@@ -128,9 +128,12 @@ public sealed class ListenerBoundaryTests
             Assert.True(await RejectedAsync(tls, presentCertificate ? stranger : null, timeout.Token));
         }
 
-        while (connections.Count != 0)
+        using (var released = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
         {
-            await Task.Delay(10, timeout.Token);
+            while (connections.Count != 0)
+            {
+                await Task.Delay(10, released.Token);
+            }
         }
 
         // One admission slot: a leaked rejected connection would make this enrolled handshake fail.
@@ -226,7 +229,8 @@ public sealed class ListenerBoundaryTests
             NullLogger.Instance,
             1,
             TimeSpan.FromSeconds(5),
-            TimeSpan.FromSeconds(20));
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(200));
         listener.Start();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var client = new TcpClient();
@@ -275,7 +279,8 @@ public sealed class ListenerBoundaryTests
             NullLogger.Instance,
             1,
             handshake ?? TimeSpan.FromSeconds(5),
-            lifetime ?? TimeSpan.FromSeconds(20));
+            lifetime ?? TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(200));
 
     private sealed class LapsingClock(DateTime expired, int validReads) : TimeProvider
     {

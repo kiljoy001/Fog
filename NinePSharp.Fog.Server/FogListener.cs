@@ -8,8 +8,10 @@ namespace NinePSharp.Fog.Server;
 
 /// <summary>
 /// Accepts 9P connections up to a limit, gives each a bounded lifetime, and on disposal stops
-/// accepting and waits for every connection to end. Subclasses serve one connection. A connection
-/// that fails other than by its transport ending is logged.
+/// accepting and waits for its connections to end: each has the drain limit to finish its requests,
+/// and the listener waits as long again before force-closing it, leaving its outcome unknown.
+/// Subclasses serve one connection. A connection that fails other than by its transport ending is
+/// logged.
 /// </summary>
 public abstract class FogListener : IAsyncDisposable
 {
@@ -17,14 +19,16 @@ public abstract class FogListener : IAsyncDisposable
     private readonly ILogger logger;
     private readonly int maximumConnections;
     private readonly TimeSpan sessionLifetime;
+    private readonly TimeSpan drain;
     private readonly ConcurrentDictionary<TcpClient, Task> connections = new();
     private readonly CancellationTokenSource stopping = new();
     private readonly object lifecycleGate = new();
     private Task? accepting;
     private Task? disposal;
 
-    private protected FogListener(IPEndPoint endpoint, ILogger logger, int maximumConnections, TimeSpan sessionLifetime)
+    private protected FogListener(IPEndPoint endpoint, ILogger logger, int maximumConnections, TimeSpan sessionLifetime, TimeSpan? drain)
     {
+        this.drain = drain ?? TimeSpan.FromSeconds(5);
         this.logger = logger;
         this.maximumConnections = maximumConnections;
         this.sessionLifetime = sessionLifetime;
@@ -32,6 +36,9 @@ public abstract class FogListener : IAsyncDisposable
     }
 
     public IPEndPoint LocalEndpoint => (IPEndPoint)listener.LocalEndpoint;
+
+    // How long a connection that has ended waits for its requests; the listener waits twice that on disposal.
+    private protected TimeSpan Drain => drain;
 
     public void Start()
     {
@@ -129,7 +136,21 @@ public abstract class FogListener : IAsyncDisposable
             await accepting;
         }
 
-        await Task.WhenAll(connections.Values);
+        try
+        {
+            await Task.WhenAll(connections.Values).WaitAsync(2 * drain);
+        }
+        catch (TimeoutException)
+        {
+            TcpClient[] unfinished = connections.Keys.ToArray();
+            foreach (TcpClient client in unfinished)
+            {
+                client.Dispose();
+            }
+
+            logger.LogWarning("{Count} connections had not finished and were force-closed; their outcome is unknown.", unfinished.Length);
+        }
+
         stopping.Dispose();
     }
 }
