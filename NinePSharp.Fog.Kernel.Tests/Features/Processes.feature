@@ -235,6 +235,7 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
       | writes      |
       | closes      |
       | duplicates  |
+      | seeks       |
 
   @FOG_KERNEL_007
   Scenario: A write inside a file replaces the bytes it covers

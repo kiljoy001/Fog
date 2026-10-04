@@ -9,6 +9,14 @@ internal static class Errors
     public const string NoChild = "no living children";
     public const string BadExec = "exec header invalid";
     public const string BadArg = "bad arg in system call";
+    public const string BadUseFd = "inappropriate use of fd";
+    public const string Permission = "permission denied";
+    public const string NoFd = "no free file descriptors";
+    public const string NoCreate = "mounted directory forbids creation";
+    public const string Mount = "inconsistent mount";
+
+    // lib9p's, for ramfs.
+    public const string CreateNonDirectory = "create in non-directory";
 
     private const int ErrMax = 128;
 

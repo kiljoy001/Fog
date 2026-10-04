@@ -16,7 +16,7 @@ internal sealed class RamFs : IResourceDataOperations
         this.provider = provider;
         this.device = device;
         this.owner = owner;
-        nodes.Add(0, new Node(device, null, (uint)NinePConstants.FileMode9P.DMDIR | 0777, owner));
+        nodes.Add(0, new Node(device, null, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_111, owner));
     }
 
     public string Provider => provider;
@@ -59,7 +59,7 @@ internal sealed class RamFs : IResourceDataOperations
 
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
     {
-        uint permissions = directoryEntry ? (uint)NinePConstants.FileMode9P.DMDIR | 0777 : 0666;
+        uint permissions = directoryEntry ? (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_111 : 0b110_110_110;
         lock (gate)
         {
             return ValueTask.FromResult(Add(directory.Identity.Path, name, permissions, owner));
@@ -125,8 +125,20 @@ internal sealed class RamFs : IResourceDataOperations
         }
     }
 
+    // ramfs removes a file opened ORCLOSE as its fid goes, unless it is the root or has children.
     public ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
-        => ValueTask.CompletedTask;
+    {
+        lock (gate)
+        {
+            Node node = nodes[openHandle.Resource.Identity.Path];
+            if ((openHandle.Mode & NinePConstants.ORCLOSE) != 0 && node.Parent is { } parent && node.Children.Count == 0)
+            {
+                nodes[parent].Children.Remove(openHandle.Resource.Identity.Path);
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
 
     // Removed nodes stay reachable through handles that still name them, as lib9p's refcounted Files do.
     public ValueTask RemoveAsync(ResourceHandle resource, ResourceOpenHandle? openHandle, ResourceOperationContext context, CancellationToken cancellationToken)

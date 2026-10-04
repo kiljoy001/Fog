@@ -10,7 +10,7 @@ namespace NinePSharp.Fog.Kernel.Tests.Steps;
 [Scope(Feature = "Programs run as Plan 9 processes on Fog's namespace")]
 public sealed class ProcessSteps
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan Bound = KernelDriver.Bound;
     private readonly List<string> seen = new();
     private readonly OpenCounter files = new();
     private Process? init;
@@ -72,7 +72,7 @@ public sealed class ProcessSteps
     [Given(@"^the directory ""(.*)"" holds the file ""(.*)""$")]
     public async Task GivenDirectoryHolds(string directory, string name)
     {
-        await init!.CloseAsync(await init.CreateAsync(directory, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0775));
+        await init!.CloseAsync(await init.CreateAsync(directory, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
         await WriteAsync($"{directory}/{name}", string.Empty);
     }
 
@@ -146,7 +146,7 @@ public sealed class ProcessSteps
     public Task WhenForksWriting(string with, string flag, string contents, string path)
         => ForkAsync(with, flag, async child =>
         {
-            int fd = await child.CreateAsync(path, NinePConstants.OWRITE, 0666);
+            int fd = await child.CreateAsync(path, NinePConstants.OWRITE, 0b110_110_110);
             await child.WriteAsync(fd, Encoding.UTF8.GetBytes(contents));
             await child.CloseAsync(fd);
         });
@@ -180,7 +180,7 @@ public sealed class ProcessSteps
                     await init!.OpenAsync(path, NinePConstants.OREAD);
                     break;
                 case "creates":
-                    await init!.CreateAsync(path, NinePConstants.OWRITE, 0666);
+                    await init!.CreateAsync(path, NinePConstants.OWRITE, 0b110_110_110);
                     break;
                 case "removes":
                     await init!.RemoveAsync(path);
@@ -196,7 +196,7 @@ public sealed class ProcessSteps
         }
     }
 
-    [When(@"^a process (reads|writes|closes|duplicates) descriptor 7$")]
+    [When(@"^a process (reads|writes|closes|duplicates|seeks) descriptor 7$")]
     public async Task WhenUsesDescriptor(string call)
     {
         Func<Task> use = call switch
@@ -204,7 +204,8 @@ public sealed class ProcessSteps
             "reads" => () => init!.ReadAsync(7, 1).AsTask(),
             "writes" => () => init!.WriteAsync(7, new byte[1]).AsTask(),
             "closes" => () => init!.CloseAsync(7).AsTask(),
-            _ => () => init!.DupAsync(7, -1).AsTask(),
+            "duplicates" => () => init!.DupAsync(7, -1).AsTask(),
+            _ => () => init!.SeekAsync(7, 0, 0).AsTask(),
         };
         failure = (await Assert.ThrowsAsync<SyscallException>(use)).Message;
     }
@@ -311,7 +312,7 @@ public sealed class ProcessSteps
 
     private async Task WriteAsync(string path, string contents)
     {
-        int fd = await init!.CreateAsync(path, NinePConstants.OWRITE, 0775);
+        int fd = await init!.CreateAsync(path, NinePConstants.OWRITE, 0b111_111_101);
         await init.WriteAsync(fd, Encoding.UTF8.GetBytes(contents));
         await init.CloseAsync(fd);
     }

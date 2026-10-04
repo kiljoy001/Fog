@@ -17,26 +17,38 @@ public sealed class Process
     private readonly FogKernel kernel;
     private readonly VProcess process;
     private readonly Process? parent;
-    private readonly LocalNamespaceDataPlane plane;
-    private readonly Plan9FileSyscalls calls;
+    private readonly ProcessDevices devices;
+    private LocalNamespaceDataPlane plane;
+    private Plan9FileSyscalls calls;
     private int children;
 
-    internal Process(FogKernel kernel, VProcess process, Process? parent, RamFs environment, string text)
+    internal Process(FogKernel kernel, VProcess process, Process? parent, RamFs environment, string text, string user)
     {
         this.kernel = kernel;
         this.process = process;
         this.parent = parent;
         Environment = environment;
+        Dup = new DupDevice(process, kernel.User);
+        Cons = new ConsDevice(this, kernel.User);
         Text = text;
-        plane = new LocalNamespaceDataPlane(process.ProcessGroup.MountTable, new ProcessDevices(this, kernel.Files));
-        calls = new Plan9FileSyscalls(process, plane, () => kernel.Context(Pid));
+        User = user;
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes);
+        (plane, calls) = Bind();
     }
 
     public long Pid => process.Id;
 
     public string Text { get; private set; }
 
-    internal RamFs Environment { get; }
+    public string User { get; internal set; }
+
+    internal RamFs Environment { get; private set; }
+
+    internal DupDevice Dup { get; }
+
+    internal ConsDevice Cons { get; }
+
+    internal long ParentPid => process.ParentId ?? 0;
 
     public async ValueTask<int> OpenAsync(string path, int mode)
     {
@@ -47,6 +59,18 @@ public sealed class Process
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
             throw await NotFoundAsync(path);
+        }
+        catch (DupOpenException dup)
+        {
+            return await OpenDescriptorAsync(dup.Descriptor, mode);
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            throw new SyscallException(Errors.NoFd);
         }
     }
 
@@ -60,29 +84,76 @@ public sealed class Process
         {
             throw await NotFoundAsync(path);
         }
+        catch (DupOpenException dup)
+        {
+            return await OpenDescriptorAsync(dup.Descriptor, mode);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.CreateNotPermitted)
+        {
+            throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.NoCreate));
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotDirectory)
+        {
+            throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.CreateNonDirectory));
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            throw new SyscallException(Errors.NoFd);
+        }
     }
 
-    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int fd, int count)
+    // newfd2: both ends get descriptors, or neither does.
+    public async ValueTask<(int First, int Second)> PipeAsync()
     {
+        var (first, second) = kernel.Pipes.Create();
+        int fd = await OpenPipeAsync(first);
         try
         {
-            return await calls.ReadAsync(fd, (uint)count);
+            return (fd, await OpenPipeAsync(second));
+        }
+        catch (SyscallException)
+        {
+            await CloseAsync(fd);
+            throw;
+        }
+    }
+
+    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int fd, int count, CancellationToken cancellationToken = default)
+    {
+        CheckMode(fd, NinePConstants.OREAD);
+        try
+        {
+            return await calls.ReadAsync(fd, (uint)count, cancellationToken);
         }
         catch (ArgumentException)
         {
             throw new SyscallException(Errors.BadFd);
         }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
+        }
     }
 
-    public async ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data)
+    public async ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
     {
+        CheckMode(fd, NinePConstants.OWRITE);
         try
         {
-            return (int)await calls.WriteAsync(fd, data);
+            return (int)await calls.WriteAsync(fd, data, cancellationToken);
         }
         catch (ArgumentException)
         {
             throw new SyscallException(Errors.BadFd);
+        }
+        catch (PipeClosedException)
+        {
+            // The note's default action, until processes can catch notes.
+            throw new ExitException("sys: write on closed pipe");
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
         }
     }
 
@@ -114,12 +185,63 @@ public sealed class Process
         NamespaceChannel file = await ResolveAsync(path);
         try
         {
-            await plane.RemoveAsync(file, null, kernel.Context(Pid), CancellationToken.None);
+            await plane.RemoveAsync(file, null, kernel.Context(Pid, User), CancellationToken.None);
         }
         catch (IOException error)
         {
             throw new SyscallException(error.Message);
         }
+    }
+
+    public async ValueTask<Stat> StatAsync(string path)
+    {
+        ResourceStat stat = await plane.StatAsync(await ResolveAsync(path), CancellationToken.None);
+        int size = 49 + new[] { stat.Name, stat.User, stat.Group, stat.LastModifier }.Sum(Encoding.UTF8.GetByteCount);
+        return new Stat((ushort)size, 0, 0, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
+    }
+
+    public async ValueTask<long> SeekAsync(int fd, long offset, int whence)
+    {
+        try
+        {
+            return await calls.SeekAsync(fd, offset, (Plan9SeekWhence)whence);
+        }
+        catch (ArgumentException)
+        {
+            throw new SyscallException(Errors.BadFd);
+        }
+    }
+
+    public async ValueTask BindAsync(string name, string old, MountFlags flags)
+    {
+        try
+        {
+            await new NamespaceSyscalls(devices).BindAsync(process, name, old, flags);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
+        {
+            throw await NotFoundAsync(await ResolvesAsync(name) ? old : name);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.MountTypeMismatch)
+        {
+            throw new SyscallException(Errors.Mount);
+        }
+    }
+
+    public async ValueTask RforkAsync(RforkFlags flags)
+    {
+        if ((flags & (RforkFlags.Mem | RforkFlags.Nowait)) != 0)
+        {
+            throw new SyscallException(Errors.BadArg);
+        }
+
+        Validate(flags);
+
+        // Without its flags, each group is shared, which leaves it as it is.
+        await kernel.Table.RforkDescriptorsAsync(Pid, DescriptorMode(flags));
+        kernel.Table.RforkNamespace(Pid, NamespaceMode(flags));
+        (plane, calls) = Bind();
+        Environment = EnvironmentFor(flags);
     }
 
     public async ValueTask<int> DupAsync(int fd, int target)
@@ -150,24 +272,9 @@ public sealed class Process
 
     public long Fork(RforkFlags flags, Func<Process, Task> body)
     {
-        if ((flags & (RforkFlags.Envg | RforkFlags.Cenvg)) == (RforkFlags.Envg | RforkFlags.Cenvg))
-        {
-            throw new SyscallException(Errors.BadArg);
-        }
-
-        if ((flags & ~(RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Envg | RforkFlags.Cenvg)) != 0)
-        {
-            throw new NotSupportedException($"rfork flags {flags} are not implemented");
-        }
-
-        VProcess forked = kernel.Table.Fork(
-            Pid,
-            NamespaceForkMode.Share,
-            descriptorMode: (flags & RforkFlags.Fdg) != 0 ? DescriptorForkMode.Copy : DescriptorForkMode.Share);
-        RamFs environment = (flags & RforkFlags.Envg) != 0 ? Environment.Copy()
-            : (flags & RforkFlags.Cenvg) != 0 ? kernel.NewEnvironment()
-            : Environment;
-        var child = new Process(kernel, forked, this, environment, Text);
+        Validate(flags);
+        VProcess forked = kernel.Table.Fork(Pid, NamespaceMode(flags), descriptorMode: DescriptorMode(flags));
+        var child = new Process(kernel, forked, this, EnvironmentFor(flags), Text, User);
         Interlocked.Increment(ref children);
 
         _ = Task.Run(() => child.RunAsync(body));
@@ -289,6 +396,29 @@ public sealed class Process
         return tokens;
     }
 
+    // Notes and rendezvous do not exist yet, so their groups need nothing.
+    private static void Validate(RforkFlags flags)
+    {
+        static bool Both(RforkFlags flags, RforkFlags a, RforkFlags b) => (flags & (a | b)) == (a | b);
+        if (Both(flags, RforkFlags.Fdg, RforkFlags.Cfdg) || Both(flags, RforkFlags.Nameg, RforkFlags.Cnameg) || Both(flags, RforkFlags.Envg, RforkFlags.Cenvg))
+        {
+            throw new SyscallException(Errors.BadArg);
+        }
+
+        const RforkFlags implemented = RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Cfdg | RforkFlags.Nameg | RforkFlags.Cnameg
+            | RforkFlags.Envg | RforkFlags.Cenvg | RforkFlags.Noteg | RforkFlags.Rend;
+        if ((flags & ~implemented) != 0)
+        {
+            throw new NotSupportedException($"rfork flags {flags} are not implemented");
+        }
+    }
+
+    private static NamespaceForkMode NamespaceMode(RforkFlags flags)
+        => (flags & RforkFlags.Nameg) != 0 ? NamespaceForkMode.Copy : (flags & RforkFlags.Cnameg) != 0 ? NamespaceForkMode.Empty : NamespaceForkMode.Share;
+
+    private static DescriptorForkMode DescriptorMode(RforkFlags flags)
+        => (flags & RforkFlags.Fdg) != 0 ? DescriptorForkMode.Copy : (flags & RforkFlags.Cfdg) != 0 ? DescriptorForkMode.Empty : DescriptorForkMode.Share;
+
     private static bool Separator(char c) => c is ' ' or '\t' or '\r' or '\n';
 
     private static string Line(ReadOnlySpan<byte> bytes)
@@ -308,6 +438,54 @@ public sealed class Process
             : null;
     }
 
+    private async ValueTask<int> OpenDescriptorAsync(int fd, int mode)
+    {
+        CheckMode(fd, mode);
+        return await DupAsync(fd, -1);
+    }
+
+    // fdtochan's check of the mode against the descriptor's: any mode for one opened for reading and
+    // writing, otherwise its own, with OEXEC counting as OREAD. One not open is left to the call.
+    private void CheckMode(int fd, int mode)
+    {
+        DescriptorSlot? slot = process.Descriptors.Snapshot().FirstOrDefault(slot => slot.Number == fd);
+        int opened = slot is null ? NinePConstants.ORDWR : DupDevice.OpenMode(slot.Handle.Mode);
+        if (opened != NinePConstants.ORDWR && DupDevice.OpenMode(mode) != opened)
+        {
+            throw new SyscallException(Errors.BadUseFd);
+        }
+    }
+
+    private async ValueTask<int> OpenPipeAsync(ResourceHandle end)
+    {
+        ResourceOpenHandle opened = await kernel.Pipes.OpenAsync(end, NinePConstants.ORDWR, kernel.Context(Pid, User), CancellationToken.None);
+        ResourceOperationContext close = kernel.Context(Pid, User);
+        try
+        {
+            return process.Descriptors.Install(opened, () => kernel.Pipes.ClunkAsync(opened, close, CancellationToken.None));
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            await kernel.Pipes.ClunkAsync(opened, close, CancellationToken.None);
+            throw new SyscallException(Errors.NoFd);
+        }
+    }
+
+    private (LocalNamespaceDataPlane Plane, Plan9FileSyscalls Calls) Bind()
+    {
+        var data = new LocalNamespaceDataPlane(process.ProcessGroup.MountTable, devices);
+        return (data, new Plan9FileSyscalls(process, data, () => kernel.Context(Pid, User)));
+    }
+
+    private RamFs EnvironmentFor(RforkFlags flags)
+        => (flags & RforkFlags.Envg) != 0 ? Environment.Copy() : (flags & RforkFlags.Cenvg) != 0 ? kernel.NewEnvironment() : Environment;
+
+    private async ValueTask<bool> ResolvesAsync(string path)
+    {
+        string[] names = Elements(path);
+        return (await plane.WalkAsync(Start(path), names, CancellationToken.None)).Complete(names.Length);
+    }
+
     private async Task<byte[]> ReadHeaderAsync(string path)
     {
         NamespaceChannel file = await ResolveAsync(path);
@@ -316,14 +494,14 @@ public sealed class Process
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.ExecDirectory));
         }
 
-        ResourceOpenHandle opened = await plane.OpenAsync(file, NinePConstants.OEXEC, kernel.Context(Pid), CancellationToken.None);
+        ResourceOpenHandle opened = await plane.OpenAsync(file, NinePConstants.OEXEC, kernel.Context(Pid, User), CancellationToken.None);
         try
         {
             return (await plane.ReadAsync(opened, 0, HeaderSize, CancellationToken.None)).ToArray();
         }
         finally
         {
-            await plane.ClunkAsync(opened, kernel.Context(Pid), CancellationToken.None);
+            await plane.ClunkAsync(opened, kernel.Context(Pid, User), CancellationToken.None);
         }
     }
 

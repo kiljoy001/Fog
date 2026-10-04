@@ -16,15 +16,15 @@ public sealed class RamFsTests
         Assert.True(directory.IsDirectory);
         Assert.False(file.IsDirectory);
         Assert.Equal(file, await fs.WalkAsync(directory, "f", default));
-        Assert.Equal(0666u, (await fs.StatAsync(file, default)).Mode);
+        Assert.Equal(0b110_110_110u, (await fs.StatAsync(file, default)).Mode);
     }
 
     [Fact]
     public async Task CreateAndOpenRejectsAnExistingName()
     {
         var fs = new RamFs("ram", "#R", "glenda");
-        await fs.CreateAndOpenAsync(fs.Root, "f", 0666, 1, Context, default);
-        var rejected = await Assert.ThrowsAsync<ResourceCreateRejectedException>(() => fs.CreateAndOpenAsync(fs.Root, "f", 0666, 1, Context, default).AsTask());
+        await fs.CreateAndOpenAsync(fs.Root, "f", 0b110_110_110, 1, Context, default);
+        var rejected = await Assert.ThrowsAsync<ResourceCreateRejectedException>(() => fs.CreateAndOpenAsync(fs.Root, "f", 0b110_110_110, 1, Context, default).AsTask());
         Assert.Equal("file already exists", rejected.Message);
     }
 }

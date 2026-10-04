@@ -23,6 +23,8 @@ public sealed class FogKernel
 
     internal IResourceDataOperations Files { get; }
 
+    internal PipeDevice Pipes { get; } = new();
+
     internal string User { get; }
 
     public static FogKernel InMemory(IReadOnlyDictionary<string, ProgramMain> programs, string user = "none")
@@ -36,23 +38,27 @@ public sealed class FogKernel
         ResourceHandle bin = await Files.CreateAsync(root, "bin", true, CancellationToken.None);
         await Files.CreateAsync(root, "tmp", true, CancellationToken.None);
         ResourceHandle env = await Files.CreateAsync(root, "env", true, CancellationToken.None);
+        ResourceHandle fd = await Files.CreateAsync(root, "fd", true, CancellationToken.None);
+        ResourceHandle dev = await Files.CreateAsync(root, "dev", true, CancellationToken.None);
         foreach (string name in programs.Keys)
         {
-            ResourceOpenHandle program = await Files.CreateAndOpenAsync(bin, name, 0775, NinePConstants.OWRITE, Context(0), CancellationToken.None);
-            await Files.WriteAsync(program, 0, Encoding.UTF8.GetBytes($"\0fog {name}\n"), Context(0), CancellationToken.None);
-            await Files.ClunkAsync(program, Context(0), CancellationToken.None);
+            ResourceOpenHandle program = await Files.CreateAndOpenAsync(bin, name, 0b111_111_101, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
+            await Files.WriteAsync(program, 0, Encoding.UTF8.GetBytes($"\0fog {name}\n"), Context(0, User), CancellationToken.None);
+            await Files.ClunkAsync(program, Context(0, User), CancellationToken.None);
         }
 
         VProcess first = Table.CreateInitial(new NamespaceNavigator(new MountTable(), Files).Attach(root));
         RamFs environment = NewEnvironment();
         first.ProcessGroup.MountTable.Mount(environment.Root, env, MountFlags.Replace | MountFlags.Create);
-        return new Process(this, first, null, environment, "*init*");
+        first.ProcessGroup.MountTable.Mount(DupDevice.Root, fd);
+        first.ProcessGroup.MountTable.Mount(ConsDevice.Root, dev, MountFlags.After);
+        return new Process(this, first, null, environment, "*init*", User);
     }
 
     internal RamFs NewEnvironment() => new("env", "#e", User);
 
     internal ProgramMain? Program(string name) => programs.GetValueOrDefault(name);
 
-    internal ResourceOperationContext Context(long pid)
-        => new(new ResourceOperationId(session, (ulong)Interlocked.Increment(ref sequence)), pid, User);
+    internal ResourceOperationContext Context(long pid, string user)
+        => new(new ResourceOperationId(session, (ulong)Interlocked.Increment(ref sequence)), pid, user);
 }
