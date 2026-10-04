@@ -7,8 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../NinePSharp.Fog/NinePSharp.Fog.csproj" />
-    <ProjectReference Include="../NinePSharp.Server/NinePSharp.Server.csproj" />
-    <ProjectReference Include="../NinePSharp.Client/NinePSharp.Client.csproj" />
+    <PackageReference Include="NinePSharp.Server" Version="$(NinePSharpVersion)" />
+    <PackageReference Include="NinePSharp.Client" Version="$(NinePSharpVersion)" />
   </ItemGroup>
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">

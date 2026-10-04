@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  MIN_LINE: 25
+  MIN_BRANCH: 10
+  CRAP_LIMIT: 30
+  MIN_MUTATION: 100
+  FUZZ_SECONDS: 30
+
+jobs:
+  quality:
+    name: Full quality gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install quality tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes afl++
+          dotnet tool install --global dotnet-stryker --version 4.12.0
+          dotnet tool install --global sharpfuzz.commandline --version 2.2.0
+
+      - name: Run build, test, coverage, CRAP, mutation, and fuzz gates
+        run: bash scripts/run-quality.sh --full
+
+      - name: Archive quality evidence
+        if: always()
+        run: |
+          mkdir -p .artifacts
+          tar --create --gzip --file quality-evidence.tar.gz .artifacts
+
+      - name: Upload quality evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-evidence-${{ github.run_id }}
+          path: quality-evidence.tar.gz
+          if-no-files-found: error
+          retention-days: 14

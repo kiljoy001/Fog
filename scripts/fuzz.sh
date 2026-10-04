@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Coverage-guided fuzzing for NinePSharp via SharpFuzz and AFL++.
+# Coverage-guided fuzzing for Fog via SharpFuzz and AFL++.
 
 set -euo pipefail
 
-TARGET="${1:-parser}"
+TARGET="${1:-fog}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$ROOT/NinePSharp.Fuzzer"
+PROJECT="$ROOT/NinePSharp.Fog.Fuzzer"
 OUT="$ROOT/.artifacts/fuzz/bin/$TARGET"
 FUZZ_SECONDS="${FUZZ_SECONDS:-10}"
 
@@ -20,26 +20,6 @@ if ! command -v afl-fuzz >/dev/null 2>&1; then
 fi
 
 case "$TARGET" in
-  parser)
-    CORPUS="$ROOT/corpus/parser/valid"
-    INSTRUMENT=("NinePSharp.Parser.dll" "NinePSharp.dll")
-    ;;
-  filesystem|inmemory)
-    CORPUS="$ROOT/corpus/backend"
-    INSTRUMENT=("NinePSharp.Server.Abstractions.dll" "NinePSharp.Server.dll" "NinePSharp.dll")
-    ;;
-  namespace)
-    CORPUS="$ROOT/corpus/namespace"
-    INSTRUMENT=("NinePSharp.Namespaces.dll")
-    ;;
-  namespace-syscalls)
-    CORPUS="$ROOT/corpus/namespace"
-    INSTRUMENT=("NinePSharp.Namespaces.dll")
-    ;;
-  orleans)
-    CORPUS="$ROOT/corpus/orleans"
-    INSTRUMENT=("NinePSharp.Namespaces.Orleans.Server.dll" "NinePSharp.Namespaces.Orleans.dll" "NinePSharp.Namespaces.dll")
-    ;;
   fog)
     CORPUS="$ROOT/corpus/fog"
     INSTRUMENT=("NinePSharp.Fog.dll")
@@ -48,16 +28,12 @@ case "$TARGET" in
     CORPUS="$ROOT/corpus/fog"
     INSTRUMENT=("NinePSharp.Fog.Server.dll" "NinePSharp.Fog.dll")
     ;;
-  authorization)
-    CORPUS="$ROOT/corpus/authorization"
-    INSTRUMENT=("NinePSharp.Namespaces.Authorization.dll")
-    ;;
   fog-dispatcher)
     CORPUS="$ROOT/corpus/fog-dispatcher"
     INSTRUMENT=("NinePSharp.Fog.Server.dll" "NinePSharp.Fog.dll")
     ;;
   *)
-    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [parser|filesystem|inmemory|namespace|namespace-syscalls|orleans|authorization|fog|fog-files|fog-dispatcher]" >&2
+    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [fog|fog-files|fog-dispatcher]" >&2
     exit 2
     ;;
 esac
@@ -69,7 +45,7 @@ fi
 
 echo "building fuzz target: $TARGET"
 rm -rf "$OUT"
-dotnet publish "$PROJECT/NinePSharp.Fuzzer.csproj" -c Release -o "$OUT"
+dotnet publish "$PROJECT/NinePSharp.Fog.Fuzzer.csproj" -c Release -o "$OUT"
 
 for assembly in "${INSTRUMENT[@]}"; do
   echo "instrumenting $assembly"
@@ -92,7 +68,7 @@ export AFL_QUIET="${AFL_QUIET:-1}"
 echo "starting afl-fuzz for ${FUZZ_SECONDS}s; findings land in $FINDINGS"
 set +e
 timeout "${FUZZ_SECONDS}s" afl-fuzz -i "$CORPUS" -o "$FINDINGS" -t 5000 -m none \
-  -- "$DOTNET_BIN" "$OUT/NinePSharp.Fuzzer.dll" "$TARGET" >"$LOG" 2>&1
+  -- "$DOTNET_BIN" "$OUT/NinePSharp.Fog.Fuzzer.dll" "$TARGET" >"$LOG" 2>&1
 status=$?
 set -e
 

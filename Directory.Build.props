@@ -1,40 +1,14 @@
 <Project>
   <PropertyGroup>
-    <IsNinePSharpPackage>false</IsNinePSharpPackage>
+    <!-- The NinePSharp packages Fog builds on. -->
+    <NinePSharpVersion>0.2.0</NinePSharpVersion>
     <BuildInParallel Condition="'$(BuildInParallel)' == ''">false</BuildInParallel>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Parser'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.Abstractions'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Client'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Core.FSharp'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.FSharp'">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Namespaces'))">true</IsNinePSharpPackage>
-    <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Backends.'))">true</IsNinePSharpPackage>
 
     <!-- Checkouts the quality scripts build under .artifacts keep their own style. -->
     <IsStyleChecked Condition="'$(MSBuildProjectExtension)' == '.csproj' and !$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\', '/').Contains('/.artifacts/'))">true</IsStyleChecked>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(IsNinePSharpPackage)' == 'true'">
-    <VersionPrefix>0.2.0</VersionPrefix>
-    <Authors>NinePSharp Contributors</Authors>
-    <Company>NinePSharp</Company>
-    <Description>$(MSBuildProjectName) is part of NinePSharp, a modular 9P protocol toolkit and backend plugin ecosystem.</Description>
-    <PackageTags>9p;plan9;filesystem;rpc;data-gateway</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.NUGET.md</PackageReadmeFile>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <Deterministic>true</Deterministic>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsStyleChecked)' == 'true'">

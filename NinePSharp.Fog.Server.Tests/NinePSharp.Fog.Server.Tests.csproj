@@ -16,10 +16,10 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../NinePSharp.Fog.Server/NinePSharp.Fog.Server.csproj" />
-    <ProjectReference Include="../NinePSharp.Client/NinePSharp.Client.csproj" />
+    <PackageReference Include="NinePSharp.Client" Version="$(NinePSharpVersion)" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="../NinePSharp.Fuzzer/FogFileFuzz.cs" Link="FogFileFuzz.cs" />
-    <Compile Include="../NinePSharp.Fuzzer/FogDispatcherFuzz.cs" Link="FogDispatcherFuzz.cs" />
+    <Compile Include="../NinePSharp.Fog.Fuzzer/FogFileFuzz.cs" Link="FogFileFuzz.cs" />
+    <Compile Include="../NinePSharp.Fog.Fuzzer/FogDispatcherFuzz.cs" Link="FogDispatcherFuzz.cs" />
   </ItemGroup>
 </Project>

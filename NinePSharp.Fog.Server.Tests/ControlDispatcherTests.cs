@@ -221,12 +221,12 @@ public sealed class ControlDispatcherTests
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "NinePSharp.sln")))
+            if (File.Exists(Path.Combine(directory.FullName, "Fog.sln")))
             {
                 return directory.FullName;
             }
         }
 
-        throw new DirectoryNotFoundException("NinePSharp.sln");
+        throw new DirectoryNotFoundException("Fog.sln");
     }
 }

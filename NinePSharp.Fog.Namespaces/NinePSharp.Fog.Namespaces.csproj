@@ -13,9 +13,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog.Server\NinePSharp.Fog.Server.csproj" />
-    <ProjectReference Include="..\NinePSharp.Namespaces.Authorization\NinePSharp.Namespaces.Authorization.csproj" />
-    <ProjectReference Include="..\NinePSharp.Namespaces.Orleans\NinePSharp.Namespaces.Orleans.csproj" />
-    <ProjectReference Include="..\NinePSharp.Namespaces.Orleans.Server\NinePSharp.Namespaces.Orleans.Server.csproj" />
+    <PackageReference Include="NinePSharp.Namespaces.Authorization" Version="$(NinePSharpVersion)" />
+    <PackageReference Include="NinePSharp.Namespaces.Orleans" Version="$(NinePSharpVersion)" />
+    <PackageReference Include="NinePSharp.Namespaces.Orleans.Server" Version="$(NinePSharpVersion)" />
   </ItemGroup>
 
 </Project>

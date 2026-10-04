@@ -16,7 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../NinePSharp.Fog/NinePSharp.Fog.csproj" />
-    <Compile Include="../NinePSharp.Fuzzer/FogControlFuzz.cs" Link="FogControlFuzz.cs" />
+    <Compile Include="../NinePSharp.Fog.Fuzzer/FogControlFuzz.cs" Link="FogControlFuzz.cs" />
     <None Include="../docs/specifications/fog-v1-profiles/examples/*.tab" Link="examples/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

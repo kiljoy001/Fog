@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NinePSharp.Namespaces\NinePSharp.Namespaces.csproj" />
+    <PackageReference Include="NinePSharp.Namespaces" Version="$(NinePSharpVersion)" />
   </ItemGroup>
 
 </Project>

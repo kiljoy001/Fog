@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog.Auth\NinePSharp.Fog.Auth.csproj" />
-    <ProjectReference Include="..\NinePSharp.Client\NinePSharp.Client.csproj" />
+    <PackageReference Include="NinePSharp.Client" Version="$(NinePSharpVersion)" />
   </ItemGroup>
 
   <ItemGroup>

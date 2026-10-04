@@ -17,7 +17,7 @@ MIN_MUTATION="${MIN_MUTATION:-100}"
 step() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
 step "build"
-dotnet build NinePSharp.sln -c Release -v minimal
+dotnet build Fog.sln -c Release -v minimal
 
 mkdir -p .artifacts/coverage
 rm -f .artifacts/coverage/merged.json .artifacts/coverage/dotnet.xml
@@ -38,24 +38,17 @@ coverage_test() {
     /p:CoverletOutputFormat="$format" \
     /p:CoverletOutput="$output" \
     "${merge_args[@]}" \
-    /p:Include="[NinePSharp*]*" \
-    /p:Exclude="[*.Tests]*%2c[*.Fuzzer]*%2c[*.Examples]*"
+    /p:Include="[NinePSharp.Fog*]*" \
+    /p:Exclude="[*.Tests]*%2c[*.Fuzzer]*"
 }
 
-step "unit, property, parser, backend, and client tests"
-coverage_test NinePSharp.Tests/NinePSharp.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Parser.Tests/NinePSharp.Parser.Tests.fsproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Server.Abstractions.Tests/NinePSharp.Server.Abstractions.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Namespaces.Tests/NinePSharp.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Namespaces.Orleans.Tests/NinePSharp.Namespaces.Orleans.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Namespaces.Authorization.Tests/NinePSharp.Namespaces.Authorization.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+step "Fog tests"
 coverage_test NinePSharp.Fog.Tests/NinePSharp.Fog.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Server.Tests/NinePSharp.Fog.Server.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Namespaces.Tests/NinePSharp.Fog.Namespaces.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Auth.Tests/NinePSharp.Fog.Auth.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
 coverage_test NinePSharp.Fog.Rc.Tests/NinePSharp.Fog.Rc.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Fog.Kernel.Tests/NinePSharp.Fog.Kernel.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
-coverage_test NinePSharp.Client.Tests/NinePSharp.Client.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
+coverage_test NinePSharp.Fog.Kernel.Tests/NinePSharp.Fog.Kernel.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
 step "gate self-tests"
 python3 tools/test_crap.py
@@ -70,71 +63,25 @@ python3 tools/crap.py \
   --threshold "$CRAP_LIMIT" --fail-over "$CRAP_LIMIT" \
   --json .artifacts/crap-dotnet.json
 
-if command -v semgrep >/dev/null 2>&1; then
-  step "semgrep"
-  semgrep --config quality/semgrep.yml --error
-else
-  echo "semgrep not installed; skipping custom static rules"
-fi
+mutate() {
+  local tests="$1"
+  local config="$2"
+  local output=".artifacts/$3"
+  rm -rf "$output"
+  (cd "$tests" && dotnet stryker --config-file "../$config" --reporter json --reporter progress --output "../$output" --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir "$output" --min-score "$MIN_MUTATION"
+}
 
 if [[ $FULL -eq 1 ]]; then
   step "mutation testing"
-  rm -rf .artifacts/stryker .artifacts/stryker-namespaces .artifacts/stryker-orleans .artifacts/stryker-orleans-server .artifacts/stryker-transport
-  (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-ci.json --reporter json --reporter progress --output ../.artifacts/stryker --skip-version-check --break-on-initial-test-failure --verbosity error)
-  (cd NinePSharp.Namespaces.Tests && dotnet stryker --config-file ../stryker-config-namespaces.json --reporter json --reporter progress --output ../.artifacts/stryker-namespaces --skip-version-check --break-on-initial-test-failure --verbosity error)
-  (cd NinePSharp.Namespaces.Orleans.Tests && dotnet stryker --config-file ../stryker-config-orleans.json --reporter json --reporter progress --output ../.artifacts/stryker-orleans --skip-version-check --break-on-initial-test-failure --verbosity error)
-  (cd NinePSharp.Namespaces.Orleans.Tests && dotnet stryker --config-file ../stryker-config-orleans-server.json --reporter json --reporter progress --output ../.artifacts/stryker-orleans-server --skip-version-check --break-on-initial-test-failure --verbosity error)
-  (cd NinePSharp.Tests && dotnet stryker --config-file ../stryker-config-transport.json --reporter json --reporter progress --output ../.artifacts/stryker-transport --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker --min-score "$MIN_MUTATION"
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-namespaces --min-score "$MIN_MUTATION"
-  rm -rf .artifacts/stryker-namespaces-authorization
-  (cd NinePSharp.Namespaces.Authorization.Tests && dotnet stryker --config-file ../stryker-config-namespaces-authorization.json --reporter json --reporter progress --output ../.artifacts/stryker-namespaces-authorization --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-namespaces-authorization --min-score "$MIN_MUTATION"
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-orleans --min-score "$MIN_MUTATION"
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-orleans-server --min-score "$MIN_MUTATION"
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-transport --min-score "$MIN_MUTATION"
-
-  (cd NinePSharp.Fog.Tests && dotnet stryker --config-file ../stryker-config-fog.json --reporter json --reporter progress --output ../.artifacts/stryker-fog --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog --min-score "$MIN_MUTATION"
-
-  (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-fog-server.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-server --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-server --min-score "$MIN_MUTATION"
-  rm -rf .artifacts/stryker-fog-namespaces
-  (cd NinePSharp.Fog.Namespaces.Tests && dotnet stryker --config-file ../stryker-config-fog-namespaces.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-namespaces --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-namespaces --min-score "$MIN_MUTATION"
+  mutate NinePSharp.Fog.Tests stryker-config-fog.json stryker-fog
+  mutate NinePSharp.Fog.Server.Tests stryker-config-fog-server.json stryker-fog-server
+  mutate NinePSharp.Fog.Namespaces.Tests stryker-config-fog-namespaces.json stryker-fog-namespaces
   # The keyfs tests need swtpm and python3 (for a stale socket); see NinePSharp.Fog.Auth.Tests.
-  rm -rf .artifacts/stryker-fog-auth
-  (cd NinePSharp.Fog.Auth.Tests && dotnet stryker --config-file ../stryker-config-fog-auth.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-auth --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-auth --min-score "$MIN_MUTATION"
-  rm -rf .artifacts/stryker-fog-rc
-  (cd NinePSharp.Fog.Rc.Tests && dotnet stryker --config-file ../stryker-config-fog-rc.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-rc --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-rc --min-score "$MIN_MUTATION"
-  rm -rf .artifacts/stryker-fog-commands
-  (cd NinePSharp.Fog.Rc.Tests && dotnet stryker --config-file ../stryker-config-fog-commands.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-commands --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-commands --min-score "$MIN_MUTATION"
-  rm -rf .artifacts/stryker-fog-kernel
-  (cd NinePSharp.Fog.Kernel.Tests && dotnet stryker --config-file ../stryker-config-fog-kernel.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-kernel --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-kernel --min-score "$MIN_MUTATION"
-  (cd NinePSharp.Fog.Server.Tests && dotnet stryker --config-file ../stryker-config-control-client.json --reporter json --reporter progress --output ../.artifacts/stryker-control-client --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-control-client --min-score "$MIN_MUTATION"
-
-  step "SharpFuzz/AFL parser campaign"
-  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh parser
-
-  step "SharpFuzz/AFL filesystem campaign"
-  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh filesystem
-
-  step "SharpFuzz/AFL namespace campaign"
-  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace
-
-  step "SharpFuzz/AFL namespace syscall campaign"
-  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh namespace-syscalls
-
-  step "SharpFuzz/AFL namespace authorization campaign"
-  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh authorization
-
-  step "SharpFuzz/AFL Orleans gateway campaign"
-  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh orleans
+  mutate NinePSharp.Fog.Auth.Tests stryker-config-fog-auth.json stryker-fog-auth
+  mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-rc.json stryker-fog-rc
+  mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-commands.json stryker-fog-commands
+  mutate NinePSharp.Fog.Kernel.Tests stryker-config-fog-kernel.json stryker-fog-kernel
 
   step "SharpFuzz/AFL fog record and transaction campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog
