@@ -48,7 +48,7 @@ jobs:
       - name: Install quality tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes afl++
+          sudo apt-get install --yes afl++ swtpm swtpm-tools
           dotnet tool install --global dotnet-stryker --version 4.12.0
           dotnet tool install --global sharpfuzz.commandline --version 2.2.0
 
