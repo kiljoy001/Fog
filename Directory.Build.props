@@ -14,6 +14,9 @@
     <IsNinePSharpPackage Condition="'$(MSBuildProjectName)' == 'NinePSharp.Server.FSharp'">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Namespaces'))">true</IsNinePSharpPackage>
     <IsNinePSharpPackage Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('NinePSharp.Backends.'))">true</IsNinePSharpPackage>
+
+    <!-- Checkouts the quality scripts build under .artifacts keep their own style. -->
+    <IsStyleChecked Condition="'$(MSBuildProjectExtension)' == '.csproj' and !$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\', '/').Contains('/.artifacts/'))">true</IsStyleChecked>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsNinePSharpPackage)' == 'true'">
@@ -34,11 +37,11 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+  <PropertyGroup Condition="'$(IsStyleChecked)' == 'true'">
     <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)StyleCop.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+  <ItemGroup Condition="'$(IsStyleChecked)' == 'true'">
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
