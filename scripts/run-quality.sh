@@ -69,7 +69,7 @@ mutate() {
   local output=".artifacts/$3"
   rm -rf "$output"
   (cd "$tests" && dotnet stryker --config-file "../$config" --reporter json --reporter progress --output "../$output" --skip-version-check --break-on-initial-test-failure --verbosity error)
-  python3 tools/mutation_summary.py --output-dir "$output" --min-score "$MIN_MUTATION"
+  python3 tools/mutation_summary.py --output-dir "$output" --min-score "$MIN_MUTATION" --accepted-timeouts quality/stryker-timeouts.json
 }
 
 if [[ $FULL -eq 1 ]]; then

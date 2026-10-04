@@ -1,0 +1,236 @@
+[
+  {
+    "file": "Errors.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "if (length >= ErrMax / 3 && length + error.Length >= 2 * ErrMax / 3)",
+    "reason": "namelenerror trims the path in a loop that no longer reaches its end"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Logical mutation",
+    "line": "if (length >= ErrMax / 3 && length + error.Length >= 2 * ErrMax / 3)",
+    "reason": "namelenerror trims the path in a loop that no longer reaches its end"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Negate expression",
+    "line": "if (length >= ErrMax / 3 && length + error.Length >= 2 * ErrMax / 3)",
+    "reason": "namelenerror trims the path in a loop that no longer reaches its end"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "while (length - next < ErrMax / 3 || length - next + error.Length < 2 * ErrMax / 3);",
+    "reason": "the do-while trimming the name never meets its bound"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Equality mutation",
+    "line": "while (length - next < ErrMax / 3 || length - next + error.Length < 2 * ErrMax / 3);",
+    "reason": "the do-while trimming the name never meets its bound"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Equality mutation",
+    "line": "while (next > 0 && path[--next] != '/')",
+    "reason": "the backward search for / never stops"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Logical mutation",
+    "line": "while (next > 0 && path[--next] != '/')",
+    "reason": "the backward search for / never stops"
+  },
+  {
+    "file": "Errors.cs",
+    "mutator": "Negate expression",
+    "line": "while (next > 0 && path[--next] != '/')",
+    "reason": "the backward search for / never stops"
+  },
+  {
+    "file": "PipeQueue.cs",
+    "mutator": "Equality mutation",
+    "line": "while (sofar < data.Length);",
+    "reason": "a write of nothing left keeps writing empty blocks"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Statement mutation",
+    "line": "entries.Add(new Stat(block.Span, ref offset));",
+    "reason": "the directory read never advances its offset"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c0, false);",
+    "reason": "a while's condition is not compiled, and an empty condition is while(true)"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Equality mutation",
+    "line": "for (t = assignment; t.Type == '='; t = t.Child[2]!)",
+    "reason": "the walk down a chain of assignments never ends"
+  },
+  {
+    "file": "RcInput.cs",
+    "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
+    "line": "return new(() => ValueTask.FromResult(next < bytes.Length ? bytes[next++] : -1));",
+    "reason": "the test input source never reaches end of file"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Boolean mutation",
+    "line": "LastWord = false;",
+    "reason": "the lexer stops advancing through its input"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
+    "line": "if (afterDollar ? !IdChar(c) : !WordChar(c))",
+    "reason": "a word never ends"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Negate expression",
+    "line": "if (afterDollar ? !IdChar(c) : !WordChar(c))",
+    "reason": "a word never ends"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Equality mutation",
+    "line": "if (c == '\\\\' && !inQuote)",
+    "reason": "the lexer stops advancing through its input"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Logical mutation",
+    "line": "if (c == '\\\\' && !inQuote)",
+    "reason": "the lexer stops advancing through its input"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Negate expression",
+    "line": "if (c == '\\\\' && !inQuote)",
+    "reason": "the lexer stops advancing through its input"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Equality mutation",
+    "line": "if (c is ' ' or '\\t')",
+    "reason": "skipping blanks never stops"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Logical mutation",
+    "line": "private static bool WordChar(int c) => c != EndOfFile && !\"\\n \\t#;&|^$=`'{}()<>\".Contains((char)c, StringComparison.Ordinal);",
+    "reason": "end of file counts as a word character"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "reason": "skipping blanks never stops"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "RcTree? At(int i) => values[first + i];",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Negate expression",
+    "line": "if (++top >= MaxDepth)",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Equality mutation",
+    "line": "if (n > RcTables.Flag)",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Equality mutation",
+    "line": "state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Boolean mutation",
+    "line": "while (true)",
+    "reason": "the parse loop restarts without consuming input"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Negate expression",
+    "line": "while (true)",
+    "reason": "the parse loop restarts without consuming input"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Block removal mutation",
+    "line": "{",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcShell.Ops.cs",
+    "mutator": "Logical mutation",
+    "line": "if (process.Pid == mypid && !trapped && Vlook(\"sigexit\") is { Fn: not null } trap)",
+    "reason": "sigexit runs again for every exit"
+  },
+  {
+    "file": "RcShell.Ops.cs",
+    "mutator": "Boolean mutation",
+    "line": "trapped = true;",
+    "reason": "sigexit calls itself as it exits"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Logical mutation",
+    "line": "if (type == RcRedir.Open && Clobbers(runq!.Redir, from))",
+    "reason": "pushredir moves descriptors without end"
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Negate expression",
+    "line": "if (type == RcRedir.Open && Clobbers(runq!.Redir, from))",
+    "reason": "pushredir moves descriptors without end"
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Boolean mutation",
+    "line": "return false;",
+    "reason": "every redirection is moved, again and again"
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Equality mutation",
+    "line": "while (r.Next != rp.Next)",
+    "reason": "shuffleredir's walk never finds its end"
+  }
+]

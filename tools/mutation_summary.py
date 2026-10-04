@@ -16,11 +16,30 @@ def latest_report(root: Path) -> Path | None:
     return reports[0] if reports else None
 
 
+def load_accepted(path: Path | None) -> set[tuple[str, str, str]]:
+    if path is None:
+        return set()
+    entries = json.loads(path.read_text())
+    return {(entry["file"], entry["mutator"], entry["line"].strip()) for entry in entries}
+
+
+def is_accepted(accepted: set[tuple[str, str, str]], path: str, lines: list[str], mutant: dict) -> bool:
+    number = mutant.get("location", {}).get("start", {}).get("line", 0)
+    line = lines[number - 1].strip() if 0 < number <= len(lines) else ""
+    return (path.replace("\\", "/").split("/")[-1], mutant.get("mutatorName", ""), line) in accepted
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, default=Path(".artifacts/stryker"))
     parser.add_argument("--min-score", type=float)
+    parser.add_argument(
+        "--accepted-timeouts",
+        type=Path,
+        help="reviewed timeouts that can only end by timing out, each matched by file, mutator and source line",
+    )
     args = parser.parse_args()
+    accepted = load_accepted(args.accepted_timeouts)
 
     report = latest_report(args.output_dir)
     if report is None:
@@ -31,10 +50,14 @@ def main() -> int:
     counts: dict[str, int] = {}
     survivors_by_file: dict[str, int] = {}
 
+    accepted_count = 0
     for path, info in data.get("files", {}).items():
+        lines = info.get("source", "").splitlines()
         for mutant in info.get("mutants", []):
             status = mutant.get("status", "?")
             counts[status] = counts.get(status, 0) + 1
+            if status == "Timeout" and is_accepted(accepted, path, lines, mutant):
+                accepted_count += 1
             if status == "Survived":
                 name = path.split("/")[-1]
                 survivors_by_file[name] = survivors_by_file.get(name, 0) + 1
@@ -44,12 +67,12 @@ def main() -> int:
     survived = counts.get("Survived", 0)
     no_coverage = counts.get("NoCoverage", 0)
     total = killed + timed_out + survived + no_coverage
-    score = (killed / total * 100) if total else 0.0
+    score = ((killed + accepted_count) / total * 100) if total else 0.0
 
     print("## Mutation testing\n")
     print(f"- **Score:** {score:.2f}%")
     print(f"- **Killed:** {killed}")
-    print(f"- **Timed out:** {timed_out}")
+    print(f"- **Timed out:** {timed_out}" + (f" ({accepted_count} accepted)" if accepted_count else ""))
     print(f"- **Survived:** {survived}")
     print(f"- **No coverage:** {no_coverage}")
 
