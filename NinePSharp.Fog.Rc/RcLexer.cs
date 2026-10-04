@@ -4,7 +4,7 @@ namespace NinePSharp.Fog.Rc;
 
 // rc's lexer, lex.c, with here.c's reading of here documents. Characters are bytes. rc's addutf
 // takes a UTF-8 sequence at once; its continuation bytes are word characters, so a word taking them
-// one at a time reads the same.
+// one at a time reads the same. Reading may wait for input, so the lexer is asynchronous.
 internal sealed class RcLexer
 {
     private const int EndOfFile = -1;
@@ -16,16 +16,19 @@ internal sealed class RcLexer
         ["switch"] = RcToken.Switch, ["fn"] = RcToken.Fn,
     };
 
-    private readonly RcInput input;
-    private readonly TextWriter errors;
-    private readonly char[] token = new char[TokenSize];
-    private readonly List<RcTree> hereDocuments = new();
+    private RcInput input;
+    private TextWriter errors;
+    private char[] token = new char[TokenSize];
+    private List<RcTree> hereDocuments = new();
     private string epilog = "}\n";
     private int epilogAt;
     private int peekc = '{';
     private int future = EndOfFile;
     private bool inQuote;
     private bool inComment;
+
+    // The length of the token being read; -1 is rc's null token pointer, after the buffer overflowed.
+    private int length;
 
     internal RcLexer(RcInput input, string file, TextWriter errors)
     {
@@ -38,7 +41,13 @@ internal sealed class RcLexer
 
     internal int Line { get; set; } = 1;
 
-    internal bool Eof { get; private set; }
+    internal bool Eof { get; set; }
+
+    // Whether the last command compiled was an if, for `if not` on a later line.
+    internal bool IfLast { get; set; }
+
+    // Set by `. -q`: the commands it reads ignore rc -e.
+    internal bool Quiet { get; set; }
 
     internal int LastC { get; private set; }
 
@@ -49,9 +58,12 @@ internal sealed class RcLexer
     internal bool DoPrompt { get; set; } = true;
 
     // Called where rc calls pprompt; null when there is no prompt.
-    internal Action? Prompt { get; set; }
+    internal Func<ValueTask>? Prompt { get; set; }
 
     internal int ErrorCount { get; set; }
+
+    // yyerror sets $status to the message.
+    internal Action<string>? Failed { get; set; }
 
     internal string? LastError { get; private set; }
 
@@ -60,11 +72,22 @@ internal sealed class RcLexer
     // Every token sets it before any error can name it.
     internal string? TokenText { get; private set; }
 
-    // pfln
     internal static string Location(string? file, int line) =>
         file is null ? "rc" : line != 0 ? $"{file}:{line}" : file;
 
     internal static bool IdChar(int c) => c > ' ' && !"!\"#$%&'()+,-./:;<=>?@[\\]^`{|}~".Contains((char)c, StringComparison.Ordinal);
+
+    // pfln
+    // A forked shell's copy, reading its own copy of the input and writing errors to its own io.
+    internal RcLexer Copy(RcInput input, TextWriter errors)
+    {
+        var copy = (RcLexer)MemberwiseClone();
+        copy.input = input;
+        copy.errors = errors;
+        copy.token = (char[])token.Clone();
+        copy.hereDocuments = new(hereDocuments);
+        return copy;
+    }
 
     // As `.` reads a file without -b: one command line at a time, not one braced block.
     internal void ReadLines()
@@ -88,23 +111,23 @@ internal sealed class RcLexer
         return tree;
     }
 
-    internal void SkipNewlines()
+    internal async ValueTask SkipNewlinesAsync()
     {
         while (true)
         {
-            SkipWhite();
-            if (NextC() != '\n')
+            await SkipWhiteAsync();
+            if (await NextCAsync() != '\n')
             {
                 return;
             }
 
-            Advance();
+            await AdvanceAsync();
         }
     }
 
-    internal int Lex()
+    internal async ValueTask<int> LexAsync()
     {
-        int c = NextC();
+        int c = await NextCAsync();
         Value = null;
 
         // Embarrassing sneakiness, as rc says: after a word, '(' is a subscript and a word character
@@ -114,7 +137,7 @@ internal sealed class RcLexer
             LastWord = false;
             if (c == '(')
             {
-                Advance();
+                await AdvanceAsync();
                 TokenText = "( [SUB]";
                 return RcToken.Sub;
             }
@@ -127,12 +150,12 @@ internal sealed class RcLexer
         }
 
         inQuote = false;
-        SkipWhite();
+        await SkipWhiteAsync();
 
         // Only a word reads differently after $, as a variable name.
         bool afterDollar = LastDol;
-        LastDol = (c = Advance()) == '$';
-        if (Operator(c) is { } symbol)
+        LastDol = (c = await AdvanceAsync()) == '$';
+        if (await OperatorAsync(c) is { } symbol)
         {
             return symbol;
         }
@@ -143,10 +166,10 @@ internal sealed class RcLexer
             return c;
         }
 
-        return Word(c, afterDollar);
+        return await WordAsync(c, afterDollar);
     }
 
-    internal void Error(string message)
+    internal async ValueTask ErrorAsync(string message)
     {
         errors.Write(Location(File, Line));
         errors.Write(": ");
@@ -163,19 +186,20 @@ internal sealed class RcLexer
         LastDol = false;
         while (LastC != '\n' && LastC != EndOfFile)
         {
-            Advance();
+            await AdvanceAsync();
         }
 
         ErrorCount++;
         LastError = message;
+        Failed?.Invoke(message);
     }
 
     // heredoc: a here document's text is read after the line that names it.
-    internal void HereDocument(RcTree redirection)
+    internal async ValueTask HereDocumentAsync(RcTree redirection)
     {
         if (redirection.Child[0]!.Type != RcToken.Word)
         {
-            Error("Bad here tag");
+            await ErrorAsync("Bad here tag");
             return;
         }
 
@@ -183,11 +207,11 @@ internal sealed class RcLexer
     }
 
     // readhere
-    internal void ReadHereDocuments()
+    internal async ValueTask ReadHereDocumentsAsync()
     {
         foreach (RcTree redirection in hereDocuments)
         {
-            redirection.Str = ReadHereDocument(redirection.Child[0]!);
+            redirection.Str = await ReadHereDocumentAsync(redirection.Child[0]!);
         }
 
         hereDocuments.Clear();
@@ -195,7 +219,7 @@ internal sealed class RcLexer
 
     private static bool WordChar(int c) => c != EndOfFile && !"\n \t#;&|^$=`'{}()<>".Contains((char)c, StringComparison.Ordinal);
 
-    private int? Operator(int c)
+    private async ValueTask<int?> OperatorAsync(int c)
     {
         switch (c)
         {
@@ -203,13 +227,13 @@ internal sealed class RcLexer
                 TokenText = "EOF";
                 return EndOfFile;
             case '$':
-                if (NextIs('#'))
+                if (await NextIsAsync('#'))
                 {
                     TokenText = "$#";
                     return RcToken.Count;
                 }
 
-                if (NextIs('"'))
+                if (await NextIsAsync('"'))
                 {
                     TokenText = "$\"";
                     return '"';
@@ -218,52 +242,52 @@ internal sealed class RcLexer
                 TokenText = "$";
                 return '$';
             case '&':
-                if (NextIs('&'))
+                if (await NextIsAsync('&'))
                 {
-                    SkipNewlines();
+                    await SkipNewlinesAsync();
                     TokenText = "&&";
                     return RcToken.AndAnd;
                 }
 
                 TokenText = "&";
                 return '&';
-            case '|' when NextIs('|'):
-                SkipNewlines();
+            case '|' when await NextIsAsync('|'):
+                await SkipNewlinesAsync();
                 TokenText = "||";
                 return RcToken.OrOr;
             case '|' or '<' or '>':
-                return Redirection(c);
+                return await RedirectionAsync(c);
             case '\'':
-                return Quoted();
+                return await QuotedAsync();
             default:
                 return null;
         }
     }
 
-    private int Word(int c, bool afterDollar)
+    private async ValueTask<int> WordAsync(int c, bool afterDollar)
     {
-        int w = 0;
+        length = 0;
         bool glob = false;
         while (true)
         {
             if (c is '*' or '[' or '?' or RcToken.Glob)
             {
                 glob = true;
-                w = AddToken(w, RcToken.Glob);
+                await AddTokenAsync(RcToken.Glob);
             }
 
-            w = AddToken(w, c);
-            c = NextC();
+            await AddTokenAsync(c);
+            c = await NextCAsync();
             if (afterDollar ? !IdChar(c) : !WordChar(c))
             {
                 break;
             }
 
-            Advance();
+            await AdvanceAsync();
         }
 
         LastWord = true;
-        TokenText = Text(w);
+        TokenText = Text();
         RcTree tree = LookUp(TokenText);
         if (tree.Type != RcToken.Word)
         {
@@ -279,29 +303,29 @@ internal sealed class RcLexer
         return tree.Type;
     }
 
-    private int Redirection(int c)
+    private async ValueTask<int> RedirectionAsync(int c)
     {
         RcTree tree = NewTree(0);
-        int w = Redirector(c, tree);
-        if (NextIs('[') && (w = Descriptors(tree, w)) == EndOfFile)
+        await RedirectorAsync(c, tree);
+        if (await NextIsAsync('[') && !await DescriptorsAsync(tree))
         {
             return EndOfFile;
         }
 
-        TokenText = new string(token, 0, w);
+        TokenText = new string(token, 0, length);
         Value = tree;
         if (tree.Type == RcToken.Pipe)
         {
-            SkipNewlines();
+            await SkipNewlinesAsync();
         }
 
         return tree.Type;
     }
 
-    private int Redirector(int c, RcTree tree)
+    private async ValueTask RedirectorAsync(int c, RcTree tree)
     {
-        int w = 0;
-        token[w++] = (char)c;
+        length = 0;
+        token[length++] = (char)c;
         switch (c)
         {
             case '|':
@@ -311,10 +335,10 @@ internal sealed class RcLexer
                 break;
             case '>':
                 tree.Type = RcToken.Redir;
-                if (NextIs(c))
+                if (await NextIsAsync(c))
                 {
                     tree.RType = RcToken.Append;
-                    token[w++] = (char)c;
+                    token[length++] = (char)c;
                 }
                 else
                 {
@@ -325,15 +349,15 @@ internal sealed class RcLexer
                 break;
             default:
                 tree.Type = RcToken.Redir;
-                if (NextIs(c))
+                if (await NextIsAsync(c))
                 {
                     tree.RType = RcToken.Here;
-                    token[w++] = (char)c;
+                    token[length++] = (char)c;
                 }
-                else if (NextIs('>'))
+                else if (await NextIsAsync('>'))
                 {
                     tree.RType = RcToken.ReadWrite;
-                    token[w++] = (char)c;
+                    token[length++] = (char)c;
                 }
                 else
                 {
@@ -343,40 +367,38 @@ internal sealed class RcLexer
                 tree.Fd0 = 0;
                 break;
         }
-
-        return w;
     }
 
-    // The [n] or [n=m] or [n=] after a redirection or pipe.
-    private int Descriptors(RcTree tree, int w)
+    // The [n] or [n=m] or [n=] after a redirection or pipe; false after a syntax error.
+    private async ValueTask<bool> DescriptorsAsync(RcTree tree)
     {
-        token[w++] = '[';
-        int c = Advance();
-        token[w++] = (char)c;
+        token[length++] = '[';
+        int c = await AdvanceAsync();
+        token[length++] = (char)c;
         if (c is < '0' or > '9')
         {
-            return RedirectionError(tree, w);
+            return await RedirectionErrorAsync(tree);
         }
 
-        tree.Fd0 = Number(ref c, ref w);
+        (tree.Fd0, c) = await NumberAsync(c);
         if (c == '=')
         {
-            token[w++] = '=';
+            token[length++] = '=';
             if (tree.Type == RcToken.Redir)
             {
                 tree.Type = RcToken.Dup;
             }
 
-            c = Advance();
+            c = await AdvanceAsync();
             if (c is >= '0' and <= '9')
             {
                 tree.RType = RcToken.DupFd;
                 tree.Fd1 = tree.Fd0;
-                tree.Fd0 = Number(ref c, ref w);
+                (tree.Fd0, c) = await NumberAsync(c);
             }
             else if (tree.Type == RcToken.Pipe)
             {
-                return RedirectionError(tree, w);
+                return await RedirectionErrorAsync(tree);
             }
             else
             {
@@ -386,41 +408,42 @@ internal sealed class RcLexer
 
         if (c != ']' || (tree.Type == RcToken.Dup && tree.RType is RcToken.Here or RcToken.Append))
         {
-            return RedirectionError(tree, w);
+            return await RedirectionErrorAsync(tree);
         }
 
-        token[w++] = ']';
-        return w;
+        token[length++] = ']';
+        return true;
     }
 
-    private int Number(ref int c, ref int w)
+    // The number starting with digit c, and the character after it.
+    private async ValueTask<(int Value, int Next)> NumberAsync(int c)
     {
         int n = 0;
         do
         {
             n = (n * 10) + c - '0';
-            token[w++] = (char)c;
-            c = Advance();
+            token[length++] = (char)c;
+            c = await AdvanceAsync();
         }
         while (c is >= '0' and <= '9');
-        return n;
+        return (n, c);
     }
 
-    private int RedirectionError(RcTree tree, int w)
+    private async ValueTask<bool> RedirectionErrorAsync(RcTree tree)
     {
-        TokenText = new string(token, 0, w);
-        Error(tree.Type == RcToken.Pipe ? "pipe syntax" : "redirection syntax");
-        return EndOfFile;
+        TokenText = new string(token, 0, length);
+        await ErrorAsync(tree.Type == RcToken.Pipe ? "pipe syntax" : "redirection syntax");
+        return false;
     }
 
-    private int Quoted()
+    private async ValueTask<int> QuotedAsync()
     {
-        int w = 0;
+        length = 0;
         LastWord = true;
         inQuote = true;
         while (true)
         {
-            int c = Advance();
+            int c = await AdvanceAsync();
             if (c == EndOfFile)
             {
                 break;
@@ -428,48 +451,47 @@ internal sealed class RcLexer
 
             if (c == '\'')
             {
-                if (NextC() != '\'')
+                if (await NextCAsync() != '\'')
                 {
                     break;
                 }
 
-                Advance();
+                await AdvanceAsync();
             }
 
-            w = AddToken(w, c);
+            await AddTokenAsync(c);
         }
 
-        TokenText = Text(w);
+        TokenText = Text();
         RcTree tree = Token(TokenText, RcToken.Word);
         tree.Quoted = true;
         Value = tree;
         return tree.Type;
     }
 
-    // -1 is rc's null token pointer, after the buffer has overflowed.
-    private int AddToken(int w, int value)
+    private async ValueTask AddTokenAsync(int value)
     {
-        if (w < 0)
+        if (length < 0)
         {
-            return w;
+            return;
         }
 
-        if (w == TokenSize - 1)
+        if (length == TokenSize - 1)
         {
-            token[w] = '\0';
-            TokenText = new string(token, 0, w);
-            Error("token buffer too short");
-            return -1;
+            token[length] = '\0';
+            TokenText = new string(token, 0, length);
+            length = -1;
+            await ErrorAsync("token buffer too short");
+            return;
         }
 
-        token[w] = (char)value;
-        return w + 1;
+        token[length++] = (char)value;
     }
 
     // After an overflow the token ends at the NUL AddToken put there, as in rc's buffer.
-    private string Text(int w) => new(token, 0, w < 0 ? Array.IndexOf(token, '\0') : w);
+    private string Text() => new(token, 0, length < 0 ? Array.IndexOf(token, '\0') : length);
 
-    private int GetNext()
+    private async ValueTask<int> GetNextAsync()
     {
         int c;
         if (peekc != EndOfFile)
@@ -484,15 +506,15 @@ internal sealed class RcLexer
             return FromEpilog();
         }
 
-        if (DoPrompt)
+        if (DoPrompt && Prompt is not null)
         {
-            Prompt?.Invoke();
+            await Prompt();
         }
 
-        c = input.Read();
+        c = await input.ReadAsync();
         if (c == '\\' && !inQuote)
         {
-            c = input.Read();
+            c = await input.ReadAsync();
             if (c == '\n' && !inComment)
             {
                 Line++;
@@ -531,19 +553,19 @@ internal sealed class RcLexer
         return EndOfFile;
     }
 
-    private int NextC()
+    private async ValueTask<int> NextCAsync()
     {
         if (future == EndOfFile)
         {
-            future = GetNext();
+            future = await GetNextAsync();
         }
 
         return future;
     }
 
-    private int Advance()
+    private async ValueTask<int> AdvanceAsync()
     {
-        int c = NextC();
+        int c = await NextCAsync();
         LastC = future;
         future = EndOfFile;
         if (c == '\n')
@@ -554,30 +576,30 @@ internal sealed class RcLexer
         return c;
     }
 
-    private void SkipWhite()
+    private async ValueTask SkipWhiteAsync()
     {
         while (true)
         {
-            int c = NextC();
+            int c = await NextCAsync();
             if (c == '#')
             {
                 inComment = true;
                 while (true)
                 {
-                    c = NextC();
+                    c = await NextCAsync();
                     if (c is '\n' or EndOfFile)
                     {
                         inComment = false;
                         break;
                     }
 
-                    Advance();
+                    await AdvanceAsync();
                 }
             }
 
             if (c is ' ' or '\t')
             {
-                Advance();
+                await AdvanceAsync();
             }
             else
             {
@@ -586,11 +608,11 @@ internal sealed class RcLexer
         }
     }
 
-    private bool NextIs(int c)
+    private async ValueTask<bool> NextIsAsync(int c)
     {
-        if (NextC() == c)
+        if (await NextCAsync() == c)
         {
-            Advance();
+            await AdvanceAsync();
             return true;
         }
 
@@ -599,19 +621,23 @@ internal sealed class RcLexer
 
     // readhere1: the text up to a line that is exactly the tag. rc reads into a char, so a 0xFF
     // byte ends the document as end of file does.
-    private string? ReadHereDocument(RcTree tag)
+    private async ValueTask<string?> ReadHereDocumentAsync(RcTree tag)
     {
-        Prompt?.Invoke();
+        if (Prompt is not null)
+        {
+            await Prompt();
+        }
+
         var text = new StringBuilder();
         string match = tag.Str!;
         int matched = 0;
         bool matching = true;
         int c;
-        while ((c = input.Read()) != EndOfFile && c != 0xff)
+        while ((c = await input.ReadAsync()) != EndOfFile && c != 0xff)
         {
             if (c == 0)
             {
-                Error("NUL bytes in here doc");
+                await ErrorAsync("NUL bytes in here doc");
                 return null;
             }
 
@@ -624,7 +650,11 @@ internal sealed class RcLexer
                     break;
                 }
 
-                Prompt?.Invoke();
+                if (Prompt is not null)
+                {
+                    await Prompt();
+                }
+
                 matching = true;
                 matched = 0;
             }

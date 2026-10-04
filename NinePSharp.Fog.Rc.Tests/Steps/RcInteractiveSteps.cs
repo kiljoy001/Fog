@@ -13,10 +13,10 @@ public sealed class RcInteractiveSteps
     private RcReader? reader;
 
     [When("rc -i reads the script")]
-    public void WhenRead(string text)
+    public async Task WhenRead(string text)
     {
         script = text;
-        reader = RcReader.Read(Encoding.UTF8.GetBytes(text + "\n"), "/fd/0", interactive: true);
+        reader = await RcReader.ReadAsync(Encoding.UTF8.GetBytes(text + "\n"), "/fd/0", interactive: true);
     }
 
     [Then("it prints")]

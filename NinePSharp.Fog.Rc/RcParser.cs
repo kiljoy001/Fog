@@ -52,7 +52,7 @@ internal sealed class RcParser(RcLexer lexer)
     // Reads the next line and hands it to compile, which returns whether it compiled. rc's grammar
     // has no error productions, so yacc's recovery pops every state and ends the parse at the first
     // error; the generator checks that no table index reaches RcTables.Last.
-    internal Outcome Parse(Func<RcTree?, bool> compile)
+    internal async ValueTask<Outcome> ParseAsync(Func<RcTree?, ValueTask<bool>> compile)
     {
         int state = 0, symbol = NoSymbol, top = -1;
         RcTree? value = null, lexValue = null;
@@ -60,7 +60,7 @@ internal sealed class RcParser(RcLexer lexer)
         {
             if (++top >= MaxDepth)
             {
-                lexer.Error("yacc stack overflow");
+                await lexer.ErrorAsync("yacc stack overflow");
                 return Outcome.Stop;
             }
 
@@ -72,7 +72,8 @@ internal sealed class RcParser(RcLexer lexer)
             {
                 if (symbol == NoSymbol)
                 {
-                    symbol = Lex(out lexValue);
+                    symbol = Symbol(await lexer.LexAsync());
+                    lexValue = lexer.Value;
                 }
 
                 // A negative index is no shift; the generator checks index 0 is never one.
@@ -95,7 +96,7 @@ internal sealed class RcParser(RcLexer lexer)
 
             if (n == 0)
             {
-                lexer.Error("syntax error");
+                await lexer.ErrorAsync("syntax error");
                 return Outcome.Stop;
             }
 
@@ -106,7 +107,9 @@ internal sealed class RcParser(RcLexer lexer)
             int symbolOfRule = RcTables.RuleSymbols[n];
             int go = RcTables.Gotos[symbolOfRule];
             state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];
-            switch (Reduce(n, first, ref value, compile))
+            bool? end;
+            (end, value) = await ReduceAsync(n, first, value, compile);
+            switch (end)
             {
                 case false:
                     return Outcome.Stop;
@@ -191,34 +194,27 @@ internal sealed class RcParser(RcLexer lexer)
         return t;
     }
 
-    private int Lex(out RcTree? value)
-    {
-        int symbol = Symbol(lexer.Lex());
-        value = lexer.Value;
-        return symbol;
-    }
-
     // syn.y's actions, numbered as yacc numbers the productions. Rule 1 and rule 2 end the parse.
-    private bool? Reduce(int rule, int first, ref RcTree? result, Func<RcTree?, bool> compile)
+    private async ValueTask<(bool? End, RcTree? Result)> ReduceAsync(int rule, int first, RcTree? result, Func<RcTree?, ValueTask<bool>> compile)
     {
         switch (rule)
         {
             case 1:
-                return false;
+                return (false, result);
             case 2:
-                lexer.ReadHereDocuments();
-                return compile(values[first]);
+                await lexer.ReadHereDocumentsAsync();
+                return (await compile(values[first]), result);
         }
 
-        result = rule < 19 ? Line(rule, first, result)
-            : rule < 39 ? Command(rule, first, result)
+        result = rule < 19 ? await LineAsync(rule, first, result)
+            : rule < 39 ? await CommandAsync(rule, first, result)
             : rule < 47 ? Simple(rule, first, result)
             : Word(rule, first, result);
-        return null;
+        return (null, result);
     }
 
     // line, body, cmdsa, brace, paren, assign, epilog, redir and the empty cmd.
-    private RcTree? Line(int rule, int first, RcTree? result)
+    private async ValueTask<RcTree?> LineAsync(int rule, int first, RcTree? result)
     {
         RcTree? At(int i) => values[first + i];
         switch (rule)
@@ -228,7 +224,7 @@ internal sealed class RcParser(RcLexer lexer)
             case 8:
                 return Tree1('&', At(0));
             case 10:
-                lexer.ReadHereDocuments();
+                await lexer.ReadHereDocumentsAsync();
                 return result;
             case 11:
                 return Tree1(RcToken.Brace, At(1));
@@ -244,7 +240,7 @@ internal sealed class RcParser(RcLexer lexer)
                 RcTree redirection = Mung(At(0)!, At(1));
                 if (redirection.RType == RcToken.Here)
                 {
-                    lexer.HereDocument(redirection);
+                    await lexer.HereDocumentAsync(redirection);
                 }
 
                 return redirection;
@@ -253,7 +249,7 @@ internal sealed class RcParser(RcLexer lexer)
         }
     }
 
-    private RcTree? Command(int rule, int first, RcTree? result)
+    private async ValueTask<RcTree?> CommandAsync(int rule, int first, RcTree? result)
     {
         RcTree? At(int i) => values[first + i];
         switch (rule)
@@ -261,7 +257,7 @@ internal sealed class RcParser(RcLexer lexer)
             case 19:
                 return EpiMung(At(0), At(1));
             case 20 or 22 or 24 or 26 or 28 or 30:
-                lexer.SkipNewlines();
+                await lexer.SkipNewlinesAsync();
                 return result;
             case 21 or 29:
                 return Mung(At(0)!, At(1), At(3));

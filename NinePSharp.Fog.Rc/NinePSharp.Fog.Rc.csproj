@@ -11,4 +11,8 @@
     <InternalsVisibleTo Include="NinePSharp.Fog.Rc.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\NinePSharp.Fog.Kernel\NinePSharp.Fog.Kernel.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -17,24 +17,24 @@ public sealed class RcSyntaxSteps
     private RcReader? reader;
 
     [When("rc reads the script")]
-    public void WhenRead(string text)
+    public async Task WhenRead(string text)
     {
         script = text;
-        Read(Encoding.UTF8.GetBytes(text + "\n"));
+        await ReadAsync(Encoding.UTF8.GetBytes(text + "\n"));
     }
 
     [When(@"^rc reads a script of ""echo "" and a word of (\d+) x's$")]
-    public void WhenReadLongWord(int length)
+    public async Task WhenReadLongWord(int length)
     {
         setup = $"{{echo -n 'echo '; for(i in `{{seq {length / 10}}}) echo -n xxxxxxxxxx; echo}} >{File}";
-        Read(Encoding.ASCII.GetBytes("echo " + new string('x', length) + "\n"));
+        await ReadAsync(Encoding.ASCII.GetBytes("echo " + new string('x', length) + "\n"));
     }
 
     [When(@"^rc reads a script of ""(.*)"" and a word of (\d+) x's, then a line of ""(\w+)""$")]
-    public void WhenReadLongWordThenLine(string prefix, int length, string line)
+    public async Task WhenReadLongWordThenLine(string prefix, int length, string line)
     {
         setup = $"{{echo -n '{prefix}'; for(i in `{{seq {length / 10}}}) echo -n xxxxxxxxxx; echo; echo {line}}} >{File}";
-        Read(Encoding.ASCII.GetBytes(prefix + new string('x', length) + "\n" + line + "\n"));
+        await ReadAsync(Encoding.ASCII.GetBytes(prefix + new string('x', length) + "\n" + line + "\n"));
     }
 
     [Then(@"^rc reports the first (\d+) x's as a token too long, then as a token out of place on line 2$")]
@@ -45,24 +45,24 @@ public sealed class RcSyntaxSteps
     public Task ThenOnlyTooLong(int length) => ThenReports($"{File}:1: token {new string('x', length)}: token buffer too short");
 
     [When(@"^rc reads a script of (\d+) opening parentheses$")]
-    public void WhenReadDeep(int count)
+    public async Task WhenReadDeep(int count)
     {
         setup = $"{{for(i in `{{seq {count}}}) echo -n '('; echo}} >{File}";
-        Read(Encoding.ASCII.GetBytes(new string('(', count) + "\n"));
+        await ReadAsync(Encoding.ASCII.GetBytes(new string('(', count) + "\n"));
     }
 
     [When("rc reads a here document holding a NUL byte")]
-    public void WhenReadNul()
+    public async Task WhenReadNul()
     {
         setup = $"dd -if /dev/zero -of /tmp/z -bs 1 -count 1 >[2]/dev/null; {{echo 'fn f {{cat <<X'; echo -n a; cat /tmp/z; echo; echo X; echo '}}'; echo 'whatis f'}} >{File}";
-        Read(Encoding.Latin1.GetBytes("fn f {cat <<X\na\0\nX\n}\nwhatis f\n"));
+        await ReadAsync(Encoding.Latin1.GetBytes("fn f {cat <<X\na\0\nX\n}\nwhatis f\n"));
     }
 
     [When("rc reads a here document holding a 0xFF byte")]
-    public void WhenReadFf()
+    public async Task WhenReadFf()
     {
         setup = $"{{echo 'fn f {{cat <<X'; echo -n ab; echo -n ÿ | tcs -t latin1; echo cd; echo X; echo '}}'; echo 'whatis f'}} >{File}";
-        Read(Encoding.Latin1.GetBytes("fn f {cat <<X\nab\u00ffcd\nX\n}\nwhatis f\n"));
+        await ReadAsync(Encoding.Latin1.GetBytes("fn f {cat <<X\nab\u00ffcd\nX\n}\nwhatis f\n"));
     }
 
     [Then(@"^whatis (\w+) prints$")]
@@ -86,7 +86,7 @@ public sealed class RcSyntaxSteps
     // rc's strings hold bytes; these hold them one per char.
     private static string Text(string bytes) => Encoding.UTF8.GetString(Encoding.Latin1.GetBytes(bytes));
 
-    private void Read(byte[] bytes) => reader = RcReader.Read(bytes, File, interactive: false);
+    private async Task ReadAsync(byte[] bytes) => reader = await RcReader.ReadAsync(bytes, File, interactive: false);
 
     // 9front's rc, given the same script, prints the same text. A null text is made by setup.
     private async Task AgreeWithNineFront(string? text, string expected)

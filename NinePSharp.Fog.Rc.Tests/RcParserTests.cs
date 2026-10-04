@@ -35,13 +35,13 @@ public sealed class RcParserTests
 
     // As rc reads a string for eval or -c: the whole input is one braced block.
     [Fact]
-    public void WithoutReadingLinesTheInputIsOneBlock()
+    public async Task WithoutReadingLinesTheInputIsOneBlock()
     {
         var lexer = new RcLexer(RcInput.FromBytes("a\nb\n"u8.ToArray()), "eval", TextWriter.Null);
         var parser = new RcParser(lexer);
         var lines = new List<RcTree?>();
-        Assert.Equal(RcParser.Outcome.Line, parser.Parse(tree => Keep(lines, tree)));
-        Assert.Equal(RcParser.Outcome.Stop, parser.Parse(tree => Keep(lines, tree)));
+        Assert.Equal(RcParser.Outcome.Line, await parser.ParseAsync(tree => Keep(lines, tree)));
+        Assert.Equal(RcParser.Outcome.Stop, await parser.ParseAsync(tree => Keep(lines, tree)));
         Assert.True(lexer.Eof);
         Assert.Equal("{\n\ta\n\tb\n}", RcPrinter.Print(Assert.Single(lines)));
     }
@@ -49,10 +49,10 @@ public sealed class RcParserTests
     // globprop: a word with a glob is a pattern inside a list, a concatenation or an argument list,
     // and marks that node as holding a glob. A lone word keeps the lexer's mark.
     [Fact]
-    public void GlobsArePropagatedAsGlobpropDoes()
+    public async Task GlobsArePropagatedAsGlobpropDoes()
     {
-        Assert.Equal(1, Line("*.c")!.Child[0]!.Glob);
-        RcTree arguments = Line("*.c (a b*) x^*.y z")!.Child[0]!;
+        Assert.Equal(1, (await LineAsync("*.c"))!.Child[0]!.Glob);
+        RcTree arguments = (await LineAsync("*.c (a b*) x^*.y z"))!.Child[0]!;
         Assert.Equal(2, FirstWord(arguments).Glob);
         RcTree concatenation = arguments.Child[0]!.Child[1]!;
         RcTree list = arguments.Child[0]!.Child[0]!.Child[1]!;
@@ -62,18 +62,18 @@ public sealed class RcParserTests
         Assert.Equal(1, arguments.Glob);
     }
 
-    private static bool Keep(List<RcTree?> lines, RcTree? tree)
+    private static ValueTask<bool> Keep(List<RcTree?> lines, RcTree? tree)
     {
         lines.Add(tree);
-        return true;
+        return ValueTask.FromResult(true);
     }
 
-    private static RcTree? Line(string text)
+    private static async Task<RcTree?> LineAsync(string text)
     {
         var lexer = new RcLexer(RcInput.FromBytes(Encoding.UTF8.GetBytes(text + "\n")), "/tmp/s", TextWriter.Null);
         lexer.ReadLines();
         RcTree? line = null;
-        new RcParser(lexer).Parse(tree => (line = tree) is not null);
+        await new RcParser(lexer).ParseAsync(tree => ValueTask.FromResult((line = tree) is not null));
         return line;
     }
 

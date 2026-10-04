@@ -6,16 +6,16 @@ public sealed class RcLexerTests
 {
     // yyerror forgets that the last token was a word or $, and counts the error for compile.
     [Fact]
-    public void AnErrorClearsTheWordStateAndIsCounted()
+    public async Task AnErrorClearsTheWordStateAndIsCounted()
     {
         RcLexer lexer = Lexer("$a b\n");
         lexer.ReadLines();
-        Assert.Equal('$', lexer.Lex());
-        Assert.Equal(RcToken.Word, lexer.Lex());
+        Assert.Equal('$', await lexer.LexAsync());
+        Assert.Equal(RcToken.Word, await lexer.LexAsync());
         Assert.True(lexer.LastWord);
         lexer.LastDol = true;
 
-        lexer.Error("broken");
+        await lexer.ErrorAsync("broken");
 
         Assert.False(lexer.LastWord);
         Assert.False(lexer.LastDol);
@@ -24,12 +24,12 @@ public sealed class RcLexerTests
 
     // rc's doprompt is shared by every input, so the end of one asks the input that resumes to prompt.
     [Fact]
-    public void TheEndOfInputAsksForAPrompt()
+    public async Task TheEndOfInputAsksForAPrompt()
     {
         RcLexer lexer = Lexer(string.Empty);
         lexer.ReadLines();
         lexer.DoPrompt = false;
-        Assert.Equal(RcToken.EndOfFile, lexer.Lex());
+        Assert.Equal(RcToken.EndOfFile, await lexer.LexAsync());
         Assert.True(lexer.DoPrompt);
     }
 

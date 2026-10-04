@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog.Rc\NinePSharp.Fog.Rc.csproj" />
+    <ProjectReference Include="..\NinePSharp.Fog.Commands\NinePSharp.Fog.Commands.csproj" />
   </ItemGroup>
 
   <ItemGroup>

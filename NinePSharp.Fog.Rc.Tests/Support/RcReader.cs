@@ -13,7 +13,7 @@ internal sealed class RcReader
     // rc's strings hold bytes, one per char; Output decodes them as UTF-8.
     internal string Output => Encoding.UTF8.GetString(Encoding.Latin1.GetBytes(output.ToString()));
 
-    internal static RcReader Read(byte[] bytes, string file, bool interactive)
+    internal static async Task<RcReader> ReadAsync(byte[] bytes, string file, bool interactive)
     {
         var reader = new RcReader();
         string prompt = "%";
@@ -25,6 +25,7 @@ internal sealed class RcReader
                 reader.output.Write(prompt);
                 lexer.DoPrompt = false;
                 prompt = "+";
+                return ValueTask.CompletedTask;
             };
         }
 
@@ -34,15 +35,15 @@ internal sealed class RcReader
         {
             prompt = "%";
             lexer.ErrorCount = 0;
-            RcParser.Outcome outcome = parser.Parse(tree =>
+            RcParser.Outcome outcome = await parser.ParseAsync(tree =>
             {
                 if (lexer.ErrorCount != 0)
                 {
-                    return false;
+                    return ValueTask.FromResult(false);
                 }
 
                 reader.Run(tree);
-                return true;
+                return ValueTask.FromResult(true);
             });
             if (outcome == RcParser.Outcome.Stop && (!interactive || lexer.Eof))
             {

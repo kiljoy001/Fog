@@ -109,6 +109,9 @@ if [[ $FULL -eq 1 ]]; then
   rm -rf .artifacts/stryker-fog-rc
   (cd NinePSharp.Fog.Rc.Tests && dotnet stryker --config-file ../stryker-config-fog-rc.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-rc --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-rc --min-score "$MIN_MUTATION"
+  rm -rf .artifacts/stryker-fog-commands
+  (cd NinePSharp.Fog.Rc.Tests && dotnet stryker --config-file ../stryker-config-fog-commands.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-commands --skip-version-check --break-on-initial-test-failure --verbosity error)
+  python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-commands --min-score "$MIN_MUTATION"
   rm -rf .artifacts/stryker-fog-kernel
   (cd NinePSharp.Fog.Kernel.Tests && dotnet stryker --config-file ../stryker-config-fog-kernel.json --reporter json --reporter progress --output ../.artifacts/stryker-fog-kernel --skip-version-check --break-on-initial-test-failure --verbosity error)
   python3 tools/mutation_summary.py --output-dir .artifacts/stryker-fog-kernel --min-score "$MIN_MUTATION"
