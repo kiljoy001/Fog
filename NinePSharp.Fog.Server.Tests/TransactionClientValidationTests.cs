@@ -399,7 +399,9 @@ public sealed class TransactionClientValidationTests
 
             ISerializable reply = Override?.Invoke(request) ?? Respond(request);
             response.Dispose();
-            response = new MemoryStream(SequentialClientTests.Frame(reply));
+            byte[] frame = new byte[reply.Size];
+            reply.WriteTo(frame);
+            response = new MemoryStream(frame);
         }
 
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => response.ReadAsync(buffer, cancellationToken);
