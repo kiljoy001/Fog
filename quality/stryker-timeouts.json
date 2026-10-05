@@ -286,5 +286,17 @@
     "mutator": "Block removal mutation",
     "line": "if (symbol == NoSymbol) {",
     "reason": "the parser never asks the lexer for a token and cycles through its states"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Statement mutation",
+    "line": "t++;",
+    "reason": "Tokenize never moves past a separator"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Statement mutation",
+    "line": "token.Append(line[t++]);",
+    "reason": "Tokenize never moves past a token character"
   }
 ]
