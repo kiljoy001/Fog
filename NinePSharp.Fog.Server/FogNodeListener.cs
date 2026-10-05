@@ -37,8 +37,7 @@ public sealed class FogNodeListener : FogListener
 
     private protected override async Task ServeAsync(TcpClient client, CancellationToken lifetime)
     {
-        await using var tls = new SslStream(client.GetStream(), false, (_, peer, _, _) =>
-            peer is X509Certificate2 supplied && policy.AuthenticateCertificate(supplied));
+        await using var tls = new SslStream(client.GetStream());
         using var handshake = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
         handshake.CancelAfter(handshakeTimeout);
         await tls.AuthenticateAsServerAsync(
@@ -46,12 +45,13 @@ public sealed class FogNodeListener : FogListener
         {
             ServerCertificate = certificate,
             ClientCertificateRequired = true,
+            RemoteCertificateValidationCallback = (_, peer, _, _) => peer is X509Certificate2 supplied && policy.AuthenticateCertificate(supplied),
             EnabledSslProtocols = SslProtocols.Tls13,
-            AllowRenegotiation = false,
             AllowTlsResume = false,
         },
             handshake.Token);
-        if (tls.RemoteCertificate is not X509Certificate2 peer || !policy.AuthenticateCertificate(peer))
+        var peer = tls.RemoteCertificate as X509Certificate2;
+        if (peer is null || !policy.AuthenticateCertificate(peer))
         {
             throw new AuthenticationException();
         }

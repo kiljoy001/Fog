@@ -55,12 +55,15 @@ public sealed class ListenerDrainTests
             await Write(first, new Tclunk(2, 1), deadline.Token);
         }
 
+        // The processor's default drain is five seconds; only the configured one fits under four.
+        var released = System.Diagnostics.Stopwatch.StartNew();
         while (true)
         {
             try
             {
                 await using Stream second = await Connect(fixture, listener, deadline.Token);
                 await Version(second, deadline.Token);
+                Assert.True(released.Elapsed < TimeSpan.FromSeconds(4), $"The slot took {released.Elapsed} to release.");
                 return;
             }
             catch (Exception exception) when (exception is IOException or System.Security.Authentication.AuthenticationException)

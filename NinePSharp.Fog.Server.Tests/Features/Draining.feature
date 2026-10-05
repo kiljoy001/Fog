@@ -49,7 +49,7 @@ Feature: Draining in-flight 9P work is bounded and leaves unfinished work with a
   Scenario: A flushed tag can be used again while its abandoned write still runs
     Given a write to "file" that ignores cancellation is in flight
     When the node flushes the write
-    And the node stats the root with the write's tag
+    And the node stats the root with the write's tag as soon as the flush is answered
     Then that request is answered with Rstat
 
   @FOG_DRAIN_004

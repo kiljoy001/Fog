@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging.Abstractions;
 using NinePSharp.Fog.Server;
@@ -239,6 +241,67 @@ public sealed class ListenerBoundaryTests
         Assert.True(await RejectedAsync(tls, fixture.NodeCertificate, timeout.Token));
         Assert.Equal(4, clock.Reads);
         Assert.Empty(fixture.Store.LiveIds());
+    }
+
+    [Fact]
+    public async Task AReconnectingNodeCannotResumeItsTlsSession()
+    {
+        using var fixture = new ControlFixture();
+
+        // The session lifetime closes each connection, so s_client has read any ticket before it saves the session.
+        await using var listener = Create(fixture, fixture.ServerCertificate, lifetime: TimeSpan.FromSeconds(1));
+        listener.Start();
+        DirectoryInfo directory = Directory.CreateTempSubdirectory("fog-resume-");
+        try
+        {
+            string certificate = Path.Combine(directory.FullName, "node.pem");
+            string key = Path.Combine(directory.FullName, "node.key");
+            string session = Path.Combine(directory.FullName, "session.pem");
+            await File.WriteAllTextAsync(certificate, fixture.NodeCertificate.ExportCertificatePem());
+            using (ECDsa privateKey = fixture.NodeCertificate.GetECDsaPrivateKey()!)
+            {
+                await File.WriteAllTextAsync(key, privateKey.ExportPkcs8PrivateKeyPem());
+            }
+
+            string[] connect =
+            [
+                "s_client", "-connect", $"127.0.0.1:{listener.LocalEndpoint.Port}", "-servername", "control.test",
+                "-tls1_3", "-cert", certificate, "-key", key, "-ign_eof",
+            ];
+            Assert.Contains("New, TLSv1.3", await OpenSslAsync([.. connect, "-sess_out", session]));
+            Assert.Contains("New, TLSv1.3", await OpenSslAsync([.. connect, "-sess_in", session]));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static async Task<string> OpenSslAsync(string[] arguments)
+    {
+        var start = new ProcessStartInfo("openssl") { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (string argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using Process process = Process.Start(start)!;
+        process.StandardInput.Close();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            Task<string> output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            Task<string> error = process.StandardError.ReadToEndAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token);
+            return await output + await error;
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+            }
+        }
     }
 
     private static async Task<bool> RejectedAsync(SslStream tls, X509Certificate2? certificate, CancellationToken cancellation)

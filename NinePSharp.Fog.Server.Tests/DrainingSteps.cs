@@ -74,11 +74,16 @@ public sealed class DrainingSteps
         reply = await Send(NinePMessage.NewMsgTwrite(new Twrite(102, 2, 0, new byte[] { 2 }))).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
-    [When("the node stats the root with the write's tag")]
+    [When("the node stats the root with the write's tag as soon as the flush is answered")]
     public async Task WhenStatWithSameTag()
     {
-        await drain!.WaitAsync(TimeSpan.FromSeconds(10));
-        reply = await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromSeconds(10));
+        // Sent inline as the flush completes, before the abandoned write's own continuation can run.
+        Task<object> stat = await drain!.ContinueWith(
+            _ => Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default).WaitAsync(TimeSpan.FromSeconds(10));
+        reply = await stat.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Then("that request is answered with Rstat")]
