@@ -158,11 +158,13 @@ internal sealed class P9anyServer
             throw P9anyException.TooSmall();
         }
 
+        Ticket? accepted = null;
+        Authenticator? authenticator = null;
         if (!form1 ||
-            !Ticket.TryUnmarshal(key!, data, out Ticket? accepted, out _) ||
+            !Ticket.TryUnmarshal(key!, data, out accepted, out _) ||
             accepted!.Type != AuthMessageType.AuthTs ||
             !CryptographicOperations.FixedTimeEquals(accepted.Challenge, challenge) ||
-            !Authenticator.TryUnmarshal(accepted, data[Form1TicketLength..], out Authenticator? authenticator, out _) ||
+            !Authenticator.TryUnmarshal(accepted, data[Form1TicketLength..], out authenticator, out _) ||
             authenticator!.Type != AuthMessageType.AuthAc ||
             !CryptographicOperations.FixedTimeEquals(authenticator.Challenge, challenge))
         {

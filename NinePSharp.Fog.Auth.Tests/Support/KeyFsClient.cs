@@ -35,7 +35,7 @@ internal sealed class KeyFsClient : IDisposable
     {
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath));
-        var client = new NinePClient(new NetworkStream(socket, ownsSocket: false));
+        var client = new NinePClient(new DeadlineStream(socket, ownsSocket: false));
         await client.VersionAsync(8192, "9P2000");
         return new KeyFsClient(socket, client);
     }
@@ -101,6 +101,12 @@ internal sealed class KeyFsClient : IDisposable
             }
 
             data.AddRange(read.Data.ToArray());
+
+            // Keyfs files are a few hundred bytes; a read that keeps going has lost its offset.
+            if (data.Count > 1 << 20)
+            {
+                throw new InvalidOperationException("The keyfs read never reached its end.");
+            }
         }
     }
 

@@ -338,13 +338,14 @@ Feature: Fog keeps its authentication database as 9front keyfs does
     When the sealed key file is <damage>
     And the keyfs is restarted on the same TPM
     Then the keyfs refuses to start with "keyfs: cannot unseal storage key"
+    And the TPM was never opened during the restart
 
     Examples:
-      | damage                     |
-      | emptied                    |
-      | given another magic        |
-      | extended by one byte       |
-      | cut short                  |
+      | damage                      |
+      | emptied                     |
+      | given another magic         |
+      | extended by one byte        |
+      | cut short                   |
       | given a garbled public area |
 
   @FOG_KEYFS_040

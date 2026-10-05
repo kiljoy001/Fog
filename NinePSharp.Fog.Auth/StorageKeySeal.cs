@@ -65,7 +65,7 @@ internal static class StorageKeySeal
 
     internal static byte[] Unseal(Func<Tpm2Device> openTpm, ReadOnlySpan<byte> blob)
     {
-        (TpmPublic Public, TpmPrivate Private) sealedKey;
+        (TpmPublic Public, TpmPrivate Private) sealedKey = default;
         try
         {
             sealedKey = Parse(blob);
@@ -75,6 +75,7 @@ internal static class StorageKeySeal
             throw new KeyFsException(CannotUnseal, exception);
         }
 
+        byte[] secret = [];
         try
         {
             using Tpm2 tpm = Connect(openTpm);
@@ -84,7 +85,7 @@ internal static class StorageKeySeal
                 TpmHandle sealedObject = tpm.Load(primary, sealedKey.Private, sealedKey.Public);
                 try
                 {
-                    return tpm.Unseal(sealedObject);
+                    secret = tpm.Unseal(sealedObject);
                 }
                 finally
                 {
@@ -100,6 +101,8 @@ internal static class StorageKeySeal
         {
             throw new KeyFsException(CannotUnseal, exception);
         }
+
+        return secret;
     }
 
     internal static (TpmPublic Public, TpmPrivate Private) Parse(ReadOnlySpan<byte> blob)

@@ -58,7 +58,7 @@ public sealed class KeyFsProtocolSteps
         keyfs?.Dispose();
         if (host is not null)
         {
-            await host.DisposeAsync();
+            await host.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         tpm?.Dispose();
@@ -284,7 +284,7 @@ public sealed class KeyFsProtocolSteps
             System.Net.Sockets.SocketType.Stream,
             System.Net.Sockets.ProtocolType.Unspecified);
         await socket.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(options.SocketPath));
-        await using var stream = new System.Net.Sockets.NetworkStream(socket);
+        await using var stream = new DeadlineStream(socket, ownsSocket: true);
         await SendRawAsync(stream, new Tversion(NinePConstants.NoTag, 8192, "9P2000"));
         await ReadRawAsync(stream);
         await SendRawAsync(stream, new Tgetattr(tag, 0, 0x7FF));

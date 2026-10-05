@@ -43,6 +43,7 @@ public sealed class KeyFsSteps
     private KeyFsHost? otherHost;
     private KeyFsDispatcher? stoppedDispatcher;
     private int socketsBeforeStart;
+    private int tpmOpens;
 
     [When("a keyfs is initialised on an empty software TPM")]
     public static void WhenInitialised()
@@ -73,8 +74,12 @@ public sealed class KeyFsSteps
     {
         await StopAsync();
         socketsBeforeStart = SocketInodes().Count;
+        tpmOpens = 0;
         failure = await CatchAsync(StartAsync);
     }
+
+    [Then("the TPM was never opened during the restart")]
+    public void ThenTpmNotOpened() => Assert.Equal(0, tpmOpens);
 
     [Then(@"^the keyfs refuses to start with ""(.*)""$")]
     public void ThenRefusesToStart(string message)
@@ -793,7 +798,7 @@ public sealed class KeyFsSteps
         otherServer?.Dispose();
         if (otherHost is not null)
         {
-            await otherHost.DisposeAsync();
+            await otherHost.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         await StopAsync();
@@ -904,7 +909,7 @@ public sealed class KeyFsSteps
         if (host is not null)
         {
             stoppedDispatcher = host.Dispatcher;
-            await host.DisposeAsync();
+            await host.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         host = null;
@@ -961,7 +966,11 @@ public sealed class KeyFsSteps
     {
         StateDirectory = directory,
         SocketPath = socketPath ?? Path.Combine(directory, "keys.sock"),
-        OpenTpm = softwareTpm.OpenDevice,
+        OpenTpm = () =>
+        {
+            tpmOpens++;
+            return softwareTpm.OpenDevice();
+        },
         Time = time,
         Files = files ?? KeyFsFiles.Default,
     };

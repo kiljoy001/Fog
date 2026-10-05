@@ -199,7 +199,7 @@ public sealed class AuthSrvSteps
     [When("the auth server shuts down")]
     public async Task WhenServerShutsDown()
     {
-        await server!.DisposeAsync();
+        await server!.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         server = null;
     }
 
@@ -413,7 +413,7 @@ public sealed class AuthSrvSteps
     public async Task ThenStopsListening()
     {
         IPEndPoint endPoint = server!.LocalEndPoint;
-        await server.DisposeAsync();
+        await server.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         server = null;
         await Assert.ThrowsAsync<SocketException>(() => AuthClient.ConnectAsync(endPoint));
     }
@@ -429,13 +429,13 @@ public sealed class AuthSrvSteps
 
         if (server is not null)
         {
-            await server.DisposeAsync();
+            await server.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         admin?.Dispose();
         if (keyfsHost is not null)
         {
-            await keyfsHost.DisposeAsync();
+            await keyfsHost.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         tpm?.Dispose();
@@ -465,7 +465,7 @@ public sealed class AuthSrvSteps
         client = null;
         if (server is not null)
         {
-            await server.DisposeAsync();
+            await server.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         StartServer();

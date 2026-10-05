@@ -356,13 +356,13 @@ public sealed class AuthFidSteps
     {
         if (server is not null)
         {
-            await server.DisposeAsync();
+            await server.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         admin?.Dispose();
         if (keyfsHost is not null)
         {
-            await keyfsHost.DisposeAsync();
+            await keyfsHost.DisposeAsync().AsTask().WaitAsync(DeadlineStream.Wait);
         }
 
         tpm?.Dispose();

@@ -27,6 +27,7 @@
   <ItemGroup>
     <Compile Include="..\NinePSharp.Fog.Auth.Tests\Support\SoftwareTpm.cs" Link="Support\SoftwareTpm.cs" />
     <Compile Include="..\NinePSharp.Fog.Auth.Tests\Support\KeyFsClient.cs" Link="Support\KeyFsClient.cs" />
+    <Compile Include="..\NinePSharp.Fog.Auth.Tests\Support\DeadlineStream.cs" Link="Support\DeadlineStream.cs" />
   </ItemGroup>
 
   <ItemGroup>
