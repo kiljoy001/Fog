@@ -129,17 +129,24 @@ public sealed class FogRecordTests
     [Fact]
     public void SerializationRejectsUnknownMissingDuplicateAndInvalidCells()
     {
-        Assert.Throws<FogException>(() => Schema.Serialize([new Dictionary<string, string?> { ["id"] = "a", ["unknown"] = "x" }], 4096, 1));
-        Assert.Throws<FogException>(() => Schema.Serialize([new Dictionary<string, string?>()], 4096, 1));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row(string.Empty, "x")], 4096, 1));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row("one", "a"), Row("one", "b")], 4096, 2));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row("one", "a"), Row("one", "a")], 4096, 2));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "\0")], 4096, 1));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "\ud800")], 4096, 1));
-        Assert.Throws<FogException>(() => Schema.Serialize([Row("a", new string('x', 7162))], 9000, 1));
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([new Dictionary<string, string?> { ["id"] = "a", ["unknown"] = "x" }], 4096, 1)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([new Dictionary<string, string?>()], 4096, 1)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([Row(string.Empty, "x")], 4096, 1)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([Row("one", "a"), Row("one", "b")], 4096, 2)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([Row("one", "a"), Row("one", "a")], 4096, 2)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "\0")], 4096, 1)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "\ud800")], 4096, 1)).Code);
+        Assert.Equal("invalid-request", Assert.Throws<FogException>(() => Schema.Serialize([Row("a", new string('x', 7162))], 9000, 1)).Code);
         Assert.Equal("limit", Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "a"), Row("b", "b")], 4096, 1)).Code);
         Assert.Equal("limit", Assert.Throws<FogException>(() => Schema.Serialize([Row("a", "a")], 1, 1)).Code);
         Assert.Equal("limit", Assert.Throws<FogException>(() => Schema.Serialize([], Header.Length - 1, 1)).Code);
+    }
+
+    [Fact]
+    public void SerializationStopsReadingRowsOnceALimitIsExceeded()
+    {
+        Assert.Equal("limit", Assert.Throws<FogException>(() => Schema.Serialize(UntilLimit(Row("a", "a"), Row("b", "b")), 4096, 1)).Code);
+        Assert.Equal("limit", Assert.Throws<FogException>(() => Schema.Serialize(UntilLimit(Row("a", new string('x', 64))), Header.Length + 8, 2)).Code);
     }
 
     [Theory]
@@ -208,4 +215,14 @@ public sealed class FogRecordTests
 
     internal static IReadOnlyDictionary<string, string?> Row(string id, string? value) =>
         new Dictionary<string, string?> { ["id"] = id, ["value"] = value };
+
+    private static IEnumerable<IReadOnlyDictionary<string, string?>> UntilLimit(params IReadOnlyDictionary<string, string?>[] rows)
+    {
+        foreach (var row in rows)
+        {
+            yield return row;
+        }
+
+        throw new InvalidOperationException("read past the limit");
+    }
 }

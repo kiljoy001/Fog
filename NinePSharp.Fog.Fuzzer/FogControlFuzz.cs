@@ -121,7 +121,7 @@ public static class FogControlFuzz
                                     return System.Threading.Tasks.Task.CompletedTask;
                                 });
                         });
-                        Check(control.WriteAsync("owner", id, "commit\n"u8.ToArray()).GetAwaiter().GetResult() == 7, "commit byte count");
+                        Check(Finished(control.WriteAsync("owner", id, "commit\n"u8.ToArray())) == 7, "commit byte count");
                         if (!done)
                         {
                             expectedEffects++;
@@ -141,7 +141,7 @@ public static class FogControlFuzz
                     break;
                 case 6:
                     var release = new FogControlFile(store, _ => throw new InvalidOperationException("release prepared an effect"));
-                    Check(release.WriteAsync("owner", id, "release\n"u8.ToArray()).GetAwaiter().GetResult() == 8, "release byte count");
+                    Check(Finished(release.WriteAsync("owner", id, "release\n"u8.ToArray())) == 8, "release byte count");
                     Reject("tx-expired", () => store.Status("owner", id));
                     upload?.Dispose();
                     upload = null;
@@ -154,7 +154,7 @@ public static class FogControlFuzz
                     break;
                 case 7:
                     var invalid = new FogControlFile(store, _ => throw new InvalidOperationException("invalid command prepared an effect"));
-                    Reject("invalid-request", () => invalid.WriteAsync("owner", id, new byte[] { instruction }).GetAwaiter().GetResult());
+                    Reject("invalid-request", () => Finished(invalid.WriteAsync("owner", id, new byte[] { instruction })));
                     if (writing)
                     {
                         Reject("invalid-request", () => upload!.Write(ulong.MaxValue, [instruction]));
@@ -196,6 +196,8 @@ public static class FogControlFuzz
 
         throw new InvalidOperationException("invalid operation accepted: " + code);
     }
+
+    private static uint Finished(System.Threading.Tasks.Task<uint> write) => write.WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
 
     private static void Check(bool condition, string invariant)
     {

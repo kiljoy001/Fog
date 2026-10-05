@@ -100,6 +100,7 @@ public sealed class FogRecordSchema
         var output = new StringBuilder(header);
         long outputBytes = Utf8.GetByteCount(header);
         int count = 0;
+        byte[] result = [];
         try
         {
             foreach (var row in rows)
@@ -109,8 +110,8 @@ public sealed class FogRecordSchema
                     throw new FogException("limit");
                 }
 
-                if (row.Keys.Any(key => !columns.Contains(key, StringComparer.Ordinal)) ||
-                    !row.TryGetValue(columns[0], out string? head) || string.IsNullOrEmpty(head))
+                string? head = row.GetValueOrDefault(columns[0]);
+                if (row.Keys.Any(key => !columns.Contains(key, StringComparer.Ordinal)) || string.IsNullOrEmpty(head))
                 {
                     throw new FogException("invalid-request");
                 }
@@ -136,9 +137,8 @@ public sealed class FogRecordSchema
                 table.RemoveRow(entry);
             }
 
-            byte[] result = Utf8.GetBytes(output.ToString());
+            result = Utf8.GetBytes(output.ToString());
             _ = Parse(result, maxBytes, maxRows);
-            return result;
         }
         catch (TabException)
         {
@@ -148,6 +148,8 @@ public sealed class FogRecordSchema
         {
             throw new FogException("invalid-request");
         }
+
+        return result;
     }
 
     private static bool ValidName(string value) => !string.IsNullOrEmpty(value) && value.Length <= 128 &&
