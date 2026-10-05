@@ -174,7 +174,7 @@ public sealed class AuthPassSteps
     }
 
     [Then("the server closes the connection")]
-    public async Task ThenClosed() => await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(10));
+    public async Task ThenClosed() => await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(3));
 
     [Then("the server replies AuthOK and a form 1 ticket that does not open with that PAK key")]
     public async Task ThenUnopenable()

@@ -324,10 +324,10 @@ public sealed class AuthSrvSteps
     }
 
     [Then("the server closes the connection")]
-    public async Task ThenClosed() => await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(10));
+    public async Task ThenClosed() => await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(3));
 
     [Then("the server closes the connection without replying")]
-    public async Task ThenClosedSilently() => Assert.Equal(0, await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(10)));
+    public async Task ThenClosedSilently() => Assert.Equal(0, await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(3)));
 
     [When(@"^a client sends a ticket request of type (\w+)$")]
     public async Task WhenRequestOfType(string type)
@@ -373,7 +373,7 @@ public sealed class AuthSrvSteps
     }
 
     [Then("the server has closed the connection")]
-    public async Task ThenHasClosed() => Assert.Equal(0, await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(10)));
+    public async Task ThenHasClosed() => Assert.Equal(0, await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(3)));
 
     [When(@"^(\d+) clients each complete a PAK and ticket request round for ""(.*)"" at the same time$")]
     public async Task WhenConcurrentRounds(int count, string user)
