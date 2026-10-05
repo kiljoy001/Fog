@@ -298,5 +298,11 @@
     "mutator": "Statement mutation",
     "line": "token.Append(line[t++]);",
     "reason": "Tokenize never moves past a token character"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Boolean mutation",
+    "line": "return (false, result);",
+    "reason": "end of file reads as a parsed line, so rc parses end of file forever"
   }
 ]
