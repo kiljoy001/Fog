@@ -12,9 +12,9 @@ SOURCE = "class Example\n{\n    void Spin() { while (true) { } }\n}\n"
 
 
 class MutationSummaryTests(unittest.TestCase):
-    def summarize(self, statuses, accepted=None):
+    def summarize(self, statuses, accepted=None, line=3, mutator="Boolean mutation"):
         mutants = [
-            {"status": status, "mutatorName": "Boolean mutation", "location": {"start": {"line": 3}}}
+            {"status": status, "mutatorName": mutator, "location": {"start": {"line": line}}}
             for status in statuses
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -53,6 +53,13 @@ class MutationSummaryTests(unittest.TestCase):
                 result = self.summarize(["Killed", "Timeout"], self.accepted(**changes))
                 self.assertEqual(1, result.returncode)
                 self.assertIn("**Score:** 50.00%", result.stdout)
+
+    def test_a_bare_brace_is_named_by_the_line_that_owns_it(self):
+        block = {"mutator": "Block removal mutation"}
+        owned = self.summarize(["Timeout"], self.accepted(line="class Example {", **block), line=2, mutator="Block removal mutation")
+        self.assertEqual(0, owned.returncode, owned.stdout)
+        bare = self.summarize(["Timeout"], self.accepted(line="{", **block), line=2, mutator="Block removal mutation")
+        self.assertEqual(1, bare.returncode)
 
     def test_the_list_never_excuses_a_survivor(self):
         self.assertEqual(1, self.summarize(["Killed", "Survived"], self.accepted()).returncode)

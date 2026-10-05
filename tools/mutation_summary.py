@@ -26,6 +26,9 @@ def load_accepted(path: Path | None) -> set[tuple[str, str, str]]:
 def is_accepted(accepted: set[tuple[str, str, str]], path: str, lines: list[str], mutant: dict) -> bool:
     number = mutant.get("location", {}).get("start", {}).get("line", 0)
     line = lines[number - 1].strip() if 0 < number <= len(lines) else ""
+    if line == "{" and number > 1:
+        # A bare brace would match every block in the file; name the block by its owner.
+        line = lines[number - 2].strip() + " {"
     return (path.replace("\\", "/").split("/")[-1], mutant.get("mutatorName", ""), line) in accepted
 
 

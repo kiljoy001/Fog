@@ -188,7 +188,7 @@
   {
     "file": "RcParser.cs",
     "mutator": "Block removal mutation",
-    "line": "{",
+    "line": "while (p.Child[1] is not null) {",
     "reason": "the automaton cycles between states"
   },
   {
@@ -232,5 +232,53 @@
     "mutator": "Equality mutation",
     "line": "while (r.Next != rp.Next)",
     "reason": "shuffleredir's walk never finds its end"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Logical mutation",
+    "line": "internal static bool IdChar(int c) => c > ' ' && !\"!\\\"#$%&'()+,-./:;<=>?@[\\\\]^`{|}~\".Contains((char)c, StringComparison.Ordinal);",
+    "reason": "end of file counts as a name character after $"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Logical mutation",
+    "line": "while (LastC != '\\n' && LastC != EndOfFile)",
+    "reason": "skipping the rest of a bad line never stops"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Boolean mutation",
+    "line": "Eof = true;",
+    "reason": "rc never sees end of file and reads it forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Equality mutation",
+    "line": "if (peekc != EndOfFile)",
+    "reason": "the lexer returns end of file without reading or setting Eof, so rc reads it forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Negate expression",
+    "line": "if (Eof)",
+    "reason": "the lexer returns end of file without reading or setting Eof, so rc reads it forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (future == EndOfFile) {",
+    "reason": "NextCAsync never reads, so rc sees end of file forever without Eof"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Equality mutation",
+    "line": "if (symbol == NoSymbol)",
+    "reason": "the parser never asks the lexer for a token and cycles through its states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Conditional (true) mutation",
+    "line": "state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];",
+    "reason": "the goto lands in a state that keeps reducing"
   }
 ]
