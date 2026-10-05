@@ -41,3 +41,4 @@ publish_out/
 
 # Reqnroll-generated code-behind
 *.feature.cs
+coverage.json
