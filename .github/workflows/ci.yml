@@ -27,9 +27,9 @@ env:
 
 jobs:
   quality:
-    name: Full quality gate
+    name: Build, tests, coverage and CRAP
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 30
 
     steps:
       - name: Check out source
@@ -45,27 +45,103 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install quality tools
+      - name: Install test tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes afl++ swtpm swtpm-tools
-          dotnet tool install --global dotnet-stryker --version 4.12.0
-          dotnet tool install --global sharpfuzz.commandline --version 2.2.0
+          sudo apt-get install --yes swtpm swtpm-tools
 
-      - name: Run build, test, coverage, CRAP, mutation, and fuzz gates
-        run: bash scripts/run-quality.sh --full
-
-      - name: Archive quality evidence
-        if: always()
-        run: |
-          mkdir -p .artifacts
-          tar --create --gzip --file quality-evidence.tar.gz .artifacts
+      - name: Run build, test, coverage and CRAP gates
+        run: bash scripts/run-quality.sh
 
       - name: Upload quality evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: quality-evidence-${{ github.run_id }}
-          path: quality-evidence.tar.gz
+          path: .artifacts
           if-no-files-found: error
+          retention-days: 14
+
+  mutation:
+    name: Mutation (${{ matrix.scope }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scope: fog
+          - scope: fog-server
+          - scope: fog-namespaces
+          - scope: fog-auth
+          # Mutants that spin forever starve their neighbours; leave rc's runner spare cores.
+          - scope: fog-rc
+            concurrency: 2
+          - scope: fog-commands
+          - scope: fog-kernel
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install mutation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes swtpm swtpm-tools
+          dotnet tool install --global dotnet-stryker --version 4.12.0
+
+      - name: Run the ${{ matrix.scope }} mutation gate
+        env:
+          STRYKER_CONCURRENCY: ${{ matrix.concurrency }}
+        run: bash scripts/run-quality.sh --mutate ${{ matrix.scope }}
+
+      - name: Upload mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-${{ matrix.scope }}-${{ github.run_id }}
+          path: .artifacts
+          if-no-files-found: error
+          retention-days: 14
+
+  fuzz:
+    name: SharpFuzz/AFL campaigns
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install fuzz tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes afl++
+          dotnet tool install --global sharpfuzz.commandline --version 2.2.0
+
+      - name: Run the fuzz campaigns
+        run: bash scripts/run-quality.sh --fuzz
+
+      - name: Upload fuzz evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-evidence-${{ github.run_id }}
+          path: .artifacts
+          if-no-files-found: warn
           retention-days: 14

@@ -280,5 +280,11 @@
     "mutator": "Conditional (true) mutation",
     "line": "state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];",
     "reason": "the goto lands in a state that keeps reducing"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (symbol == NoSymbol) {",
+    "reason": "the parser never asks the lexer for a token and cycles through its states"
   }
 ]
