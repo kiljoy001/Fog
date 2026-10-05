@@ -59,6 +59,7 @@ jobs:
         with:
           name: quality-evidence-${{ github.run_id }}
           path: .artifacts
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
 
@@ -111,6 +112,7 @@ jobs:
         with:
           name: mutation-${{ matrix.scope }}-${{ github.run_id }}
           path: .artifacts
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
 
@@ -143,5 +145,6 @@ jobs:
         with:
           name: fuzz-evidence-${{ github.run_id }}
           path: .artifacts
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
