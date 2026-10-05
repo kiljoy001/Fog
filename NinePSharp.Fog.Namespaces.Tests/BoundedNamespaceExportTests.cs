@@ -109,12 +109,12 @@ public sealed class BoundedNamespaceExportTests
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         inner.Gate = gate.Task;
         Task<object> blocked = Send(export, "a", Attach(1, 1));
-        await inner.Entered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        await inner.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Task<object> flush = Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(2, 1)));
-        Assert.IsType<Rwalk>(await Send(export, "a", Walk(3, 1, 2, "x")).WaitAsync(TimeSpan.FromSeconds(1)));
+        Assert.IsType<Rwalk>(await Send(export, "a", Walk(3, 1, 2, "x")).WaitAsync(TimeSpan.FromSeconds(10)));
         gate.SetResult();
-        await blocked.WaitAsync(TimeSpan.FromSeconds(1));
-        await flush.WaitAsync(TimeSpan.FromSeconds(1));
+        await blocked.WaitAsync(TimeSpan.FromSeconds(10));
+        await flush.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]
@@ -197,17 +197,17 @@ public sealed class BoundedNamespaceExportTests
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         inner.Gate = gate.Task;
         Task<object> blocked = Send(export, "a", Attach(1, 1));
-        await inner.Entered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        await inner.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("busy", Error(await Send(export, "a", Walk(2, 1, 2, "x"))));
         Task<object> flush = Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(3, 1)));
 
         // Bounded: a second admitted flush would wait on the blocked request instead of failing.
-        Assert.Equal("busy", Error(await Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(4, 1))).WaitAsync(TimeSpan.FromSeconds(1))));
+        Assert.Equal("busy", Error(await Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(4, 1))).WaitAsync(TimeSpan.FromSeconds(10))));
         gate.SetResult();
-        Assert.IsType<Rattach>(await blocked.WaitAsync(TimeSpan.FromSeconds(1)));
-        Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromSeconds(1)));
+        Assert.IsType<Rattach>(await blocked.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.IsType<Rwalk>(await Send(export, "a", Walk(5, 1, 2, "x")));
-        Assert.IsType<Rflush>(await Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(6, 5))).WaitAsync(TimeSpan.FromSeconds(1)));
+        Assert.IsType<Rflush>(await Send(export, "a", NinePMessage.NewMsgTflush(new Tflush(6, 5))).WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     [Fact]

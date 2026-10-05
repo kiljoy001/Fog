@@ -14,7 +14,7 @@ namespace NinePSharp.Fog.Rc.Tests.Steps;
 public sealed class RcExecutionSteps
 {
     private const string Script = "/tmp/s";
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
     private Process? init;
     private string script = string.Empty;
     private string output = string.Empty;

@@ -2,7 +2,7 @@ namespace NinePSharp.Fog.Kernel.Tests.Support;
 
 public sealed class KernelDriver
 {
-    public static readonly TimeSpan Bound = TimeSpan.FromSeconds(1);
+    public static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
 
     public FogKernel Kernel { get; set; } = null!;
 

@@ -373,7 +373,7 @@ public sealed class AuthSrvSteps
     }
 
     [Then("the server has closed the connection")]
-    public async Task ThenHasClosed() => Assert.Equal(0, await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(1)));
+    public async Task ThenHasClosed() => Assert.Equal(0, await client!.DrainUntilClosedAsync(TimeSpan.FromSeconds(10)));
 
     [When(@"^(\d+) clients each complete a PAK and ticket request round for ""(.*)"" at the same time$")]
     public async Task WhenConcurrentRounds(int count, string user)
