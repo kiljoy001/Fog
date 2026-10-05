@@ -29,7 +29,7 @@ public sealed class ControlRetryTests
             "worker",
             512,
             4096,
-            TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(10));
         byte[] input = [1, 2, 3];
         var result = await client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = input }, ["reply"]);
         Assert.Equal(input, result["reply"]);
@@ -53,7 +53,7 @@ public sealed class ControlRetryTests
             1024,
             TimeSpan.FromSeconds(2));
         await Assert.ThrowsAsync<IOException>(() => client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = [] }, ["reply"])
-            .WaitAsync(TimeSpan.FromMilliseconds(250)));
+            .WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(3, attempts);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();

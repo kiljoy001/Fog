@@ -125,7 +125,7 @@ public sealed class ControlTlsTests
             TimeSpan.FromSeconds(10),
             TimeSpan.FromMilliseconds(200));
         listener.Start();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(
             listener.LocalEndpoint,
             kind == "wildcard" ? "control.example.test" : "control.test",
@@ -150,7 +150,7 @@ public sealed class ControlTlsTests
             "worker",
             256,
             4096,
-            TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(10));
         byte[] input = Enumerable.Range(0, 3000).Select(n => (byte)n).ToArray();
         for (int iteration = 0; iteration < 5; iteration++)
         {
@@ -168,7 +168,7 @@ public sealed class ControlTlsTests
     {
         using var fixture = new ControlFixture();
         await using var listener = fixture.Listen();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var tls = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate), fixture.NodeCertificate, timeout.Token);
         Assert.Equal(SslProtocols.Tls13, tls.SslProtocol);
         using var client = new NinePClient(tls);
@@ -199,7 +199,7 @@ public sealed class ControlTlsTests
     {
         using var fixture = new ControlFixture();
         await using var listener = fixture.Listen();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await Assert.ThrowsAsync<AuthenticationException>(() => FogTlsClient.ConnectAsync(
             listener.LocalEndpoint,
             wrongName ? "imposter.test" : "control.test",

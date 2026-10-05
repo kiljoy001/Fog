@@ -1,0 +1,2392 @@
+{
+  "NinePSharp.Fog.dll": {
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogAtomicPlan.cs": {
+      "NinePSharp.Fog.FogAtomicPlan": {
+        "System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.Byte[]> NinePSharp.Fog.FogAtomicPlan::get_Outputs()": {
+          "Lines": {
+            "5": 29
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogCommitPlan.cs": {
+      "NinePSharp.Fog.FogCommitPlan": {
+        "System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.Byte[]> NinePSharp.Fog.FogCommitPlan::get_Outputs()": {
+          "Lines": {
+            "8": 2313
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogControlFile.cs": {
+      "NinePSharp.Fog.FogControlFile": {
+        "System.Void NinePSharp.Fog.FogControlFile::.ctor(NinePSharp.Fog.FogTransactionStore,System.Func`2<System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.ReadOnlyMemory`1<System.Byte>>,NinePSharp.Fog.FogCommitPlan>)": {
+          "Lines": {
+            "9": 2030,
+            "11": 2030,
+            "12": 2029,
+            "13": 2028,
+            "14": 2028,
+            "15": 2028
+          },
+          "Branches": []
+        }
+      },
+      "NinePSharp.Fog.FogControlFile/<WriteAsync>d__3": {
+        "System.Void NinePSharp.Fog.FogControlFile/<WriteAsync>d__3::MoveNext()": {
+          "Lines": {
+            "19": 2031,
+            "20": 2030,
+            "22": 118,
+            "23": 115,
+            "26": 1912,
+            "28": 964,
+            "29": 964,
+            "32": 948,
+            "33": 1079
+          },
+          "Branches": [
+            {
+              "Line": 20,
+              "Offset": 55,
+              "EndOffset": 57,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 118
+            },
+            {
+              "Line": 20,
+              "Offset": 55,
+              "EndOffset": 181,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 1912
+            },
+            {
+              "Line": 26,
+              "Offset": 208,
+              "EndOffset": 210,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 964
+            },
+            {
+              "Line": 26,
+              "Offset": 208,
+              "EndOffset": 237,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 948
+            }
+          ]
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogException.cs": {
+      "NinePSharp.Fog.FogException": {
+        "System.String NinePSharp.Fog.FogException::get_Code()": {
+          "Lines": {
+            "6": 10495
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogException::.ctor(System.String)": {
+          "Lines": {
+            "4": 5554
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogRecordSchema.cs": {
+      "NinePSharp.Fog.FogRecordSchema": {
+        "System.Collections.Generic.IReadOnlyList`1<System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.String>> NinePSharp.Fog.FogRecordSchema::Parse(System.ReadOnlySpan`1<System.Byte>,System.Int32,System.Int32)": {
+          "Lines": {
+            "44": 1072,
+            "45": 1070,
+            "46": 1068,
+            "48": 3,
+            "53": 1065,
+            "54": 526,
+            "55": 447,
+            "56": 445,
+            "58": 8,
+            "61": 437,
+            "62": 437,
+            "63": 1760,
+            "65": 1882,
+            "66": 447,
+            "68": 6,
+            "72": 888,
+            "73": 441,
+            "75": 2,
+            "78": 2443,
+            "81": 429,
+            "83": 539,
+            "85": 539,
+            "87": 2,
+            "89": 2,
+            "91": 429
+          },
+          "Branches": [
+            {
+              "Line": 46,
+              "Offset": 30,
+              "EndOffset": 32,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 3
+            },
+            {
+              "Line": 46,
+              "Offset": 30,
+              "EndOffset": 43,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 1065
+            },
+            {
+              "Line": 56,
+              "Offset": 87,
+              "EndOffset": 89,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 8
+            },
+            {
+              "Line": 56,
+              "Offset": 87,
+              "EndOffset": 100,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 437
+            },
+            {
+              "Line": 63,
+              "Offset": 378,
+              "EndOffset": 133,
+              "Path": 1,
+              "Ordinal": 13,
+              "Hits": 447
+            },
+            {
+              "Line": 65,
+              "Offset": 177,
+              "EndOffset": 179,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 443
+            },
+            {
+              "Line": 65,
+              "Offset": 209,
+              "EndOffset": 211,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 442
+            },
+            {
+              "Line": 65,
+              "Offset": 177,
+              "EndOffset": 238,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 6
+            },
+            {
+              "Line": 65,
+              "Offset": 209,
+              "EndOffset": 238,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 6
+            },
+            {
+              "Line": 65,
+              "Offset": 236,
+              "EndOffset": 238,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 6
+            },
+            {
+              "Line": 65,
+              "Offset": 236,
+              "EndOffset": 249,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 441
+            },
+            {
+              "Line": 73,
+              "Offset": 288,
+              "EndOffset": 290,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 2
+            },
+            {
+              "Line": 73,
+              "Offset": 288,
+              "EndOffset": 301,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 439
+            },
+            {
+              "Line": 63,
+              "Offset": 378,
+              "EndOffset": 383,
+              "Path": 0,
+              "Ordinal": 12,
+              "Hits": 429
+            }
+          ]
+        },
+        "System.Byte[] NinePSharp.Fog.FogRecordSchema::Serialize(System.Collections.Generic.IEnumerable`1<System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.String>>,System.Int32,System.Int32)": {
+          "Lines": {
+            "96": 230,
+            "97": 229,
+            "98": 227,
+            "99": 225,
+            "100": 225,
+            "101": 225,
+            "102": 225,
+            "105": 904,
+            "107": 231,
+            "109": 1,
+            "112": 750,
+            "113": 230,
+            "115": 3,
+            "119": 227,
+            "120": 1030,
+            "122": 289,
+            "124": 273,
+            "128": 225,
+            "129": 225,
+            "130": 224,
+            "132": 1,
+            "135": 223,
+            "136": 223,
+            "139": 217,
+            "140": 217,
+            "141": 213,
+            "143": 2,
+            "145": 2,
+            "147": 1,
+            "149": 1,
+            "151": 213
+          },
+          "Branches": [
+            {
+              "Line": 105,
+              "Offset": 376,
+              "EndOffset": 85,
+              "Path": 1,
+              "Ordinal": 17,
+              "Hits": 231
+            },
+            {
+              "Line": 107,
+              "Offset": 100,
+              "EndOffset": 102,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1
+            },
+            {
+              "Line": 107,
+              "Offset": 100,
+              "EndOffset": 113,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 230
+            },
+            {
+              "Line": 112,
+              "Offset": 137,
+              "EndOffset": 139,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 229
+            },
+            {
+              "Line": 112,
+              "Offset": 156,
+              "EndOffset": 158,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 228
+            },
+            {
+              "Line": 112,
+              "Offset": 137,
+              "EndOffset": 167,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 3
+            },
+            {
+              "Line": 112,
+              "Offset": 156,
+              "EndOffset": 167,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 3
+            },
+            {
+              "Line": 112,
+              "Offset": 165,
+              "EndOffset": 167,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 3
+            },
+            {
+              "Line": 112,
+              "Offset": 165,
+              "EndOffset": 178,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 227
+            },
+            {
+              "Line": 120,
+              "Offset": 262,
+              "EndOffset": 217,
+              "Path": 1,
+              "Ordinal": 13,
+              "Hits": 289
+            },
+            {
+              "Line": 122,
+              "Offset": 237,
+              "EndOffset": 239,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 289
+            },
+            {
+              "Line": 122,
+              "Offset": 241,
+              "EndOffset": 243,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 273
+            },
+            {
+              "Line": 122,
+              "Offset": 237,
+              "EndOffset": 255,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 514
+            },
+            {
+              "Line": 122,
+              "Offset": 241,
+              "EndOffset": 255,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 514
+            },
+            {
+              "Line": 120,
+              "Offset": 262,
+              "EndOffset": 264,
+              "Path": 0,
+              "Ordinal": 12,
+              "Hits": 225
+            },
+            {
+              "Line": 130,
+              "Offset": 339,
+              "EndOffset": 341,
+              "Path": 0,
+              "Ordinal": 14,
+              "Hits": 1
+            },
+            {
+              "Line": 130,
+              "Offset": 339,
+              "EndOffset": 352,
+              "Path": 1,
+              "Ordinal": 15,
+              "Hits": 223
+            },
+            {
+              "Line": 105,
+              "Offset": 376,
+              "EndOffset": 381,
+              "Path": 0,
+              "Ordinal": 16,
+              "Hits": 217
+            }
+          ]
+        },
+        "System.Boolean NinePSharp.Fog.FogRecordSchema::ValidName(System.String)": {
+          "Lines": {
+            "153": 125,
+            "154": 1148
+          },
+          "Branches": [
+            {
+              "Line": 153,
+              "Offset": 6,
+              "EndOffset": 8,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 123
+            },
+            {
+              "Line": 153,
+              "Offset": 19,
+              "EndOffset": 21,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 122
+            },
+            {
+              "Line": 153,
+              "Offset": 6,
+              "EndOffset": 59,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 3
+            },
+            {
+              "Line": 153,
+              "Offset": 19,
+              "EndOffset": 59,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 3
+            },
+            {
+              "Line": 154,
+              "Offset": 3,
+              "EndOffset": 5,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 928
+            },
+            {
+              "Line": 154,
+              "Offset": 3,
+              "EndOffset": 12,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 95
+            },
+            {
+              "Line": 154,
+              "Offset": 15,
+              "EndOffset": 17,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 82
+            },
+            {
+              "Line": 154,
+              "Offset": 20,
+              "EndOffset": 22,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 49
+            },
+            {
+              "Line": 154,
+              "Offset": 15,
+              "EndOffset": 29,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 13
+            },
+            {
+              "Line": 154,
+              "Offset": 8,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 1016
+            },
+            {
+              "Line": 154,
+              "Offset": 20,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 1016
+            },
+            {
+              "Line": 154,
+              "Offset": 25,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 1016
+            },
+            {
+              "Line": 154,
+              "Offset": 32,
+              "EndOffset": 34,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 1016
+            },
+            {
+              "Line": 154,
+              "Offset": 8,
+              "EndOffset": 38,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 7
+            },
+            {
+              "Line": 154,
+              "Offset": 25,
+              "EndOffset": 38,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 7
+            },
+            {
+              "Line": 154,
+              "Offset": 32,
+              "EndOffset": 38,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 7
+            }
+          ]
+        },
+        "LibTab.TabTable NinePSharp.Fog.FogRecordSchema::NewTable()": {
+          "Lines": {
+            "156": 837
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogRecordSchema::Preflight(System.String,System.Int32)": {
+          "Lines": {
+            "160": 526,
+            "162": 69,
+            "165": 457,
+            "166": 457,
+            "168": 2,
+            "171": 455,
+            "173": 1,
+            "176": 454,
+            "177": 454,
+            "179": 1,
+            "182": 1834,
+            "184": 468,
+            "185": 2982,
+            "188": 1027,
+            "189": 1027,
+            "190": 1027,
+            "191": 1027,
+            "193": 6,
+            "196": 1021,
+            "198": 2,
+            "201": 1019,
+            "204": 445
+          },
+          "Branches": [
+            {
+              "Line": 160,
+              "Offset": 13,
+              "EndOffset": 15,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 69
+            },
+            {
+              "Line": 160,
+              "Offset": 13,
+              "EndOffset": 26,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 457
+            },
+            {
+              "Line": 166,
+              "Offset": 62,
+              "EndOffset": 64,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 2
+            },
+            {
+              "Line": 166,
+              "Offset": 62,
+              "EndOffset": 65,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 455
+            },
+            {
+              "Line": 171,
+              "Offset": 72,
+              "EndOffset": 74,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 1
+            },
+            {
+              "Line": 171,
+              "Offset": 72,
+              "EndOffset": 85,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 454
+            },
+            {
+              "Line": 177,
+              "Offset": 117,
+              "EndOffset": 119,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 1
+            },
+            {
+              "Line": 177,
+              "Offset": 117,
+              "EndOffset": 130,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 453
+            },
+            {
+              "Line": 182,
+              "Offset": 273,
+              "EndOffset": 138,
+              "Path": 1,
+              "Ordinal": 15,
+              "Hits": 468
+            },
+            {
+              "Line": 185,
+              "Offset": 263,
+              "EndOffset": 159,
+              "Path": 1,
+              "Ordinal": 13,
+              "Hits": 1027
+            },
+            {
+              "Line": 191,
+              "Offset": 204,
+              "EndOffset": 206,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 6
+            },
+            {
+              "Line": 191,
+              "Offset": 204,
+              "EndOffset": 217,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 1021
+            },
+            {
+              "Line": 196,
+              "Offset": 236,
+              "EndOffset": 238,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 2
+            },
+            {
+              "Line": 196,
+              "Offset": 236,
+              "EndOffset": 249,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 1019
+            },
+            {
+              "Line": 185,
+              "Offset": 263,
+              "EndOffset": 265,
+              "Path": 0,
+              "Ordinal": 12,
+              "Hits": 460
+            },
+            {
+              "Line": 182,
+              "Offset": 273,
+              "EndOffset": 278,
+              "Path": 0,
+              "Ordinal": 14,
+              "Hits": 445
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogRecordSchema::.ctor(System.String,System.String[],System.String[],System.String[])": {
+          "Lines": {
+            "21": 32,
+            "23": 32,
+            "24": 31,
+            "25": 29,
+            "26": 28,
+            "27": 97,
+            "28": 55,
+            "30": 15,
+            "33": 13,
+            "34": 13,
+            "35": 13,
+            "36": 13,
+            "37": 13,
+            "38": 13,
+            "39": 13,
+            "40": 13
+          },
+          "Branches": [
+            {
+              "Line": 26,
+              "Offset": 64,
+              "EndOffset": 66,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 23
+            },
+            {
+              "Line": 26,
+              "Offset": 73,
+              "EndOffset": 75,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 22
+            },
+            {
+              "Line": 26,
+              "Offset": 78,
+              "EndOffset": 80,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 21
+            },
+            {
+              "Line": 26,
+              "Offset": 122,
+              "EndOffset": 124,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 16
+            },
+            {
+              "Line": 26,
+              "Offset": 153,
+              "EndOffset": 155,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 64,
+              "EndOffset": 182,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 73,
+              "EndOffset": 182,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 78,
+              "EndOffset": 182,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 122,
+              "EndOffset": 182,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 153,
+              "EndOffset": 182,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 180,
+              "EndOffset": 182,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 15
+            },
+            {
+              "Line": 26,
+              "Offset": 180,
+              "EndOffset": 193,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 13
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogRecordSchema::.cctor()": {
+          "Lines": {
+            "10": 1,
+            "11": 1,
+            "12": 1,
+            "13": 1
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogTransactionLimits.cs": {
+      "NinePSharp.Fog.FogTransactionLimits": {
+        "System.Int32 NinePSharp.Fog.FogTransactionLimits::get_MaxTransactions()": {
+          "Lines": {
+            "5": 2008
+          },
+          "Branches": []
+        },
+        "System.Int32 NinePSharp.Fog.FogTransactionLimits::get_MaxPerOwner()": {
+          "Lines": {
+            "6": 2003
+          },
+          "Branches": []
+        },
+        "System.Int32 NinePSharp.Fog.FogTransactionLimits::get_MaxInputBytes()": {
+          "Lines": {
+            "7": 5727
+          },
+          "Branches": []
+        },
+        "System.Int32 NinePSharp.Fog.FogTransactionLimits::get_MaxSnapshotBytes()": {
+          "Lines": {
+            "8": 5494
+          },
+          "Branches": []
+        },
+        "System.Int64 NinePSharp.Fog.FogTransactionLimits::get_MaxReservedBytes()": {
+          "Lines": {
+            "9": 2000
+          },
+          "Branches": []
+        },
+        "System.Int32 NinePSharp.Fog.FogTransactionLimits::get_MaxFiles()": {
+          "Lines": {
+            "10": 1660
+          },
+          "Branches": []
+        },
+        "System.TimeSpan NinePSharp.Fog.FogTransactionLimits::get_StagingLifetime()": {
+          "Lines": {
+            "11": 14221
+          },
+          "Branches": []
+        },
+        "System.TimeSpan NinePSharp.Fog.FogTransactionLimits::get_RetentionLifetime()": {
+          "Lines": {
+            "12": 2571
+          },
+          "Branches": []
+        },
+        "System.Int64 NinePSharp.Fog.FogTransactionLimits::get_Reservation()": {
+          "Lines": {
+            "14": 4743
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogTransactionLimits::Validate()": {
+          "Lines": {
+            "18": 515,
+            "19": 515,
+            "21": 16,
+            "23": 499
+          },
+          "Branches": [
+            {
+              "Line": 18,
+              "Offset": 7,
+              "EndOffset": 9,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 513
+            },
+            {
+              "Line": 18,
+              "Offset": 16,
+              "EndOffset": 18,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 511
+            },
+            {
+              "Line": 18,
+              "Offset": 25,
+              "EndOffset": 27,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 509
+            },
+            {
+              "Line": 18,
+              "Offset": 34,
+              "EndOffset": 36,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 507
+            },
+            {
+              "Line": 18,
+              "Offset": 48,
+              "EndOffset": 50,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 505
+            },
+            {
+              "Line": 18,
+              "Offset": 57,
+              "EndOffset": 59,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 503
+            },
+            {
+              "Line": 18,
+              "Offset": 75,
+              "EndOffset": 77,
+              "Path": 0,
+              "Ordinal": 12,
+              "Hits": 501
+            },
+            {
+              "Line": 18,
+              "Offset": 7,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 16,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 25,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 34,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 48,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 57,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 75,
+              "EndOffset": 95,
+              "Path": 1,
+              "Ordinal": 13,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 93,
+              "EndOffset": 95,
+              "Path": 0,
+              "Ordinal": 14,
+              "Hits": 16
+            },
+            {
+              "Line": 18,
+              "Offset": 93,
+              "EndOffset": 106,
+              "Path": 1,
+              "Ordinal": 15,
+              "Hits": 499
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionLimits::.ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int64,System.Int32,System.TimeSpan,System.TimeSpan)": {
+          "Lines": {
+            "4": 510
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogTransactionStatus.cs": {
+      "NinePSharp.Fog.FogTransactionStatus": {
+        "System.String NinePSharp.Fog.FogTransactionStatus::get_Id()": {
+          "Lines": {
+            "3": 16306
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogTransactionStore.cs": {
+      "NinePSharp.Fog.FogTransactionStore": {
+        "System.String NinePSharp.Fog.FogTransactionStore::Clone(System.String)": {
+          "Lines": {
+            "34": 1483,
+            "36": 1483,
+            "37": 1481,
+            "38": 1499,
+            "39": 1481,
+            "41": 5,
+            "44": 1476,
+            "46": 1,
+            "49": 1475,
+            "50": 1475,
+            "51": 1475,
+            "52": 1475,
+            "54": 1475
+          },
+          "Branches": [
+            {
+              "Line": 38,
+              "Offset": 70,
+              "EndOffset": 72,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1479
+            },
+            {
+              "Line": 38,
+              "Offset": 111,
+              "EndOffset": 113,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 1478
+            },
+            {
+              "Line": 38,
+              "Offset": 70,
+              "EndOffset": 144,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 5
+            },
+            {
+              "Line": 38,
+              "Offset": 111,
+              "EndOffset": 144,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 5
+            },
+            {
+              "Line": 38,
+              "Offset": 142,
+              "EndOffset": 144,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 5
+            },
+            {
+              "Line": 38,
+              "Offset": 142,
+              "EndOffset": 155,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 1476
+            },
+            {
+              "Line": 44,
+              "Offset": 163,
+              "EndOffset": 165,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 1
+            },
+            {
+              "Line": 44,
+              "Offset": 163,
+              "EndOffset": 176,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 1475
+            }
+          ]
+        },
+        "NinePSharp.Fog.FogUpload NinePSharp.Fog.FogTransactionStore::OpenInput(System.String,System.String,System.String,System.String)": {
+          "Lines": {
+            "58": 1466,
+            "59": 1465,
+            "61": 1465,
+            "62": 1463,
+            "63": 1411,
+            "65": 5,
+            "68": 1406,
+            "70": 447,
+            "73": 959,
+            "75": 1,
+            "78": 958,
+            "80": 958
+          },
+          "Branches": [
+            {
+              "Line": 63,
+              "Offset": 50,
+              "EndOffset": 52,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 5
+            },
+            {
+              "Line": 63,
+              "Offset": 50,
+              "EndOffset": 63,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 1406
+            },
+            {
+              "Line": 68,
+              "Offset": 69,
+              "EndOffset": 71,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 447
+            },
+            {
+              "Line": 68,
+              "Offset": 69,
+              "EndOffset": 82,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 959
+            },
+            {
+              "Line": 73,
+              "Offset": 95,
+              "EndOffset": 97,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 906
+            },
+            {
+              "Line": 73,
+              "Offset": 119,
+              "EndOffset": 121,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 1
+            },
+            {
+              "Line": 73,
+              "Offset": 95,
+              "EndOffset": 132,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 958
+            },
+            {
+              "Line": 73,
+              "Offset": 119,
+              "EndOffset": 132,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 958
+            }
+          ]
+        },
+        "System.Threading.Tasks.Task NinePSharp.Fog.FogTransactionStore::CommitAsync(System.String,System.String,System.Func`2<System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.ReadOnlyMemory`1<System.Byte>>,NinePSharp.Fog.FogCommitPlan>,System.Threading.CancellationToken)": {
+          "Lines": {
+            "92": 1282,
+            "93": 1281,
+            "95": 1280,
+            "97": 1280,
+            "98": 1276,
+            "100": 1067,
+            "102": 831,
+            "106": 236,
+            "107": 712,
+            "108": 236,
+            "109": 234,
+            "110": 221,
+            "111": 221,
+            "114": 442,
+            "117": 430,
+            "118": 430,
+            "120": 430
+          },
+          "Branches": [
+            {
+              "Line": 98,
+              "Offset": 83,
+              "EndOffset": 88,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1067
+            },
+            {
+              "Line": 100,
+              "Offset": 99,
+              "EndOffset": 101,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 873
+            },
+            {
+              "Line": 100,
+              "Offset": 99,
+              "EndOffset": 124,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 831
+            },
+            {
+              "Line": 100,
+              "Offset": 122,
+              "EndOffset": 124,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 831
+            },
+            {
+              "Line": 100,
+              "Offset": 122,
+              "EndOffset": 135,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 236
+            },
+            {
+              "Line": 98,
+              "Offset": 83,
+              "EndOffset": 314,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 430
+            }
+          ]
+        },
+        "NinePSharp.Fog.FogTransactionStatus NinePSharp.Fog.FogTransactionStore::Status(System.String,System.String)": {
+          "Lines": {
+            "125": 9121,
+            "127": 9121,
+            "128": 8153,
+            "130": 8153
+          },
+          "Branches": []
+        },
+        "System.Threading.Tasks.Task NinePSharp.Fog.FogTransactionStore::CommitAtomicAsync(System.String,System.String,System.Func`2<System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.ReadOnlyMemory`1<System.Byte>>,NinePSharp.Fog.FogAtomicPlan>,System.Threading.CancellationToken)": {
+          "Lines": {
+            "139": 12,
+            "140": 11,
+            "142": 10,
+            "144": 10,
+            "145": 10,
+            "147": 8,
+            "149": 2,
+            "152": 6,
+            "153": 18,
+            "154": 6,
+            "155": 6,
+            "156": 5,
+            "157": 4,
+            "158": 4,
+            "161": 4,
+            "162": 3,
+            "163": 3,
+            "164": 3,
+            "165": 3,
+            "166": 3,
+            "167": 3,
+            "168": 3,
+            "169": 1,
+            "171": 1,
+            "172": 1,
+            "173": 1,
+            "176": 6,
+            "177": 6,
+            "179": 6
+          },
+          "Branches": [
+            {
+              "Line": 145,
+              "Offset": 60,
+              "EndOffset": 65,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 8
+            },
+            {
+              "Line": 147,
+              "Offset": 71,
+              "EndOffset": 73,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 7
+            },
+            {
+              "Line": 147,
+              "Offset": 71,
+              "EndOffset": 91,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 2
+            },
+            {
+              "Line": 147,
+              "Offset": 89,
+              "EndOffset": 91,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 2
+            },
+            {
+              "Line": 147,
+              "Offset": 89,
+              "EndOffset": 102,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 6
+            },
+            {
+              "Line": 145,
+              "Offset": 60,
+              "EndOffset": 416,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 6
+            }
+          ]
+        },
+        "System.Byte[] NinePSharp.Fog.FogTransactionStore::SnapshotOutput(System.String,System.String,System.String)": {
+          "Lines": {
+            "183": 7
+          },
+          "Branches": []
+        },
+        "System.Int32 NinePSharp.Fog.FogTransactionStore::OutputSize(System.String,System.String,System.String)": {
+          "Lines": {
+            "187": 4,
+            "189": 4,
+            "190": 3,
+            "192": 1,
+            "195": 2,
+            "197": 1,
+            "200": 1,
+            "202": 1
+          },
+          "Branches": [
+            {
+              "Line": 190,
+              "Offset": 41,
+              "EndOffset": 43,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1
+            },
+            {
+              "Line": 190,
+              "Offset": 41,
+              "EndOffset": 54,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 2
+            },
+            {
+              "Line": 195,
+              "Offset": 67,
+              "EndOffset": 69,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 1
+            },
+            {
+              "Line": 195,
+              "Offset": 67,
+              "EndOffset": 80,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 1
+            }
+          ]
+        },
+        "System.Collections.Generic.IReadOnlySet`1<System.String> NinePSharp.Fog.FogTransactionStore::LiveIds()": {
+          "Lines": {
+            "207": 3,
+            "209": 3,
+            "210": 3,
+            "212": 3
+          },
+          "Branches": []
+        },
+        "System.Byte[] NinePSharp.Fog.FogTransactionStore::ReadOutput(System.String,System.String,System.String,System.UInt64,System.UInt32)": {
+          "Lines": {
+            "216": 1111,
+            "218": 1111,
+            "219": 1108,
+            "221": 885,
+            "224": 223,
+            "226": 1,
+            "229": 222,
+            "230": 222,
+            "232": 222
+          },
+          "Branches": [
+            {
+              "Line": 219,
+              "Offset": 41,
+              "EndOffset": 43,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 885
+            },
+            {
+              "Line": 219,
+              "Offset": 41,
+              "EndOffset": 54,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 223
+            },
+            {
+              "Line": 224,
+              "Offset": 67,
+              "EndOffset": 69,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 1
+            },
+            {
+              "Line": 224,
+              "Offset": 67,
+              "EndOffset": 80,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 222
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::Release(System.String,System.String)": {
+          "Lines": {
+            "236": 1280,
+            "238": 1280,
+            "239": 1277,
+            "241": 3,
+            "244": 1274,
+            "245": 1274,
+            "246": 1274
+          },
+          "Branches": [
+            {
+              "Line": 239,
+              "Offset": 42,
+              "EndOffset": 44,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 3
+            },
+            {
+              "Line": 239,
+              "Offset": 42,
+              "EndOffset": 55,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 1274
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::CloseSession(System.String)": {
+          "Lines": {
+            "251": 990,
+            "253": 3960,
+            "255": 990,
+            "257": 184,
+            "258": 184,
+            "262": 990
+          },
+          "Branches": [
+            {
+              "Line": 253,
+              "Offset": 97,
+              "EndOffset": 36,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 990
+            },
+            {
+              "Line": 255,
+              "Offset": 54,
+              "EndOffset": 56,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 185
+            },
+            {
+              "Line": 255,
+              "Offset": 69,
+              "EndOffset": 71,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 184
+            },
+            {
+              "Line": 255,
+              "Offset": 54,
+              "EndOffset": 90,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 1980
+            },
+            {
+              "Line": 255,
+              "Offset": 69,
+              "EndOffset": 90,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 1980
+            },
+            {
+              "Line": 253,
+              "Offset": 97,
+              "EndOffset": 99,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 990
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::Sweep()": {
+          "Lines": {
+            "266": 3,
+            "268": 3,
+            "269": 3,
+            "270": 3
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::Write(NinePSharp.Fog.FogUpload,System.UInt64,System.ReadOnlySpan`1<System.Byte>)": {
+          "Lines": {
+            "274": 928,
+            "276": 928,
+            "277": 652,
+            "279": 192,
+            "282": 479,
+            "283": 460,
+            "285": 4,
+            "288": 456,
+            "289": 456,
+            "290": 456
+          },
+          "Branches": [
+            {
+              "Line": 277,
+              "Offset": 36,
+              "EndOffset": 38,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 192
+            },
+            {
+              "Line": 277,
+              "Offset": 36,
+              "EndOffset": 49,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 460
+            },
+            {
+              "Line": 283,
+              "Offset": 130,
+              "EndOffset": 132,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 4
+            },
+            {
+              "Line": 283,
+              "Offset": 130,
+              "EndOffset": 143,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 456
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::Seal(NinePSharp.Fog.FogUpload)": {
+          "Lines": {
+            "294": 594,
+            "296": 594,
+            "297": 342,
+            "298": 342,
+            "299": 342,
+            "300": 342,
+            "301": 342
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::Abort(NinePSharp.Fog.FogUpload)": {
+          "Lines": {
+            "305": 1205,
+            "308": 1205,
+            "310": 247,
+            "313": 1205,
+            "314": 1205,
+            "315": 1205
+          },
+          "Branches": [
+            {
+              "Line": 308,
+              "Offset": 36,
+              "EndOffset": 38,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 780
+            },
+            {
+              "Line": 308,
+              "Offset": 45,
+              "EndOffset": 47,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 247
+            },
+            {
+              "Line": 308,
+              "Offset": 36,
+              "EndOffset": 54,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 1205
+            },
+            {
+              "Line": 308,
+              "Offset": 45,
+              "EndOffset": 54,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 1205
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::RequireStaging(NinePSharp.Fog.FogTransactionStore/Entry)": {
+          "Lines": {
+            "319": 2981,
+            "321": 172,
+            "323": 2809
+          },
+          "Branches": [
+            {
+              "Line": 319,
+              "Offset": 16,
+              "EndOffset": 18,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 172
+            },
+            {
+              "Line": 319,
+              "Offset": 16,
+              "EndOffset": 29,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 2809
+            }
+          ]
+        },
+        "System.Boolean NinePSharp.Fog.FogTransactionStore::ValidFile(System.String)": {
+          "Lines": {
+            "325": 1661,
+            "326": 12778
+          },
+          "Branches": [
+            {
+              "Line": 325,
+              "Offset": 6,
+              "EndOffset": 8,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1658
+            },
+            {
+              "Line": 325,
+              "Offset": 16,
+              "EndOffset": 18,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 1657
+            },
+            {
+              "Line": 325,
+              "Offset": 6,
+              "EndOffset": 56,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 4
+            },
+            {
+              "Line": 325,
+              "Offset": 16,
+              "EndOffset": 56,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 4
+            },
+            {
+              "Line": 326,
+              "Offset": 3,
+              "EndOffset": 5,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 11107
+            },
+            {
+              "Line": 326,
+              "Offset": 3,
+              "EndOffset": 12,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 10
+            },
+            {
+              "Line": 326,
+              "Offset": 15,
+              "EndOffset": 17,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 6
+            },
+            {
+              "Line": 326,
+              "Offset": 20,
+              "EndOffset": 22,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 4
+            },
+            {
+              "Line": 326,
+              "Offset": 15,
+              "EndOffset": 29,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 4
+            },
+            {
+              "Line": 326,
+              "Offset": 8,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 11108
+            },
+            {
+              "Line": 326,
+              "Offset": 20,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 11108
+            },
+            {
+              "Line": 326,
+              "Offset": 25,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 11108
+            },
+            {
+              "Line": 326,
+              "Offset": 32,
+              "EndOffset": 34,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 11108
+            },
+            {
+              "Line": 326,
+              "Offset": 8,
+              "EndOffset": 38,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 9
+            },
+            {
+              "Line": 326,
+              "Offset": 25,
+              "EndOffset": 38,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 9
+            },
+            {
+              "Line": 326,
+              "Offset": 32,
+              "EndOffset": 38,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 9
+            }
+          ]
+        },
+        "System.Collections.Generic.Dictionary`2<System.String,System.Byte[]> NinePSharp.Fog.FogTransactionStore::FreezeOutputs(NinePSharp.Fog.FogCommitPlan)": {
+          "Lines": {
+            "365": 239,
+            "366": 483,
+            "368": 10,
+            "371": 461,
+            "373": 3,
+            "376": 226,
+            "377": 679
+          },
+          "Branches": [
+            {
+              "Line": 365,
+              "Offset": 22,
+              "EndOffset": 24,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 238
+            },
+            {
+              "Line": 365,
+              "Offset": 40,
+              "EndOffset": 42,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 237
+            },
+            {
+              "Line": 365,
+              "Offset": 89,
+              "EndOffset": 91,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 233
+            },
+            {
+              "Line": 365,
+              "Offset": 97,
+              "EndOffset": 99,
+              "Path": 0,
+              "Ordinal": 6,
+              "Hits": 6
+            },
+            {
+              "Line": 365,
+              "Offset": 22,
+              "EndOffset": 112,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 10
+            },
+            {
+              "Line": 365,
+              "Offset": 40,
+              "EndOffset": 112,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 10
+            },
+            {
+              "Line": 365,
+              "Offset": 89,
+              "EndOffset": 112,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 10
+            },
+            {
+              "Line": 365,
+              "Offset": 110,
+              "EndOffset": 112,
+              "Path": 0,
+              "Ordinal": 8,
+              "Hits": 10
+            },
+            {
+              "Line": 365,
+              "Offset": 97,
+              "EndOffset": 123,
+              "Path": 1,
+              "Ordinal": 7,
+              "Hits": 229
+            },
+            {
+              "Line": 365,
+              "Offset": 110,
+              "EndOffset": 123,
+              "Path": 1,
+              "Ordinal": 9,
+              "Hits": 229
+            },
+            {
+              "Line": 371,
+              "Offset": 182,
+              "EndOffset": 184,
+              "Path": 0,
+              "Ordinal": 10,
+              "Hits": 3
+            },
+            {
+              "Line": 371,
+              "Offset": 182,
+              "EndOffset": 195,
+              "Path": 1,
+              "Ordinal": 11,
+              "Hits": 226
+            }
+          ]
+        },
+        "NinePSharp.Fog.FogTransactionStore/Entry NinePSharp.Fog.FogTransactionStore::FindWriter(NinePSharp.Fog.FogUpload)": {
+          "Lines": {
+            "382": 1522,
+            "383": 1518,
+            "384": 1398,
+            "386": 404,
+            "389": 994
+          },
+          "Branches": [
+            {
+              "Line": 384,
+              "Offset": 31,
+              "EndOffset": 33,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 404
+            },
+            {
+              "Line": 384,
+              "Offset": 31,
+              "EndOffset": 44,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 994
+            }
+          ]
+        },
+        "NinePSharp.Fog.FogTransactionStore/Entry NinePSharp.Fog.FogTransactionStore::Find(System.String,System.String)": {
+          "Lines": {
+            "394": 16224,
+            "395": 16216,
+            "397": 971,
+            "400": 15245,
+            "402": 5,
+            "405": 15240,
+            "407": 2,
+            "408": 2,
+            "411": 15238
+          },
+          "Branches": [
+            {
+              "Line": 395,
+              "Offset": 21,
+              "EndOffset": 23,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 971
+            },
+            {
+              "Line": 395,
+              "Offset": 21,
+              "EndOffset": 34,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 15245
+            },
+            {
+              "Line": 400,
+              "Offset": 46,
+              "EndOffset": 48,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 5
+            },
+            {
+              "Line": 400,
+              "Offset": 46,
+              "EndOffset": 59,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 15240
+            },
+            {
+              "Line": 405,
+              "Offset": 66,
+              "EndOffset": 68,
+              "Path": 0,
+              "Ordinal": 4,
+              "Hits": 2
+            },
+            {
+              "Line": 405,
+              "Offset": 66,
+              "EndOffset": 87,
+              "Path": 1,
+              "Ordinal": 5,
+              "Hits": 15238
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::CheckAuthority(System.String)": {
+          "Lines": {
+            "416": 17707,
+            "418": 10,
+            "420": 17697
+          },
+          "Branches": [
+            {
+              "Line": 416,
+              "Offset": 6,
+              "EndOffset": 8,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 17706
+            },
+            {
+              "Line": 416,
+              "Offset": 6,
+              "EndOffset": 22,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 10
+            },
+            {
+              "Line": 416,
+              "Offset": 20,
+              "EndOffset": 22,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 10
+            },
+            {
+              "Line": 416,
+              "Offset": 20,
+              "EndOffset": 33,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 17697
+            }
+          ]
+        },
+        "System.Boolean NinePSharp.Fog.FogTransactionStore::Expired(NinePSharp.Fog.FogTransactionStore/Entry)": {
+          "Lines": {
+            "422": 15273,
+            "423": 15273
+          },
+          "Branches": [
+            {
+              "Line": 422,
+              "Offset": 16,
+              "EndOffset": 18,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 15258
+            },
+            {
+              "Line": 422,
+              "Offset": 51,
+              "EndOffset": 53,
+              "Path": 0,
+              "Ordinal": 2,
+              "Hits": 13708
+            },
+            {
+              "Line": 422,
+              "Offset": 51,
+              "EndOffset": 66,
+              "Path": 1,
+              "Ordinal": 3,
+              "Hits": 1550
+            },
+            {
+              "Line": 422,
+              "Offset": 16,
+              "EndOffset": 83,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 15
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::SweepCore()": {
+          "Lines": {
+            "427": 3021,
+            "429": 7,
+            "431": 1487
+          },
+          "Branches": [
+            {
+              "Line": 427,
+              "Offset": 69,
+              "EndOffset": 33,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 7
+            },
+            {
+              "Line": 427,
+              "Offset": 69,
+              "EndOffset": 71,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1487
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::Remove(System.String,NinePSharp.Fog.FogTransactionStore/Entry)": {
+          "Lines": {
+            "435": 1283,
+            "436": 1283,
+            "437": 1283,
+            "438": 1283
+          },
+          "Branches": [
+            {
+              "Line": 435,
+              "Offset": 7,
+              "EndOffset": 9,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 1098
+            },
+            {
+              "Line": 435,
+              "Offset": 7,
+              "EndOffset": 12,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 185
+            }
+          ]
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore::.ctor(NinePSharp.Fog.FogTransactionLimits,System.Func`2<System.String,System.Boolean>,System.TimeProvider)": {
+          "Lines": {
+            "13": 517,
+            "14": 517,
+            "18": 517,
+            "22": 517,
+            "24": 517,
+            "25": 516,
+            "26": 515,
+            "27": 499,
+            "28": 499,
+            "29": 499,
+            "30": 499
+          },
+          "Branches": [
+            {
+              "Line": 29,
+              "Offset": 96,
+              "EndOffset": 98,
+              "Path": 0,
+              "Ordinal": 0,
+              "Hits": 493
+            },
+            {
+              "Line": 29,
+              "Offset": 96,
+              "EndOffset": 104,
+              "Path": 1,
+              "Ordinal": 1,
+              "Hits": 499
+            }
+          ]
+        }
+      },
+      "NinePSharp.Fog.FogTransactionStore/Entry": {
+        "System.String NinePSharp.Fog.FogTransactionStore/Entry::get_Owner()": {
+          "Lines": {
+            "442": 16738
+          },
+          "Branches": []
+        },
+        "System.Collections.Generic.Dictionary`2<System.String,System.Byte[]> NinePSharp.Fog.FogTransactionStore/Entry::get_Inputs()": {
+          "Lines": {
+            "444": 5489
+          },
+          "Branches": []
+        },
+        "System.Collections.Generic.Dictionary`2<System.String,System.Byte[]> NinePSharp.Fog.FogTransactionStore/Entry::get_Outputs()": {
+          "Lines": {
+            "446": 1923
+          },
+          "Branches": []
+        },
+        "System.Int64 NinePSharp.Fog.FogTransactionStore/Entry::get_Timestamp()": {
+          "Lines": {
+            "448": 16956
+          },
+          "Branches": []
+        },
+        "System.String NinePSharp.Fog.FogTransactionStore/Entry::get_State()": {
+          "Lines": {
+            "450": 47262
+          },
+          "Branches": []
+        },
+        "System.String NinePSharp.Fog.FogTransactionStore/Entry::get_Error()": {
+          "Lines": {
+            "452": 8378
+          },
+          "Branches": []
+        },
+        "NinePSharp.Fog.FogUpload NinePSharp.Fog.FogTransactionStore/Entry::get_Writer()": {
+          "Lines": {
+            "454": 8663
+          },
+          "Branches": []
+        },
+        "System.Threading.Tasks.TaskCompletionSource NinePSharp.Fog.FogTransactionStore/Entry::get_Completion()": {
+          "Lines": {
+            "456": 886
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogTransactionStore/Entry::.ctor(System.String,System.Int64)": {
+          "Lines": {
+            "440": 1475
+          },
+          "Branches": []
+        }
+      },
+      "NinePSharp.Fog.FogTransactionStore/<ApplyAsync>d__26": {
+        "System.Void NinePSharp.Fog.FogTransactionStore/<ApplyAsync>d__26::MoveNext()": {
+          "Lines": {
+            "332": 221,
+            "333": 220,
+            "335": 220,
+            "336": 220,
+            "337": 220,
+            "338": 220,
+            "339": 220,
+            "340": 220,
+            "341": 220,
+            "342": 220,
+            "343": 1,
+            "345": 1,
+            "348": 1,
+            "349": 1,
+            "350": 1,
+            "351": 1,
+            "352": 221
+          },
+          "Branches": []
+        }
+      },
+      "NinePSharp.Fog.FogTransactionStore/<ObserveAsync>d__27": {
+        "System.Void NinePSharp.Fog.FogTransactionStore/<ObserveAsync>d__27::MoveNext()": {
+          "Lines": {
+            "356": 436,
+            "357": 431,
+            "359": 431,
+            "360": 430,
+            "361": 430
+          },
+          "Branches": []
+        }
+      }
+    },
+    "/home/scott/Repo/Fog/NinePSharp.Fog/FogUpload.cs": {
+      "NinePSharp.Fog.FogUpload": {
+        "System.String NinePSharp.Fog.FogUpload::get_Owner()": {
+          "Lines": {
+            "17": 1522
+          },
+          "Branches": []
+        },
+        "System.String NinePSharp.Fog.FogUpload::get_Transaction()": {
+          "Lines": {
+            "19": 2727
+          },
+          "Branches": []
+        },
+        "System.String NinePSharp.Fog.FogUpload::get_Session()": {
+          "Lines": {
+            "21": 185
+          },
+          "Branches": []
+        },
+        "System.String NinePSharp.Fog.FogUpload::get_File()": {
+          "Lines": {
+            "23": 342
+          },
+          "Branches": []
+        },
+        "System.IO.MemoryStream NinePSharp.Fog.FogUpload::get_Buffer()": {
+          "Lines": {
+            "25": 4791
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogUpload::Write(System.UInt64,System.ReadOnlySpan`1<System.Byte>)": {
+          "Lines": {
+            "27": 928
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogUpload::Seal()": {
+          "Lines": {
+            "29": 594
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogUpload::Dispose()": {
+          "Lines": {
+            "31": 1205
+          },
+          "Branches": []
+        },
+        "System.Void NinePSharp.Fog.FogUpload::.ctor(NinePSharp.Fog.FogTransactionStore,System.String,System.String,System.String,System.String)": {
+          "Lines": {
+            "8": 958,
+            "10": 958,
+            "11": 958,
+            "12": 958,
+            "13": 958,
+            "14": 958,
+            "15": 958
+          },
+          "Branches": []
+        }
+      }
+    }
+  }
+}

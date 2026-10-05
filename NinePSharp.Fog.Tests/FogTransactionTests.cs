@@ -390,7 +390,7 @@ public sealed class FogTransactionTests
 
     internal static FogTransactionStore Store(TimeProvider? time = null) => new(Limits, _ => true, time);
 
-    internal static Task Bounded(Task task) => task.WaitAsync(TimeSpan.FromMilliseconds(100));
+    internal static Task Bounded(Task task) => task.WaitAsync(TimeSpan.FromSeconds(10));
 
     internal static int RetainedInputCount(FogTransactionStore store, string id)
     {

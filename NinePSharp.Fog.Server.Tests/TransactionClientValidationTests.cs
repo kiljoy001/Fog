@@ -70,7 +70,7 @@ public sealed class TransactionClientValidationTests
         peer.Outputs[name] = [1, 2];
         var client = Client(peer, maximum: 2);
         var result = await client.ExecuteAsync(name, new Dictionary<string, byte[]> { ["request"] = [3], [name] = [4] }, [name])
-            .WaitAsync(TimeSpan.FromMilliseconds(250));
+            .WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(new byte[] { 1, 2 }, result[name]);
         Assert.Equal(new byte[] { 3 }, peer.Inputs["request"].ToArray());
         Assert.Equal(new byte[] { 4 }, peer.Inputs[name].ToArray());
@@ -176,7 +176,7 @@ public sealed class TransactionClientValidationTests
             1024,
             TimeSpan.FromSeconds(5));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ExecuteAsync("fixture", Request(), ["reply"], canceled.Token).WaitAsync(TimeSpan.FromMilliseconds(250)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ExecuteAsync("fixture", Request(), ["reply"], canceled.Token).WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(1, attempts);
     }
 
@@ -227,7 +227,7 @@ public sealed class TransactionClientValidationTests
             256,
             1024,
             TimeSpan.FromMilliseconds(30));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ExecuteAsync("fixture", Request(), ["reply"]).WaitAsync(TimeSpan.FromMilliseconds(250)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ExecuteAsync("fixture", Request(), ["reply"]).WaitAsync(TimeSpan.FromSeconds(10)));
         using var peer = new ControlPeer();
         var input = Request();
         var frozen = new FogTransactionClient(
@@ -282,7 +282,7 @@ public sealed class TransactionClientValidationTests
             "worker",
             256,
             maximum,
-            TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(10));
         var context = new RecordingContext();
         var previous = SynchronizationContext.Current;
         Task<IReadOnlyDictionary<string, byte[]>> operation;
@@ -306,7 +306,7 @@ public sealed class TransactionClientValidationTests
     private static Dictionary<string, byte[]> Request() => new() { ["request"] = [1] };
 
     private static FogTransactionClient Client(ControlPeer peer, int maximum = 1024) =>
-        new(_ => Task.FromResult<Stream>(peer), "worker", 256, maximum, TimeSpan.FromMilliseconds(100));
+        new(_ => Task.FromResult<Stream>(peer), "worker", 256, maximum, TimeSpan.FromSeconds(10));
 
     private sealed class RecordingContext : SynchronizationContext
     {

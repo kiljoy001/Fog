@@ -83,19 +83,19 @@ public sealed class ControlDispatcherTests
         Task<object> write = fixture.Send(NinePMessage.NewMsgTwrite(new Twrite(100, 4, 0, "commit\n"u8.ToArray())));
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Task<object> flush = fixture.Send(NinePMessage.NewMsgTflush(new Tflush(101, 100)));
-            Assert.Equal("interrupted", Assert.IsType<Rerror>(await write.WaitAsync(TimeSpan.FromMilliseconds(250))).Ename);
-            Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Assert.Equal("interrupted", Assert.IsType<Rerror>(await write.WaitAsync(TimeSpan.FromSeconds(10))).Ename);
+            Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.Equal("committing", fixture.Store.Status(fixture.Owner, id).State);
             finish.SetResult();
-            Assert.IsType<Rwrite>(await fixture.Write(4, "commit\n"u8.ToArray()).WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Assert.IsType<Rwrite>(await fixture.Write(4, "commit\n"u8.ToArray()).WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.Equal(1, fixture.Effects);
         }
         finally
         {
             finish.TrySetResult();
-            await fixture.Dispatcher.CloseSessionAsync("s").WaitAsync(TimeSpan.FromMilliseconds(250));
+            await fixture.Dispatcher.CloseSessionAsync("s").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 

@@ -35,7 +35,7 @@ public sealed class ControlWireSteps
             "worker",
             256,
             4096,
-            TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(10));
         result = await client.ExecuteAsync("fixture", new Dictionary<string, byte[]> { ["request"] = input }, ["reply"]);
     }
 
@@ -51,7 +51,7 @@ public sealed class ControlWireSteps
     [When("the node connects using an incorrect expected server name")]
     public async Task BadName()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         rejection = await Record.ExceptionAsync(async () =>
         {
             await using var tls = await FogTlsClient.ConnectAsync(

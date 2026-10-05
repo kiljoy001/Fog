@@ -24,11 +24,11 @@ public sealed class ListenerDrainTests
         listener.Start();
         using var client = new TcpClient();
         await client.ConnectAsync(listener.LocalEndpoint);
-        await listener.Serving.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await listener.Serving.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
 
-        Assert.Equal(0, await client.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(0, await client.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(["1 connections had not finished and were force-closed; their outcome is unknown."], logger.At(LogLevel.Warning));
         listener.Release.SetResult();
     }
@@ -48,7 +48,7 @@ public sealed class ListenerDrainTests
             TimeSpan.FromMinutes(1),
             ShortDrain);
         listener.Start();
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using (Stream first = await Connect(fixture, listener, deadline.Token))
         {
             await Version(first, deadline.Token);

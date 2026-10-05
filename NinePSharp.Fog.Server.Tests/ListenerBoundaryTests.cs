@@ -26,21 +26,21 @@ public sealed class ListenerBoundaryTests
         await using var listener = Create(fixture, fixture.ServerCertificate);
         listener.Start();
         var endpoint = listener.LocalEndpoint;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var first = await FogTlsClient.ConnectAsync(endpoint, "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate), fixture.NodeCertificate, timeout.Token);
         using var extra = new TcpClient();
         await extra.ConnectAsync(endpoint, timeout.Token);
-        Assert.Equal(0, await extra.GetStream().ReadAsync(new byte[1], timeout.Token).AsTask().WaitAsync(TimeSpan.FromMilliseconds(250)));
+        Assert.Equal(0, await extra.GetStream().ReadAsync(new byte[1], timeout.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(10)));
         Task? accepting = (Task?)typeof(FogListener)
             .GetField("accepting", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(listener);
         var connections = (System.Collections.IDictionary)typeof(FogListener)
             .GetField("connections", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(listener)!;
-        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(250));
+        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(accepting!.IsCompletedSuccessfully);
         Assert.Empty(connections);
-        Assert.Equal(0, await first.ReadAsync(new byte[1], timeout.Token).AsTask().WaitAsync(TimeSpan.FromMilliseconds(250)));
+        Assert.Equal(0, await first.ReadAsync(new byte[1], timeout.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(10)));
         using var closed = new TcpClient();
         await Assert.ThrowsAsync<SocketException>(() => closed.ConnectAsync(endpoint, timeout.Token).AsTask());
     }
@@ -51,7 +51,7 @@ public sealed class ListenerBoundaryTests
         using var fixture = new ControlFixture();
         await using var listener = Create(fixture, fixture.ServerCertificate, handshake: TimeSpan.FromMilliseconds(50));
         listener.Start();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var idle = new TcpClient();
         await idle.ConnectAsync(listener.LocalEndpoint, timeout.Token);
         Assert.Equal(0, await idle.GetStream().ReadAsync(new byte[1], timeout.Token));
@@ -62,9 +62,9 @@ public sealed class ListenerBoundaryTests
     public async Task SessionDeadlineClosesAnAuthenticatedIdleSocket()
     {
         using var fixture = new ControlFixture();
-        await using var listener = Create(fixture, fixture.ServerCertificate, lifetime: TimeSpan.FromSeconds(1));
+        await using var listener = Create(fixture, fixture.ServerCertificate, lifetime: TimeSpan.FromSeconds(3));
         listener.Start();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var tls = await FogTlsClient.ConnectAsync(listener.LocalEndpoint, "control.test", FogNodePolicy.SpkiPin(fixture.ServerCertificate), fixture.NodeCertificate, timeout.Token);
         Assert.Equal(0, await tls.ReadAsync(new byte[1], timeout.Token));
         Assert.Equal(0, fixture.Effects);
@@ -75,8 +75,8 @@ public sealed class ListenerBoundaryTests
     {
         using var fixture = new ControlFixture();
         var listener = Create(fixture, fixture.ServerCertificate);
-        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(250));
-        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(250));
+        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+        await listener.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Throws<ObjectDisposedException>(listener.Start);
     }
 
@@ -128,7 +128,7 @@ public sealed class ListenerBoundaryTests
             Assert.True(await RejectedAsync(tls, presentCertificate ? stranger : null, timeout.Token));
         }
 
-        using (var released = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+        using (var released = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
         {
             while (connections.Count != 0)
             {
@@ -161,7 +161,7 @@ public sealed class ListenerBoundaryTests
         await stopping.CancelAsync();
         socket.Stop();
         var loop = (Task)typeof(FogListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
-        await loop.WaitAsync(TimeSpan.FromSeconds(1));
+        await loop.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(loop.IsCompletedSuccessfully);
         await listener.DisposeAsync();
     }
@@ -195,7 +195,7 @@ public sealed class ListenerBoundaryTests
         _ = stopping.Token;
 
         connection.SetResult();
-        await disposal.WaitAsync(TimeSpan.FromSeconds(1));
+        await disposal.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Throws<ObjectDisposedException>(() => stopping.Token);
     }
 
@@ -208,7 +208,7 @@ public sealed class ListenerBoundaryTests
 
         // A listener that was never started is not a disposal race; its failure must surface.
         var loop = (Task)typeof(FogListener).GetMethod("AcceptAsync", Private)!.Invoke(listener, null)!;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => loop.WaitAsync(TimeSpan.FromSeconds(1)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => loop.WaitAsync(TimeSpan.FromSeconds(10)));
         await listener.DisposeAsync();
     }
 

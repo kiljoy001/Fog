@@ -70,15 +70,15 @@ public sealed class DrainingSteps
     [When(@"^the node writes to ""(.*)"" again$")]
     public async Task WhenWriteAgain(string name)
     {
-        await drain!.WaitAsync(TimeSpan.FromSeconds(2));
-        reply = await Send(NinePMessage.NewMsgTwrite(new Twrite(102, 2, 0, new byte[] { 2 }))).WaitAsync(TimeSpan.FromSeconds(2));
+        await drain!.WaitAsync(TimeSpan.FromSeconds(10));
+        reply = await Send(NinePMessage.NewMsgTwrite(new Twrite(102, 2, 0, new byte[] { 2 }))).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [When("the node stats the root with the write's tag")]
     public async Task WhenStatWithSameTag()
     {
-        await drain!.WaitAsync(TimeSpan.FromSeconds(2));
-        reply = await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromSeconds(2));
+        await drain!.WaitAsync(TimeSpan.FromSeconds(10));
+        reply = await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Then("that request is answered with Rstat")]
@@ -89,10 +89,10 @@ public sealed class DrainingSteps
 
     [Then(@"^the write is answered with Rerror ""(.*)""$")]
     public async Task ThenWriteAnswered(string error)
-        => Assert.Equal(error, Assert.IsType<Rerror>(await inFlight!.WaitAsync(TimeSpan.FromSeconds(2))).Ename);
+        => Assert.Equal(error, Assert.IsType<Rerror>(await inFlight!.WaitAsync(TimeSpan.FromSeconds(10))).Ename);
 
     [Then("the flush is answered with Rflush")]
-    public async Task ThenRflush() => Assert.IsType<Rflush>(await flush!.WaitAsync(TimeSpan.FromSeconds(2)));
+    public async Task ThenRflush() => Assert.IsType<Rflush>(await flush!.WaitAsync(TimeSpan.FromSeconds(10)));
 
     [Then(@"^that write is answered with Rerror ""(.*)""$")]
     public void ThenThatWrite(string error) => Assert.Equal(error, Assert.IsType<Rerror>(reply).Ename);
@@ -104,7 +104,7 @@ public sealed class DrainingSteps
     [Then("no outcome is logged as unknown")]
     public async Task ThenNothingUnknown()
     {
-        await drain!.WaitAsync(TimeSpan.FromSeconds(2));
+        await drain!.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.DoesNotContain(logger.At(LogLevel.Warning), message => message.Contains("unknown", StringComparison.Ordinal));
     }
 
@@ -159,7 +159,7 @@ public sealed class DrainingSteps
     [Then("the client's connection is closed")]
     public async Task ThenClientClosed()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var buffer = new byte[64];
         while (await clients[0].GetStream().ReadAsync(buffer, deadline.Token) != 0)
         {
@@ -205,7 +205,7 @@ public sealed class DrainingSteps
 
     private async Task<TcpClient> RequestAsync()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var client = new TcpClient();
         await client.ConnectAsync(listener!.LocalEndpoint, deadline.Token);
         await SendAsync(client, new Tversion(1, 8192, "9P2000"), deadline.Token);

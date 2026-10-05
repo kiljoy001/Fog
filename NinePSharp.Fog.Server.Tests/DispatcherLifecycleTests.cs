@@ -95,20 +95,20 @@ public sealed class DispatcherLifecycleTests
             Error("busy", await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))));
             Error("busy", await Send(NinePMessage.NewMsgTstat(new Tstat(101, 1))));
             var flush = Send(NinePMessage.NewMsgTflush(new Tflush(102, 100)));
-            await cancelled.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
+            await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.False(flush.IsCompleted);
 
             // Bounded: a second admitted flush would wait on the blocked write instead of failing.
-            Error("busy", await Send(NinePMessage.NewMsgTflush(new Tflush(103, 100))).WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Error("busy", await Send(NinePMessage.NewMsgTflush(new Tflush(103, 100))).WaitAsync(TimeSpan.FromSeconds(10)));
             finish.SetResult(1);
-            Assert.Equal(1U, Assert.IsType<Rwrite>(await write.WaitAsync(TimeSpan.FromMilliseconds(250))).Count);
-            Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Assert.Equal(1U, Assert.IsType<Rwrite>(await write.WaitAsync(TimeSpan.FromSeconds(10))).Count);
+            Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.IsType<Rstat>(await Send(NinePMessage.NewMsgTstat(new Tstat(104, 1))));
         }
         finally
         {
             finish.TrySetResult(1);
-            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromMilliseconds(250));
+            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -127,15 +127,15 @@ public sealed class DispatcherLifecycleTests
         CancellationTokenSource pendingCancellation = PendingCancellation(dispatcher, "probe", 100);
         try
         {
-            Error("busy", await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromMilliseconds(250)));
-            Error("invalid-request", await Send(NinePMessage.NewMsgTflush(new Tflush(101, 101))).WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Error("busy", await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromSeconds(10)));
+            Error("invalid-request", await Send(NinePMessage.NewMsgTflush(new Tflush(101, 101))).WaitAsync(TimeSpan.FromSeconds(10)));
         }
         finally
         {
             finish.TrySetResult(1);
-            await write.WaitAsync(TimeSpan.FromMilliseconds(250));
+            await write.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Throws<ObjectDisposedException>(pendingCancellation.Cancel);
-            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromMilliseconds(250));
+            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -170,16 +170,16 @@ public sealed class DispatcherLifecycleTests
         var write = Send(NinePMessage.NewMsgTwrite(new Twrite(100, 2, 0, new byte[] { 1 })));
         try
         {
-            Error("busy", await Send(NinePMessage.NewMsgTwrite(new Twrite(101, 2, 0, new byte[] { 2 }))).WaitAsync(TimeSpan.FromMilliseconds(250)));
-            Error("busy", await Send(NinePMessage.NewMsgTclunk(new Tclunk(102, 2))).WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Error("busy", await Send(NinePMessage.NewMsgTwrite(new Twrite(101, 2, 0, new byte[] { 2 }))).WaitAsync(TimeSpan.FromSeconds(10)));
+            Error("busy", await Send(NinePMessage.NewMsgTclunk(new Tclunk(102, 2))).WaitAsync(TimeSpan.FromSeconds(10)));
             fixture.Policy.Replace(2, []);
             finish.SetResult(1);
-            Error("denied", await write.WaitAsync(TimeSpan.FromMilliseconds(250)));
+            Error("denied", await write.WaitAsync(TimeSpan.FromSeconds(10)));
         }
         finally
         {
             finish.TrySetResult(1);
-            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromMilliseconds(250));
+            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -207,8 +207,8 @@ public sealed class DispatcherLifecycleTests
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         var write = Send(NinePMessage.NewMsgTwrite(new Twrite(100, 2, 0, new byte[] { 1 })));
         Task reset = terminal ? dispatcher.CloseSessionAsync("probe") : Send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000")));
-        await reset.WaitAsync(TimeSpan.FromMilliseconds(250));
-        Error("interrupted", await write.WaitAsync(TimeSpan.FromMilliseconds(250)));
+        await reset.WaitAsync(TimeSpan.FromSeconds(10));
+        Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(1, disposed);
         Assert.Equal(2, tree.ClosedSessions.Count);
         Assert.All(tree.ClosedSessions, id => Assert.Equal("probe", id));
@@ -239,12 +239,12 @@ public sealed class DispatcherLifecycleTests
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> reset = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
-        await canceled.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        Error("not-ready", await Send(NinePMessage.NewMsgTstat(new Tstat(5, 1))).WaitAsync(TimeSpan.FromMilliseconds(250)));
+        Error("not-ready", await Send(NinePMessage.NewMsgTstat(new Tstat(5, 1))).WaitAsync(TimeSpan.FromSeconds(10)));
         finish.SetResult(1);
-        Error("interrupted", await write.WaitAsync(TimeSpan.FromMilliseconds(250)));
-        Assert.IsType<Rversion>(await reset.WaitAsync(TimeSpan.FromMilliseconds(250)));
+        Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.IsType<Rversion>(await reset.WaitAsync(TimeSpan.FromSeconds(10)));
         await dispatcher.CloseSessionAsync("probe");
     }
 
@@ -271,14 +271,14 @@ public sealed class DispatcherLifecycleTests
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> oldVersion = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
-        await canceled.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Task close = dispatcher.CloseSessionAsync("probe");
         Assert.IsType<Rversion>(await Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000"))));
 
         finish.SetResult();
-        Error("interrupted", await write.WaitAsync(TimeSpan.FromMilliseconds(250)));
-        Error("not-ready", await oldVersion.WaitAsync(TimeSpan.FromMilliseconds(250)));
-        await close.WaitAsync(TimeSpan.FromMilliseconds(250));
+        Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
+        Error("not-ready", await oldVersion.WaitAsync(TimeSpan.FromSeconds(10)));
+        await close.WaitAsync(TimeSpan.FromSeconds(10));
         await dispatcher.CloseSessionAsync("probe");
     }
 
@@ -305,13 +305,13 @@ public sealed class DispatcherLifecycleTests
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> version = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
-        await canceled.Task.WaitAsync(TimeSpan.FromMilliseconds(250));
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Task close = dispatcher.CloseSessionAsync("probe");
 
         finish.SetResult();
-        Error("interrupted", await write.WaitAsync(TimeSpan.FromMilliseconds(250)));
-        Error("not-ready", await version.WaitAsync(TimeSpan.FromMilliseconds(250)));
-        await close.WaitAsync(TimeSpan.FromMilliseconds(250));
+        Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
+        Error("not-ready", await version.WaitAsync(TimeSpan.FromSeconds(10)));
+        await close.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]

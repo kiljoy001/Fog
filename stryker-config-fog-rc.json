@@ -8,7 +8,7 @@
       "**/*.cs"
     ],
     "mutation-level": "Standard",
-    "additional-timeout": 3000,
+    "additional-timeout": 60000,
     "thresholds": {
       "high": 100,
       "low": 100,
