@@ -192,16 +192,8 @@ public static class FogDispatcherFuzz
 
                 if (flush)
                 {
-                    var request = ((NinePMessage.MsgTflush)message).Item;
-                    if (request.OldTag == request.Tag)
-                    {
-                        Rejected(response, tag, "invalid-request");
-                    }
-                    else
-                    {
-                        Expect<Rflush>(response, tag);
-                    }
-
+                    // flush(5): a Tflush is never answered with Rerror, even a flush of itself.
+                    Expect<Rflush>(response, tag);
                     continue;
                 }
 

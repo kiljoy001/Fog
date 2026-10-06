@@ -71,7 +71,7 @@ public sealed class DispatcherLifecycleTests
     }
 
     [Fact]
-    public async Task SaturatedRequestsKeepOneFlushSlotAndFlushWaitsForTheOldOperation()
+    public async Task SaturatedRequestsCanStillFlushAndANewerFlushFinishesTheOlderOne()
     {
         using var fixture = new ControlFixture();
         var finish = new TaskCompletionSource<uint>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -98,11 +98,13 @@ public sealed class DispatcherLifecycleTests
             await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.False(flush.IsCompleted);
 
-            // Bounded: a second admitted flush would wait on the blocked write instead of failing.
-            Error("busy", await Send(NinePMessage.NewMsgTflush(new Tflush(103, 100))).WaitAsync(TimeSpan.FromSeconds(10)));
+            // flush(5): only the last of several flushes needs an answer, so the newer one takes over.
+            var newer = Send(NinePMessage.NewMsgTflush(new Tflush(103, 100)));
+            Assert.Same(FogNinePDispatcher.NoReply, await flush.WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.False(newer.IsCompleted);
             finish.SetResult(1);
             Assert.Equal(1U, Assert.IsType<Rwrite>(await write.WaitAsync(TimeSpan.FromSeconds(10))).Count);
-            Assert.IsType<Rflush>(await flush.WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.IsType<Rflush>(await newer.WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.IsType<Rstat>(await Send(NinePMessage.NewMsgTstat(new Tstat(104, 1))));
         }
         finally
@@ -113,7 +115,7 @@ public sealed class DispatcherLifecycleTests
     }
 
     [Fact]
-    public async Task DuplicateTagsAndSelfFlushAreRejectedDirectly()
+    public async Task DuplicateTagsAreRejectedAndASelfFlushIsAnsweredAtOnce()
     {
         using var fixture = new ControlFixture();
         var finish = new TaskCompletionSource<uint>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -128,7 +130,8 @@ public sealed class DispatcherLifecycleTests
         try
         {
             Error("busy", await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromSeconds(10)));
-            Error("invalid-request", await Send(NinePMessage.NewMsgTflush(new Tflush(101, 101))).WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(101, 101))).WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.False(write.IsCompleted);
         }
         finally
         {

@@ -13,6 +13,9 @@ namespace NinePSharp.Fog.Server;
 /// <summary>Standard 9P2000 control export, for already mutually authenticated enrolled-node TLS transports.</summary>
 public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecycle
 {
+    /// <summary>The result of a flush that a newer flush of the same request answers; it is sent as nothing.</summary>
+    public static readonly object NoReply = new();
+
     private readonly object gate = new();
     private readonly Dictionary<string, Session> sessions = new(StringComparer.Ordinal);
     private readonly FogFileTree tree;
@@ -57,57 +60,26 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
                 return await VersionAsync(sessionId, version.Item);
             }
 
-            Session session;
-            lock (gate)
-            {
-                if (!sessions.TryGetValue(sessionId, out session!))
-                {
-                    throw new FogException("not-ready");
-                }
-            }
-
-            Pending pending;
-            lock (session.Gate)
-            {
-                CheckSession(session);
-                if (request.Size > session.MSize || request.Tag == NinePConstants.NoTag)
-                {
-                    throw new FogException("invalid-request");
-                }
-
-                if (session.Pending.ContainsKey(request.Tag))
-                {
-                    throw new FogException("busy");
-                }
-
-                // One reserved flush slot lets a saturated client cancel, without unlimited waiters.
-                if (message is NinePMessage.MsgTflush ? session.Flushes != 0 :
-                    session.Pending.Count - session.Flushes >= limits.RequestsPerSession)
-                {
-                    throw new FogException("busy");
-                }
-
-                pending = new Pending();
-                session.Pending[request.Tag] = pending;
-                if (message is NinePMessage.MsgTflush)
-                {
-                    session.Flushes++;
-                }
-            }
-
+            (Session session, Pending pending) = Admit(sessionId, message, request);
             try
             {
                 Task<object> operation;
                 lock (session.Gate)
                 {
                     operation = message is NinePMessage.MsgTflush flush ?
-                    FlushAsync(session, flush.Item, pending.Cancellation.Token) :
+                    FlushAsync(session, flush.Item, pending) :
                     DispatchCore(sessionId, session, message, certificate, pending.Cancellation.Token);
                 }
 
                 // A request abandoned by a drain is answered now; its operation may still finish later.
+                // An abandoned flush has no effect to be unsure of, and flush(5) allows it only an Rflush.
                 if (await Task.WhenAny(operation, pending.Abandoned.Task) != operation)
                 {
+                    if (message is NinePMessage.MsgTflush abandoned)
+                    {
+                        return FlushReply(abandoned.Item, pending);
+                    }
+
                     logger.LogWarning("Request {Tag} was abandoned after the drain limit; its outcome is unknown.", request.Tag);
                     throw new FogException("unknown");
                 }
@@ -162,6 +134,8 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
 
         await ResetAsync(sessionId, session);
     }
+
+    private static object FlushReply(Tflush request, Pending flush) => flush.Superseded ? NoReply : new Rflush(request.Tag);
 
     private static void DropSnapshot(Session session, Fid fid)
     {
@@ -226,29 +200,89 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         NinePMessage.MsgTwstat m => m.Item, _ => null,
     };
 
-    private async Task<object> FlushAsync(Session session, Tflush request, CancellationToken cancellation)
+    private (Session Session, Pending Pending) Admit(string sessionId, NinePMessage message, ISerializable request)
     {
-        Pending? flushed = null;
+        Session? session;
+        lock (gate)
+        {
+            if (!sessions.TryGetValue(sessionId, out session))
+            {
+                throw new FogException("not-ready");
+            }
+        }
+
+        bool flush = message is NinePMessage.MsgTflush;
         lock (session.Gate)
         {
-            if (request.Tag == request.OldTag)
+            CheckSession(session);
+            if (request.Size > session.MSize || request.Tag == NinePConstants.NoTag)
             {
                 throw new FogException("invalid-request");
             }
 
-            if (session.Pending.TryGetValue(request.OldTag, out var operation))
+            if (session.Pending.ContainsKey(request.Tag))
+            {
+                throw new FogException("busy");
+            }
+
+            // flush(5) never refuses a flush; at most one waits per request, so flushes stay bounded too.
+            if (!flush && session.Pending.Count - session.Flushes >= limits.RequestsPerSession)
+            {
+                throw new FogException("busy");
+            }
+
+            var pending = new Pending { IsFlush = flush };
+            session.Pending[request.Tag] = pending;
+            if (flush)
+            {
+                session.Flushes++;
+            }
+
+            return (session, pending);
+        }
+    }
+
+    // flush(5): a flush is answered Rflush once its request is answered or abandoned, and at once when it
+    // names its own tag, an unused tag or another flush. Of several flushes of one request only the last
+    // needs an answer, so a newer flush finishes the older one, which is sent as nothing.
+    private async Task<object> FlushAsync(Session session, Tflush request, Pending self)
+    {
+        bool drain = false;
+        Pending? flushed = null;
+        lock (session.Gate)
+        {
+            if (request.OldTag != request.Tag && session.Pending.TryGetValue(request.OldTag, out var operation) && !operation.IsFlush)
             {
                 operation.Cancellation.Cancel();
+                drain = operation.Flusher is null;
+                operation.Flusher?.Supersede();
+                operation.Flusher = self;
                 flushed = operation;
             }
         }
 
-        if (flushed is not null)
+        if (flushed is null)
         {
-            await DrainAsync([flushed]).WaitAsync(cancellation);
+            return new Rflush(request.Tag);
         }
 
-        return new Rflush(request.Tag);
+        if (drain)
+        {
+            _ = AnswerFlushAsync(session, flushed);
+        }
+
+        await self.Flushed.Task;
+        return FlushReply(request, self);
+    }
+
+    // One drain per flushed request, bounded by the drain limit; it answers whichever flush is current.
+    private async Task AnswerFlushAsync(Session session, Pending flushed)
+    {
+        await DrainAsync([flushed]);
+        lock (session.Gate)
+        {
+            flushed.Flusher!.Flushed.TrySetResult();
+        }
     }
 
     private async Task<object> VersionAsync(string id, Tversion request)
@@ -630,8 +664,23 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
     {
         internal CancellationTokenSource Cancellation { get; } = new();
 
+        internal bool IsFlush { get; init; }
+
+        // The newest flush waiting for this request, if any.
+        internal Pending? Flusher { get; set; }
+
+        internal bool Superseded { get; private set; }
+
+        internal TaskCompletionSource Flushed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         internal TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         internal TaskCompletionSource Abandoned { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal void Supersede()
+        {
+            Superseded = true;
+            Flushed.TrySetResult();
+        }
     }
 }

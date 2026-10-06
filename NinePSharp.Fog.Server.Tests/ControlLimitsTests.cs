@@ -50,7 +50,7 @@ public sealed class ControlLimitsTests
         Error("invalid-request", await Send(NinePMessage.NewMsgTread(new Tread(65535, 1, 0, 1))));
         Error("invalid-request", await Send(NinePMessage.NewMsgTwrite(new Twrite(5, 1, 0, new byte[256]))));
         Error("denied", await Send(NinePMessage.NewMsgTremove(new Tremove(6, 1))));
-        Error("invalid-request", await Send(NinePMessage.NewMsgTflush(new Tflush(7, 7))));
+        Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(7, 7))));
         Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(8, 123))));
         Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(9, 123))));
         await dispatcher.CloseSessionAsync("bounded");
