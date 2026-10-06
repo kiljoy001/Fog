@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Coyote" Version="1.7.11" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Reqnroll.xUnit" Version="2.1.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NinePSharp.Fog.Server/NinePSharp.Fog.Server.csproj" />
+    <PackageReference Include="NinePSharp.Client" Version="$(NinePSharpVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../NinePSharp.Fog.Server.Tests/ControlFixture.cs" Link="Support/ControlFixture.cs" />
+    <Compile Include="../NinePSharp.Fog.Server.Tests/ProbeTree.cs" Link="Support/ProbeTree.cs" />
+    <Compile Include="../NinePSharp.Fog.Server.Tests/RecordingLogger.cs" Link="Support/RecordingLogger.cs" />
+  </ItemGroup>
+</Project>

@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NinePSharp.Fog.Server.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NinePSharp.Fog.Tests", "NinePSharp.Fog.Tests\NinePSharp.Fog.Tests.csproj", "{EF42A34E-CF9D-4893-98C2-A492E57E456B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NinePSharp.Fog.Coyote.Tests", "NinePSharp.Fog.Coyote.Tests\NinePSharp.Fog.Coyote.Tests.csproj", "{915F63BD-E5C5-48F9-B269-04748375B72F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -209,6 +211,18 @@ Global
 		{EF42A34E-CF9D-4893-98C2-A492E57E456B}.Release|x64.Build.0 = Release|Any CPU
 		{EF42A34E-CF9D-4893-98C2-A492E57E456B}.Release|x86.ActiveCfg = Release|Any CPU
 		{EF42A34E-CF9D-4893-98C2-A492E57E456B}.Release|x86.Build.0 = Release|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Debug|x64.Build.0 = Debug|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Debug|x86.Build.0 = Debug|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Release|x64.ActiveCfg = Release|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Release|x64.Build.0 = Release|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Release|x86.ActiveCfg = Release|Any CPU
+		{915F63BD-E5C5-48F9-B269-04748375B72F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
