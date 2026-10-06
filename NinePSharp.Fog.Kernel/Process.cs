@@ -36,6 +36,21 @@ public sealed class Process
         (plane, calls) = Bind();
     }
 
+    /// <summary>nulldir: a directory entry every field of which wstat leaves unchanged.</summary>
+    public static Stat NullDir => new(
+        0,
+        ushort.MaxValue,
+        uint.MaxValue,
+        new Qid((QidType)0xFF, uint.MaxValue, ulong.MaxValue),
+        uint.MaxValue,
+        uint.MaxValue,
+        uint.MaxValue,
+        ulong.MaxValue,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty);
+
     public long Pid => process.Id;
 
     public string Text { get; private set; }
@@ -118,29 +133,37 @@ public sealed class Process
         }
     }
 
-    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int fd, int count, CancellationToken cancellationToken = default)
+    public ValueTask<ReadOnlyMemory<byte>> ReadAsync(int fd, int count, CancellationToken cancellationToken = default)
+        => PReadAsync(fd, count, -1, cancellationToken);
+
+    public ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
+        => PWriteAsync(fd, data, -1, cancellationToken);
+
+    /// <summary>pread: reads at an offset without moving the descriptor's; -1 reads at and advances it, as read does.</summary>
+    public async ValueTask<ReadOnlyMemory<byte>> PReadAsync(int fd, int count, long offset, CancellationToken cancellationToken = default)
     {
         CheckMode(fd, NinePConstants.OREAD);
         try
         {
-            return await calls.ReadAsync(fd, (uint)count, cancellationToken);
+            return await calls.PReadAsync(fd, offset, (uint)count, cancellationToken);
         }
         catch (ArgumentException)
         {
             throw new SyscallException(Errors.BadFd);
         }
-        catch (IOException error)
+        catch (Exception error) when (error is IOException or NamespaceFidException)
         {
             throw new SyscallException(error.Message);
         }
     }
 
-    public async ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
+    /// <summary>pwrite: writes at an offset without moving the descriptor's; -1 writes at and advances it, as write does.</summary>
+    public async ValueTask<int> PWriteAsync(int fd, ReadOnlyMemory<byte> data, long offset, CancellationToken cancellationToken = default)
     {
         CheckMode(fd, NinePConstants.OWRITE);
         try
         {
-            return (int)await calls.WriteAsync(fd, data, cancellationToken);
+            return (int)await calls.PWriteAsync(fd, offset, data, cancellationToken);
         }
         catch (ArgumentException)
         {
@@ -151,7 +174,53 @@ public sealed class Process
             // The note's default action, until processes can catch notes.
             throw new ExitException("sys: write on closed pipe");
         }
+        catch (Exception error) when (error is IOException or NamespaceFidException)
+        {
+            throw new SyscallException(error.Message);
+        }
+    }
+
+    /// <summary>fstat: the directory entry of an open file, under the name it was opened by.</summary>
+    public async ValueTask<Stat> FStatAsync(int fd)
+    {
+        try
+        {
+            ReadOnlyMemory<byte> record = await calls.FStatAsync(fd, ushort.MaxValue);
+            int offset = 0;
+            return new Stat(record.Span, ref offset);
+        }
+        catch (ArgumentException)
+        {
+            throw new SyscallException(Errors.BadFd);
+        }
+    }
+
+    /// <summary>wstat: changes a file's directory entry, leaving every field set as in <see cref="NullDir"/>.</summary>
+    public async ValueTask WStatAsync(string path, Stat stat)
+    {
+        await ResolveAsync(path);
+        try
+        {
+            await calls.WStatAsync(path, KernelFileStats.Encode(stat));
+        }
         catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
+        }
+    }
+
+    /// <summary>fwstat: as wstat, for the file a descriptor names.</summary>
+    public async ValueTask FWStatAsync(int fd, Stat stat)
+    {
+        try
+        {
+            await calls.FWStatAsync(fd, KernelFileStats.Encode(stat));
+        }
+        catch (ArgumentException)
+        {
+            throw new SyscallException(Errors.BadFd);
+        }
+        catch (Exception error) when (error is IOException or NamespaceFidException)
         {
             throw new SyscallException(error.Message);
         }
@@ -195,9 +264,7 @@ public sealed class Process
 
     public async ValueTask<Stat> StatAsync(string path)
     {
-        ResourceStat stat = await plane.StatAsync(await ResolveAsync(path), CancellationToken.None);
-        int size = 49 + new[] { stat.Name, stat.User, stat.Group, stat.LastModifier }.Sum(Encoding.UTF8.GetByteCount);
-        return new Stat((ushort)size, 0, 0, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
+        return KernelFileStats.ToStat(await plane.StatAsync(await ResolveAsync(path), CancellationToken.None));
     }
 
     public async ValueTask<long> SeekAsync(int fd, long offset, int whence)
@@ -474,7 +541,7 @@ public sealed class Process
     private (LocalNamespaceDataPlane Plane, Plan9FileSyscalls Calls) Bind()
     {
         var data = new LocalNamespaceDataPlane(process.ProcessGroup.MountTable, devices);
-        return (data, new Plan9FileSyscalls(process, data, () => kernel.Context(Pid, User)));
+        return (data, new Plan9FileSyscalls(process, data, () => kernel.Context(Pid, User), fileStats: new KernelFileStats(devices)));
     }
 
     private RamFs EnvironmentFor(RforkFlags flags)

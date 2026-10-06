@@ -2,7 +2,8 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes) : IResourceDataOperations
+internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes)
+    : IResourceDataOperations, IResourceOpenStatOperations, IResourceWStatOperations
 {
     public ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
         => Device(directory).WalkAsync(directory, name, cancellationToken);
@@ -33,6 +34,22 @@ internal sealed class ProcessDevices(Process caller, IResourceDataOperations fil
 
     public ValueTask RemoveAsync(ResourceHandle resource, ResourceOpenHandle? openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
         => Device(resource).RemoveAsync(resource, openHandle, context, cancellationToken);
+
+    // A device without its own open-file stat reports the file the descriptor names.
+    public ValueTask<ResourceStat> StatOpenAsync(ResourceOpenHandle handle, CancellationToken cancellationToken)
+        => Device(handle.Resource) is IResourceOpenStatOperations opened
+            ? opened.StatOpenAsync(handle, cancellationToken)
+            : Device(handle.Resource).StatAsync(handle.Resource, cancellationToken);
+
+    public ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
+        => Updates(resource).WStatAsync(resource, stat, context, cancellationToken);
+
+    public ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
+        => Updates(handle.Resource).WStatOpenAsync(handle, stat, context, cancellationToken);
+
+    // devwstat: a device that does not change entries refuses with Eperm.
+    private IResourceWStatOperations Updates(ResourceHandle resource)
+        => Device(resource) as IResourceWStatOperations ?? throw new ResourceWStatRejectedException(Errors.Permission);
 
     private IResourceDataOperations Device(ResourceHandle handle) => handle.Identity.Provider switch
     {

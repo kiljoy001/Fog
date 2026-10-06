@@ -10,5 +10,7 @@ public sealed class KernelDriver
 
     public int[] Pipe { get; set; } = [];
 
+    public ManualClock Clock { get; } = new();
+
     public Task<T> Bounded<T>(ValueTask<T> operation) => operation.AsTask().WaitAsync(Bound);
 }

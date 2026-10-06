@@ -11,7 +11,7 @@ public sealed class KernelSteps(KernelDriver driver)
     [Given("a booted kernel")]
     public async Task GivenABootedKernel()
     {
-        driver.Kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>());
+        driver.Kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(), clock: driver.Clock);
         driver.Init = await driver.Kernel.BootAsync();
     }
 

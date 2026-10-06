@@ -304,5 +304,41 @@
     "mutator": "Boolean mutation",
     "line": "return (false, result);",
     "reason": "end of file reads as a parsed line, so rc parses end of file forever"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int done = 0; done < reply.Length;)",
+    "reason": "a read that has filled its reply keeps reading nothing"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "Equality mutation",
+    "line": "if (node.Blocks.TryGetValue(at / BlockSize, out byte[]? block) && within < block.Length)",
+    "reason": "a block that ends before the offset gives no bytes, so the read never advances"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "Logical mutation",
+    "line": "if (node.Blocks.TryGetValue(at / BlockSize, out byte[]? block) && within < block.Length)",
+    "reason": "a block that ends before the offset gives no bytes, so the read never advances"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+    "line": "done += n;",
+    "reason": "the block loop moves backwards and never reaches its end"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int done = 0; done < data.Length;)",
+    "reason": "a write that has copied everything keeps copying nothing"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "int within = (int)(at % BlockSize);",
+    "reason": "an offset past the block gives a count of nothing or less, so the block loop never advances"
   }
 ]

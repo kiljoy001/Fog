@@ -4,7 +4,7 @@ namespace NinePSharp.Fog.Kernel;
 internal sealed class PipeQueue
 {
     public const string Hungup = "i/o on hungup channel";
-    private const int Limit = 256 * 1024;
+    public const int MaxLimit = 256 * 1024;
     private const int Atomic = 64 * 1024;
     private readonly object gate = new();
     private readonly LinkedList<byte[]> blocks = new();
@@ -13,6 +13,19 @@ internal sealed class PipeQueue
     private long written;
     private bool closed;
     private int eof;
+    private int limit = MaxLimit;
+
+    // qlen: what is queued for the reader.
+    public long Length
+    {
+        get
+        {
+            lock (gate)
+            {
+                return written - read;
+            }
+        }
+    }
 
     public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int count, CancellationToken cancellationToken)
     {
@@ -83,6 +96,16 @@ internal sealed class PipeQueue
         }
     }
 
+    // qsetlimit: writers wait once more than the limit is queued; waiting writers look again.
+    public void SetLimit(int bytes)
+    {
+        lock (gate)
+        {
+            limit = bytes;
+            Signal();
+        }
+    }
+
     private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     // qflow: the writer waits until no more than the limit is queued ahead of the end of its write.
@@ -93,7 +116,7 @@ internal sealed class PipeQueue
             Task wait;
             lock (gate)
             {
-                if (end - read <= Limit || closed)
+                if (end - read <= limit || closed)
                 {
                     return;
                 }

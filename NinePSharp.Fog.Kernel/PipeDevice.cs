@@ -5,7 +5,7 @@ using NinePSharp.Namespaces;
 namespace NinePSharp.Fog.Kernel;
 
 // devpipe: each pipe is a pair of ends; an end reads its own queue and writes the other's.
-internal sealed class PipeDevice : IResourceDataOperations
+internal sealed class PipeDevice(string owner) : IResourceDataOperations, IResourceWStatOperations
 {
     public const string Provider = "pipe";
     private readonly object gate = new();
@@ -83,8 +83,29 @@ internal sealed class PipeDevice : IResourceDataOperations
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
         => throw new NotSupportedException();
 
+    // pipestat: an end is data or data1, as long as what is queued for it to read.
     public ValueTask<ResourceStat> StatAsync(ResourceHandle resource, CancellationToken cancellationToken)
-        => throw new NotSupportedException();
+    {
+        ulong end = resource.Identity.Path;
+        long queued = Queue(resource, 0).Length;
+        return ValueTask.FromResult(new ResourceStat(resource, end == 0 ? "data" : "data1", 0b110_110_110, 0, 0, (ulong)queued, owner, owner, owner));
+    }
+
+    public ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
+        => WStatAsync(handle.Resource, stat, context, cancellationToken);
+
+    // pipewstat: the length, unconditionally, becomes both queues' limit.
+    public ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
+    {
+        if (stat.Length > PipeQueue.MaxLimit)
+        {
+            throw new ResourceWStatRejectedException(Errors.BadArg);
+        }
+
+        Queue(resource, 0).SetLimit((int)stat.Length);
+        Queue(resource, 1).SetLimit((int)stat.Length);
+        return ValueTask.FromResult(stat.EncodedLength);
+    }
 
     public ValueTask<ResourceOpenHandle> CreateAndOpenAsync(ResourceHandle directory, string name, uint permissions, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
         => throw new NotSupportedException();

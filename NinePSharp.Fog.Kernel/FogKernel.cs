@@ -17,19 +17,20 @@ public sealed class FogKernel
         this.root = root;
         Files = files;
         User = user;
+        Pipes = new PipeDevice(user);
     }
 
     internal VProcessTable Table { get; } = new();
 
     internal IResourceDataOperations Files { get; }
 
-    internal PipeDevice Pipes { get; } = new();
+    internal PipeDevice Pipes { get; }
 
     internal string User { get; }
 
-    public static FogKernel InMemory(IReadOnlyDictionary<string, ProgramMain> programs, string user = "none")
+    public static FogKernel InMemory(IReadOnlyDictionary<string, ProgramMain> programs, string user = "none", TimeProvider? clock = null)
     {
-        var files = new RamFs("ram", "#R", user);
+        var files = new RamFs("ram", "#R", user, clock: clock);
         return new FogKernel(programs, files, files.Root, user);
     }
 
@@ -55,7 +56,7 @@ public sealed class FogKernel
         return new Process(this, first, null, environment, "*init*", User);
     }
 
-    internal RamFs NewEnvironment() => new("env", "#e", User);
+    internal RamFs NewEnvironment() => new("env", "#e", User, changeable: false);
 
     internal ProgramMain? Program(string name) => programs.GetValueOrDefault(name);
 
