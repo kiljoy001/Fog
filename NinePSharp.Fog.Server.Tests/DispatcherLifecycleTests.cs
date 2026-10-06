@@ -126,10 +126,11 @@ public sealed class DispatcherLifecycleTests
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(100, 2, 0, new byte[] { 1 })));
-        CancellationTokenSource pendingCancellation = PendingCancellation(dispatcher, "probe", 100);
+        CancellationTokenSource? pendingCancellation = null;
         try
         {
             Error("busy", await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1))).WaitAsync(TimeSpan.FromSeconds(10)));
+            pendingCancellation = PendingCancellation(dispatcher, "probe", 100);
             Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(101, 101))).WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.False(write.IsCompleted);
         }
@@ -137,7 +138,7 @@ public sealed class DispatcherLifecycleTests
         {
             finish.TrySetResult(1);
             await write.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Throws<ObjectDisposedException>(pendingCancellation.Cancel);
+            Assert.Throws<ObjectDisposedException>(pendingCancellation!.Cancel);
             await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
@@ -434,7 +435,7 @@ public sealed class DispatcherLifecycleTests
             .GetValue(dispatcher)!;
         object session = sessions[sessionId]!;
         var pending = (System.Collections.IDictionary)session.GetType()
-            .GetProperty("Pending", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetField("pending", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(session)!;
         object operation = pending[tag]!;
         return (CancellationTokenSource)operation.GetType()
