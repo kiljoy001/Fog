@@ -5,7 +5,7 @@ LibTab job interface. These choices do not install or certify a runtime.
 
 | runtime | Profile / ABI / meter | Selected engine and useful boundary |
 | --- | --- | --- |
-| `wasm` | `fog-wasi-namespace-v1` / `wasip1-namespace-v1` / `fog-host-io-v1` | dotnet-webassembly core wasm32 commands; Fog supplies WASIp1 imports and explicit virtual directory capabilities |
+| `wasm` | `fog-wasi-namespace-v1` / `wasip1-namespace-v1` / `fog-host-io-v1` | dotnet-webassembly core wasm32 applications, each a Fog kernel process execed from `/bin/{app}`; Fog supplies WASIp1 imports over the process's descriptors and namespace |
 
 The selected primary WASM workload contract is defined in [Wasm.md](Wasm.md) and uses [Isolation.md](Isolation.md). Runtime/provider names remain extensible,
 but installing a different ABI or different semantics requires a different explicit

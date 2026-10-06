@@ -1,47 +1,104 @@
 @fog_v1_profiles @design
-Feature: dotnet-webassembly commands use the virtual namespace through WASI
-  Fog provides the Preview 1 bridge; dotnet-webassembly provides the execution engine.
-  These acceptance scenarios are pending production bindings.
+Feature: A WASM application runs as a Fog process and uses its namespace through WASI
+  Each application is one Fog kernel process: its parent forks it and execs the module at
+  /bin/{app}, which exec recognises by its \0asm header. The module's WASI Preview 1 imports
+  act on that process: its descriptors, its namespace, its environment and its exit. The
+  descriptors it starts with are the ones its parent left open, and the directories among
+  them are its preopens. dotnet-webassembly provides the execution engine. These acceptance
+  scenarios are pending production bindings.
 
-  @WASI_NS_001 @integration
-  Scenario: A compiled command uses a namespace-backed data directory
-    Given a pinned dotnet-webassembly worker and explicit read-write preopen /data
-    When a WASIp1 command opens, writes, seeks, reads and closes /data/report
-    Then the expected bytes are visible through an independent authorized 9P client
-    And no Linux directory is opened on behalf of the guest
+  Background:
+    Given a booted Fog kernel
+    And "/bin/report" holds a WASM application
 
-  @WASI_NS_002 @security @property
-  Scenario Outline: Relative path traversal cannot escape directory authority
-    Given a directory capability for /data and no authority outside it
-    When path_open receives <path>
-    Then it fails with NOTCAPABLE without opening an unauthorized resource
+  @WASI_NS_001
+  Scenario: An application is forked and execed like any program, and its parent waits for it
+    Given a process that forks a child
+    When the child execs "/bin/report" with the arguments "report" and "daily"
+    Then the application's args_get returns "report" and "daily"
+    And when it returns from _start the parent's wait returns a Waitmsg with an empty status
+
+  @WASI_NS_015
+  Scenario: Descriptors 0, 1 and 2 are the ones the parent left open
+    Given a process that makes a pipe and forks a child with the pipe's first end as descriptor 1
+    When the child execs an application that writes "hello" to descriptor 1
+    Then the parent reads "hello" from the pipe's second end
+
+  @WASI_NS_016
+  Scenario: The directories the parent left open are the preopens, under the names they were opened by
+    Given a process with "/data" open as descriptor 3 and "/data/report" open as descriptor 4
+    When it execs "/bin/report"
+    Then fd_prestat_get reports descriptor 3 as a preopened directory named "/data"
+    And fd_prestat_get reports descriptor 4 as not a preopen
+    And no other descriptor is a preopen
+
+  @WASI_NS_017
+  Scenario Outline: Exec refuses a module outside the profile and leaves the process as it was
+    Given a process with "/tmp/f" open as descriptor 3
+    When it execs a module <defect>
+    Then the exec fails with "exec header invalid"
+    And the process still runs its own program with descriptor 3 open
 
     Examples:
-      | path                        |
-      | /etc/passwd                 |
-      | ../secret                   |
-      | child/../../secret          |
-      | link-to-outside/secret      |
+      | defect                                           |
+      | with a start section                             |
+      | with a shared memory                             |
+      | without a memory exported as "memory"            |
+      | with no finite memory maximum                    |
+      | importing a function outside the profile         |
+      | importing a profile function with the wrong type |
+
+  @WASI_NS_018
+  Scenario Outline: How the application ends is its exit status
+    Given a process that forks a child
+    When the child execs an application that <ends>
+    Then the parent's wait returns a Waitmsg with the status "<status>"
+
+    Examples:
+      | ends                          | status                       |
+      | returns from _start           |                              |
+      | calls proc_exit with 0        |                              |
+      | calls proc_exit with 3        | wasm-exit 3                  |
+      | executes unreachable          | wasm-trap: unreachable       |
+
+  @WASI_NS_019
+  Scenario: The application's environment is its process's environment
+    Given a process whose environment holds "region" as "north"
+    When it execs an application that reads its environment with environ_get
+    Then the application sees "region=north"
+
+  @WASI_NS_002 @security @property
+  Scenario Outline: A path cannot leave the directory it is resolved from
+    Given a process with "/data" open as descriptor 3 and "/secret" in its namespace
+    When the application calls path_open on descriptor 3 with <path>
+    Then it fails with NOTCAPABLE and nothing outside "/data" is walked or opened
+
+    Examples:
+      | path                       |
+      | /secret                    |
+      | ../secret                  |
+      | child/../../secret         |
+      | a name bound over "/secret" by a mount it does not authorize |
 
   @WASI_NS_003 @security
-  Scenario: Namespace replacement cannot enlarge an existing capability
-    Given an opened directory capability and retained file descriptor
-    When its mount is replaced or unmounted during an admitted operation
-    Then the admitted operation retains its authorized channel
-    And fresh lookups authorize each newly selected resource
-    And a path prefix alone cannot authorize a replacement provider
+  Scenario: Changing the namespace cannot enlarge a descriptor the application holds
+    Given an application holding descriptor 3 on "/data" and a file opened beneath it
+    When its process's namespace is changed by a bind over "/data" during a call
+    Then the call in progress keeps the channel it was admitted with
+    And later path_open calls on descriptor 3 resolve from the directory descriptor 3 names
+    And a matching path prefix alone grants nothing in the new mount
 
   @WASI_NS_004 @property
-  Scenario: Requested rights cannot exceed inherited rights
-    Given a read-only preopen and a generated requested rights set
-    When path_open or fd_fdstat_set_rights requests additional rights
-    Then it fails with NOTCAPABLE before any provider mutation
-    And reduced rights cannot later be restored by the guest
+  Scenario: Rights come from the open mode and only shrink
+    Given a process with "/data" open for reading as descriptor 3
+    When the application asks path_open or fd_fdstat_set_rights for write rights beneath it
+    Then it fails with NOTCAPABLE before any provider changes anything
+    And rights narrowed by fd_fdstat_set_rights cannot be restored
 
   @WASI_NS_005
-  Scenario Outline: WASI open flags preserve their distinct meanings
-    Given an existing writable file containing report data
-    When path_open requests <flags>
+  Scenario Outline: WASI open flags keep their distinct meanings
+    Given a process with "/data" open as descriptor 3 and "/data/report" holding report data
+    When the application calls path_open on "report" with <flags>
     Then the result is <result>
 
     Examples:
@@ -52,72 +109,81 @@ Feature: dotnet-webassembly commands use the virtual namespace through WASI
       | DIRECTORY   | NOTDIR with contents unchanged   |
 
   @WASI_NS_006
-  Scenario: Renumber atomically moves one descriptor capability
-    Given two descriptors with different files, rights, positions and flags
-    When fd_renumber moves the first onto the second
-    Then the destination retains the source capability, position and flags
-    And the old source number is invalid
-    And displaced ownership is released exactly once
-    And a same-number renumber changes nothing
+  Scenario: fd_renumber is the process's renumber
+    Given an application with two descriptors on different files, with different offsets
+    When it calls fd_renumber to move the first onto the second
+    Then the second number names the first file at the first offset
+    And the first number is not open
+    And the file the second number named is closed exactly once
+    And renumbering a descriptor onto its own number changes nothing
 
   @WASI_NS_007 @property @fuzz
-  Scenario: Guest memory is checked before any external file effect
+  Scenario: Guest memory is checked before any kernel call
     Given generated iovec tables, byte ranges, counts and result pointers
     When fd_read, fd_write, fd_pread or fd_pwrite validates them
-    Then wrapped or out-of-bounds ranges fail before provider IO
-    And vector count and cumulative copy size cannot exceed admitted limits
-    And valid IO reports actual byte counts including short transfers and EOF
+    Then wrapped or out-of-bounds ranges fail before any kernel call
+    And vector count and total copy size cannot exceed the admitted limits
+    And valid IO reports the actual byte counts, including short transfers and end of file
 
   @WASI_NS_008
   Scenario: Memory growth cannot invalidate the host's next buffer access
-    Given a command whose linear memory grows between file calls
+    Given an application whose linear memory grows between file calls
     When the next call uses a buffer on a newly allocated page
     Then the bridge reads the current memory base and validates the new range
-    And no pointer or Span from a previous call survives asynchronous IO
+    And no pointer or Span from a previous call survives the kernel call
 
   @WASI_NS_009
-  Scenario: Positioned IO cannot invoke Plan 9's implicit-offset sentinel
-    Given a seekable descriptor with a shared position of seven
-    When fd_pread requests the all-ones 64-bit offset
-    Then it reports an unrepresentable offset error without provider IO
-    And the shared position remains seven
+  Scenario Outline: Positioned IO cannot reach Plan 9's implicit-offset sentinel
+    Given an application with a file open as descriptor 3 at offset seven
+    When it calls <call> with the offset <offset>
+    Then it fails with an unrepresentable offset error without a kernel call
+    And descriptor 3's offset is still seven
+
+    Examples:
+      | call      | offset               |
+      | fd_pread  | 18446744073709551615 |
+      | fd_pwrite | 9223372036854775808  |
 
   @WASI_NS_010
-  Scenario: Directory continuation uses WASI cookies and records
-    Given a preopened union directory containing repeated names
-    When fd_readdir is called with bounded buffers and returned cookies
-    Then it emits WASI dirents in union order including repeated names
-    And a short final record fragment and resumption obey Preview 1
-    And unsupported or foreign cookies fail without corrupting the cursor
-    And no raw 9P stat record is exposed as a WASI dirent
+  Scenario: fd_readdir continues from its cookies over a union directory
+    Given a process with a union directory holding repeated names open as descriptor 3
+    When the application calls fd_readdir with small buffers, passing back each cookie it got
+    Then it receives every entry in union order, repeated names included, as WASI dirents
+    And a record cut short by the buffer is completed by the next call, as Preview 1 says
+    And a cookie of zero starts again from the first entry
+    And a cookie it was never given fails without disturbing the directory
+    And no raw 9P stat record reaches the application
 
-  @WASI_NS_011 @cluster
-  Scenario: A suspended provider does not prevent process termination
-    Given a WASI file call waiting for an asynchronous resource grain
-    When status and exit requests reach the process authority
-    Then both requests are processed while provider IO remains pending
-    And guest execution waits only on its bounded worker
-    And late completion cannot write into disposed or replacement guest memory
-    And all retained ownership is drained or recorded for recovery
+  @WASI_NS_011
+  Scenario: A kernel call the application waits on holds only the application's thread
+    Given an application blocked in fd_read on an empty pipe
+    Then other processes, the application's parent among them, keep running
+    And when the pipe's other end writes "x", the fd_read returns "x"
 
   @WASI_NS_012 @security
-  Scenario: A guest without imports remains subject to the deadline
-    Given a valid command looping forever without making host calls
-    When its independent supervisor deadline expires
-    Then the worker is killed and reaped while the Orleans host remains responsive
-    And no fuel counter or CancellationToken is claimed to interrupt the loop
+  Scenario: An application looping without host calls is still contained
+    Given an application looping forever without calling the host
+    When its deadline under Isolation.md expires
+    Then its execution is stopped without relying on a token or disposing its instance
+    And the rest of the kernel stays responsive
 
   @WASI_NS_013
-  Scenario: Unsupported provider operations are explicit
-    Given a provider without atomic append, sync or rename support
-    When the guest requests one of those operations
-    Then it receives NOTSUP without an emulated successful guarantee
-    And copy followed by delete is not reported as atomic rename
+  Scenario Outline: Operations the namespace cannot honour are explicit
+    Given a process with "/data" open as descriptor 3
+    When the application calls <call>
+    Then it fails with NOTSUP and no copy, delete or emulation takes place
+
+    Examples:
+      | call                                                |
+      | path_rename from "/data/a" to "/data/sub/a"          |
+      | path_symlink                                         |
+      | path_link                                            |
+      | fd_sync on a provider without a durability guarantee |
 
   @WASI_NS_014
-  Scenario: Trap cleanup does not claim to roll back authorized file effects
-    Given a command that wrote an authorized file and then traps
-    When the worker terminates
-    Then staged job result bytes are not published as successful output
-    And completed external file effects remain visible
-    And descriptors, pending operations and guest memory follow the cleanup contract
+  Scenario: A trap ends the process without rolling back what it wrote
+    Given a process that forks a child holding "/tmp/scratch" open ORCLOSE
+    When the child execs an application that writes "partial" to "/data/out" and then traps
+    Then the parent's wait returns a Waitmsg whose status starts "wasm-trap: "
+    And "/data/out" holds "partial"
+    And "/tmp/scratch" has been removed, as when any process exits
