@@ -122,13 +122,36 @@ and a birth generation, which gives snapshots and reclaims their space. Changes 
 upserted into the tree, so a qid version or time can change without a read-modify-write and
 several changes commit atomically together. Its manual still calls it experimental.
 
-Replication is Fog's addition and is not designed yet. Copy-on-write makes it natural: a
-commit is a set of new blocks and a new root. A replica takes every block born after the
-generation it already has, checks each against its hash, and then adopts the new root, as
-ZFS send and receive do. Only which commit is current has to be agreed between machines.
+Replication is Fog's addition. Copy-on-write makes it natural: a commit is a set of new
+blocks and a new root. A replica takes every block born after the generation it already has,
+checks each against its hash, and then adopts the new root, as ZFS send and receive do.
 
-Orleans's membership table belongs on the same file server. Kept there, it outlives any
-one machine, which a table owned by a single control host cannot.
+### Agreeing on the current commit
+
+Which commit of each file system is current is decided by consensus, with
+[CometBFT](https://github.com/cometbft/cometbft), the maintained continuation of Tendermint
+Core. Only that small fact is agreed: the replicated state is the current root hash and
+generation of each file system. Blocks travel directly between the storage machines and are
+checked against their hashes; they never pass through consensus.
+
+- CometBFT runs as its own process on each storage machine and drives Fog's ABCI application,
+  written in C#, over a local socket or gRPC. A transaction proposes a new root; it is applied
+  only if its generation follows the current one and enough replicas hold its blocks.
+- A committed block is final: there are no forks to roll back, so a root once current stays
+  in the history of every replica.
+- It tolerates f faulty machines out of 3f+1, Byzantine ones included, so a cluster that must
+  survive one failed machine needs four storage machines. A lying or compromised machine cannot
+  make the others adopt a forged root.
+- The validators are the storage machines; adding or removing one is an ABCI validator
+  update.
+
+CometBFT speaks its own peer-to-peer protocol between machines. That is the one exception to
+all remote service traffic being 9P, kept because carrying it over 9P would mean replacing
+CometBFT's transport.
+
+Orleans's membership table belongs on the same file server, or directly in the consensus
+state; which suits Orleans's membership protocol better is decided when it is designed. Either
+way it outlives any one machine, which a table owned by a single control host cannot.
 
 ## Getting in
 
@@ -138,8 +161,9 @@ Plan 9 client. The shell is Fog's port of 9front rc, running as a process like a
 
 ## Order of work
 
-1. The storage file server and the Orleans storage provider over 9P, starting on one
-   machine with conditional writes by qid version; replication follows.
+1. The storage file server, a gefs port, and the Orleans storage provider over 9P, on one
+   machine with conditional writes by qid version; then replication of commits, with
+   CometBFT agreeing on the current one.
 2. The grain-backed kernel: process, descriptor group, environment group and pipe grains;
    fork onto a fresh grain, wait and exit across silos; the existing kernel scenarios
    passing on a multi-silo test cluster.
