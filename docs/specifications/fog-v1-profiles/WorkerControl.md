@@ -1,5 +1,7 @@
 # Worker assignment, scopes and resource-side authority
 
+> The [Fog architecture](../fog-architecture/README.md) places work by fork onto process grains rather than pulling it to workers; this contract describes the earlier model.
+
 Status: proposed `fog-control-v1`, single trusted operator. All network exchanges
 below use ordinary 9P files, protected by the selected TLS/AAN profile where enabled.
 None requires a guest to possess a node credential or invoke a grain API directly.

@@ -1,5 +1,7 @@
 # Orleans 10.3.1 membership over 9P
 
+> The [Fog architecture](../fog-architecture/README.md) requires membership to survive the loss of any one machine, which a single control host owning the table does not.
+
 Status: proposed adapter contract, not a new membership algorithm. Orleans retains
 its membership decisions; the control host supplies atomic table operations. The
 API baseline is the installed `Microsoft.Orleans.*` 10.3.1 packages and their XML

@@ -1,5 +1,7 @@
 # Concrete version-one fog profiles
 
+> The [Fog architecture](../fog-architecture/README.md) supersedes the job, worker and control-node model these profiles assume; see its list of disagreements.
+
 Primary workload target: dotnet-webassembly applications using a WASI bridge over
 Plan 9 namespace/file operations. Production execution remains pending; its requirements
 now drive the next namespace syscall slice.

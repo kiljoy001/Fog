@@ -1,5 +1,7 @@
 # LibTab compute jobs over 9P: BDD contract
 
+> The [Fog architecture](../fog-architecture/README.md) runs long-lived applications as processes, not disposable jobs; this specification describes the earlier model.
+
 Current priority: Plan 9 namespace emulation. Workload execution described here is deferred.
 
 Status: proposed, specification-only. The feature files have no bindings and are

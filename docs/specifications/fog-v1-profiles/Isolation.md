@@ -1,5 +1,7 @@
 # linux-process-v1 execution boundary
 
+> The [Fog architecture](../fog-architecture/README.md) runs WASM applications as kernel processes inside the silo on any contemporary machine; containment of runaway guests needs a new design there.
+
 Status: proposed first supported containment profile, not a claim that the current
 gateway can safely execute untrusted code. Installed host adapters, supervisors and
 runner binaries are trusted. Uploaded WASM and input files are not.

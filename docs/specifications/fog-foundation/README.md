@@ -1,5 +1,7 @@
 # Single-operator fog foundation
 
+> The [Fog architecture](../fog-architecture/README.md) replaces the single configured control node with processes and grains that can run on any machine.
+
 Status: proposed, specification-only. These documents and Gherkin scenarios are
 design contracts, not implemented authentication, authorization, membership, or
 acceptance tests. They add no production dependency and change no running service.
