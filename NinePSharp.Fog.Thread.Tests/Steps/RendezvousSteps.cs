@@ -10,6 +10,7 @@ public sealed class RendezvousSteps : IDisposable
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(50);
     private readonly List<Task<object?>> meetings = new();
     private readonly CancellationTokenSource interrupt = new();
+    private readonly RendezvousGroup group = new();
     private object? tag;
     private object? other;
 
@@ -26,15 +27,18 @@ public sealed class RendezvousSteps : IDisposable
     }
 
     [When(@"^(?:a|another) thread rendezvouses on the tag with ""(.*)""$")]
-    public void WhenMeet(string value) => meetings.Add(Rendezvous.MeetAsync(tag!, value));
+    public void WhenMeet(string value) => meetings.Add(group.Rendezvous.MeetAsync(tag!, value));
 
     [When(@"^another thread rendezvouses on the other tag with ""(.*)""$")]
-    public void WhenMeetOther(string value) => meetings.Add(Rendezvous.MeetAsync(other!, value));
+    public void WhenMeetOther(string value) => meetings.Add(group.Rendezvous.MeetAsync(other!, value));
+
+    [When(@"^another thread in another rendezvous group rendezvouses on the tag with ""(.*)""$")]
+    public void WhenMeetElsewhere(string value) => meetings.Add(new RendezvousGroup().Rendezvous.MeetAsync(tag!, value));
 
     [When(@"^a thread rendezvouses on the tag with ""(.*)"" and is interrupted$")]
     public async Task WhenInterrupted(string value)
     {
-        meetings.Add(Rendezvous.MeetAsync(tag!, value, interrupt.Token));
+        meetings.Add(group.Rendezvous.MeetAsync(tag!, value, interrupt.Token));
         await Task.Delay(Settle);
         await interrupt.CancelAsync();
     }

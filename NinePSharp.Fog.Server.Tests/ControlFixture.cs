@@ -74,7 +74,7 @@ internal sealed class ControlFixture : IDisposable
 
     public void Dispose()
     {
-        Dispatcher.CloseSessionAsync("s").GetAwaiter().GetResult();
+        Dispatcher.CloseSessionWithinAsync("s").GetAwaiter().GetResult();
         ServerCertificate.Dispose();
         NodeCertificate.Dispose();
         OtherCertificate.Dispose();
@@ -96,7 +96,7 @@ internal sealed class ControlFixture : IDisposable
     }
 
     internal Task<object> Send(NinePMessage message, string session = "s", X509Certificate2? certificate = null) =>
-        Dispatcher.DispatchAsync(session, message, NinePDialect.NineP2000, certificate ?? NodeCertificate);
+        Dispatcher.DispatchWithinAsync(session, message, NinePDialect.NineP2000, certificate ?? NodeCertificate);
 
     internal async Task Initialize(string session = "s")
     {

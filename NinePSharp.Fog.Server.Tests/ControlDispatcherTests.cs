@@ -95,7 +95,7 @@ public sealed class ControlDispatcherTests
         finally
         {
             finish.TrySetResult();
-            await fixture.Dispatcher.CloseSessionAsync("s").WaitAsync(TimeSpan.FromSeconds(10));
+            await fixture.Dispatcher.CloseSessionWithinAsync("s").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -128,7 +128,7 @@ public sealed class ControlDispatcherTests
             Assert.Equal("denied", Assert.IsType<Rerror>(await fixture.Send(NinePMessage.NewMsgTattach(request))).Ename);
         }
 
-        object reply = await fixture.Dispatcher.DispatchAsync(
+        object reply = await fixture.Dispatcher.DispatchWithinAsync(
             "s",
             NinePMessage.NewMsgTattach(new Tattach(4, 1, NinePConstants.NoFid, "worker", "runtime")),
             NinePDialect.NineP2000);

@@ -1,8 +1,8 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using NinePSharp.Constants;
+using NinePSharp.Fog.Thread;
 using NinePSharp.Interfaces;
 using NinePSharp.Messages;
 using NinePSharp.Parser;
@@ -12,11 +12,12 @@ namespace NinePSharp.Fog.Server;
 
 /// <summary>
 /// One 9P session as a process: a single loop owns its fids, pending requests, flushes and drains, and
-/// everything else reaches it as an event in its inbox. Writes run outside the loop and report back.
+/// everything else reaches it on its inbox channel. Writes run outside the loop and report back.
 /// </summary>
 internal sealed class FogSession
 {
-    private readonly Channel<Event> inbox = Channel.CreateUnbounded<Event>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<Event> inbox = new(new RendezvousGroup());
+    private readonly object order = new();
     private readonly Dictionary<uint, Fid> fids = new();
     private readonly Dictionary<ushort, Operation> pending = new();
     private readonly string id;
@@ -26,10 +27,13 @@ internal sealed class FogSession
     private readonly TimeProvider time;
     private readonly ILogger logger;
     private readonly long created;
+    private readonly Task loop;
     private uint messageSize;
     private long snapshotBytes;
+    private Task<int> handoff = Task.FromResult(1);
     private bool ready;
     private bool closed;
+    private bool shut;
 
     internal FogSession(string id, FogFileTree tree, FogNodePolicy policy, FogNinePLimits limits, TimeProvider time, ILogger logger)
     {
@@ -40,29 +44,20 @@ internal sealed class FogSession
         this.time = time;
         this.logger = logger;
         created = time.GetTimestamp();
-        _ = RunAsync();
+        loop = RunAsync();
     }
 
-    internal Task<object> SendAsync(NinePMessage message, ISerializable request, X509Certificate2? certificate)
+    internal async Task<object> SendAsync(NinePMessage message, ISerializable request, X509Certificate2? certificate)
     {
         var reply = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!inbox.Writer.TryWrite(new Request(message, request, certificate, reply)))
-        {
-            reply.SetResult(new Rerror(request.Tag, "not-ready"));
-        }
-
-        return reply.Task;
+        return await HandOff(new Request(message, request, certificate, reply)) == 1 ? await reply.Task : new Rerror(request.Tag, "not-ready");
     }
 
-    internal Task CloseAsync()
+    // Closing drains the session and ends its loop; a session already closed has nothing to wait for.
+    internal async Task CloseAsync()
     {
-        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!inbox.Writer.TryWrite(new Close(done)))
-        {
-            done.SetResult();
-        }
-
-        return done.Task;
+        await HandOff(new Close());
+        await loop;
     }
 
     private static Rerror Error(ushort tag, Exception exception) => exception switch
@@ -117,9 +112,39 @@ internal sealed class FogSession
         return cursor - start;
     }
 
+    // The writer's own task, so a drain sees it finish the moment it does; a writer that throws instead of
+    // returning a task fails like any other.
+    private static Task<uint> Write(Func<ulong, ReadOnlyMemory<byte>, CancellationToken, Task<uint>> write, Twrite request, CancellationToken cancellation)
+    {
+        try
+        {
+            return write(request.Offset, request.Data, cancellation);
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException<uint>(exception);
+        }
+    }
+
+    // The transport hands requests over in the order it read them, but a channel serves waiting senders
+    // in any order, so each send waits for the one before it.
+    private Task<int> HandOff(Event next)
+    {
+        lock (order)
+        {
+            return handoff = SendAfterAsync(handoff, next);
+        }
+    }
+
+    private async Task<int> SendAfterAsync(Task<int> previous, Event next)
+    {
+        await previous;
+        return await inbox.SendAsync(next);
+    }
+
     private async Task RunAsync()
     {
-        await foreach (Event next in inbox.Reader.ReadAllAsync())
+        for (var (result, next) = await inbox.RecvAsync(); result == 1; (result, next) = await inbox.RecvAsync())
         {
             try
             {
@@ -137,6 +162,11 @@ internal sealed class FogSession
                     logger.LogError(exception, "Session {Session} failed to handle {Event}.", id, next.GetType().Name);
                 }
             }
+
+            if (shut)
+            {
+                await inbox.CloseAsync();
+            }
         }
     }
 
@@ -153,8 +183,8 @@ internal sealed class FogSession
             case Expired expired:
                 Expire(expired.Drain);
                 break;
-            case Close close:
-                Shut(close.Done);
+            case Close:
+                Shut();
                 break;
         }
     }
@@ -278,32 +308,28 @@ internal sealed class FogSession
         var operation = new Operation(request.Tag, received.Reply, isFlush: false) { Fid = fid, Certificate = received.Certificate };
         pending.Add(request.Tag, operation);
         fid.Writing = true;
-        _ = WriteAsync(operation, write, request);
+        operation.Work = Write(write, request, operation.Cancellation.Token);
+        _ = ReportAsync(operation);
     }
 
-    private async Task WriteAsync(Operation operation, Func<ulong, ReadOnlyMemory<byte>, CancellationToken, Task<uint>> write, Twrite request)
+    private async Task ReportAsync(Operation operation)
     {
         object result;
         try
         {
-            result = await write(request.Offset, request.Data, operation.Cancellation.Token);
+            result = await operation.Work!;
         }
         catch (Exception exception)
         {
             result = exception;
         }
 
-        inbox.Writer.TryWrite(new Finished(operation, result));
+        await inbox.SendAsync(new Finished(operation, result));
     }
 
     private void Finish(Operation operation, object result)
     {
         operation.Fid!.Writing = false;
-        if (operation.Answered)
-        {
-            return;
-        }
-
         object response;
         try
         {
@@ -358,32 +384,31 @@ internal sealed class FogSession
         if (drain.Waiting.Count == 0)
         {
             done();
-            return;
         }
-
-        _ = ExpireAsync(drain);
+        else
+        {
+            _ = ExpireAsync(drain);
+        }
     }
 
     private async Task ExpireAsync(Drain drain)
     {
         await Task.Delay(limits.Drain);
-        inbox.Writer.TryWrite(new Expired(drain));
+        await inbox.SendAsync(new Expired(drain));
     }
 
     private void Expire(Drain drain)
     {
-        // Requests first, so a flush is never answered while the request it flushes still holds its tag.
-        foreach (var operation in drain.Waiting.OrderBy(operation => operation.IsFlush).ToArray())
+        // Only a write still running is abandoned. A flush is answered with the request it flushes, which
+        // is always in the same drain, and a write that has finished is known though its result has yet to
+        // reach the loop.
+        foreach (var operation in drain.Waiting.ToArray())
         {
-            // An abandoned flush has no effect to be unsure of, and flush(5) allows it only an Rflush.
-            if (operation.IsFlush)
+            if (operation.Work is { IsCompleted: false })
             {
-                Answer(operation, new Rflush(operation.Tag));
-                continue;
+                logger.LogWarning("Request {Tag} was abandoned after the drain limit; its outcome is unknown.", operation.Tag);
+                Answer(operation, new Rerror(operation.Tag, "unknown"));
             }
-
-            logger.LogWarning("Request {Tag} was abandoned after the drain limit; its outcome is unknown.", operation.Tag);
-            Answer(operation, new Rerror(operation.Tag, "unknown"));
         }
     }
 
@@ -397,17 +422,24 @@ internal sealed class FogSession
             operation.Cancellation.Cancel();
         }
 
+        // The reset is answered even if releasing the session's files fails, or its caller would wait forever.
         StartDrain(operations, () =>
         {
-            foreach (var fid in fids.Values)
+            try
             {
-                fid.Open?.Dispose();
-            }
+                foreach (var fid in fids.Values)
+                {
+                    fid.Open?.Dispose();
+                }
 
-            fids.Clear();
-            snapshotBytes = 0;
-            tree.CloseSession(id);
-            then();
+                fids.Clear();
+                snapshotBytes = 0;
+                tree.CloseSession(id);
+            }
+            finally
+            {
+                then();
+            }
         });
     }
 
@@ -434,14 +466,10 @@ internal sealed class FogSession
         return new Rversion(request.Tag, messageSize, version);
     }
 
-    private void Shut(TaskCompletionSource done)
+    private void Shut()
     {
         closed = true;
-        Reset(() =>
-        {
-            inbox.Writer.TryComplete();
-            done.TrySetResult();
-        });
+        Reset(() => shut = true);
     }
 
     private Rattach Attach(Tattach request, X509Certificate2? certificate)
@@ -656,7 +684,7 @@ internal sealed class FogSession
 
     private sealed record Expired(Drain Drain) : Event;
 
-    private sealed record Close(TaskCompletionSource Done) : Event;
+    private sealed record Close : Event;
 
     private sealed class Fid(FogFileNode node, FogPrincipal principal)
     {
@@ -685,6 +713,8 @@ internal sealed class FogSession
         internal List<Drain> Drains { get; } = new();
 
         internal Fid? Fid { get; init; }
+
+        internal Task<uint>? Work { get; set; }
 
         internal X509Certificate2? Certificate { get; init; }
 

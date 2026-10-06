@@ -3,17 +3,18 @@ namespace NinePSharp.Fog.Thread;
 /// <summary>The untyped half of a libthread Channel: its buffer counters, its waiting alts, and chanclose.</summary>
 public abstract class Channel
 {
-    // channel.c's chanlock: one lock for every channel, so an alt can examine all of its channels at once.
-    internal static readonly object Lock = new();
-
-    private protected Channel(int size)
+    private protected Channel(RendezvousGroup group, int size)
     {
+        ArgumentNullException.ThrowIfNull(group);
         ArgumentOutOfRangeException.ThrowIfNegative(size);
+        Group = group;
         Size = size;
     }
 
     /// <summary>The number of messages the channel buffers; zero for an unbuffered channel.</summary>
     public int Size { get; }
+
+    internal RendezvousGroup Group { get; }
 
     internal int Count { get; set; }
 
@@ -28,7 +29,7 @@ public abstract class Channel
     public async Task<int> CloseAsync()
     {
         var failed = new List<Tag>();
-        lock (Lock)
+        lock (Group.ChannelLock)
         {
             if (Closed)
             {
@@ -54,7 +55,7 @@ public abstract class Channel
 
         foreach (Tag tag in failed)
         {
-            await Rendezvous.MeetAsync(tag, Tag.ClosedWake);
+            await Group.Rendezvous.MeetAsync(tag, Tag.ClosedWake);
         }
 
         return 0;
@@ -63,7 +64,7 @@ public abstract class Channel
     /// <summary>chanclosing: -1 while the channel is open, else the number of messages still buffered.</summary>
     public int Closing()
     {
-        lock (Lock)
+        lock (Group.ChannelLock)
         {
             return Closed ? Count : -1;
         }

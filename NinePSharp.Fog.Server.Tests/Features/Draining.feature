@@ -3,7 +3,8 @@ Feature: Draining in-flight 9P work is bounded and leaves unfinished work with a
   Closing a session, Tversion and Tflush cancel in-flight requests and wait at most the drain limit
   for them. A request still running after that is abandoned: it is answered with Rerror "unknown",
   its outcome is logged as unknown, and nothing waits for it again. Its effect may still happen,
-  as flush(5) says of a request flushed before its reply. A connection whose requests do not finish
+  as flush(5) says of a request flushed before its reply. A write that has finished by then is
+  answered with its result, and an abandoned write that finishes later changes nothing. A connection whose requests do not finish
   within the drain limit after it ends still releases its socket and its slot, and disposing a
   listener closes connections that have not finished within the drain limit.
 
@@ -51,6 +52,44 @@ Feature: Draining in-flight 9P work is bounded and leaves unfinished work with a
     When the node flushes the write
     And the node stats the root with the write's tag as soon as the flush is answered
     Then that request is answered with Rstat
+
+  @FOG_DRAIN_006
+  Scenario: Closing a session waits for its drain
+    Given a write to "file" that ignores cancellation is in flight
+    When the session closes
+    Then the close has not finished
+    And it finishes within 2 seconds
+
+  @FOG_DRAIN_007
+  Scenario: An abandoned write that finishes later changes nothing, even with its tag in use again
+    Given a write to "file" that ignores cancellation is in flight
+    When the node flushes the write
+    And the node writes on a second fid with the write's tag, a write that ignores cancellation
+    And the abandoned write finishes
+    Then a request with the write's tag is answered with Rerror "busy"
+    And the write's outcome is logged as unknown exactly once
+
+  @FOG_DRAIN_008
+  Scenario: A write that has finished when the drain limit passes is answered, not abandoned
+    Given a write to "file" that ignores cancellation is in flight
+    And a second write on a second fid, ignoring cancellation, that finishes as the first is abandoned
+    When the session closes
+    Then the write is answered with Rerror "unknown"
+    And the second write is answered with Rwrite
+    And the write's outcome is logged as unknown exactly once
+
+  @FOG_DRAIN_009
+  Scenario Outline: A failure releasing the session's files is logged, and the drain still ends
+    Given a write to "file" that honours cancellation is in flight
+    And releasing the session's files fails
+    When <drain>
+    Then it finishes within 2 seconds
+    And "Session node failed to handle Finished." is logged as an error
+
+    Examples:
+      | drain                   |
+      | the session closes      |
+      | the node sends Tversion |
 
   @FOG_DRAIN_004
   Scenario: A connection whose request never finishes still releases its socket and slot

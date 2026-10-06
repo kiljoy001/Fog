@@ -29,38 +29,38 @@ public abstract class Alt
     /// <summary>alt ending in CHANEND: the index of the entry executed, or -1 if interrupted or every entry failed by a close.</summary>
     public static async Task<int> AltAsync(IReadOnlyList<Alt> alts, CancellationToken interrupt = default)
     {
-        ArgumentNullException.ThrowIfNull(alts);
+        RendezvousGroup group = GroupOf(alts);
         int now;
         Tag? waiting;
         Tag? met;
-        lock (Channel.Lock)
+        lock (group.ChannelLock)
         {
             now = Now(alts, block: true, out waiting, out met);
         }
 
         if (met is not null)
         {
-            await Rendezvous.MeetAsync(met, null, CancellationToken.None);
+            await group.Rendezvous.MeetAsync(met, null, CancellationToken.None);
             return now;
         }
 
-        return waiting is null ? now : await WaitAsync(alts, waiting, interrupt);
+        return waiting is null ? now : await WaitAsync(group, alts, waiting, interrupt);
     }
 
     /// <summary>alt ending in CHANNOBLK: as AltAsync, but the terminator's index, alts.Count, rather than blocking.</summary>
     public static async Task<int> NbAltAsync(IReadOnlyList<Alt> alts)
     {
-        ArgumentNullException.ThrowIfNull(alts);
+        RendezvousGroup group = GroupOf(alts);
         int now;
         Tag? met;
-        lock (Channel.Lock)
+        lock (group.ChannelLock)
         {
             now = Now(alts, block: false, out _, out met);
         }
 
         if (met is not null)
         {
-            await Rendezvous.MeetAsync(met, null, CancellationToken.None);
+            await group.Rendezvous.MeetAsync(met, null, CancellationToken.None);
         }
 
         return now;
@@ -71,6 +71,19 @@ public abstract class Alt
 
     // Takes a message from, or puts one in, the channel's buffer.
     internal abstract void UseBuffer();
+
+    // An alt's channels share one group, as a libthread program's channels share its process; an alt of
+    // CHANNOP entries alone has no channel to meet on and waits in a group of its own.
+    private static RendezvousGroup GroupOf(IReadOnlyList<Alt> alts)
+    {
+        RendezvousGroup[] groups = alts.Where(entry => entry.Op != AltOp.Nop).Select(entry => entry.Channel!.Group).Distinct().ToArray();
+        return groups.Length switch
+        {
+            0 => new RendezvousGroup(),
+            1 => groups[0],
+            _ => throw new ArgumentException("an alt's channels must share a rendezvous group", nameof(alts)),
+        };
+    }
 
     // Under the lock: executes an entry that can proceed, returning the tag of any waiter it committed;
     // or settles what a closed set of channels means; or queues the alt on every open channel.
@@ -152,12 +165,12 @@ public abstract class Alt
         return -1;
     }
 
-    private static async Task<int> WaitAsync(IReadOnlyList<Alt> alts, Tag tag, CancellationToken interrupt)
+    private static async Task<int> WaitAsync(RendezvousGroup group, IReadOnlyList<Alt> alts, Tag tag, CancellationToken interrupt)
     {
-        object? woken = await Rendezvous.MeetAsync(tag, null, interrupt);
+        object? woken = await group.Rendezvous.MeetAsync(tag, null, interrupt);
         while (true)
         {
-            lock (Channel.Lock)
+            lock (group.ChannelLock)
             {
                 if (woken != Rendezvous.Interrupted)
                 {
@@ -172,7 +185,7 @@ public abstract class Alt
             }
 
             // Interrupted after someone committed us: they will meet us, so go back (channel.c's Again).
-            woken = await Rendezvous.MeetAsync(tag, null, CancellationToken.None);
+            woken = await group.Rendezvous.MeetAsync(tag, null, CancellationToken.None);
         }
     }
 

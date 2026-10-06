@@ -9,7 +9,8 @@ Feature: Channels and alt behave as 9front's libthread describes in thread(2)
   it, send and recv never block, send returns -1, and recv returns -1 once the channel is empty.
   Alt may choose an operation that failed because its channel was closed, marking the entry's
   error, and returns -1 when every entry failed that way. A .NET task stands in for a thread, and
-  cancelling its token interrupts it as threadint does.
+  cancelling its token interrupts it as threadint does. A channel belongs to a rendezvous group, as a
+  libthread program's channels belong to its process, and an alt's channels must share one.
 
   @FOG_THREAD_001
   Scenario: A send on an unbuffered channel waits for a recv, and the recv gets its value
@@ -194,3 +195,9 @@ Feature: Channels and alt behave as 9front's libthread describes in thread(2)
     Then the send returns -1
     And a receive gets 0 and returns 1
     And another receive returns -1 at once
+
+  @FOG_THREAD_022
+  Scenario: An alt over channels of different rendezvous groups is refused
+    Given 2 unbuffered channels in different rendezvous groups
+    When a thread alts on receiving from each channel
+    Then the alt is refused because "an alt's channels must share a rendezvous group"

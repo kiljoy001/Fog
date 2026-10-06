@@ -175,5 +175,5 @@ public sealed class FlushingSteps : IDisposable
 
     private void Flush(ushort oldTag) => flushes.Add(Send(NinePMessage.NewMsgTflush(new Tflush(FlushTag(flushes.Count), oldTag))));
 
-    private Task<object> Send(NinePMessage message) => dispatcher!.DispatchAsync(Session, message, NinePDialect.NineP2000, fixture!.NodeCertificate);
+    private Task<object> Send(NinePMessage message) => dispatcher!.DispatchWithinAsync(Session, message, NinePDialect.NineP2000, fixture!.NodeCertificate);
 }

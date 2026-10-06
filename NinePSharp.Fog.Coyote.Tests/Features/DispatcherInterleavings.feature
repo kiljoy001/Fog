@@ -53,3 +53,14 @@ Feature: Draining holds in every interleaving Coyote explores
     And in every explored schedule the flush is answered with Rflush
     And in every explored schedule the write's tag can be used again the moment the flushes are answered
     And in every explored schedule the write's outcome is logged as unknown exactly once
+
+  @FOG_COYOTE_007
+  Scenario: Requests sent without waiting for answers reach the session in the order they were sent
+    When the node walks "file" to a new fid, opens it and stats it without waiting for the answers
+    Then in every explored schedule the walk, open and stat are each answered without an error
+
+  @FOG_COYOTE_008
+  Scenario: Coyote controls every wait the session makes
+    Given a write to "file" that finishes when it is released or cancelled
+    When the node flushes the write while the session closes
+    Then Coyote reports no wait it did not control

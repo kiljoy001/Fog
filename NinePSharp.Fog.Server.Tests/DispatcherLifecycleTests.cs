@@ -13,9 +13,9 @@ public sealed class DispatcherLifecycleTests
     {
         using var fixture = new ControlFixture();
         _ = new FogNinePDispatcher(fixture.Tree, fixture.Policy, fixture.Limits with { MessageSize = int.MaxValue });
-        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Dispatcher.DispatchAsync(string.Empty, NinePMessage.NewMsgTflush(new Tflush(1, 2)), NinePDialect.NineP2000));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => fixture.Dispatcher.DispatchAsync("s", null!, NinePDialect.NineP2000));
-        Error("invalid-request", await fixture.Dispatcher.DispatchAsync("s", NinePMessage.NewMsgRflush(new Rflush(1)), NinePDialect.NineP2000));
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Dispatcher.DispatchWithinAsync(string.Empty, NinePMessage.NewMsgTflush(new Tflush(1, 2)), NinePDialect.NineP2000));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => fixture.Dispatcher.DispatchWithinAsync("s", null!, NinePDialect.NineP2000));
+        Error("invalid-request", await fixture.Dispatcher.DispatchWithinAsync("s", NinePMessage.NewMsgRflush(new Rflush(1)), NinePDialect.NineP2000));
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public sealed class DispatcherLifecycleTests
         using var fixture = new ControlFixture();
         var tree = new ProbeTree { Listed = [new(2, "a", false), new(3, "bb", false), new(4, "ccc", false)] };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         var opened = Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(2, 1, NinePConstants.OREAD))));
         Assert.Equal(QidType.QTDIR, opened.Qid.Type);
@@ -35,11 +35,11 @@ public sealed class DispatcherLifecycleTests
         Assert.Equal(bytes.AsSpan(first, second).ToArray(), Assert.IsType<Rread>(await Send(NinePMessage.NewMsgTread(new Tread(5, 1, (ulong)first, (uint)second)))).Data.ToArray());
         Assert.Equal(bytes[(first + second)..], Assert.IsType<Rread>(await Send(NinePMessage.NewMsgTread(new Tread(6, 1, (ulong)(first + second), 245)))).Data.ToArray());
         Error("invalid-request", await Send(NinePMessage.NewMsgTread(new Tread(7, 1, (ulong)first + 1, 245))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
         dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { SnapshotBytesPerSession = first + second - 1 });
         await Initialize(Send);
         Error("snapshot-limit", await Send(NinePMessage.NewMsgTopen(new Topen(8, 1, NinePConstants.OREAD))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
         dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { SnapshotBytesPerSession = bytes.Length * 2 });
         await Initialize(Send);
         Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(9, 1, NinePConstants.OREAD))));
@@ -51,7 +51,52 @@ public sealed class DispatcherLifecycleTests
         Error("snapshot-limit", await Send(NinePMessage.NewMsgTopen(new Topen(13, 3, NinePConstants.OREAD))));
         Assert.IsType<Rclunk>(await Send(NinePMessage.NewMsgTclunk(new Tclunk(14, 1))));
         Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(15, 3, NinePConstants.OREAD))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
+    }
+
+    // A request that took the session before it was closed reaches it while it drains, or after.
+    [Fact]
+    public async Task ASessionAnswersNotReadyWhileClosingAndAfterItClosed()
+    {
+        using var fixture = new ControlFixture();
+        var never = new TaskCompletionSource<uint>();
+        var tree = new ProbeTree { OnOpen = () => new FogOpenFile(write: (_, _, _) => never.Task) };
+        var session = new FogSession("s", tree, fixture.Policy, fixture.Limits with { Drain = TimeSpan.FromMilliseconds(200) }, fixture.Time, new RecordingLogger());
+        Task<object> Send(NinePMessage message)
+            => session.SendAsync(message, FogNinePDispatcher.Payload(message)!, fixture.NodeCertificate).WaitAsync(Bounded.Wait);
+        await Initialize(Send);
+        Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"]))));
+        Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE))));
+        Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
+
+        int released = tree.ClosedSessions.Count;
+        Task closing = session.CloseAsync().WaitAsync(Bounded.Wait);
+        Error("not-ready", await Send(NinePMessage.NewMsgTstat(new Tstat(5, 1))));
+        Error("not-ready", await Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 8192, "9P2000"))));
+        Assert.False(closing.IsCompleted);
+        await closing;
+        Error("unknown", await write);
+        Assert.Equal(released + 1, tree.ClosedSessions.Count);
+        Error("not-ready", await Send(NinePMessage.NewMsgTstat(new Tstat(6, 1))));
+        await session.CloseAsync().WaitAsync(Bounded.Wait);
+    }
+
+    // Each walk must precede its clunk and each clunk the next walk; out of order, one would fail.
+    [Fact]
+    public async Task RequestsSentWithoutWaitingAreHandledInTheOrderSent()
+    {
+        using var fixture = new ControlFixture();
+        var dispatcher = new FogNinePDispatcher(new ProbeTree(), fixture.Policy, fixture.Limits);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        await Initialize(Send);
+        var replies = new List<Task<object>>();
+        for (ushort tag = 10; tag < 50; tag += 2)
+        {
+            replies.Add(Send(NinePMessage.NewMsgTwalk(new Twalk(tag, 1, 2, ["file"]))));
+            replies.Add(Send(NinePMessage.NewMsgTclunk(new Tclunk((ushort)(tag + 1), 2))));
+        }
+
+        Assert.All(await Task.WhenAll(replies), reply => Assert.IsNotType<Rerror>(reply));
     }
 
     [Fact]
@@ -60,14 +105,14 @@ public sealed class DispatcherLifecycleTests
         using var fixture = new ControlFixture();
         var tree = new ProbeTree { Walked = new(2, new string('x', 300), false) };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         Error("limit", await Send(NinePMessage.NewMsgTstat(new Tstat(3, 2))));
         tree.Walked = new(3, "file", false);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(4, 1, 3, ["file"])));
         Assert.Equal(0x180U, Assert.IsType<Rstat>(await Send(NinePMessage.NewMsgTstat(new Tstat(5, 3)))).Stat.Mode);
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -85,7 +130,7 @@ public sealed class DispatcherLifecycleTests
         }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { RequestsPerSession = 1 });
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
@@ -110,7 +155,7 @@ public sealed class DispatcherLifecycleTests
         finally
         {
             finish.TrySetResult(1);
-            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
+            await dispatcher.CloseSessionWithinAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -121,7 +166,7 @@ public sealed class DispatcherLifecycleTests
         var finish = new TaskCompletionSource<uint>(TaskCreationOptions.RunContinuationsAsynchronously);
         var tree = new ProbeTree { OnOpen = () => new(write: (_, _, _) => finish.Task) };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { RequestsPerSession = 2 });
-        Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage message) => dispatcher.DispatchWithinAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
@@ -139,7 +184,7 @@ public sealed class DispatcherLifecycleTests
             finish.TrySetResult(1);
             await write.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Throws<ObjectDisposedException>(pendingCancellation!.Cancel);
-            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
+            await dispatcher.CloseSessionWithinAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -150,14 +195,14 @@ public sealed class DispatcherLifecycleTests
         var tree = new ProbeTree();
         tree.RejectedNames.Add("missing");
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage message) => dispatcher.DispatchWithinAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
 
         var walk = Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, [".", "missing", "."]))));
 
         Assert.Single(walk.Wqid);
         Error("invalid-request", await Send(NinePMessage.NewMsgTstat(new Tstat(3, 2))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -167,7 +212,7 @@ public sealed class DispatcherLifecycleTests
         var finish = new TaskCompletionSource<uint>(TaskCreationOptions.RunContinuationsAsynchronously);
         var tree = new ProbeTree { OnOpen = () => new(write: (_, _, _) => finish.Task) };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
@@ -183,7 +228,7 @@ public sealed class DispatcherLifecycleTests
         finally
         {
             finish.TrySetResult(1);
-            await dispatcher.CloseSessionAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
+            await dispatcher.CloseSessionWithinAsync("probe").WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -205,19 +250,19 @@ public sealed class DispatcherLifecycleTests
                 close: _ => disposed++),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         var write = Send(NinePMessage.NewMsgTwrite(new Twrite(100, 2, 0, new byte[] { 1 })));
-        Task reset = terminal ? dispatcher.CloseSessionAsync("probe") : Send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000")));
+        Task reset = terminal ? dispatcher.CloseSessionWithinAsync("probe") : Send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000")));
         await reset.WaitAsync(TimeSpan.FromSeconds(10));
         Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(1, disposed);
         Assert.Equal(2, tree.ClosedSessions.Count);
         Assert.All(tree.ClosedSessions, id => Assert.Equal("probe", id));
         Error(terminal ? "not-ready" : "invalid-request", await Send(NinePMessage.NewMsgTread(new Tread(101, 2, 0, 1))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -237,7 +282,7 @@ public sealed class DispatcherLifecycleTests
             }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage message) => dispatcher.DispatchWithinAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
@@ -249,7 +294,7 @@ public sealed class DispatcherLifecycleTests
         finish.SetResult(1);
         Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.IsType<Rversion>(await reset.WaitAsync(TimeSpan.FromSeconds(10)));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -269,21 +314,21 @@ public sealed class DispatcherLifecycleTests
             }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage message) => dispatcher.DispatchWithinAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> oldVersion = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
         await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Task close = dispatcher.CloseSessionAsync("probe");
+        Task close = dispatcher.CloseSessionWithinAsync("probe");
         Assert.IsType<Rversion>(await Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000"))));
 
         finish.SetResult();
         Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
         Error("not-ready", await oldVersion.WaitAsync(TimeSpan.FromSeconds(10)));
         await close.WaitAsync(TimeSpan.FromSeconds(10));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -303,14 +348,14 @@ public sealed class DispatcherLifecycleTests
             }),
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits);
-        Task<object> Send(NinePMessage message) => dispatcher.DispatchAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage message) => dispatcher.DispatchWithinAsync("probe", message, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OWRITE)));
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> version = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
         await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Task close = dispatcher.CloseSessionAsync("probe");
+        Task close = dispatcher.CloseSessionWithinAsync("probe");
 
         finish.SetResult();
         Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
@@ -325,7 +370,7 @@ public sealed class DispatcherLifecycleTests
         int disposed = 0;
         var tree = new ProbeTree { OnOpen = () => new(new byte[300], close: _ => disposed++) };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { SnapshotBytesPerSession = 300, MessageSize = 256 }, fixture.Time);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"])));
         var open = Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(3, 2, NinePConstants.OREAD))));
@@ -343,7 +388,7 @@ public sealed class DispatcherLifecycleTests
         Assert.IsType<Rclunk>(await Send(NinePMessage.NewMsgTclunk(new Tclunk(10, 3))));
         Assert.Equal(4, disposed); // Clunk callback then disposal callback.
         Error("invalid-request", await Send(NinePMessage.NewMsgTread(new Tread(11, 3, 0, 1))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -352,7 +397,7 @@ public sealed class DispatcherLifecycleTests
         using var fixture = new ControlFixture();
         var tree = new ProbeTree { OnOpen = () => new(write: (_, bytes, _) => Task.FromResult((uint)bytes.Length)) };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { MessageSize = 256 }, fixture.Time);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, Enumerable.Repeat(".", 16).ToArray())));
         Assert.IsType<Rstat>(await Send(NinePMessage.NewMsgTstat(new Tstat(3, 2))));
@@ -365,7 +410,7 @@ public sealed class DispatcherLifecycleTests
         fixture.Time.Advance(fixture.Limits.SessionLifetime);
         Error("denied", await Send(NinePMessage.NewMsgTstat(new Tstat(9, 1))));
         Error("denied", await Send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000"))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -382,7 +427,7 @@ public sealed class DispatcherLifecycleTests
         },
         };
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits, fixture.Time);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         await Initialize(Send);
         var stat = new Stat(0, 0, 0, new Qid(QidType.QTFILE, 0, 2), 0, 0, 0, 0, "renamed", "fog", "fog", "fog");
         foreach (var (tag, message) in new (ushort, NinePMessage)[]
@@ -399,7 +444,7 @@ public sealed class DispatcherLifecycleTests
 
         Assert.Equal(0, opens);
         Assert.Equal("/", Assert.IsType<Rstat>(await Send(NinePMessage.NewMsgTstat(new Tstat(24, 1)))).Stat.Name);
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     [Fact]
@@ -408,7 +453,7 @@ public sealed class DispatcherLifecycleTests
         using var fixture = new ControlFixture();
         var tree = new ProbeTree();
         var dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits, fixture.Time);
-        Task<object> Send(NinePMessage m) => dispatcher.DispatchAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage m) => dispatcher.DispatchWithinAsync("probe", m, NinePDialect.NineP2000, fixture.NodeCertificate);
         ulong Length(object reply) => Assert.IsType<Rstat>(reply).Stat.Length;
         await Initialize(Send);
         Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(2, 1, 2, ["file"]))));
@@ -425,7 +470,7 @@ public sealed class DispatcherLifecycleTests
         Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(9, 1, 4, ["file"]))));
         Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(10, 4, NinePConstants.OREAD))));
         Assert.Equal(5UL, Length(await Send(NinePMessage.NewMsgTstat(new Tstat(11, 4)))));
-        await dispatcher.CloseSessionAsync("probe");
+        await dispatcher.CloseSessionWithinAsync("probe");
     }
 
     private static CancellationTokenSource PendingCancellation(FogNinePDispatcher dispatcher, string sessionId, ushort tag)

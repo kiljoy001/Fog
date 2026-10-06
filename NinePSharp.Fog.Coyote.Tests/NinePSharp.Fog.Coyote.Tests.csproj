@@ -17,6 +17,7 @@
     <PackageReference Include="NinePSharp.Client" Version="$(NinePSharpVersion)" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="../NinePSharp.Fog.Server.Tests/Bounded.cs" Link="Support/Bounded.cs" />
     <Compile Include="../NinePSharp.Fog.Server.Tests/ControlFixture.cs" Link="Support/ControlFixture.cs" />
     <Compile Include="../NinePSharp.Fog.Server.Tests/ProbeTree.cs" Link="Support/ProbeTree.cs" />
     <Compile Include="../NinePSharp.Fog.Server.Tests/RecordingLogger.cs" Link="Support/RecordingLogger.cs" />

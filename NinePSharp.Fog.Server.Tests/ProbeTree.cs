@@ -17,6 +17,8 @@ internal sealed class ProbeTree : FogFileTree
 
     internal List<string> ClosedSessions { get; } = new();
 
+    internal Exception? CloseFailure { get; set; }
+
     public override FogFileNode Walk(FogPrincipal principal, FogFileNode directory, string name) =>
         RejectedNames.Contains(name) ? throw new FogException("tx-expired") : name == "." ? directory : Walked;
 
@@ -28,5 +30,12 @@ internal sealed class ProbeTree : FogFileTree
 
     public override FogOpenFile Open(FogPrincipal principal, string session, FogFileNode node, byte mode, long snapshotBudget) => OnOpen();
 
-    public override void CloseSession(string session) => ClosedSessions.Add(session);
+    public override void CloseSession(string session)
+    {
+        ClosedSessions.Add(session);
+        if (CloseFailure is not null)
+        {
+            throw CloseFailure;
+        }
+    }
 }

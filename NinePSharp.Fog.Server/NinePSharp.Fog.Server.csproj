@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../NinePSharp.Fog/NinePSharp.Fog.csproj" />
+    <ProjectReference Include="../NinePSharp.Fog.Thread/NinePSharp.Fog.Thread.csproj" />
     <PackageReference Include="NinePSharp.Server" Version="$(NinePSharpVersion)" />
     <PackageReference Include="NinePSharp.Client" Version="$(NinePSharpVersion)" />
   </ItemGroup>

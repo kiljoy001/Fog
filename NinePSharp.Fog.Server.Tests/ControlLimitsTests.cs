@@ -36,7 +36,7 @@ public sealed class ControlLimitsTests
     {
         using var fixture = new ControlFixture();
         var dispatcher = new FogNinePDispatcher(fixture.Tree, fixture.Policy, fixture.Limits with { Sessions = 1, FidsPerSession = 1, MessageSize = 256 });
-        Task<object> Send(NinePMessage message, string session = "bounded") => dispatcher.DispatchAsync(session, message, NinePDialect.NineP2000, fixture.NodeCertificate);
+        Task<object> Send(NinePMessage message, string session = "bounded") => dispatcher.DispatchWithinAsync(session, message, NinePDialect.NineP2000, fixture.NodeCertificate);
         void Error(string code, object result) => Assert.Equal(code, Assert.IsType<Rerror>(result).Ename);
         Error("not-ready", await Send(NinePMessage.NewMsgTread(new Tread(1, 1, 0, 1))));
         Error("invalid-request", await Send(NinePMessage.NewMsgTversion(new Tversion(65535, 255, "9P2000"))));
@@ -53,10 +53,10 @@ public sealed class ControlLimitsTests
         Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(7, 7))));
         Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(8, 123))));
         Assert.IsType<Rflush>(await Send(NinePMessage.NewMsgTflush(new Tflush(9, 123))));
-        await dispatcher.CloseSessionAsync("bounded");
-        await dispatcher.CloseSessionAsync("bounded");
+        await dispatcher.CloseSessionWithinAsync("bounded");
+        await dispatcher.CloseSessionWithinAsync("bounded");
         Assert.IsType<Rversion>(await Send(NinePMessage.NewMsgTversion(new Tversion(65535, 256, "9P2000")), "second"));
-        await dispatcher.CloseSessionAsync("second");
+        await dispatcher.CloseSessionWithinAsync("second");
     }
 
     [Fact]

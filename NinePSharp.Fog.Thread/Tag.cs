@@ -15,5 +15,5 @@ internal sealed class Tag
 
     internal bool Taken => Committed is not null;
 
-    private sealed class Unreachable() : Channel(0);
+    private sealed class Unreachable() : Channel(new RendezvousGroup(), 0);
 }

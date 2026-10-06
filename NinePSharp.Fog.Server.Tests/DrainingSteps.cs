@@ -20,8 +20,10 @@ public sealed class DrainingSteps
     private const string Session = "node";
     private readonly RecordingLogger logger = new();
     private readonly TaskCompletionSource<uint> never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<uint> second = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<TcpClient> clients = new();
     private ControlFixture? fixture;
+    private Task<object>? secondWrite;
     private ProbeTree? tree;
     private FogNinePDispatcher? dispatcher;
     private Func<ulong, ReadOnlyMemory<byte>, CancellationToken, Task<uint>> write = (_, _, _) => Task.FromResult(1u);
@@ -35,7 +37,17 @@ public sealed class DrainingSteps
     public void GivenExport(int milliseconds)
     {
         fixture = new ControlFixture();
-        tree = new ProbeTree { OnOpen = () => new FogOpenFile(write: (offset, data, token) => write(offset, data, token)) };
+
+        // A write of 3 is the second write, and a write of 4 finishes at once.
+        tree = new ProbeTree
+        {
+            OnOpen = () => new FogOpenFile(write: (offset, data, token) => data.Span[0] switch
+            {
+                3 => second.Task,
+                4 => Task.FromResult(1u),
+                _ => write(offset, data, token),
+            }),
+        };
         dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { Drain = TimeSpan.FromMilliseconds(milliseconds) }, fixture.Time, logger);
     }
 
@@ -57,6 +69,48 @@ public sealed class DrainingSteps
         await Task.Delay(Timeout.InfiniteTimeSpan, token);
         return 1;
     });
+
+    [Given(@"^a second write on a second fid, ignoring cancellation, that finishes as the first is abandoned$")]
+    public async Task GivenSecondWrite()
+    {
+        await OpenSecondFid();
+        logger.OnLog = message =>
+        {
+            if (message.Contains("abandoned", StringComparison.Ordinal))
+            {
+                second.TrySetResult(1);
+            }
+        };
+        secondWrite = Send(NinePMessage.NewMsgTwrite(new Twrite(102, 3, 0, new byte[] { 3 })));
+        await Task.Delay(50);
+        Assert.False(secondWrite.IsCompleted);
+    }
+
+    [Given("releasing the session's files fails")]
+    public void GivenCloseFails() => tree!.CloseFailure = new InvalidOperationException("release failed");
+
+    [When(@"^the node writes on a second fid with the write's tag, a write that ignores cancellation$")]
+    public async Task WhenSecondWriteSameTag()
+    {
+        await drain!.WaitAsync(TimeSpan.FromSeconds(10));
+        await OpenSecondFid();
+        secondWrite = Send(NinePMessage.NewMsgTwrite(new Twrite(100, 3, 0, new byte[] { 3 })));
+        await Task.Delay(50);
+        Assert.False(secondWrite.IsCompleted);
+    }
+
+    // Once the first fid takes another write, the session has handled the abandoned write's finish.
+    [When("the abandoned write finishes")]
+    public async Task WhenAbandonedFinishes()
+    {
+        never.SetResult(1);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (await Send(NinePMessage.NewMsgTwrite(new Twrite(103, 2, 0, new byte[] { 4 }))) is Rerror { Ename: "busy" })
+        {
+            Assert.True(DateTime.UtcNow < deadline, "the abandoned write never finished");
+            await Task.Delay(10);
+        }
+    }
 
     [When("the session closes")]
     public void WhenClose() => drain = dispatcher!.CloseSessionAsync(Session);
@@ -85,6 +139,30 @@ public sealed class DrainingSteps
             TaskScheduler.Default).WaitAsync(TimeSpan.FromSeconds(10));
         reply = await stat.WaitAsync(TimeSpan.FromSeconds(10));
     }
+
+    [Then(@"^a request with the write's tag is answered with Rerror ""(.*)""$")]
+    public async Task ThenTagAnswered(string error)
+        => Assert.Equal(error, Assert.IsType<Rerror>(await Send(NinePMessage.NewMsgTstat(new Tstat(100, 1)))).Ename);
+
+    [Then("the close has not finished")]
+    public async Task ThenCloseWaits()
+    {
+        await Task.Delay(50);
+        Assert.False(drain!.IsCompleted);
+    }
+
+    [Then("the second write is answered with Rwrite")]
+    public async Task ThenSecondWritten() => Assert.IsType<Rwrite>(await secondWrite!.WaitAsync(TimeSpan.FromSeconds(10)));
+
+    [Then("the write's outcome is logged as unknown exactly once")]
+    public async Task ThenUnknownOnce()
+    {
+        await drain!.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Single(logger.At(LogLevel.Warning), message => message.Contains("outcome is unknown", StringComparison.Ordinal));
+    }
+
+    [Then(@"^""(.*)"" is logged as an error$")]
+    public void ThenLoggedError(string message) => Assert.Contains(message, logger.At(LogLevel.Error));
 
     [Then("that request is answered with Rstat")]
     public void ThenRstat() => Assert.IsType<Rstat>(reply);
@@ -198,7 +276,13 @@ public sealed class DrainingSteps
         await client.GetStream().WriteAsync(bytes, cancellation);
     }
 
-    private Task<object> Send(NinePMessage message) => dispatcher!.DispatchAsync(Session, message, NinePDialect.NineP2000, fixture!.NodeCertificate);
+    private Task<object> Send(NinePMessage message) => dispatcher!.DispatchWithinAsync(Session, message, NinePDialect.NineP2000, fixture!.NodeCertificate);
+
+    private async Task OpenSecondFid()
+    {
+        Assert.IsType<Rwalk>(await Send(NinePMessage.NewMsgTwalk(new Twalk(10, 1, 3, ["file"]))));
+        Assert.IsType<Ropen>(await Send(NinePMessage.NewMsgTopen(new Topen(11, 3, NinePConstants.OWRITE))));
+    }
 
     private async Task StartWrite(Func<ulong, ReadOnlyMemory<byte>, CancellationToken, Task<uint>> behaviour)
     {

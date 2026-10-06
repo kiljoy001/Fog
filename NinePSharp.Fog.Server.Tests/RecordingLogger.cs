@@ -8,6 +8,9 @@ internal sealed class RecordingLogger : ILogger
 
     internal TaskCompletionSource FirstError { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    // Runs as each message is logged, on the logging thread.
+    internal Action<string>? OnLog { get; set; }
+
     internal IReadOnlyList<(LogLevel Level, string Message, Exception? Exception)> Entries
     {
         get
@@ -31,6 +34,7 @@ internal sealed class RecordingLogger : ILogger
             entries.Add((logLevel, formatter(state, exception), exception));
         }
 
+        OnLog?.Invoke(formatter(state, exception));
         if (logLevel == LogLevel.Error)
         {
             FirstError.TrySetResult();

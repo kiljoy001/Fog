@@ -84,7 +84,7 @@ public sealed class FogNinePDispatcher : INinePFSDispatcher, INinePSessionLifecy
         return session.CloseAsync();
     }
 
-    private static ISerializable? Payload(NinePMessage message) => message switch
+    internal static ISerializable? Payload(NinePMessage message) => message switch
     {
         NinePMessage.MsgTversion m => m.Item, NinePMessage.MsgTauth m => m.Item, NinePMessage.MsgTattach m => m.Item,
         NinePMessage.MsgTflush m => m.Item, NinePMessage.MsgTwalk m => m.Item, NinePMessage.MsgTopen m => m.Item,

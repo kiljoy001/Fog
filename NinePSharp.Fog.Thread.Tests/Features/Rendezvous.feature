@@ -2,7 +2,8 @@
 Feature: Threads rendezvous on a tag as libthread's _threadrendezvous does
   Two threads meeting on the same tag exchange values: the first to arrive sleeps until the
   second comes, and each returns the other's value. A sleeper that is interrupted leaves the tag
-  and returns ~0, which therefore is not used as an ordinary value. Tags are compared by identity.
+  and returns ~0, which therefore is not used as an ordinary value. Tags are compared by identity,
+  and only within one rendezvous group, as rfork's RFREND separates processes' tags.
 
   @FOG_THREAD_101
   Scenario: The first thread waits, and the two exchange values
@@ -29,3 +30,9 @@ Feature: Threads rendezvous on a tag as libthread's _threadrendezvous does
     When another thread rendezvouses on the tag with "second"
     Then that rendezvous has not finished
 
+  @FOG_THREAD_104
+  Scenario: Threads in different rendezvous groups do not meet, even on the same tag
+    Given a tag
+    When a thread rendezvouses on the tag with "first"
+    And another thread in another rendezvous group rendezvouses on the tag with "second"
+    Then neither rendezvous has finished

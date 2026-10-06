@@ -5,7 +5,10 @@ namespace NinePSharp.Fog.Thread.Tests;
 public sealed class ArgumentTests
 {
     [Fact]
-    public void ChancreateRefusesANegativeSize() => Assert.Throws<ArgumentOutOfRangeException>(() => new Channel<int>(-1));
+    public void ChancreateRefusesANegativeSize() => Assert.Throws<ArgumentOutOfRangeException>(() => new Channel<int>(new RendezvousGroup(), -1));
+
+    [Fact]
+    public void ChancreateRefusesNoGroup() => Assert.Throws<ArgumentNullException>(() => new Channel<int>(null!));
 
     [Fact]
     public async Task AltRefusesNoEntries()

@@ -14,6 +14,7 @@ public sealed class ChannelSteps : IDisposable
     private readonly List<Task<(int Result, int Value)>> receives = new();
     private readonly List<int> received = new();
     private readonly CancellationTokenSource interrupt = new();
+    private readonly RendezvousGroup group = new();
     private readonly int[] chosen = new int[2];
     private IReadOnlyList<Alt> entries = [];
     private Task<int>? alt;
@@ -32,24 +33,31 @@ public sealed class ChannelSteps : IDisposable
     }
 
     [Given("an unbuffered channel")]
-    public void GivenUnbuffered() => channels.Add(new Channel<int>());
+    public void GivenUnbuffered() => channels.Add(new Channel<int>(group));
 
     [Given(@"^(\d+) unbuffered channels$")]
     public void GivenUnbufferedChannels(int count)
     {
         for (int i = 0; i < count; i++)
         {
-            channels.Add(new Channel<int>());
+            channels.Add(new Channel<int>(group));
         }
     }
 
+    [Given("2 unbuffered channels in different rendezvous groups")]
+    public void GivenSeparateGroups()
+    {
+        channels.Add(new Channel<int>(group));
+        channels.Add(new Channel<int>(new RendezvousGroup()));
+    }
+
     [Given(@"^a channel buffering (\d+) messages?$")]
-    public void GivenBuffered(int size) => channels.Add(new Channel<int>(size));
+    public void GivenBuffered(int size) => channels.Add(new Channel<int>(group, size));
 
     [Given("a full channel buffering 1 message")]
     public async Task GivenFull()
     {
-        channels.Add(new Channel<int>(1));
+        channels.Add(new Channel<int>(group, 1));
         Assert.Equal(1, await channels[0].NbSendAsync(0));
     }
 
@@ -58,7 +66,7 @@ public sealed class ChannelSteps : IDisposable
     {
         for (int i = 0; i < 2; i++)
         {
-            channels.Add(new Channel<int>(1));
+            channels.Add(new Channel<int>(group, 1));
             Assert.Equal(1, await channels[i].NbSendAsync(i));
         }
     }
@@ -137,6 +145,9 @@ public sealed class ChannelSteps : IDisposable
         entries = [Alt<int>.Recv(channels[0]), Alt<int>.Recv(channels[1])];
         alt = Alt.AltAsync(entries);
     }
+
+    [Then(@"^the alt is refused because ""(.*)""$")]
+    public async Task ThenRefused(string reason) => Assert.StartsWith(reason, (await Assert.ThrowsAsync<ArgumentException>(() => alt!)).Message, StringComparison.Ordinal);
 
     [When("the thread alts with the same entries again")]
     public void WhenAltAgain() => alt = Alt.AltAsync(entries);

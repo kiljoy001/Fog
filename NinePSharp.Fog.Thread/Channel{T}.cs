@@ -3,8 +3,8 @@ namespace NinePSharp.Fog.Thread;
 /// <summary>A libthread Channel of <typeparamref name="T"/> messages: chancreate, send, recv, nbsend and nbrecv.</summary>
 public sealed class Channel<T> : Channel
 {
-    public Channel(int size = 0)
-        : base(size) => Buffer = new T[size];
+    public Channel(RendezvousGroup group, int size = 0)
+        : base(group, size) => Buffer = new T[size];
 
     internal T[] Buffer { get; }
 

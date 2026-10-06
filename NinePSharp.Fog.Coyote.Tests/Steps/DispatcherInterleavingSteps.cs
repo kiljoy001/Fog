@@ -122,6 +122,31 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
         return new() { ["write"] = await write, ["flush"] = flush, ["reuse"] = reuse };
     };
 
+    [When(@"^the node walks ""(.*)"" to a new fid, opens it and stats it without waiting for the answers$")]
+    public void WhenPipelined(string name) => race = async iteration =>
+    {
+        Task<object> walk = iteration.Send(NinePMessage.NewMsgTwalk(new Twalk(10, 1, 3, [name])));
+        Task<object> open = iteration.Send(NinePMessage.NewMsgTopen(new Topen(11, 3, NinePConstants.OREAD)));
+        Task<object> stat = iteration.Send(NinePMessage.NewMsgTstat(new Tstat(12, 3)));
+        return new() { ["walk"] = await walk, ["open"] = await open, ["stat"] = await stat };
+    };
+
+    [Then("in every explored schedule the walk, open and stat are each answered without an error")]
+    public void ThenInOrder() => Explore((_, replies) =>
+    {
+        foreach (string request in new[] { "walk", "open", "stat" })
+        {
+            Specification.Assert(replies[request] is not Rerror, $"the {request} was answered {Describe(replies[request])}");
+        }
+    });
+
+    [Then("Coyote reports no wait it did not control")]
+    public void ThenAllControlled()
+    {
+        TestReport report = Run((_, _) => { });
+        Assert.Empty(report.UncontrolledInvocations);
+    }
+
     [Then(@"^in every explored schedule the write is answered with Rwrite or Rerror ""interrupted""$")]
     public void ThenWriteAnswered() => Explore((_, replies) =>
         Specification.Assert(
@@ -171,7 +196,9 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
     private static string Describe(object reply) =>
         reply is Rerror error ? $"Rerror \"{error.Ename}\"" : reply == FogNinePDispatcher.NoReply ? "nothing" : reply.GetType().Name;
 
-    private void Explore(Action<Iteration, Dictionary<string, object>> rule)
+    private void Explore(Action<Iteration, Dictionary<string, object>> rule) => Run(rule);
+
+    private TestReport Run(Action<Iteration, Dictionary<string, object>> rule)
     {
         using var engine = TestingEngine.Create(
             Configuration.Create().WithTestingIterations(Iterations).WithMaxSchedulingSteps(5000),
@@ -182,13 +209,14 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
             });
         engine.Run();
         TestReport report = engine.TestReport;
-        Assert.True(report.NumOfFoundBugs == 0, string.Join(Environment.NewLine, report.BugReports) + Environment.NewLine + engine.ReproducibleTrace);
         if (report.UncontrolledInvocations.Count != 0)
         {
             output.WriteLine("Coyote did not control: " + string.Join(", ", report.UncontrolledInvocations.Order(StringComparer.Ordinal)));
         }
 
+        Assert.True(report.NumOfFoundBugs == 0, string.Join(Environment.NewLine, report.BugReports) + Environment.NewLine + engine.ReproducibleTrace);
         Assert.Equal(Iterations, (uint)report.NumOfExploredFairPaths + (uint)report.NumOfExploredUnfairPaths);
+        return report;
     }
 
     private sealed class Iteration

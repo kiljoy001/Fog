@@ -113,7 +113,7 @@ internal sealed class SoftwareTpm : IDisposable
                     throw new InvalidOperationException("swtpm exited: " + process.StandardError.ReadToEnd());
                 }
 
-                Thread.Sleep(50);
+                System.Threading.Thread.Sleep(50);
             }
         }
 
