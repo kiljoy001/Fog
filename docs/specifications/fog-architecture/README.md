@@ -111,11 +111,21 @@ and fails if the file has changed since. A whole new state replaces the old in o
 
 The file server is the one thing that cannot keep its state in grains, because grains keep
 their state in it. It runs on machines with disks, as processes bound to those machines,
-and must survive the loss of any one of them by keeping its data on several. How it
-replicates is not designed yet. Plan 9's venti is the natural starting point: blocks are
-written once and named by their hash, so copying them to other machines needs no
-coordination, and only the pointer to the current root of the file system has to be agreed
-between them.
+and must survive the loss of any one of them by keeping its data on several.
+
+It is a port of 9front's gefs (gefs(4), `sys/src/cmd/gefs` and the paper `sys/doc/gefs.ms`),
+as rc and libthread are ports of 9front's. Gefs builds the 9P file
+system on copy-on-write Bε trees. A commit becomes current only when the superblocks are
+written, so a crash loses at most unsynced data and never corrupts the file system. Every
+block pointer carries a hash of the block, so corruption is detected rather than returned,
+and a birth generation, which gives snapshots and reclaims their space. Changes are messages
+upserted into the tree, so a qid version or time can change without a read-modify-write and
+several changes commit atomically together. Its manual still calls it experimental.
+
+Replication is Fog's addition and is not designed yet. Copy-on-write makes it natural: a
+commit is a set of new blocks and a new root. A replica takes every block born after the
+generation it already has, checks each against its hash, and then adopts the new root, as
+ZFS send and receive do. Only which commit is current has to be agreed between machines.
 
 Orleans's membership table belongs on the same file server. Kept there, it outlives any
 one machine, which a table owned by a single control host cannot.
