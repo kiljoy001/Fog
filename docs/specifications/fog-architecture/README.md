@@ -79,37 +79,25 @@ sealed to another TPM). Placement rules name these resources explicitly.
 
 | Kind of process | When its machine dies |
 | --- | --- |
-| A server that keeps its durable state in grain-backed files and resources | Requests in flight fail with an error or an unknown outcome; the process comes back on another silo and carries on |
-| A WASM application with snapshots | It resumes from its last checkpoint on another silo, replaying its journal |
+| An application or server that saves its state to grain-backed files | Requests in flight fail with an error or an unknown outcome; the process starts again on another silo and reads its saved state back |
 | A program that keeps everything in memory | Its run is lost, as when a process crashes; its parent's wait sees it end with an error status, never a hang |
 
 Requests in flight follow the rule the dispatcher already follows: work that cannot be
 shown to have finished is reported with an unknown outcome, never silently retried.
 
-## Applications and snapshots
+## Applications save their own state
 
 A WASM application is a process execed from `/bin/{app}`, using WASI over its own
-descriptors and namespace ([Wasm.md](../fog-v1-profiles/Wasm.md)). Its whole state is
-linear memory, globals, tables and its call stack. dotnet-webassembly compiles the guest to
-CLR code, so the stack is a thread stack and cannot be saved as it is. Binaryen's Asyncify
-transform makes the module able to unwind its stack into linear memory at a WASI call and
-rewind it later. With that, a snapshot is plain data a grain can store:
+descriptors and namespace ([Wasm.md](../fog-v1-profiles/Wasm.md)). Fog does not save a
+running program: its stack and memory live in its silo and go with it. An application that
+must survive the loss of its machine writes what it needs to a save file and reads it back
+when it starts, as a Plan 9 program would.
 
-1. Snapshot at a WASI call boundary, with no kernel call in flight.
-2. Journal the result of every import after it: bytes read, counts written, clock values,
-   random bytes.
-3. To restore, rewind the snapshot and answer the guest's imports from the journal until it
-   runs out; effects already journalled happen exactly once. A call issued but never
-   journalled has an unknown outcome.
-
-Snapshots give WASM applications Orleans's resilience whatever they keep in memory. They
-also allow moving a running application to another silo, and deactivating an idle one
-until it has work. Managed C# programs cannot be snapshot, since their frames hold
-delegates and object references; they keep durable state in grain storage instead.
-
-The first WASI bridge does not take snapshots, but is built for them: every import passes
-through one place that can journal its result, and kernel calls are made only at import
-boundaries.
+The save file must live in a file system whose contents are grain state, such as a data
+directory its parent gives it or its own tree under `/mnt/{app}`. Orleans keeps grain state
+in a storage provider every silo reaches, so the file is there on whichever machine the
+application starts again. A file on a machine's own disk is a machine-bound resource and is
+lost with the machine.
 
 ## Getting in
 
@@ -125,9 +113,7 @@ Plan 9 client. The shell is Fog's port of 9front rc, running as a process like a
 2. Devices behind resource grains, with placement rules for machine-bound resources.
 3. The services as programs a process execs: control-export sessions, keyfs, authsrv, the
    listeners and the transaction service, each keeping its behaviour tests.
-4. The WASM exec format and WASI bridge, built for snapshots.
-5. Snapshots and the import journal; restore on another silo; migration and idle
-   deactivation.
+4. The WASM exec format and WASI bridge.
 
 Each step follows the usual gate: features, then failing tests, then code, with mutation,
 fuzz and Coyote checks.
