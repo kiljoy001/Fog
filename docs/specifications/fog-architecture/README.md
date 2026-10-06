@@ -122,9 +122,45 @@ and a birth generation, which gives snapshots and reclaims their space. Changes 
 upserted into the tree, so a qid version or time can change without a read-modify-write and
 several changes commit atomically together. Its manual still calls it experimental.
 
-Replication is Fog's addition. Copy-on-write makes it natural: a commit is a set of new
-blocks and a new root. A replica takes every block born after the generation it already has,
-checks each against its hash, and then adopts the new root, as ZFS send and receive do.
+### One device file per machine, mirrored and repaired by content
+
+Each storage machine keeps its store in one ordinary file used as gefs's disk, as gefs's `-f`
+option already allows. Fog reads and writes it at block offsets with .NET's random-access file
+API, which works the same on Linux, macOS and Windows. The file must be on a local disk, never
+NFS or SMB; it is held under an exclusive lock and preallocated, so a full disk is known before
+a commit rather than during one. A commit counts as durable only once the platform has truly
+flushed it: `fsync` on Linux, `FlushFileBuffers` on Windows and `F_FULLFSYNC` on macOS, verified
+on each platform at startup, as [Storage.md](../fog-v1-profiles/Storage.md) already demands.
+
+Every replica's file is a block-for-block mirror. One machine writes a given file system at a
+time and decides where each block goes, and every replica writes the block at the same offset.
+Offsets in block pointers therefore mean the same thing on every machine, and the same tree has
+the same root hash everywhere, which is what consensus agrees on.
+
+Block pointers carry a cryptographic hash in place of gefs's 64-bit MetroHash, which a
+dishonest replica could forge; the hash function is chosen when the format is designed. That
+lengthens a pointer from 24 bytes, so Fog's on-disk format is not 9front's.
+
+The hashes make every 16 KiB block verifiable on its own, so missing or damaged blocks are
+fetched peer to peer from any replica, over 9P like all machine-to-machine traffic:
+
+- Catching up, a replica walks the tree from the newly agreed root, descending only into
+  subtrees born after the generation it last synced, and fetches the blocks it lacks from all
+  its peers in parallel, as BitTorrent v2 verifies pieces against a hash tree.
+- Every block received is checked against the hash in the pointer that names it, all the way
+  from the agreed root, so it does not matter which peer sent it.
+- A block that fails its hash when read is fetched again from a peer by offset and expected
+  hash and rewritten, so gefs's corruption detection becomes repair.
+
+A new root is committed only after 2f+1 validators sign that they hold all of its blocks, so at
+least f+1 honest machines can serve it. Scaling comes from many small file systems, for example
+one per application or kind of grain state, each with its own writer chosen by consensus and
+handed over when that machine fails; gefs already keeps a forest of trees in one store.
+
+Still to design: the hash function; how writes are acknowledged, since a write is safe only
+once the root holding it is agreed, so writes are grouped per consensus round; and how dropping
+an old root or snapshot is agreed, after which each replica frees its blocks with gefs's
+deadlists.
 
 ### Agreeing on the current commit
 
