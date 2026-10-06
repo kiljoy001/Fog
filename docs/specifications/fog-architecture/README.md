@@ -128,26 +128,30 @@ checks each against its hash, and then adopts the new root, as ZFS send and rece
 
 ### Agreeing on the current commit
 
-Which commit of each file system is current is decided by consensus, with
-[CometBFT](https://github.com/cometbft/cometbft), the maintained continuation of Tendermint
-Core. Only that small fact is agreed: the replicated state is the current root hash and
-generation of each file system. Blocks travel directly between the storage machines and are
-checked against their hashes; they never pass through consensus.
+Which commit of each file system is current is decided by Tendermint consensus, ported to C#
+from Tendermint Core v0.34 (Apache-2.0), as gefs, rc and libthread are ported from 9front.
+Only that small fact is agreed: the replicated state is the current root hash and generation
+of each file system. Blocks travel directly between the storage machines and are checked
+against their hashes; they never pass through consensus.
 
-- CometBFT runs as its own process on each storage machine and drives Fog's ABCI application,
-  written in C#, over a local socket or gRPC. A transaction proposes a new root; it is applied
-  only if its generation follows the current one and enough replicas hold its blocks.
-- A committed block is final: there are no forks to roll back, so a root once current stays
-  in the history of every replica.
+- The port takes Tendermint's consensus state machine: rounds of proposal, prevote and
+  precommit with its locking rules, the vote sets and validator set with proposer rotation,
+  the write-ahead log that lets a restarted validator rejoin safely, and the guard that stops
+  a validator signing two different votes for one height and round.
+- Consensus messages travel over 9P like everything else: each storage machine serves its
+  consensus endpoint as files. Tendermint's own peer-to-peer layer and gossip are not ported.
+- The application is called directly in C#: a proposed root is applied only if its generation
+  follows the current one and enough replicas hold its blocks. ABCI, the mempool, block and
+  state sync, RPC and the light client are not needed.
+- A committed decision is final: there are no forks to roll back.
 - It tolerates f faulty machines out of 3f+1, Byzantine ones included, so a cluster that must
-  survive one failed machine needs four storage machines. A lying or compromised machine cannot
-  make the others adopt a forged root.
-- The validators are the storage machines; adding or removing one is an ABCI validator
-  update.
+  survive one failed machine needs four storage machines. A lying or compromised machine
+  cannot make the others adopt a forged root.
+- The validators are the storage machines; adding or removing one is a validator update
+  decided by consensus.
 
-CometBFT speaks its own peer-to-peer protocol between machines. That is the one exception to
-all remote service traffic being 9P, kept because carrying it over 9P would mean replacing
-CometBFT's transport.
+The port is checked against Tendermint's protocol specification and its tests, and Coyote
+explores its interleavings like libthread's.
 
 Orleans's membership table belongs on the same file server, or directly in the consensus
 state; which suits Orleans's membership protocol better is decided when it is designed. Either
@@ -162,8 +166,8 @@ Plan 9 client. The shell is Fog's port of 9front rc, running as a process like a
 ## Order of work
 
 1. The storage file server, a gefs port, and the Orleans storage provider over 9P, on one
-   machine with conditional writes by qid version; then replication of commits, with
-   CometBFT agreeing on the current one.
+   machine with conditional writes by qid version; then replication of commits, with a C#
+   port of Tendermint consensus agreeing on the current one.
 2. The grain-backed kernel: process, descriptor group, environment group and pipe grains;
    fork onto a fresh grain, wait and exit across silos; the existing kernel scenarios
    passing on a multi-silo test cluster.
