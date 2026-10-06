@@ -1,5 +1,7 @@
 # Optional durable resource storage
 
+> The [Fog architecture](../fog-architecture/README.md) keeps all storage, grain state included, as files on a replicated 9P file server rather than SQLite on one control host.
+
 Status: proposed `fog-store-v1`. This is a bounded single-authority storage profile,
 not distributed consensus, automatic replication, or durable job execution.
 

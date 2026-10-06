@@ -93,11 +93,32 @@ running program: its stack and memory live in its silo and go with it. An applic
 must survive the loss of its machine writes what it needs to a save file and reads it back
 when it starts, as a Plan 9 program would.
 
-The save file must live in a file system whose contents are grain state, such as a data
-directory its parent gives it or its own tree under `/mnt/{app}`. Orleans keeps grain state
-in a storage provider every silo reaches, so the file is there on whichever machine the
-application starts again. A file on a machine's own disk is a machine-bound resource and is
-lost with the machine.
+The save file must live on the cluster's storage, such as a data directory its parent gives
+it or its own tree under `/mnt/{app}`, so it is there on whichever machine the application
+starts again. A file on a machine's own disk is a machine-bound resource and is lost with
+the machine.
+
+## Storage is a 9P file server
+
+Everything Fog keeps is kept in files on a 9P file server, as in Plan 9. There is no
+database. Grain state is files too: Fog's Orleans storage provider is a 9P client that keeps
+each grain's state in a file named by its grain type and key, so the file server holds
+namespaces, process state, application save files and Orleans's own records alike.
+
+Orleans needs a conditional write, so a stale activation cannot overwrite a newer one. The
+file server provides it through the file's qid version: a write names the version it read,
+and fails if the file has changed since. A whole new state replaces the old in one step.
+
+The file server is the one thing that cannot keep its state in grains, because grains keep
+their state in it. It runs on machines with disks, as processes bound to those machines,
+and must survive the loss of any one of them by keeping its data on several. How it
+replicates is not designed yet. Plan 9's venti is the natural starting point: blocks are
+written once and named by their hash, so copying them to other machines needs no
+coordination, and only the pointer to the current root of the file system has to be agreed
+between them.
+
+Orleans's membership table belongs on the same file server. Kept there, it outlives any
+one machine, which a table owned by a single control host cannot.
 
 ## Getting in
 
@@ -107,13 +128,15 @@ Plan 9 client. The shell is Fog's port of 9front rc, running as a process like a
 
 ## Order of work
 
-1. The grain-backed kernel: process, descriptor group, environment group and pipe grains;
+1. The storage file server and the Orleans storage provider over 9P, starting on one
+   machine with conditional writes by qid version; replication follows.
+2. The grain-backed kernel: process, descriptor group, environment group and pipe grains;
    fork onto a fresh grain, wait and exit across silos; the existing kernel scenarios
    passing on a multi-silo test cluster.
-2. Devices behind resource grains, with placement rules for machine-bound resources.
-3. The services as programs a process execs: control-export sessions, keyfs, authsrv, the
+3. Devices behind resource grains, with placement rules for machine-bound resources.
+4. The services as programs a process execs: control-export sessions, keyfs, authsrv, the
    listeners and the transaction service, each keeping its behaviour tests.
-4. The WASM exec format and WASI bridge.
+5. The WASM exec format and WASI bridge.
 
 Each step follows the usual gate: features, then failing tests, then code, with mutation,
 fuzz and Coyote checks.
@@ -122,7 +145,8 @@ fuzz and Coyote checks.
 
 | Specification | Disagreement |
 | --- | --- |
-| [Membership.md](../fog-v1-profiles/Membership.md) | One configured control host owns the membership table, recreated empty at each control boot. That host is a single point of failure, so the cluster cannot outlive it; membership has to survive the loss of any one machine. |
+| [Membership.md](../fog-v1-profiles/Membership.md) | One configured control host owns the membership table, recreated empty at each control boot. That host is a single point of failure, so the cluster cannot outlive it; the table belongs on the replicated file server. |
+| [Storage.md](../fog-v1-profiles/Storage.md) | Grain state is served over 9P but kept in SQLite on one control host: a database behind a file interface, and a single point of failure. Storage is a 9P file server whose contents are files, replicated across machines. |
 | [Isolation.md](../fog-v1-profiles/Isolation.md) | A Linux-only supervisor runs one OS process per job. WASM processes run inside the silo here, and Fog targets any contemporary machine. Containment of runaway guests (a loop without imports cannot be stopped from inside the process) still needs a design: fuel instrumented into the module, or a supervisor per machine. |
 | [fog-v1-profiles README](../fog-v1-profiles/README.md), [LibTab jobs](../libtab-compute-jobs/README.md), [WorkerControl.md](../fog-v1-profiles/WorkerControl.md) | Written around disposable jobs, worker leases and a control node. Fog runs long-lived applications as processes, and work is placed by fork, not pulled by workers. |
 | [fog-foundation README](../fog-foundation/README.md) | One explicitly configured control node. Control-node duties become processes and grains that can run on any machine. |
