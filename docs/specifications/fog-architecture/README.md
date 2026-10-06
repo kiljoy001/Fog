@@ -137,9 +137,11 @@ time and decides where each block goes, and every replica writes the block at th
 Offsets in block pointers therefore mean the same thing on every machine, and the same tree has
 the same root hash everywhere, which is what consensus agrees on.
 
-Block pointers carry a cryptographic hash in place of gefs's 64-bit MetroHash, which a
-dishonest replica could forge; the hash function is chosen when the format is designed. That
-lengthens a pointer from 24 bytes, so Fog's on-disk format is not 9front's.
+Block pointers carry a SHA-256 hash in place of gefs's 64-bit MetroHash, which a dishonest
+replica could forge. SHA-256 is built into .NET and hardware accelerated on current x86 and ARM
+processors; on 16 KiB blocks it hashed about 2 GB/s on one core, level with BLAKE3, which would
+add a native library on every platform. The store's format version names its hash, so a later
+format can change it. The longer pointer means Fog's on-disk format is not 9front's.
 
 The hashes make every 16 KiB block verifiable on its own, so missing or damaged blocks are
 fetched peer to peer from any replica, over 9P like all machine-to-machine traffic:
@@ -157,7 +159,7 @@ least f+1 honest machines can serve it. Scaling comes from many small file syste
 one per application or kind of grain state, each with its own writer chosen by consensus and
 handed over when that machine fails; gefs already keeps a forest of trees in one store.
 
-Still to design: the hash function; how writes are acknowledged, since a write is safe only
+Still to design: how writes are acknowledged, since a write is safe only
 once the root holding it is agreed, so writes are grouped per consensus round; and how dropping
 an old root or snapshot is agreed, after which each replica frees its blocks with gefs's
 deadlists.
