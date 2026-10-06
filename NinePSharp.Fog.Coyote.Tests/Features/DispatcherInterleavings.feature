@@ -64,3 +64,35 @@ Feature: Draining holds in every interleaving Coyote explores
     Given a write to "file" that finishes when it is released or cancelled
     When the node flushes the write while the session closes
     Then Coyote reports no wait it did not control
+
+  @FOG_COYOTE_009
+  Scenario: Flushing one of two writes leaves the other to finish, and frees both tags
+    Given a write to "file" that finishes when it is released
+    When the node writes on both fids and flushes the first while other tasks release both writes
+    Then in every explored schedule the second write is answered with Rwrite
+    And in every explored schedule the flush is answered with Rflush
+    And in every explored schedule both writes' tags can be used again once all are answered
+
+  @FOG_COYOTE_010
+  Scenario: A clunk racing its fid's write waits for the write, and the fid is clunked once
+    Given a write to "file" that finishes when it is released
+    When the node clunks the write's fid while another task releases the write
+    Then in every explored schedule the write is answered with Rwrite
+    And in every explored schedule one clunk is answered with Rclunk and the other with Rerror "busy" before it or "invalid-request" after it
+
+  @FOG_COYOTE_011
+  Scenario: Tversion racing a flush answers both, and the write is interrupted or finishes
+    Given a write to "file" that finishes when it is released or cancelled
+    When the node flushes the write and sends Tversion at once while another task releases the write
+    Then in every explored schedule the write is answered with Rwrite or Rerror "interrupted"
+    And in every explored schedule the flush is answered with Rflush or Rerror "not-ready"
+    And in every explored schedule Tversion is answered with Rversion
+    And no explored schedule logs an outcome as unknown
+
+  @FOG_COYOTE_012
+  Scenario: Two sessions closing at once each drain only their own write
+    Given a write to "file" that finishes when it is released or cancelled
+    When a second session writes too, and both sessions close at once while another task releases the writes
+    Then in every explored schedule the write is answered with Rwrite or Rerror "interrupted"
+    And in every explored schedule the second session's write is answered with Rwrite or Rerror "interrupted"
+    And no explored schedule logs an outcome as unknown

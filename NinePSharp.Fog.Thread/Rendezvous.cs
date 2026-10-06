@@ -22,9 +22,16 @@ internal sealed class Rendezvous
             return met;
         }
 
-        using (interrupt.Register(() => Break(tag, sleeper)))
+        // Unregister rather than dispose: disposing waits for a Break already running, and a late Break
+        // changes nothing anyway.
+        CancellationTokenRegistration registration = interrupt.Register(() => Break(tag, sleeper));
+        try
         {
             return await sleeper.Wake.Task;
+        }
+        finally
+        {
+            registration.Unregister();
         }
     }
 

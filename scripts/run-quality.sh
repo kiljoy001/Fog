@@ -4,16 +4,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# No argument runs the build, tests, coverage and CRAP gates; --full adds every mutation scope and
-# fuzz campaign; --mutate SCOPE and --fuzz run one of those alone, as the CI jobs do.
+# No argument runs the build, tests, coverage and CRAP gates; --full adds every mutation scope, the
+# Coyote interleavings and the fuzz campaigns; --mutate SCOPE, --coyote and --fuzz run one alone.
 MODE=quality
 SCOPE=""
 case "${1:-}" in
   "") ;;
   --full) MODE=full ;;
   --mutate) MODE=mutate; SCOPE="${2:?--mutate needs a scope}" ;;
+  --coyote) MODE=coyote ;;
   --fuzz) MODE=fuzz ;;
-  *) echo "usage: $0 [--full | --mutate SCOPE | --fuzz]" >&2; exit 2 ;;
+  *) echo "usage: $0 [--full | --mutate SCOPE | --coyote | --fuzz]" >&2; exit 2 ;;
 esac
 
 MIN_LINE="${MIN_LINE:-25}"
@@ -97,6 +98,34 @@ scope() {
   esac
 }
 
+# Coyote explores interleavings only in assemblies rewritten to hand it their tasks, locks and awaits:
+# the code under test and the test assembly, whose awaits would otherwise run outside its control.
+# A scenario skips when its assemblies were not rewritten, so here a skip fails the gate.
+coyote() {
+  step "Coyote interleavings"
+  local output="$ROOT/.artifacts/coyote"
+  rm -rf "$output"
+  dotnet build NinePSharp.Fog.Coyote.Tests -c Release -v minimal -p:CopyLocalLockFileAssemblies=true -o "$output"
+  cat > "$output/rewrite.coyote.json" <<JSON
+{
+  "AssembliesPath": ".",
+  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll", "NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll"]
+}
+JSON
+  dotnet tool restore
+  (cd "$output" && dotnet tool run coyote rewrite rewrite.coyote.json)
+  dotnet test "$output/NinePSharp.Fog.Coyote.Tests.dll" --logger "trx;LogFileName=coyote.trx" --results-directory "$output/results"
+  python3 - "$output/results/coyote.trx" <<'PY'
+import sys
+import xml.etree.ElementTree as tree
+
+counters = tree.parse(sys.argv[1]).getroot().find("{*}ResultSummary/{*}Counters").attrib
+if int(counters["notExecuted"]) or int(counters["passed"]) != int(counters["total"]):
+    sys.exit(f"FAIL: Coyote ran {counters['passed']} of {counters['total']} scenarios; the rest were skipped or failed")
+print(f"Coyote: {counters['passed']} scenarios explored")
+PY
+}
+
 fuzz() {
   step "SharpFuzz/AFL fog record and transaction campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog
@@ -116,12 +145,14 @@ case "$MODE" in
     for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-kernel fog-thread; do
       scope "$each"
     done
+    coyote
     fuzz
     ;;
   mutate)
     step "mutation testing: $SCOPE"
     scope "$SCOPE"
     ;;
+  coyote) coyote ;;
   fuzz) fuzz ;;
 esac
 
