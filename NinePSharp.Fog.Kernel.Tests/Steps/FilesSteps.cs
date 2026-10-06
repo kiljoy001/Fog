@@ -41,8 +41,14 @@ public sealed class FilesSteps(KernelDriver driver)
     public Task WhenStats(string path) => CallAsync(async () => entry = await driver.Init.StatAsync(path));
 
     [When(@"^it seeks descriptor 0 to (-?\d+) from (the start|where it is|the end)$")]
-    public async Task WhenSeeks(long offset, string whence)
-        => position = await driver.Init.SeekAsync(0, offset, whence switch { "the start" => 0, "where it is" => 1, _ => 2 });
+    public Task WhenSeeks(long offset, string whence)
+        => CallAsync(async () => position = await driver.Init.SeekAsync(0, offset, whence switch { "the start" => 0, "where it is" => 1, _ => 2 }));
+
+    [Given(@"^the process has ""(.*)"" open for reading as descriptor 0$")]
+    public async Task GivenOpenForReading(string path) => Assert.Equal(0, await driver.Init.OpenAsync(path, NinePConstants.OREAD));
+
+    [Given("it has listed descriptor 0")]
+    public async Task GivenListed() => Assert.NotEmpty(await driver.Init.DirReadAsync(0));
 
     [When(@"^the process binds ""(.*)"" onto ""([^""]*)""$")]
     public Task WhenBinds(string name, string old) => CallAsync(() => driver.Init.BindAsync(name, old, MountFlags.Replace).AsTask());
@@ -118,6 +124,10 @@ public sealed class FilesSteps(KernelDriver driver)
 
     [Then(@"^the call fails with ""(.*)""$")]
     public void ThenFails(string message) => Assert.Equal(message, failure);
+
+    [Then(@"^listing descriptor 0 gives ""(.*)""$")]
+    public async Task ThenListingDescriptor(string names)
+        => Assert.Equal(names, string.Join(' ', (await driver.Init.DirReadAsync(0)).Select(e => e.Name)));
 
     [Then(@"^the seek returns (\d+)$")]
     public void ThenSeekReturns(long expected) => Assert.Equal(expected, position);

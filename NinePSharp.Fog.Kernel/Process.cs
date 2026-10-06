@@ -277,6 +277,10 @@ public sealed class Process
         {
             throw new SyscallException(Errors.BadFd);
         }
+        catch (NamespaceFidException)
+        {
+            throw new SyscallException(Errors.IsDirectory);
+        }
     }
 
     public async ValueTask BindAsync(string name, string old, MountFlags flags)
@@ -316,6 +320,19 @@ public sealed class Process
         try
         {
             return await process.Descriptors.DuplicateAsync(fd, target);
+        }
+        catch (ArgumentException)
+        {
+            throw new SyscallException(Errors.BadFd);
+        }
+    }
+
+    /// <summary>WASI's fd_renumber: moves a descriptor to another number, closing what that number named.</summary>
+    public async ValueTask RenumberAsync(int fd, int target)
+    {
+        try
+        {
+            await process.Descriptors.RenumberAsync(fd, target);
         }
         catch (ArgumentException)
         {

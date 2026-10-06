@@ -1,7 +1,8 @@
 @fog_kernel_files
 Feature: stat, seek and bind act on files and the namespace as 9front's do
   stat(2) reads a file's directory entry: its name as the path names it, its length and its
-  permissions. seek(2) moves a descriptor's offset from the start, from where it is or from the end.
+  permissions. seek(2) moves a descriptor's offset from the start, from where it is or from the end;
+  a directory can only go back to its start, from which it is read again.
   bind(2) makes a file or directory visible at another name in the process's namespace, replacing
   what is there or joining a union before or after it.
 
@@ -37,6 +38,26 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | 1      | the start       | 1        | ello |
       | -2     | the end         | 3        | lo   |
       | 2      | where it is     | 2        | llo  |
+
+  @FOG_KERNEL_018
+  Scenario: Seeking a directory to its start reads it again from its first entry
+    Given "/tmp/g" holds "x"
+    And the process has "/tmp" open for reading as descriptor 0
+    And it has listed descriptor 0
+    When it seeks descriptor 0 to 0 from the start
+    Then listing descriptor 0 gives "f g"
+
+  @FOG_KERNEL_018
+  Scenario Outline: Seeking a directory anywhere but its start fails
+    Given the process has "/tmp" open for reading as descriptor 0
+    When it seeks descriptor 0 to <offset> from <whence>
+    Then the call fails with "file is a directory"
+
+    Examples:
+      | offset | whence      |
+      | 1      | the start   |
+      | 0      | where it is |
+      | 0      | the end     |
 
   @FOG_KERNEL_019
   Scenario: bind makes a file visible at another name
