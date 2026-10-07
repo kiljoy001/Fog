@@ -6,11 +6,8 @@ namespace NinePSharp.Fog.Gefs;
 internal sealed class Scan(ReadOnlySpan<byte> prefix)
 {
     private readonly byte[] prefix = prefix.ToArray();
-    private readonly Blk?[] blocks = new Blk?[Format.MaxHeight];
-    private readonly int[] vi = new int[Format.MaxHeight];
-    private readonly int[] bi = new int[Format.MaxHeight];
+    private Level[] path = [];
     private BlockStore? store;
-    private int height;
     private bool first = true;
     private bool done;
 
@@ -27,35 +24,32 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
         }
 
         store = t.Store;
-        (Bptr bp, height) = t.GetRoot();
+        var (bp, height) = t.GetRoot();
+        path = new Level[height];
         Blk b = store.Get(bp);
-        for (int i = 0; i < height; i++)
+        for (int i = 0; i < path.Length; i++)
         {
-            blocks[i] = b;
-            vi[i] = b.BlockSearch(Key, out bool same);
-            if (b.Type == BlockType.Pivot)
+            int vi = b.BlockSearch(Key, out bool same);
+            if (b.Type == BlockType.Leaf)
             {
-                vi[i] = Math.Max(vi[i], 0);
-                bi[i] = b.BufferSearch(Key, out same);
-                if (bi[i] == -1)
-                {
-                    bi[i] = 0;
-                }
-                else if (!same || !first)
+                path[i] = new Level(b) { Vi = vi == -1 || !same || !first ? vi + 1 : vi };
+            }
+            else
+            {
+                int bi = b.BufferSearch(Key, out same);
+                if (!same || !first)
                 {
                     // Past the messages for the key already given, or for the key before the place.
-                    byte[] key = b.GetMessage(bi[i]).Key;
-                    while (bi[i] < b.MessageCount && Keys.Compare(key, b.GetMessage(bi[i]).Key) == 0)
+                    bi = Math.Max(bi, 0);
+                    while (bi < b.MessageCount && Keys.Compare(Key, b.GetMessage(bi).Key) >= 0)
                     {
-                        bi[i]++;
+                        bi++;
                     }
                 }
 
-                b = store.Get(Blk.GetPointer(b.GetValue(vi[i]).Value).Pointer);
-            }
-            else if (vi[i] == -1 || !same || !first)
-            {
-                vi[i]++;
+                vi = Math.Max(vi, 0);
+                path[i] = new Level(b) { Vi = vi, Bi = bi };
+                b = store.Get(Blk.GetPointer(b.GetValue(vi).Value).Pointer);
             }
         }
 
@@ -65,11 +59,11 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
     // btnext: the least key among the leaf's next value and each pivot's next buffered message.
     public bool Next()
     {
-        while (height > 0 && !done)
+        while (path.Length > 0 && !done)
         {
             // Drop the levels with nothing left; the level above moves to its next child.
-            int start = height;
-            for (int i = height - 1; blocks[i] is not { } b || (vi[i] >= b.ValueCount && bi[i] >= b.MessageCount); i--)
+            int start = path.Length;
+            for (int i = path.Length - 1; path[i].B is not { } b || (path[i].Vi >= b.ValueCount && path[i].Bi >= b.MessageCount); i--)
             {
                 if (i == 0)
                 {
@@ -77,40 +71,35 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
                     return false;
                 }
 
-                (blocks[i], vi[i], bi[i]) = (null, 0, 0);
-                vi[i - 1]++;
+                path[i] = new Level(null);
+                path[i - 1].Vi++;
                 start = i;
             }
 
+            Level above = path[start - 1];
+            bool leaf = above.Vi < above.B!.ValueCount;
             Message m;
-            bool ok;
-            int bufsrc = -1;
-            Blk above = blocks[start - 1]!;
-            if (vi[start - 1] < above.ValueCount)
+            if (leaf)
             {
-                for (int i = start; i < height; i++)
+                for (int i = start; i < path.Length; i++)
                 {
-                    blocks[i] = store!.Get(Blk.GetPointer(blocks[i - 1]!.GetValue(vi[i - 1]).Value).Pointer);
+                    path[i].B = store!.Get(Blk.GetPointer(path[i - 1].B!.GetValue(path[i - 1].Vi).Value).Pointer);
                 }
 
-                var (key, value) = blocks[height - 1]!.GetValue(vi[height - 1]);
+                var (key, value) = path[^1].B!.GetValue(path[^1].Vi);
                 m = new Message(MessageOp.Insert, key, value);
-                ok = true;
             }
             else
             {
-                m = above.GetMessage(bi[start - 1]);
-                ok = Starts(m);
-                bufsrc = start - 1;
+                m = above.B.GetMessage(above.Bi);
             }
 
-            for (int i = height - 2; i >= 0; i--)
+            for (int i = path.Length - 2; i >= 0; i--)
             {
-                if (blocks[i] is { } b && bi[i] < b.MessageCount && b.GetMessage(bi[i]) is var n && Keys.Compare(n.Key, m.Key) < 0)
+                if (path[i].B is { } b && path[i].Bi < b.MessageCount && b.GetMessage(path[i].Bi) is var n && Keys.Compare(n.Key, m.Key) < 0)
                 {
-                    ok = Starts(n);
-                    bufsrc = i;
                     m = n;
+                    leaf = false;
                 }
             }
 
@@ -120,27 +109,23 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
                 return false;
             }
 
-            if (bufsrc == -1)
+            byte[]? found = null;
+            if (leaf)
             {
-                vi[height - 1]++;
+                found = m.Value;
+                path[^1].Vi++;
             }
-            else
+            else if (m.Op is not (MessageOp.Insert or MessageOp.ClearBlock or MessageOp.Clobber))
             {
-                bi[bufsrc]++;
+                throw Tree.Broken();
             }
 
-            byte[]? found = ok ? m.Value : null;
-            for (int i = height - 2; i >= 0; i--)
+            // Every message buffered for the key, from the deepest buffer up.
+            for (int i = path.Length - 2; i >= 0; i--)
             {
-                for (Blk? b = blocks[i]; b is not null && bi[i] < b.MessageCount; bi[i]++)
+                for (Level l = path[i]; l.B is { } b && l.Bi < b.MessageCount && Keys.Compare(m.Key, b.GetMessage(l.Bi).Key) == 0; l.Bi++)
                 {
-                    Message u = b.GetMessage(bi[i]);
-                    if (Keys.Compare(m.Key, u.Key) != 0)
-                    {
-                        break;
-                    }
-
-                    found = Tree.Apply(found, u);
+                    found = Tree.Apply(found, b.GetMessage(l.Bi));
                 }
             }
 
@@ -156,17 +141,14 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
     }
 
     // btexit
-    public void Exit()
-    {
-        Array.Clear(blocks);
-        height = 0;
-    }
+    public void Exit() => path = [];
 
-    // A key first met in a buffer starts with an insert, or with a clear or clobber that leaves nothing.
-    private static bool Starts(Message m) => m.Op switch
+    private sealed class Level(Blk? b)
     {
-        MessageOp.Insert => true,
-        MessageOp.ClearBlock or MessageOp.Clobber => false,
-        _ => throw Tree.Broken(),
-    };
+        public Blk? B { get; set; } = b;
+
+        public int Vi { get; set; }
+
+        public int Bi { get; set; }
+    }
 }

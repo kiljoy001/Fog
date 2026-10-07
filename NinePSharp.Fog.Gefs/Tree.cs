@@ -79,7 +79,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
                 npath++;
             }
 
-            path[npath++] = new Path { B = b, Idx = -1, Midx = -1, Lo = -1, Hi = -1 };
+            path[npath++] = new Path { B = b, Idx = -1, Lo = -1 };
             Path rp = Flush(path, npath);
             if (rp.Left is { } rb)
             {
@@ -288,6 +288,10 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         return i;
     }
 
+    // A pivot's buffered messages, less those its child pulled down.
+    private static List<Message> Kept(Blk b, Path p, Path? pp)
+        => [.. Enumerable.Range(0, b.MessageCount).Where(k => k < p.Lo || k >= p.Lo + (pp?.Npull ?? 0)).Select(b.GetMessage)];
+
     private static bool IsData(byte[] key) => key.Length > 0 && key[0] == (byte)KeyType.Data;
 
     private void SetRoot(Bptr bp, int h)
@@ -470,6 +474,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
         }
 
+        List<Message> kept = Kept(b, p, pp);
         int k = 0;
         int j = up.Lo;
         int sz = 0;
@@ -477,19 +482,9 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
         // The room to pull into is what the buffer has, plus what the child pulled out of it.
         int spc = Blk.BufferSpace - ((2 * b.MessageCount) + b.MessageSize) + (pp?.PullSize ?? 0);
-        while (k < b.MessageCount)
+        while (k < kept.Count)
         {
-            if (k == p.Lo)
-            {
-                k += pp!.Npull;
-            }
-
-            if (k == b.MessageCount)
-            {
-                break;
-            }
-
-            Message m = b.GetMessage(k);
+            Message m = kept[k];
             if (PullMessage(up, j, m.Key, out Message u, ref full, spc - sz) <= 0)
             {
                 n.SetMessage(m);
@@ -613,19 +608,8 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
         d = l;
         byte[] mid = r.GetValue(0).Key;
-        for (int i = 0; i < b.MessageCount; i++)
+        foreach (Message m in Kept(b, p, pp))
         {
-            if (i == p.Lo)
-            {
-                i += pp!.Npull;
-            }
-
-            if (i == b.MessageCount)
-            {
-                break;
-            }
-
-            Message m = b.GetMessage(i);
             if (d == l && Keys.Compare(m.Key, mid) >= 0)
             {
                 d = r;

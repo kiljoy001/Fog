@@ -23,6 +23,8 @@ public sealed class TreeSteps
     private int freedBefore;
     private int version;
     private string? failure;
+    private Dir? entry;
+    private byte[]? entryKey;
 
     [Given("an empty tree")]
     public void GivenEmptyTree()
@@ -190,6 +192,54 @@ public sealed class TreeSteps
         scan.Exit();
     }
 
+    [When(@"^a scan of keys beginning ([0-9a-f]+) gives all it has and is left$")]
+    public void WhenScanRunOut(string prefix)
+    {
+        scan = new Scan(Convert.FromHexString(prefix));
+        scan.Enter(tree!);
+        while (scan.Next())
+        {
+        }
+
+        scan.Exit();
+    }
+
+    [When(@"^the keys (.*) are inserted one at a time$")]
+    public void WhenRawInserted(string keys)
+    {
+        foreach (string key in Items(keys))
+        {
+            Upsert(new Message(MessageOp.Insert, Convert.FromHexString(key), NextValue()));
+        }
+    }
+
+    [When("the empty key is given value a, and then value b in another upsert")]
+    public void WhenEmptyKey()
+    {
+        Upsert(new Message(MessageOp.Insert, [], "a"u8.ToArray()));
+        Upsert(new Message(MessageOp.Insert, [], "b"u8.ToArray()));
+    }
+
+    [When(@"^keys (\d+) to (\d+), and key (\d+) with a (\d+)-byte value, go into one upsert$")]
+    public void WhenInsertedWithSmall(int first, int last, int small, int size)
+        => Upsert([.. Enumerable.Range(first, last - first + 1).Select(n => new Message(MessageOp.Insert, Key(n), NextValue())), new Message(MessageOp.Insert, Key(small), new byte[size])]);
+
+    [When(@"^the entry ""(.*)"" in directory (\d+), (\d+) bytes long and modified at (\d+), is inserted$")]
+    public void WhenEntryInserted(string name, long parent, long length, long mtime)
+    {
+        entry = new Dir(name, new Qid(7, 0, 0), 0b110_100_100, 0, mtime, length, 0, 0, 0);
+        entryKey = entry.Key(parent);
+        Upsert(new Message(MessageOp.Insert, entryKey, entry.Value()));
+    }
+
+    [When(@"^its length is set to (\d+), and then its modification time to (\d+), in one upsert$")]
+    public void WhenEntryChanged(long length, long mtime)
+        => Upsert(new Message(MessageOp.Wstat, entryKey!, new WstatChange(Length: length).Pack()), new Message(MessageOp.Wstat, entryKey!, new WstatChange(Mtime: mtime).Pack()));
+
+    [When(@"^key (\d+) is clobbered and then given a stat change in one upsert$")]
+    public void WhenClobberedThenChanged(int n)
+        => Upsert(new Message(MessageOp.Clobber, Key(n), []), new Message(MessageOp.Wstat, Key(n), new WstatChange(Length: 1).Pack()));
+
     [When("the scan is re-entered")]
     public void WhenScanReentered() => scan!.Enter(tree!);
 
@@ -206,6 +256,28 @@ public sealed class TreeSteps
         Assert.False(scan!.Next());
         scan.Exit();
     }
+
+    [Then("looking up the empty key finds value b")]
+    public void ThenEmptyKey() => Assert.Equal("b"u8.ToArray(), tree!.Lookup([]));
+
+    [Then(@"^the entry looks up as (\d+) bytes long, modified at (\d+), at version (\d+), and a scan of directory (\d+) gives it so$")]
+    public void ThenEntry(long length, long mtime, uint version, long parent)
+    {
+        Dir expected = entry! with { Length = length, Mtime = mtime, Qid = entry.Qid with { Version = version } };
+        Assert.Equal(expected, Dir.Read(entryKey, tree!.Lookup(entryKey!)));
+        var prefix = new byte[9];
+        prefix[0] = (byte)KeyType.Entry;
+        BinaryPrimitives.WriteInt64BigEndian(prefix.AsSpan(1), parent);
+        var scanned = ScanAll(prefix);
+        Assert.Equal([(Hex(entryKey!), Hex(expected.Value()))], scanned.Select(kv => (Hex(kv.Key), Hex(kv.Value))));
+    }
+
+    [Then("it gives nothing")]
+    public void ThenScanGivesNothing() => Assert.False(scan!.Next());
+
+    [Then(@"^a scan of keys beginning ([0-9a-f]+) gives the keys (.*)$")]
+    public void ThenPrefixScanKeys(string prefix, string keys)
+        => Assert.Equal(Items(keys).Select(k => k.ToUpperInvariant()), ScanAll(Convert.FromHexString(prefix)).Select(kv => Hex(kv.Key)));
 
     [Then(@"^the tree is (\d+) high and its root is a leaf of (\d+) entries$")]
     public void ThenLeafRoot(int height, int entries)

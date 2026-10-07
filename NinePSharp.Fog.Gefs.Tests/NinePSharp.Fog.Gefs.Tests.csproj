@@ -14,6 +14,9 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Oracle/*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../NinePSharp.Fog.Gefs/NinePSharp.Fog.Gefs.csproj" />
   </ItemGroup>
 </Project>

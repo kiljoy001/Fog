@@ -40,6 +40,12 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
       | an insert of value a | a clobber            | finds nothing              |
       | a clobber            | an insert of value b | finds value b              |
 
+  @FOG_GEFS_201
+  Scenario: The empty key holds a value like any other
+    Given an empty tree
+    When the empty key is given value a, and then value b in another upsert
+    Then looking up the empty key finds value b
+
   @FOG_GEFS_202
   Scenario: A leaf root too full for a message splits in two under a new root
     Given an empty tree
@@ -103,6 +109,13 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
     And every key looks up as it was last given and a scan gives them in key order
     And every block of it is well formed, and every block it no longer uses was freed
 
+  @FOG_GEFS_206
+  Scenario: A pivot pulls in a message that exactly fills the room it has left
+    Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 14
+    When keys 20 to 35, and key 36 with a 17-byte value, go into one upsert
+    Then its root buffers messages for keys 20 to 36
+    And every key looks up as it was last given and a scan gives them in key order
+
   @FOG_GEFS_207
   Scenario: A lookup applies the messages buffered above a key to what its leaf holds
     Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 6
@@ -115,22 +128,66 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
     And its root buffers a delete of key 9
     Then looking up key 9 fails with "internal error: missing insert"
 
-  @FOG_GEFS_208
-  Scenario: A scan restricted to a prefix gives only the keys that begin with it
+  @FOG_GEFS_207
+  Scenario: Stat changes apply to an entry wherever they wait: in a buffer, and in its leaf once flushed
     Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 6
-    And its root buffers an insert of key 7
-    Then a scan of keys beginning 100003 gives key 3
-    And a scan of keys beginning 11 gives nothing
+    When the entry "notes" in directory 1, 10 bytes long and modified at 100, is inserted
+    And its length is set to 20, and then its modification time to 200, in one upsert
+    Then the entry looks up as 20 bytes long, modified at 200, at version 2, and a scan of directory 1 gives it so
+    When keys 20 to 35 are inserted in one upsert
+    Then the tree is 1 high and its root is a leaf of 23 entries
+    And the entry looks up as 20 bytes long, modified at 200, at version 2, and a scan of directory 1 gives it so
+
+  @FOG_GEFS_208
+  Scenario Outline: A scan restricted to a prefix gives only the keys that begin with it
+    Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 6
+    And its root buffers an insert of key 2 and an insert of key 7
+    Then a scan of keys beginning <prefix> gives <keys>
+
+    Examples:
+      | prefix | keys    |
+      | 100003 | key 3   |
+      | 100004 | key 4   |
+      | 100007 | key 7   |
+      | 11     | nothing |
+
+  @FOG_GEFS_208
+  Scenario: A scan begins after a shorter key that sorts before its prefix
+    Given an empty tree
+    When the keys 10, 100001, 100002 and 11 are inserted one at a time
+    Then a scan of keys beginning 1000 gives the keys 100001 and 100002
 
   @FOG_GEFS_208
   Scenario: A scan re-entered after the tree changes continues after the last key it gave
     Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 6
-    And its root buffers an insert of key 0, a delete of key 2, an insert of key 7 and a clobber of key 8
+    And its root buffers an insert of key 0, a delete of key 2, an insert of key 3, an insert of key 7 and a clobber of key 8
     When a scan of the whole tree gives 3 entries and is left
     And key 2 is inserted
     And key 4 is deleted
     And the scan is re-entered
     Then it gives keys 5, 6 and 7, and then nothing
+
+  @FOG_GEFS_208
+  Scenario: A scan that was left gives nothing until it is entered again
+    Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 6
+    When a scan of the whole tree gives 2 entries and is left
+    Then it gives nothing
+    When the scan is re-entered
+    Then it gives keys 3, 4, 5 and 6, and then nothing
+
+  @FOG_GEFS_208
+  Scenario Outline: A scan that has run out stays finished, even when keys it would give are added
+    Given a tree 2 high whose root points at a leaf of keys 1 to 2 and a leaf of keys 3 to 6
+    And its root buffers an insert of key 256
+    When a scan of keys beginning <prefix> gives all it has and is left
+    And key <key> is inserted
+    And the scan is re-entered
+    Then it gives nothing
+
+    Examples:
+      | prefix | key |
+      | 10     | 300 |
+      | 1000   | 9   |
 
   @FOG_GEFS_209
   Scenario: Replacing or clearing a file's data entry frees the data block it pointed at
@@ -153,6 +210,14 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
     Given an empty tree
     When keys 1 to 3 are inserted one at a time
     And key 9 is deleted
+    Then the upsert fails with "internal error: broken entry"
+    And every key looks up as it was last given and a scan gives them in key order
+
+  @FOG_GEFS_210
+  Scenario: An upsert refuses a stat change to a key a clobber has just emptied
+    Given an empty tree
+    When keys 1 to 3 are inserted one at a time
+    And key 2 is clobbered and then given a stat change in one upsert
     Then the upsert fails with "internal error: broken entry"
     And every key looks up as it was last given and a scan gives them in key order
 
@@ -192,3 +257,15 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
       | 1    |
       | 2    |
       | 3    |
+
+  @FOG_GEFS_212
+  Scenario Outline: The tree takes the shape 9front's gefs gives it under the same upserts
+    Given a tree whose root is a leaf holding only the key 10
+    When the upserts of the <run> oracle run are applied
+    Then after every tenth the tree has the shape gefs's own tree.c gave it
+
+    Examples:
+      | run                 |
+      | three-high-and-back |
+      | two-high-and-back   |
+      | small-entries       |

@@ -22,6 +22,7 @@ internal sealed class MemoryStore : BlockStore
             throw new InvalidOperationException($"block {bp.Addr} freed twice");
         }
 
+        written.Remove(bp.Addr);
         Freed.Add(bp.Addr);
     }
 
