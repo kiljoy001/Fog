@@ -113,6 +113,20 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
     And every key looks up as it was last given and a scan gives them in key order
     And every block of it is well formed, and every block it no longer uses was freed
 
+  @FOG_GEFS_202
+  Scenario Outline: A split whose pulled deletes empty a half keeps what is left
+    Given an empty tree
+    When keys 1 to 18 are inserted one at a time
+    And keys <deleted> are deleted and keys 100 to 113 inserted in one upsert
+    Then the tree is 1 high and its root is a leaf of <entries> entries
+    And every key looks up as it was last given and a scan gives them in key order
+    And every block of it is well formed, and every block it no longer uses was freed
+
+    Examples:
+      | deleted | entries |
+      | 1 to 16 | 16      |
+      | 1 to 18 | 14      |
+
   @FOG_GEFS_203
   Scenario: A pivot root with room takes an upsert into its buffer, after the messages already there for the same key
     Given an empty tree
@@ -218,6 +232,23 @@ Feature: The Bε tree buffers messages in its pivots and flushes them toward its
     And its root buffers messages for keys 100 to 113
     And every key looks up as it was last given and a scan gives them in key order
     And every block of it is well formed, and every block it no longer uses was freed
+
+  @FOG_GEFS_205
+  Scenario Outline: A tree emptied of every key works as a new one
+    Given an empty tree
+    When <count> keys of 250 bytes with 500-byte values are inserted 6 at a time
+    Then it has grown to <height> high
+    When they are all deleted 6 at a time
+    Then every key looks up as it was last given and a scan gives them in key order
+    And every block of it is well formed, and every block it no longer uses was freed
+    When they are inserted again 6 at a time
+    Then every key looks up as it was last given and a scan gives them in key order
+    And every block of it is well formed, and every block it no longer uses was freed
+
+    Examples:
+      | count | height |
+      | 300   | 2      |
+      | 1500  | 3      |
 
   @FOG_GEFS_207
   Scenario: A lookup applies the messages buffered above a key to what its leaf holds

@@ -25,6 +25,8 @@ public sealed class TreeSteps
     private string? failure;
     private Dir? entry;
     private byte[]? entryKey;
+    private byte[][] bulk = [];
+    private int bulkValue;
 
     [Given("an empty tree")]
     public void GivenEmptyTree()
@@ -108,6 +110,43 @@ public sealed class TreeSteps
         foreach (int n in Numbers(keys))
         {
             Upsert(new Message(MessageOp.Insert, Key(n), n == small ? new byte[size] : NextValue()));
+        }
+    }
+
+    [When(@"^keys (.*) are deleted and keys (.*) inserted in one upsert$")]
+    public void WhenDeletedAndInserted(string deleted, string inserted)
+        => Upsert([.. Numbers(deleted).Select(n => new Message(MessageOp.Delete, Key(n), [])), .. Numbers(inserted).Select(n => new Message(MessageOp.Insert, Key(n), NextValue()))]);
+
+    [When(@"^(\d+) keys of (\d+) bytes with (\d+)-byte values are inserted (\d+) at a time$")]
+    public void WhenManyInserted(int count, int length, int size, int batch)
+    {
+        bulk = [.. Enumerable.Range(0, count).Select(i =>
+        {
+            var key = new byte[length];
+            (key[0], key[1], key[2]) = (0x10, (byte)(i >> 8), (byte)i);
+            return key;
+        })];
+        bulkValue = size;
+        WhenInsertedAgain(batch);
+    }
+
+    [When(@"^they are inserted again (\d+) at a time$")]
+    public void WhenInsertedAgain(int batch)
+    {
+        foreach (byte[][] chunk in bulk.Chunk(batch))
+        {
+            Upsert([.. chunk.Select(k => new Message(MessageOp.Insert, k, Sized(bulkValue)))]);
+            Assert.Null(failure);
+        }
+    }
+
+    [When(@"^they are all deleted (\d+) at a time$")]
+    public void WhenAllDeleted(int batch)
+    {
+        foreach (byte[][] chunk in bulk.Chunk(batch))
+        {
+            Upsert([.. chunk.Select(k => new Message(MessageOp.Delete, k, []))]);
+            Assert.Null(failure);
         }
     }
 

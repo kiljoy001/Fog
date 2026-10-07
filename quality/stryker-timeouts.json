@@ -364,5 +364,263 @@
     "mutator": "Arithmetic mutation",
     "line": "lo = mid + 1;",
     "reason": "the binary search's lower bound falls instead of rising, so it never ends"
+  },
+  {
+    "file": "Blk.cs",
+    "mutator": "Equality mutation",
+    "line": "while (lo <= hi)",
+    "reason": "the block search's loop condition no longer closes, and a test searching an empty block never finishes"
+  },
+  {
+    "file": "Blk.cs",
+    "mutator": "Negate expression",
+    "line": "while (lo <= hi)",
+    "reason": "the block search's loop condition no longer closes, and a test searching an empty block never finishes"
+  },
+  {
+    "file": "Blk.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "int mid = (lo + hi) / 2;",
+    "reason": "the block search's midpoint leaves the range it is narrowing, and a test over it never finishes"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Negate expression",
+    "line": "while (bi < b.MessageCount && Keys.Compare(Key, b.GetMessage(bi).Key) >= 0)",
+    "reason": "entering a scan no longer stops skipping buffered messages, or never moves past one"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Statement mutation",
+    "line": "bi++;",
+    "reason": "entering a scan never moves past the buffered message it is skipping"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Negate expression",
+    "line": "if (leaf)",
+    "reason": "a scan takes its key from the wrong level and never advances past it"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int i = path.Length - 2; i >= 0; i--)",
+    "reason": "a scan applies buffered messages without advancing past them, so it gives the same key forever"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Equality mutation",
+    "line": "for (Level l = path[i]; l.B is { } b && l.Bi < b.MessageCount && Keys.Compare(m.Key, b.GetMessage(l.Bi).Key) == 0; l.Bi++)",
+    "reason": "a scan applies buffered messages without advancing past them, so it gives the same key forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Object initializer mutation",
+    "line": "path[0] = new Path { Ins = msg, Lo = npull, Hi = msg.Length, Size = sz };",
+    "reason": "the upsert's path loses the batch it pulls from, so no round makes progress and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "while (b.Type == BlockType.Pivot && (b.ValueCount <= 1 || b.BufferFull(msg.Length, path[npath - 1].Size)))",
+    "reason": "the walk down from the root no longer stops where it should, so the upsert never pulls its messages and retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "while (b.Type == BlockType.Pivot && (b.ValueCount <= 1 || b.BufferFull(msg.Length, path[npath - 1].Size)))",
+    "reason": "the walk down from the root no longer stops where it should, so the upsert never pulls its messages and retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "degen = rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "reason": "every round is taken for a degenerate root, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "degen = rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "reason": "every round is taken for a degenerate root, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Boolean mutation",
+    "line": "degen = false;",
+    "reason": "an emptied tree counts as degenerate, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "while (npull != msg.Length || degen);",
+    "reason": "the upsert's retry loop no longer ends when every message is pulled"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int i = 1; i <= b.ValueCount; i++)",
+    "reason": "victim's loop over a pivot's children never ends or never chooses one, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Conditional (true) mutation",
+    "line": "byte[]? next = i < b.ValueCount ? b.GetValue(i).Key : null;",
+    "reason": "victim gives every message to the first child, so the upsert walks into a block that never takes them and retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "byte[]? next = i < b.ValueCount ? b.GetValue(i).Key : null;",
+    "reason": "victim gives every message to the first child, so the upsert walks into a block that never takes them and retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "for (; j < b.MessageCount; j++)",
+    "reason": "victim reads past a pivot's buffer, so the walk it chooses never takes the messages and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "if (next is not null && Keys.Compare(m.Key, next) >= 0)",
+    "reason": "victim's split of the buffer between children is lost, so the upsert walks into a block that never takes the messages and retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (next is not null && Keys.Compare(m.Key, next) >= 0)",
+    "reason": "victim's split of the buffer between children is lost, so the upsert walks into a block that never takes the messages and retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+    "line": "cursz += MessageSize(m);",
+    "reason": "victim measures a child's messages as shrinking, so it never chooses one and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "if (cursz > maxsz)",
+    "reason": "victim never chooses the child with the most messages, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (cursz > maxsz)",
+    "reason": "victim never chooses the child with the most messages, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "while (lo <= hi)",
+    "reason": "fastupsert's binary search loop condition no longer closes, so it never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "while (lo <= hi)",
+    "reason": "fastupsert's binary search loop condition no longer closes, so it never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "int mid = (lo + hi) / 2;",
+    "reason": "fastupsert's binary search midpoint leaves its range, so it never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "hi = mid - 1;",
+    "reason": "fastupsert's binary search upper bound grows instead of shrinking, so it never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "lo = mid + 1;",
+    "reason": "fastupsert's binary search lower bound falls instead of rising, so it never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "while (i < b.ValueCount || j < up.Hi)",
+    "reason": "updateleaf's loop over values and messages never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "while (i < b.ValueCount || j < up.Hi)",
+    "reason": "updateleaf's loop over values and messages never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "while (i < b.ValueCount || j < up.Hi)",
+    "reason": "updateleaf's loop over values and messages never ends"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Boolean mutation",
+    "line": "bool full = false;",
+    "reason": "updatepiv starts out full, pulls nothing, and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)",
+    "reason": "updatepiv stops copying the pivot's own messages or never advances past one"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)",
+    "reason": "updatepiv stops copying the pivot's own messages or never advances past one"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "while (Pull(up, j, out u, ref full, spc) && Keys.Compare(key, u.Key) == 0)",
+    "reason": "updatepiv's pull of the parent's messages for one key never ends, or never starts, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "while (Pull(up, j, out u, ref full, spc) && Keys.Compare(key, u.Key) == 0)",
+    "reason": "updatepiv's pull of the parent's messages for one key never ends, or never starts, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Statement mutation",
+    "line": "j++;",
+    "reason": "updatepiv pulls the same parent message forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "while (Pull(up, j, out Message u, ref full, spc))",
+    "reason": "updatepiv's pull of the parent's remaining messages never ends, or never starts, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Statement mutation",
+    "line": "UpdateLeaf(path[at - 1], p);",
+    "reason": "a leaf the flush reaches is never rewritten, so its messages are never pulled and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "if (at == 1 && pp?.Left is not null && pp.Right is null && pp.Npull == p.B.MessageCount",
+    "reason": "the root gives way to its child at the wrong time, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "&& (p.B.ValueCount == 1 || (pp.Op == PathOp.Merge && p.B.ValueCount == 2)))",
+    "reason": "the root gives way to its child at the wrong time, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Block removal mutation",
+    "line": "&& (p.B.ValueCount == 1 || (pp.Op == PathOp.Merge && p.B.ValueCount == 2))) {",
+    "reason": "the root never gives way to its only child, so the upsert retries forever"
   }
 ]

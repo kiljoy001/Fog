@@ -573,6 +573,12 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         p.Op = PathOp.Split;
         p.Left = Replace(p.Left, l);
         p.Right = Replace(p.Right, r);
+
+        // The messages pulled in can delete every value of the left half; gefs then finds no root.
+        if (p.Left is null)
+        {
+            (p.Left, p.Right) = (p.Right, null);
+        }
     }
 
     // splitpiv: the pointers shared between two pivots as splitleaf shares values, and the buffered
@@ -819,7 +825,8 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             rp.Left = n;
         }
 
-        return rp!;
+        // A root leaf that split with a half left empty is replaced by the other half, or by nothing.
+        return rp ?? pp!;
     }
 
     // freepath: the blocks the upsert replaced, and the siblings it merged or rotated away.
