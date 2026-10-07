@@ -159,6 +159,22 @@ public sealed class BlockSteps
         }
     });
 
+    [When(@"^it is given a (value|message) of (\d+) bytes, its key included$")]
+    public void WhenGivenSized(string entry, int size) => Try(() =>
+    {
+        if (entry == "value")
+        {
+            block!.SetValue([1], new byte[size - 2 - 1 - 2]);
+        }
+        else
+        {
+            block!.SetMessage(new Message(MessageOp.Insert, [1], new byte[size - 1 - 2 - 1 - 2]));
+        }
+    });
+
+    [Then("it takes it")]
+    public void ThenTakes() => Assert.Equal((null, 101), (failure, block!.Type == BlockType.Leaf ? block.ValueCount : block.MessageCount));
+
     [Then(@"^(?:it|reading) fails with ""(.*)""$")]
     public void ThenFails(string message) => Assert.Equal(message, failure);
 
@@ -289,6 +305,14 @@ public sealed class BlockSteps
         byte[] oversized = bytes!.ToArray();
         BinaryPrimitives.WriteUInt16BigEndian(oversized.AsSpan(2), 20000);
         Assert.Equal(message, Assert.Throws<GefsException>(() => Blk.Read(oversized, Pointer())).Message);
+    }
+
+    [Then(@"^reading it with its header claiming (\d+) bytes fails with ""(.*)""$")]
+    public void ThenLogClaims(int size, string message)
+    {
+        byte[] claiming = bytes!.ToArray();
+        BinaryPrimitives.WriteUInt16BigEndian(claiming.AsSpan(2), (ushort)size);
+        Assert.Equal(message, Assert.Throws<GefsException>(() => Blk.Read(claiming, Pointer())).Message);
     }
 
     [When(@"^it is copied to address (\d+) in generation (\d+)$")]

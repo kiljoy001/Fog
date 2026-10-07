@@ -79,6 +79,7 @@ Feature: Blocks are laid out, searched, sealed and read as 9front's gefs does
   Scenario Outline: A pivot's buffer is full once messages of the needed size would not fit
     Given a new pivot buffering <count> messages in <used> bytes
     Then its buffer <answer> full for <more> more messages needing <needed> bytes
+    And its fill counts 8100 bytes
 
     Examples:
       | count | used | more | needed | answer |
@@ -86,6 +87,19 @@ Feature: Blocks are laid out, searched, sealed and read as 9front's gefs does
       | 100   | 7900 | 1    | 86     | is     |
       | 100   | 7900 | 2    | 83     | is not |
       | 100   | 7900 | 2    | 84     | is     |
+
+  @FOG_GEFS_104
+  Scenario Outline: A block takes an entry that exactly fills its room, and refuses one a byte larger
+    Given <block>
+    When it is given a <entry> of <size> bytes, its key included
+    Then it <result>
+
+    Examples:
+      | block                                                         | entry   | size | result                  |
+      | a new leaf filled to 16000 bytes of its space with 100 values | value   | 176  | takes it                |
+      | a new leaf filled to 16000 bytes of its space with 100 values | value   | 177  | fails with "block full" |
+      | a new pivot buffering 100 messages in 7900 bytes              | message | 85   | takes it                |
+      | a new pivot buffering 100 messages in 7900 bytes              | message | 86   | fails with "block full" |
 
   @FOG_GEFS_104
   Scenario Outline: A block refuses an entry it has no room for
@@ -155,6 +169,13 @@ Feature: Blocks are laid out, searched, sealed and read as 9front's gefs does
       | kind       |
       | allocation |
       | deadlist   |
+
+  @FOG_GEFS_106
+  Scenario: A log may use all of its block's space after its header, and no more
+    Given a new allocation log chained to block 81920 of generation 4
+    When it is given 16300 bytes of log and sealed at address 98304 in generation 5
+    Then reading its bytes gives an allocation log of 16300 bytes chained to block 81920 of generation 4
+    And reading it with its header claiming 16301 bytes fails with "block contents corrupted"
 
   @FOG_GEFS_107
   Scenario: A copied block holds the same entries at its new address, unsealed

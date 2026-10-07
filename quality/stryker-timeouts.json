@@ -352,5 +352,17 @@
     "mutator": "Equality mutation",
     "line": "if (future == EndOfFile)",
     "reason": "NextCAsync reads only when it already holds a character, so rc sees end of file forever without Eof"
+  },
+  {
+    "file": "Blk.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "hi = mid - 1;",
+    "reason": "the binary search's upper bound grows instead of shrinking, so it never ends"
+  },
+  {
+    "file": "Blk.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "lo = mid + 1;",
+    "reason": "the binary search's lower bound falls instead of rising, so it never ends"
   }
 ]
