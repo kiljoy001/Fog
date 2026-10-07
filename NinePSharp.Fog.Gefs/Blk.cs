@@ -8,7 +8,9 @@ internal sealed class Blk
 {
     public const int LeafHeaderSize = 6;
     public const int PivotHeaderSize = Format.PivotHeaderSize;
-    public const int LogHeaderSize = 2 + 2 + Format.HashSize + Format.PointerSize;
+
+    // type, size, 4 bytes of padding so a log's 8-byte entries fill its space exactly, hash, chain.
+    public const int LogHeaderSize = 2 + 2 + 4 + Format.HashSize + Format.PointerSize;
     public const int LeafSpace = Format.BlockSize - LeafHeaderSize;
     public const int BufferSpace = Format.BufferSpace;
     public const int PivotSpace = Format.BlockSize - PivotHeaderSize - BufferSpace;
@@ -73,8 +75,8 @@ internal sealed class Blk
         {
             case BlockType.Log or BlockType.Deadlist:
                 b.LogSize = BinaryPrimitives.ReadUInt16BigEndian(p);
-                b.LogHash = BlockHash.Read(p[2..]);
-                b.LogNext = Bptr.Read(p[(2 + Format.HashSize)..]);
+                b.LogHash = BlockHash.Read(p[6..]);
+                b.LogNext = Bptr.Read(p[(6 + Format.HashSize)..]);
                 break;
             case BlockType.Pivot:
                 b.ValueCount = BinaryPrimitives.ReadUInt16BigEndian(p);
@@ -138,8 +140,8 @@ internal sealed class Blk
             case BlockType.Log or BlockType.Deadlist:
                 LogHash = BlockHash.Of(Data[..LogSize]);
                 BinaryPrimitives.WriteUInt16BigEndian(p, (ushort)LogSize);
-                LogHash.Write(p[2..]);
-                LogNext.Write(p[(2 + Format.HashSize)..]);
+                LogHash.Write(p[6..]);
+                LogNext.Write(p[(6 + Format.HashSize)..]);
                 break;
         }
 

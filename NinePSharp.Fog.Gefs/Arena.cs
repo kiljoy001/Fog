@@ -4,17 +4,17 @@ namespace NinePSharp.Fog.Gefs;
 
 // blk.c's arenas: a pair of headers, then blocks allocated from free ranges, with every allocation
 // and free appended to a log that grows through blocks the arena allocates for it. Unlike gefs, a
-// header names its log by address alone, since log blocks carry their own hashes, and the arena
-// uses all of its data.
+// header names its log by address alone, since log blocks carry their own hashes, the arena uses
+// all of its data, and the log may use the reserve, so blocks can still be freed when it is full.
 internal sealed class Arena
 {
     private const long B = Format.BlockSize;
     private const int LogSpace = Format.BlockSize - Blk.LogHeaderSize;
 
-    // Room kept at the end of a log block for one more two-word entry and the chain to the next.
-    private const int LogSlop = 16 + 16 + 8;
+    // A compressed log block holds this many ranges, leaving room for a barrier and a chaining word.
+    private const int RangesPerBlock = (LogSpace - 16) / 16;
 
-    private static readonly Bptr None = new(-1, default, -1);
+    private static readonly Bptr None = new(-1, default, default);
 
     private readonly Device device;
     private readonly long header;
@@ -58,7 +58,7 @@ internal sealed class Arena
         a.Free.Free(start, size);
         a.Append(start, size, LogOp.Free);
         a.Free.Take(start, B);
-        a.Append(start, B, LogOp.Alloc);
+        a.Append(start, B, LogOp.Alloc1);
         a.Barrier(0);
         a.FlushLog();
         a.WriteHeader(0);
@@ -91,75 +91,80 @@ internal sealed class Arena
 
         long b = (sequential ? Free.TakeLowest() : Free.TakeHighest()) ?? throw new GefsException("emergency blocks exhausted");
         Used += B;
-        Append(b, B, LogOp.Alloc);
+        Append(b, B, LogOp.Alloc1);
         return b;
     }
 
     // blkdealloc_lk
     public void Deallocate(long b)
     {
-        Append(b, B, LogOp.Free);
+        Append(b, B, LogOp.Free1);
         Free.Free(b, B);
         Used -= B;
     }
 
-    // logbarrier
-    public void Barrier(long gen) => Append(gen << 8, 0, LogOp.Sync);
+    // logbarrier: the generation in place of an offset.
+    public void Barrier(long gen) => Append(gen * 256, 0, LogOp.Sync);
 
     // flushlog
     public void FlushLog() => Write(tail);
 
-    // compresslog: the log rewritten as the free ranges, into blocks taken from the bottom. The old
-    // log's blocks stay allocated until the sync that stops naming them has committed; the head
-    // returned is for freeing them then.
-    public long Compress()
+    // compresslog: the log rewritten as the free ranges, into blocks taken from the bottom until they
+    // can hold the ranges left; taking one can only shrink the ranges, so the last may end up empty.
+    // A full arena keeps its log. The
+    // old log's blocks stay allocated until the sync that stops naming them has committed; they are
+    // returned for freeing then. Its tail may never have been written, so it is not read back.
+    public List<long>? Compress()
     {
-        FlushLog();
-        int nr = Free.Count;
-        long sz = 16L * nr;
-        int nblks = (int)(((sz + LogSpace) / (LogSpace - LogSlop)) + (16L * nr / (LogSpace - LogSlop)) + 1);
-        var blks = new long[nblks];
-        for (int i = 0; i < nblks; i++)
+        if (Free.TakeLowest() is not { } first)
         {
-            blks[i] = Free.TakeLowest() ?? throw new GefsException("file system full");
-            Used += B;
+            return null;
         }
 
-        int k = 0;
-        Blk b = NewLog(blks[k++]);
-        int blocks = 1;
-        foreach (var (offset, length) in Free)
+        var blocks = new List<long> { first };
+        while (blocks.Count * RangesPerBlock < Free.Count)
         {
-            if (b.LogSize >= LogSpace - LogSlop)
+            blocks.Add(Free.TakeLowest()!.Value);
+        }
+
+        Used += blocks.Count * B;
+        Blk oldTail = tail;
+        var ranges = Free.ToList();
+        for (int k = 0; k < blocks.Count; k++)
+        {
+            Blk log = NewLog(blocks[k]);
+            foreach (var (offset, length) in ranges.Skip(k * RangesPerBlock).Take(RangesPerBlock))
             {
-                b.LogNext = new Bptr(blks[k], default, -1);
-                Write(b);
-                b = NewLog(blks[k++]);
-                blocks++;
+                Put(log, offset, length, LogOp.Free);
             }
 
-            Put(b, offset, length, LogOp.Free);
+            if (k + 1 < blocks.Count)
+            {
+                log.LogNext = new Bptr(blocks[k + 1], default, default);
+                Write(log);
+            }
+            else
+            {
+                tail = log;
+            }
         }
 
-        Write(b);
-        long old = LogHead;
-        (LogHead, tail, LogBlocks, CompressedBlocks) = (blks[0], b, blocks, blocks);
-        for (; k < nblks; k++)
+        var old = new List<long>();
+        for (long at = LogHead; at != -1; at = (at == oldTail.Address ? oldTail : Read(device, at)).LogNext.Addr)
         {
-            Deallocate(blks[k]);
+            old.Add(at);
         }
 
+        (LogHead, LogBlocks, CompressedBlocks) = (blocks[0], blocks.Count, blocks.Count);
         return old;
     }
 
     // The blocks of a log no longer named by any committed header.
-    public void FreeLog(long head)
+    public void FreeLog(List<long> blocks)
     {
-        for (long at = head; at != -1;)
+        foreach (long at in blocks)
         {
-            long next = Read(device, at).LogNext.Addr;
             Deallocate(at);
-            at = next;
         }
     }
 
@@ -168,14 +173,13 @@ internal sealed class Arena
     {
         if (which == 0)
         {
-            Blk h = Blk.New(BlockType.Arena, header, -1);
+            Blk h = Blk.New(BlockType.Arena, header, default);
             Span<byte> p = h.Data;
             BinaryPrimitives.WriteInt64BigEndian(p, LogHead);
             BinaryPrimitives.WriteInt64BigEndian(p[8..], Size);
-            BinaryPrimitives.WriteInt64BigEndian(p[16..], Used);
             h.Seal();
             packed = h.Buffer;
-            Pointer = new Bptr(header, h.Hash!.Value, -1);
+            Pointer = new Bptr(header, h.Hash!.Value, default);
         }
 
         device.Write(header + (which * B), packed);
@@ -198,7 +202,7 @@ internal sealed class Arena
 
     private static Blk NewLog(long at)
     {
-        Blk b = Blk.New(BlockType.Log, at, -1);
+        Blk b = Blk.New(BlockType.Log, at, default);
         b.LogNext = None;
         return b;
     }
@@ -207,8 +211,7 @@ internal sealed class Arena
     {
         var bytes = new byte[B];
         device.Read(at, bytes);
-        Blk b = Blk.Read(bytes, new Bptr(at, default, -1));
-        return b.Type == BlockType.Log ? b : throw new GefsException("internal error");
+        return Blk.Read(bytes, new Bptr(at, default, default));
     }
 
     private static Blk? ReadHeader(Device device, Bptr pointer)
@@ -217,14 +220,15 @@ internal sealed class Arena
         {
             var bytes = new byte[B];
             device.Read(pointer.Addr, bytes);
-            Blk h = Blk.Read(bytes, pointer);
-            return h.Type == BlockType.Arena ? h : null;
+            return Blk.Read(bytes, pointer);
         }
         catch (GefsException)
         {
             return null;
         }
     }
+
+    private static int Width(LogOp op) => op == LogOp.Free ? 16 : 8;
 
     private static IEnumerable<LogEntry> Entries(Blk b)
     {
@@ -235,11 +239,11 @@ internal sealed class Arena
             long offset = (long)(ent & ~0xffUL);
             yield return op switch
             {
-                LogOp.Alloc or LogOp.Free => new LogEntry(op, offset, BinaryPrimitives.ReadInt64BigEndian(b.Data[(i + 8)..])),
-                LogOp.Sync => new LogEntry(op, offset >> 8, 0),
+                LogOp.Free => new LogEntry(op, offset, BinaryPrimitives.ReadInt64BigEndian(b.Data[(i + 8)..])),
+                LogOp.Sync => new LogEntry(op, offset / 256, 0),
                 _ => new LogEntry(op, offset, B),
             };
-            i += op >= LogOp.Alloc ? 16 : 8;
+            i += Width(op);
         }
     }
 
@@ -247,45 +251,41 @@ internal sealed class Arena
     {
         Span<byte> p = b.Data[b.LogSize..];
         BinaryPrimitives.WriteUInt64BigEndian(p, (ulong)offset | (byte)op);
-        b.LogSize += 8;
-        if (op >= LogOp.Alloc)
+        if (op == LogOp.Free)
         {
             BinaryPrimitives.WriteInt64BigEndian(p[8..], length);
-            b.LogSize += 8;
         }
+
+        b.LogSize += Width(op);
     }
 
-    // logappend: when the block is nearly full, a block from the top of the arena continues the log,
-    // its allocation recorded as the old block's last entry.
+    // logappend: when an entry and the word chaining to the next block would not both fit, a block
+    // from the top of the arena continues the log, its allocation the old block's last entry. The old
+    // block is written then; the new one is the tail, written at the next sync.
     private void Append(long offset, long length, LogOp op)
     {
-        Blk? old = null;
-        if (tail.LogSize >= LogSpace - LogSlop)
+        if (op == LogOp.Free1 && length != B)
+        {
+            op = LogOp.Free;
+        }
+
+        if (tail.LogSize + Width(op) + 8 > LogSpace)
         {
             long o = Free.TakeHighest() ?? throw new GefsException("file system full");
             Used += B;
             Put(tail, o, B, LogOp.Alloc1);
-            tail.LogNext = new Bptr(o, default, -1);
-            (old, tail) = (tail, NewLog(o));
+            tail.LogNext = new Bptr(o, default, default);
+            Write(tail);
+            tail = NewLog(o);
             LogBlocks++;
         }
 
-        if (length == B)
-        {
-            op = op == LogOp.Alloc ? LogOp.Alloc1 : LogOp.Free1;
-        }
-
         Put(tail, offset, length, op);
-        if (old is not null)
-        {
-            Write(tail);
-            Write(old);
-        }
     }
 
     private void Replay(long syncGen)
     {
-        for (long at = LogHead; ;)
+        for (long at = LogHead; at != -1;)
         {
             Blk b = Read(device, at);
             LogBlocks++;
@@ -294,32 +294,27 @@ internal sealed class Arena
             {
                 switch (e.Op)
                 {
+                    // The log goes on after the committed barrier, which it keeps; gefs drops it, so
+                    // entries logged after a reopen would replay as if committed with it.
                     case LogOp.Sync when e.Offset >= syncGen:
-                        (b.LogSize, b.LogNext, tail) = (i, None, b);
+                        (b.LogSize, b.LogNext, tail) = (i + Width(e.Op), None, b);
                         return;
-                    case LogOp.Alloc1 or LogOp.Alloc:
+                    case LogOp.Alloc1:
                         Free.Take(e.Offset, e.Length);
                         break;
                     case LogOp.Free1 or LogOp.Free:
                         Free.Free(e.Offset, e.Length);
                         break;
-                    case LogOp.Sync:
-                        break;
-                    default:
-                        throw new GefsException("internal error");
                 }
 
-                i += e.Op >= LogOp.Alloc ? 16 : 8;
-            }
-
-            if (b.LogNext.Addr == -1)
-            {
-                tail = b;
-                return;
+                i += Width(e.Op);
             }
 
             at = b.LogNext.Addr;
         }
+
+        // A committed superblock's barrier is always written before it, so a log without one is damaged.
+        throw new GefsException("internal error");
     }
 
     private void Write(Blk b)

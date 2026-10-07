@@ -56,17 +56,20 @@ internal sealed class FreeRanges : IEnumerable<(long Offset, long Length)>
     }
 
     // blkalloc_lk: a block from the top of the last range, or from the bottom of the first.
-    public long? TakeHighest() => Take(ranges.Count == 0 ? null : ranges.Max, top: true);
+    public long? TakeHighest() => Take(ranges.Max, top: true);
 
-    public long? TakeLowest() => Take(ranges.Count == 0 ? null : ranges.Min, top: false);
+    public long? TakeLowest() => Take(ranges.Min, top: false);
 
     public IEnumerator<(long Offset, long Length)> GetEnumerator() => ranges.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    private long? Take((long Offset, long Length)? range, bool top)
+    // An empty set or view gives a range of no length.
+    private static (long Offset, long Length)? Found((long Offset, long Length) r) => r.Length > 0 ? r : null;
+
+    private long? Take((long Offset, long Length) r, bool top)
     {
-        if (range is not { } r)
+        if (Found(r) is null)
         {
             return null;
         }
@@ -76,10 +79,8 @@ internal sealed class FreeRanges : IEnumerable<(long Offset, long Length)>
         return block;
     }
 
-    // The range starting at or before offset, and the one starting after it.
-    private (long Offset, long Length)? Before(long offset)
-        => ranges.Count == 0 || ranges.Min.Offset > offset ? null : ranges.GetViewBetween(ranges.Min, (offset, 0)).Max;
+    // The range starting at or before offset, and the first starting at or after it.
+    private (long Offset, long Length)? Before(long offset) => Found(ranges.GetViewBetween((long.MinValue, 0), (offset, 0)).Max);
 
-    private (long Offset, long Length)? After(long offset)
-        => ranges.Count == 0 || ranges.Max.Offset <= offset ? null : ranges.GetViewBetween((offset + 1, 0), ranges.Max).Min;
+    private (long Offset, long Length)? After(long offset) => Found(ranges.GetViewBetween((offset, 0), (long.MaxValue, 0)).Min);
 }

@@ -28,10 +28,11 @@ internal sealed class Allocator : BlockStore
     // to a deadlist rather than back in an arena.
     public IReadOnlyList<Bptr> Killed => killed;
 
-    // ream's arenas: the first and last blocks kept for superblocks, the rest divided evenly.
+    // ream's arenas: the first and last blocks kept for superblocks, the rest divided evenly. A
+    // device is always a whole number of blocks.
     public static Allocator Ream(Device device, int arenas)
     {
-        long size = device.Size - (device.Size % B) - (2 * B);
+        long size = device.Size - (2 * B);
         long span = size / arenas;
         span -= span % B;
         if (span < 10 * B)
@@ -58,9 +59,10 @@ internal sealed class Allocator : BlockStore
 
     public void Reclaim()
     {
+        // Arenas are the same size and follow the first superblock.
         foreach (Bptr bp in pending)
         {
-            Arenas.First(a => bp.Addr >= a.Start && bp.Addr < a.Start + a.Size).Deallocate(bp.Addr);
+            Arenas[(int)((bp.Addr - B) / (Arenas[0].Size + (2 * B)))].Deallocate(bp.Addr);
         }
 
         pending.Clear();
@@ -72,7 +74,7 @@ internal sealed class Allocator : BlockStore
     // first headers but still match the second; a crash after leaves the new one, matching the first.
     public void Sync(long gen, bool compress, Action<IReadOnlyList<Bptr>> commit)
     {
-        long?[] old = [.. Arenas.Select(a => compress && a.LogBlocks >= 2 * a.CompressedBlocks ? a.Compress() : (long?)null)];
+        List<long>?[] old = [.. Arenas.Select(a => compress && a.LogBlocks >= 2 * a.CompressedBlocks ? a.Compress() : null)];
         foreach (Arena a in Arenas)
         {
             a.Barrier(gen);
@@ -91,9 +93,9 @@ internal sealed class Allocator : BlockStore
         device.Flush();
         for (int i = 0; i < old.Length; i++)
         {
-            if (old[i] is { } head)
+            if (old[i] is { } blocks)
             {
-                Arenas[i].FreeLog(head);
+                Arenas[i].FreeLog(blocks);
             }
         }
     }
@@ -102,10 +104,10 @@ internal sealed class Allocator : BlockStore
     // tried when one is full.
     protected override (long Address, long Gen) Allocate(BlockType type)
     {
-        long r = ++roundRobin / 2048;
-        for (int tries = 0; tries < Arenas.Count; tries++)
+        int first = (int)((++roundRobin / 2048) % Arenas.Count);
+        foreach (Arena a in Arenas.Skip(first).Concat(Arenas.Take(first)))
         {
-            if (Arenas[(int)((r + tries) % Arenas.Count)].Allocate(useReserve: UseReserve) is { } b)
+            if (a.Allocate(useReserve: UseReserve) is { } b)
             {
                 return (b, Gen);
             }

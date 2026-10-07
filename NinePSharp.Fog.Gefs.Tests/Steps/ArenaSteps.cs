@@ -12,7 +12,10 @@ public sealed class ArenaSteps : IDisposable
 
     private readonly Dictionary<long, Bptr[]> committed = [];
     private readonly Dictionary<long, List<HashSet<long>>> takenAt = [];
+    private readonly Dictionary<long, List<(long Offset, long Length)>> freeAt = [];
     private readonly Dictionary<byte[], byte[]> given = new(ByteArrayComparer.Instance);
+    private long lastGen;
+    private Bptr bornThere;
     private MemoryDevice? device;
     private Allocator? allocator;
     private FreeRanges? ranges;
@@ -35,7 +38,7 @@ public sealed class ArenaSteps : IDisposable
         }
     }
 
-    [Given(@"^a device of (\d+) blocks formatted with (\d+) arenas$")]
+    [Given(@"^a device of (\d+) blocks formatted with (\d+) arenas?$")]
     public void GivenFormatted(long blocks, int arenas)
     {
         device = new MemoryDevice(blocks);
@@ -294,7 +297,7 @@ public sealed class ArenaSteps : IDisposable
         Assert.Equal(message, Assert.Throws<GefsException>(() => tree.Lookup(given.Keys.First())).Message);
     }
 
-    [When(@"^a block born in generation (\d+) and a block born in generation (\d+) are allocated and freed$")]
+    [When(@"^a block born in generation (\d+) in each arena and a block born in generation (\d+) are allocated and freed$")]
     public void WhenBornAndFreed(long now, long before)
     {
         Blk current = allocator!.New(BlockType.Leaf);
@@ -304,14 +307,17 @@ public sealed class ArenaSteps : IDisposable
         allocator.Enqueue(current);
         allocator.Enqueue(older);
         (bornNow, bornBefore) = (current.Pointer, older.Pointer);
+        bornThere = new Bptr(allocator.Arenas[1].Allocate()!.Value, default, now);
         allocator.Free(bornNow);
+        allocator.Free(bornThere);
         allocator.Free(bornBefore);
     }
 
-    [Then(@"^neither is free yet, and the block born in generation (\d+) is reported for its deadlist$")]
-    public void ThenNeitherFree(long before)
+    [Then(@"^none is free yet, and the block born in generation (\d+) is reported for its deadlist$")]
+    public void ThenNoneFree(long before)
     {
         Assert.False(IsFree(bornNow.Addr));
+        Assert.False(IsFree(bornThere.Addr));
         Assert.False(IsFree(bornBefore.Addr));
         Assert.Equal([(bornBefore.Addr, before)], allocator!.Killed.Select(k => (k.Addr, k.Gen)));
     }
@@ -319,13 +325,83 @@ public sealed class ArenaSteps : IDisposable
     [When("the arenas reclaim")]
     public void WhenReclaim() => allocator!.Reclaim();
 
-    [Then(@"^the block born in generation (\d+) is free again and the block born in generation (\d+) is not$")]
+    [Then(@"^the blocks born in generation (\d+) are free again, each in its own arena, and the block born in generation (\d+) is not$")]
     public void ThenReclaimed(long now, long before)
     {
-        Assert.Equal((now, before), (bornNow.Gen, bornBefore.Gen));
-        Assert.True(IsFree(bornNow.Addr));
+        Assert.Equal((now, now, before), (bornNow.Gen, bornThere.Gen, bornBefore.Gen));
+        Assert.Contains(allocator!.Arenas[0].Free, r => r.Offset <= bornNow.Addr && bornNow.Addr < r.Offset + r.Length);
+        Assert.Contains(allocator.Arenas[1].Free, r => r.Offset <= bornThere.Addr && bornThere.Addr < r.Offset + r.Length);
         Assert.False(IsFree(bornBefore.Addr));
+        Assert.Equal((2 * B, B), (allocator.Arenas[0].Used, allocator.Arenas[1].Used));
     }
+
+    [Then(@"^the lowest free block is (\d+) and the highest (\d+)$")]
+    public void ThenLowestHighest(long lowest, long highest)
+        => Assert.Equal((lowest * B, highest * B), (ranges!.TakeLowest(), ranges.TakeHighest()));
+
+    [Then(@"^all of them came from arena (\d+), and the next comes from arena (\d+)$")]
+    public void ThenTurn(int first, int next)
+    {
+        Arena a = allocator!.Arenas[first];
+        Assert.All(gave, g => Assert.InRange(g, a.Start, a.Start + a.Size - 1));
+        Arena b = allocator.Arenas[next];
+        Assert.InRange(allocator.New(BlockType.Leaf).Address, b.Start, b.Start + b.Size - 1);
+    }
+
+    [When(@"^the arenas are reopened with generation (\d+)'s headers at generation (\d+)$")]
+    public void WhenReopenedAt(long headers, long gen) => Try(() => allocator = Allocator.Open(device!, committed[headers], gen));
+
+    [Then(@"^arena (\d+)'s log holds (\d+) entries$")]
+    public void ThenLogEntries(int arena, int count) => Assert.Equal(count, allocator!.Arenas[arena].ReadLog().Count());
+
+    [When(@"^arena (\d+)'s free space is left as (\d+) single blocks$")]
+    public void WhenSingles(int arena, int count)
+    {
+        Arena a = allocator!.Arenas[arena];
+        foreach (var (offset, length) in a.Free.ToList())
+        {
+            a.Free.Take(offset, length);
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            a.Free.Free(a.Start + B + (2 * i * B), B);
+        }
+    }
+
+    [When(@"^arena (\d+)'s log is compressed and the arenas sync generation (\d+)$")]
+    public void WhenCompressed(int arena, long gen)
+    {
+        Assert.NotNull(allocator!.Arenas[arena].Compress());
+        Sync(gen, false);
+    }
+
+    [Then(@"^arena (\d+)'s log is (\d+) blocks? long$")]
+    public void ThenLogBlocks(int arena, int blocks) => Assert.Equal(blocks, allocator!.Arenas[arena].LogBlocks);
+
+    [Then(@"^arena (\d+)'s free space is as it was$")]
+    public void ThenFreeAsWas(int arena)
+    {
+        Assert.Null(failure);
+        Assert.Equal(freeAt[lastGen], allocator!.Arenas[arena].Free.ToList());
+    }
+
+    [When(@"^the device's record is cleared and the arenas sync generation (\d+)$")]
+    public void WhenTraced(long gen)
+    {
+        device!.Trace.Clear();
+        Sync(gen, false);
+    }
+
+    [Then(@"^the device saw: (.*)$")]
+    public void ThenTrace(string events) => Assert.Equal(events.Split(", "), device!.Trace);
+
+    [Then(@"^reading half a block before its end fails with ""(.*)""$")]
+    public void ThenReadPastEnd(string message)
+        => Assert.Equal(message, Assert.Throws<GefsException>(() => file!.Read(file.Size - (B / 2), new byte[B])).Message);
+
+    [Then("it can be opened again afterwards")]
+    public void ThenOpenAgain() => File.Open(path!, FileMode.Open, FileAccess.ReadWrite, FileShare.None).Dispose();
 
     [When(@"^(\d+) tree blocks are allocated$")]
     public void WhenTreeBlocks(int count) => gave = [.. Enumerable.Range(0, count).Select(_ => allocator!.New(BlockType.Leaf).Address)];
@@ -412,7 +488,6 @@ public sealed class ArenaSteps : IDisposable
     {
         LogOp.Alloc1 => $"take {e.Offset / B}",
         LogOp.Free1 => $"free {e.Offset / B}",
-        LogOp.Alloc => $"take {e.Offset / B}-{((e.Offset + e.Length) / B) - 1}",
         LogOp.Free => $"free {e.Offset / B}-{((e.Offset + e.Length) / B) - 1}",
         _ => $"barrier {e.Offset}",
     })];
@@ -436,7 +511,9 @@ public sealed class ArenaSteps : IDisposable
     private void Remember(long gen, Bptr[] pointers)
     {
         committed[gen] = pointers;
+        lastGen = gen;
         takenAt[gen] = [.. allocator!.Arenas.Select(Taken)];
+        freeAt[gen] = [.. allocator.Arenas[0].Free];
         formatHeader ??= [.. pointers.Select(p => device!.Block(p.Addr / B))];
     }
 

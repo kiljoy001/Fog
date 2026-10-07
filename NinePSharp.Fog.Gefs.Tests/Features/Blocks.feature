@@ -173,9 +173,9 @@ Feature: Blocks are laid out, searched, sealed and read as 9front's gefs does
   @FOG_GEFS_106
   Scenario: A log may use all of its block's space after its header, and no more
     Given a new allocation log chained to block 81920 of generation 4
-    When it is given 16300 bytes of log and sealed at address 98304 in generation 5
-    Then reading its bytes gives an allocation log of 16300 bytes chained to block 81920 of generation 4
-    And reading it with its header claiming 16301 bytes fails with "block contents corrupted"
+    When it is given 16296 bytes of log and sealed at address 98304 in generation 5
+    Then reading its bytes gives an allocation log of 16296 bytes chained to block 81920 of generation 4
+    And reading it with its header claiming 16297 bytes fails with "block contents corrupted"
 
   @FOG_GEFS_107
   Scenario: A copied block holds the same entries at its new address, unsealed
