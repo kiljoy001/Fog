@@ -321,7 +321,9 @@ public sealed class DispatcherLifecycleTests
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> oldVersion = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
         await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        FogSession session = Session(dispatcher, "probe");
         Task close = dispatcher.CloseSessionWithinAsync("probe");
+        await ClosedAsync(session, fixture);
         Assert.IsType<Rversion>(await Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000"))));
 
         finish.SetResult();
@@ -355,7 +357,9 @@ public sealed class DispatcherLifecycleTests
         Task<object> write = Send(NinePMessage.NewMsgTwrite(new Twrite(4, 2, 0, new byte[] { 1 })));
         Task<object> version = Send(NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 256, "9P2000")));
         await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        FogSession session = Session(dispatcher, "probe");
         Task close = dispatcher.CloseSessionWithinAsync("probe");
+        await ClosedAsync(session, fixture);
 
         finish.SetResult();
         Error("interrupted", await write.WaitAsync(TimeSpan.FromSeconds(10)));
@@ -475,10 +479,7 @@ public sealed class DispatcherLifecycleTests
 
     private static CancellationTokenSource PendingCancellation(FogNinePDispatcher dispatcher, string sessionId, ushort tag)
     {
-        var sessions = (System.Collections.IDictionary)typeof(FogNinePDispatcher)
-            .GetField("sessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .GetValue(dispatcher)!;
-        object session = sessions[sessionId]!;
+        FogSession session = Session(dispatcher, sessionId);
         var pending = (System.Collections.IDictionary)session.GetType()
             .GetField("pending", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(session)!;
@@ -486,6 +487,22 @@ public sealed class DispatcherLifecycleTests
         return (CancellationTokenSource)operation.GetType()
             .GetProperty("Cancellation", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(operation)!;
+    }
+
+    private static FogSession Session(FogNinePDispatcher dispatcher, string sessionId)
+    {
+        var sessions = (Dictionary<string, FogSession>)typeof(FogNinePDispatcher)
+            .GetField("sessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(dispatcher)!;
+        return sessions[sessionId];
+    }
+
+    // A session is handed requests in order, so one sent after the close is answered after it: its
+    // "not-ready" shows the close has taken effect, whatever the session's channel would serve next.
+    private static async Task ClosedAsync(FogSession session, ControlFixture fixture)
+    {
+        NinePMessage probe = NinePMessage.NewMsgTstat(new Tstat(50, 1));
+        Error("not-ready", await session.SendAsync(probe, FogNinePDispatcher.Payload(probe)!, fixture.NodeCertificate).WaitAsync(Bounded.Wait));
     }
 
     private static async Task Initialize(Func<NinePMessage, Task<object>> send)

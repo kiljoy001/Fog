@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- The NinePSharp packages Fog builds on. -->
-    <NinePSharpVersion>0.2.0</NinePSharpVersion>
+    <NinePSharpVersion>0.2.1</NinePSharpVersion>
     <BuildInParallel Condition="'$(BuildInParallel)' == ''">false</BuildInParallel>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
