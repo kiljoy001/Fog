@@ -18,12 +18,7 @@ internal sealed class ControlFixture : IDisposable
 
     internal ControlFixture(FogNinePLimits? limits = null)
     {
-        Policy = new FogNodePolicy(
-            1,
-            [
-            new("worker", new string('1', 64), FogNodePolicy.SpkiPin(NodeCertificate), "worker.test"),
-            new("other", new string('2', 64), FogNodePolicy.SpkiPin(OtherCertificate), "other.test"),
-        ]);
+        Policy = NewPolicy();
         Store = new FogTransactionStore(new(4, 2, 4096, 4096, 32768, 3, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2)), Policy.IsCurrentOwner, Time);
         var service = new FogTransactionService(
             "fixture",
@@ -103,6 +98,14 @@ internal sealed class ControlFixture : IDisposable
         _ = await Send(NinePMessage.NewMsgTversion(new Tversion(65535, 4096, "9P2000")), session);
         _ = await Send(NinePMessage.NewMsgTattach(new Tattach(NextTag(), 1, NinePConstants.NoFid, "worker", "runtime")), session);
     }
+
+    // The fixture's enrolled nodes, in a policy of its own; a policy holds a lock, so Coyote iterations each need one.
+    internal FogNodePolicy NewPolicy() => new(
+        1,
+        [
+        new("worker", new string('1', 64), FogNodePolicy.SpkiPin(NodeCertificate), "worker.test"),
+        new("other", new string('2', 64), FogNodePolicy.SpkiPin(OtherCertificate), "other.test"),
+    ]);
 
     internal ushort NextTag() => tag++;
 

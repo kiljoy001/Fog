@@ -322,7 +322,7 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
                     return behaviour == WriteBehaviour.Never ? new TaskCompletionSource<uint>().Task : release.Task;
                 }),
             };
-            Dispatcher = new FogNinePDispatcher(tree, fixture.Policy, fixture.Limits with { Drain = drain }, fixture.Time, Logger);
+            Dispatcher = new FogNinePDispatcher(tree, fixture.NewPolicy(), fixture.Limits with { Drain = drain }, fixture.Time, Logger);
         }
 
         internal RecordingLogger Logger { get; } = new();
