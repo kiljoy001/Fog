@@ -195,6 +195,41 @@ Orleans's membership table belongs on the same file server, or directly in the c
 state; which suits Orleans's membership protocol better is decided when it is designed. Either
 way it outlives any one machine, which a table owned by a single control host cannot.
 
+### Testing storage and replication
+
+Each layer is tested on its own and then on top of the one below, on the gate like the
+interop and Coyote stages.
+
+- **The tree on a device file.** The tree's scenarios run against a block store on a real
+  device file as well as in memory. A crash injected at each write boundary, then a reopen,
+  must leave the file system exactly at its last committed root, with nothing half-written
+  visible. Bytes flipped on disk must make a read refuse the block. A port of gefs's
+  `check.c` ends every such test: no leaked, unreachable or doubly freed blocks.
+- **The file system through 9P.** The 9front interop stage mounts the file server and runs rc
+  workloads: copies, `mk` builds, removes, appends, renames and wstats. The same script run on
+  a fresh 9front gefs and on Fog must leave the same listings, modes, sizes and contents,
+  except where Fog departs from gefs on purpose and the script says so.
+- **Replicas.**
+  - A test cluster of storage machines with the consensus port writes through 9P. Every
+    replica must reach a byte-identical device file and report the same committed root for
+    each file system.
+  - Fault tests:
+    - Kill the writer mid-commit, and check the handover continues from the last agreed root.
+    - Restart a replica that fell behind, and check it catches up.
+    - Add a machine, and check it fetches a recent root's blocks by hash instead of
+      replaying history.
+    - Delete or corrupt blocks on one machine, and check they are repaired from peers.
+    - Partition the cluster, and check it never commits two roots for one generation.
+    - Propose a root whose blocks no 2f+1 machines hold, and check it never commits.
+- **Interleavings.** Coyote explores the consensus port's interleavings, Byzantine and crashed
+  validators included, as it does libthread's and the dispatcher's.
+- **Load and soak.** A load stage drives 9P traffic at the cluster for hours. Then every replica
+  is checked and their roots compared; slow leaks like gefs's own unfreed siblings appear only
+  over time.
+
+The block store therefore needs a way to inject a crash at each write boundary. A commit also
+needs a single point where the root changes, so a test can stop just before and just after it.
+
 ## Getting in
 
 A user reaches the cluster as they would a 9front machine: rc through stock `rcpu` or
