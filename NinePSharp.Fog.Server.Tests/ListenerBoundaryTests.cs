@@ -5,7 +5,9 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging.Abstractions;
+using NinePSharp.Constants;
 using NinePSharp.Fog.Server;
+using NinePSharp.Messages;
 using Xunit;
 
 namespace NinePSharp.Fog.Server.Tests;
@@ -323,8 +325,13 @@ public sealed class ListenerBoundaryTests
         }
 
         // TLS 1.3 lets the client finish first; the server's rejection then arrives as an alert or a close.
+        // A Tversion makes a server that accepted the node answer at once, so neither outcome waits.
         try
         {
+            var version = new Tversion(NinePConstants.NoTag, 8192, "9P2000");
+            var bytes = new byte[version.Size];
+            version.WriteTo(bytes);
+            await tls.WriteAsync(bytes, cancellation);
             return await tls.ReadAsync(new byte[1], cancellation) == 0;
         }
         catch (Exception exception) when (exception is System.Security.Authentication.AuthenticationException or IOException)

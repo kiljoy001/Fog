@@ -14,7 +14,11 @@ namespace NinePSharp.Fog.Rc.Tests.Steps;
 public sealed class RcExecutionSteps
 {
     private const string Script = "/tmp/s";
+    private const int MaxOutput = 1 << 20;
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(3);
+
+    // Each read is bounded, and so is the whole run, so an rc that keeps printing fails the scenario too.
+    private static readonly TimeSpan RunBound = TimeSpan.FromSeconds(10);
     private Process? init;
     private string script = string.Empty;
     private string output = string.Empty;
@@ -128,21 +132,24 @@ public sealed class RcExecutionSteps
         await init.CloseAsync(write);
 
         // A zero-length write reads as empty, so the output ends where the hung-up pipe refuses reads.
+        using var run = new CancellationTokenSource(RunBound);
         var bytes = new List<byte>();
-        while (await ReadAsync(read) is { } block)
+        while (await ReadAsync(read, run.Token) is { } block)
         {
             bytes.AddRange(block.ToArray());
+            Assert.True(bytes.Count <= MaxOutput, "rc printed more than any scenario expects");
         }
 
         await init.WaitAsync().WaitAsync(Bound);
+
         output = Encoding.UTF8.GetString(bytes.ToArray());
     }
 
-    private async Task<ReadOnlyMemory<byte>?> ReadAsync(int fd)
+    private async Task<ReadOnlyMemory<byte>?> ReadAsync(int fd, CancellationToken run)
     {
         try
         {
-            return await init!.ReadAsync(fd, 8192).AsTask().WaitAsync(Bound);
+            return await init!.ReadAsync(fd, 8192).AsTask().WaitAsync(Bound, run);
         }
         catch (SyscallException)
         {

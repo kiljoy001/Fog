@@ -340,5 +340,11 @@
     "mutator": "Arithmetic mutation",
     "line": "int within = (int)(at % BlockSize);",
     "reason": "an offset past the block gives a count of nothing or less, so the block loop never advances"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Negate expression",
+    "line": "if (LastWord)",
+    "reason": "a caret is inserted before every word without reading it, so the lexer returns carets forever"
   }
 ]

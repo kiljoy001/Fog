@@ -15,6 +15,6 @@
       "break": 100
     },
     "concurrency": 4,
-    "coverage-analysis": "off"
+    "coverage-analysis": "perTestInIsolation"
   }
 }
