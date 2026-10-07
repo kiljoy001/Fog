@@ -32,6 +32,8 @@ internal sealed class Blk
     // The hash of the sealed block; none until it is sealed.
     public BlockHash? Hash { get; private set; }
 
+    public Bptr Pointer => new(Address, Hash ?? default, Gen);
+
     public byte[] Buffer { get; } = new byte[Format.BlockSize];
 
     public Span<byte> Data => Buffer.AsSpan(dataOffset);
@@ -205,6 +207,15 @@ internal sealed class Blk
         BinaryPrimitives.WriteUInt16BigEndian(p[(3 + m.Key.Length)..], (ushort)m.Value.Length);
         m.Value.CopyTo(p[(5 + m.Key.Length)..]);
         MessageCount++;
+    }
+
+    // fastupsert's shuffle: the i'th buffered message's offset moved to slot at, those between moving up.
+    public void MoveMessage(int i, int at)
+    {
+        Span<byte> table = Data[PivotSpace..];
+        ushort offset = BinaryPrimitives.ReadUInt16BigEndian(table[(2 * i)..]);
+        table[(2 * at)..(2 * i)].CopyTo(table[((2 * at) + 2)..]);
+        BinaryPrimitives.WriteUInt16BigEndian(table[(2 * at)..], offset);
     }
 
     public Message GetMessage(int i)

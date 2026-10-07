@@ -7,6 +7,7 @@ internal static class Format
     public const int BlockSize = 1 << BlockShift;
     public const int MaxEntry = 256;
     public const int MaxName = MaxEntry - 1 - 9 - 1;
+    public const int MaxInline = 512;
     public const int HashSize = 32;
     public const int PointerSize = 8 + HashSize + 8;
     public const int DirSize = 8 + 8 + 4 + 1 + 4 + 8 + 8 + 8 + 4 + 4 + 4;
@@ -14,6 +15,10 @@ internal static class Format
     public const int PivotHeaderSize = 10;
     public const int BufferSpace = (BlockSize - PivotHeaderSize) / 2;
     public const int MaxArenas = 256;
+
+    // Msgmax: an op and the larger of a key with an inline value or a key with a block pointer.
+    public const int MaxMessage = 1 + (MaxEntry + MaxInline > MaxEntry + PointerSize ? MaxEntry + MaxInline : MaxEntry + PointerSize);
+    public const int MaxHeight = 32;
 
     // Not "gefs9.00": the pointers differ, so 9front's gefs must not open a Fog store, nor Fog a gefs one.
     public static ReadOnlySpan<byte> Version => "fogfs001"u8;
