@@ -346,5 +346,11 @@
     "mutator": "Negate expression",
     "line": "if (LastWord)",
     "reason": "a caret is inserted before every word without reading it, so the lexer returns carets forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Equality mutation",
+    "line": "if (future == EndOfFile)",
+    "reason": "NextCAsync reads only when it already holds a character, so rc sees end of file forever without Eof"
   }
 ]
