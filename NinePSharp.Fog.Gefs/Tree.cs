@@ -51,6 +51,13 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             sz += MessageSize(m);
         }
 
+        // A batch that would not fit an empty buffer could split a leaf root, merge it back and go
+        // round forever.
+        if ((2 * msg.Length) + sz > Blk.BufferSpace)
+        {
+            throw new GefsException("upsert too large");
+        }
+
         int npull = 0;
         bool degen;
         do
@@ -62,7 +69,9 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
 
             Blk b = store.Get(bp);
-            if (npull == 0 && b.Type == BlockType.Pivot && b.ValueCount > 1 && !b.BufferFull(msg.Length, sz))
+
+            // A root is left with one child only partway through an upsert, after it has pulled messages.
+            if (npull == 0 && b.Type == BlockType.Pivot && !b.BufferFull(msg.Length, sz))
             {
                 FastUpsert(b, msg);
                 return;
@@ -79,7 +88,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
                 npath++;
             }
 
-            path[npath++] = new Path { B = b, Idx = -1, Lo = -1 };
+            path[npath++] = new Path { B = b };
             Path rp = Flush(path, npath);
             if (rp.Left is { } rb)
             {
@@ -189,23 +198,19 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
     private static Message At(Path p, int i) => p.Ins is { } ins ? ins[i] : p.B!.GetMessage(i);
 
-    // pullmsg: the i'th message of p's range, compared with a key, unless it would not fit in spc.
-    private static int PullMessage(Path p, int i, byte[]? key, out Message m, ref bool full, int spc)
+    // pullmsg: the i'th message of p's range, unless the range is spent or the message would not fit
+    // in spc, after which nothing more is pulled.
+    private static bool Pull(Path p, int i, out Message m, ref bool full, int spc)
     {
         m = default;
         if (i >= p.Hi || full)
         {
-            return -1;
+            return false;
         }
 
         m = At(p, i);
-        if (MessageSize(m) <= spc)
-        {
-            return key is null ? 0 : Keys.Compare(key, m.Key);
-        }
-
-        full = true;
-        return -1;
+        full = MessageSize(m) > spc;
+        return !full;
     }
 
     // victim: the child whose messages take the most of the buffer.
@@ -255,9 +260,9 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
 
             var (key, value) = b.GetValue(0);
-            if (b.MessageCount > 0 && Keys.Compare(key, b.GetMessage(0).Key) > 0)
+            if (b.MessageCount > 0)
             {
-                key = b.GetMessage(0).Key;
+                key = new[] { key, b.GetMessage(0).Key }.Min(KeyOrder)!;
             }
 
             n.SetPointer(key, b.Pointer, b.Fill);
@@ -270,11 +275,6 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     // splitidx: the first buffered message of l and r at or after key.
     private static int SplitIndex(Blk l, Blk r, byte[] key, int idx)
     {
-        if (l.Type == BlockType.Leaf)
-        {
-            return idx;
-        }
-
         int i = idx;
         for (; i < l.MessageCount + r.MessageCount; i++)
         {
@@ -368,7 +368,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     // updateleaf's and splitleaf's copy loop: the messages that follow for the same key apply to it.
     private byte[]? Absorb(Path up, Path p, ref int j, ref bool full, int spc, byte[] key, byte[]? value)
     {
-        while (PullMessage(up, j, key, out Message m, ref full, spc) == 0)
+        while (Pull(up, j, out Message m, ref full, spc) && Keys.Compare(key, m.Key) == 0)
         {
             if (value is not null)
             {
@@ -485,7 +485,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         while (k < kept.Count)
         {
             Message m = kept[k];
-            if (PullMessage(up, j, m.Key, out Message u, ref full, spc - sz) <= 0)
+            if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)
             {
                 n.SetMessage(m);
                 k++;
@@ -493,7 +493,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
 
             byte[] key = u.Key;
-            while (PullMessage(up, j, key, out u, ref full, spc) == 0)
+            while (Pull(up, j, out u, ref full, spc) && Keys.Compare(key, u.Key) == 0)
             {
                 n.SetMessage(u);
                 sz = MessageSize(u);
@@ -503,14 +503,8 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
         }
 
-        while (j < up.Hi)
+        while (Pull(up, j, out Message u, ref full, spc))
         {
-            PullMessage(up, j, null, out Message u, ref full, spc);
-            if (full)
-            {
-                break;
-            }
-
             n.SetMessage(u);
             sz = MessageSize(u);
             p.PullSize += sz;
@@ -534,7 +528,10 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         int j = up.Lo;
         int copied = 0;
         bool full = false;
-        int halfsz = Math.Min(((2 * b.ValueCount) + b.ValueSize + up.Size) / 2, Blk.LeafSpace / 2);
+
+        // gefs takes the lesser of this and half the leaf with its messages, but a leaf only splits when
+        // those overflow a block, so the two differ at a single byte count.
+        int halfsz = Blk.LeafSpace / 2;
         int spc = Blk.LeafSpace - (halfsz + Format.MaxMessage);
         while (i < b.ValueCount)
         {
@@ -545,7 +542,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
 
             var (key, value) = b.GetValue(i);
-            int c = PullMessage(up, j, key, out Message m, ref full, spc);
+            int c = Pull(up, j, out Message m, ref full, spc) ? Keys.Compare(key, m.Key) : -1;
             byte[]? kept;
             if (c < 0)
             {
@@ -590,14 +587,16 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         int halfsz = ((2 * b.ValueCount) + b.ValueSize) / 2;
         for (int i = 0; i < b.ValueCount; i++)
         {
-            if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))
+            // Unlike a leaf, a pivot only splits when nearly full, so half its size is always reached
+            // with more than two pointers on each side.
+            if (d == l && copied >= halfsz)
             {
                 d = r;
             }
 
-            if (i == p.Idx)
+            if (pp is not null && i == p.Idx)
             {
-                copied += CopyUp(d, pp!);
+                copied += CopyUp(d, pp);
                 continue;
             }
 
@@ -635,14 +634,11 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
         }
 
-        if (a.Type == BlockType.Pivot)
+        foreach (Blk s in (Blk[])[a, b])
         {
-            foreach (Blk s in (Blk[])[a, b])
+            for (int i = 0; i < s.MessageCount; i++)
             {
-                for (int i = 0; i < s.MessageCount; i++)
-                {
-                    d.SetMessage(s.GetMessage(i));
-                }
+                d.SetMessage(s.GetMessage(i));
             }
         }
 
@@ -679,23 +675,20 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             }
         }
 
-        if (a.Type == BlockType.Pivot)
+        d = l;
+        int o = 0;
+        foreach (Blk s in (Blk[])[a, b])
         {
-            d = l;
-            int o = 0;
-            foreach (Blk s in (Blk[])[a, b])
+            for (int i = 0; i < s.MessageCount; i++)
             {
-                for (int i = 0; i < s.MessageCount; i++)
+                if (o == sp)
                 {
-                    if (o == sp)
-                    {
-                        d = r;
-                        o = 0;
-                    }
-
-                    d.SetMessage(s.GetMessage(i));
-                    o++;
+                    d = r;
+                    o = 0;
                 }
+
+                d.SetMessage(s.GetMessage(i));
+                o++;
             }
         }
 
@@ -707,11 +700,10 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
     private bool RotateOrMerge(Path p, Path pp, int idx, Blk a, Blk b)
     {
+        // gefs also checks the two buffers fit one, but trybalance only gets here when both blocks do.
         int na = (2 * a.ValueCount) + a.ValueSize;
         int nb = (2 * b.ValueCount) + b.ValueSize;
-        int ma = (2 * a.MessageCount) + a.MessageSize;
-        int mb = (2 * b.MessageCount) + b.MessageSize;
-        if (na + nb < Blk.PivotSpace - (4 * Format.MaxMessage) && ma + mb < Blk.BufferSpace)
+        if (na + nb < Blk.PivotSpace - (4 * Format.MaxMessage))
         {
             Merge(p, pp, idx, a, b);
             return true;
@@ -800,7 +792,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
                 // A root merged down to one child that took its whole buffer gives way to that child.
                 if (at == 1 && pp?.Left is not null && pp.Right is null && pp.Npull == p.B.MessageCount
-                    && ((pp.Op == PathOp.Merge && p.B.ValueCount == 2) || (pp.Op == PathOp.Mod && p.B.ValueCount == 1)))
+                    && (p.B.ValueCount == 1 || (pp.Op == PathOp.Merge && p.B.ValueCount == 2)))
                 {
                     pp.Npull = p.Npull;
                     return pp;

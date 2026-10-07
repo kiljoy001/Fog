@@ -18,11 +18,6 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
     // btenter: down from the root to the first key at or after the scan's place.
     public void Enter(Tree t)
     {
-        if (done)
-        {
-            return;
-        }
-
         store = t.Store;
         var (bp, height) = t.GetRoot();
         path = new Level[height];

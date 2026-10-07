@@ -34,45 +34,40 @@ public sealed class TreeSteps
     }
 
     [Given(@"^a tree 2 high whose root points at a leaf of keys (\d+) to (\d+) and a leaf of keys (\d+) to (\d+)$")]
-    public void GivenTwoLeaves(int a, int b, int c, int d)
+    public void GivenTwoLeaves(int a, int b, int c, int d) => GivenLeaves($"{a} to {b} and {c} to {d}");
+
+    [Given(@"^a tree 2 high whose root points at leaves of keys ((?:(?!holding).)*)$")]
+    public void GivenLeaves(string leaves) => GivenSmallValue(leaves, -1, 0);
+
+    [Given(@"^a tree 2 high whose root points at leaves of keys (.*), key (\d+) holding a (\d+)-byte value$")]
+    public void GivenSmallValue(string leaves, int small, int size)
     {
         store = new MemoryStore();
-        Blk root = store.New(BlockType.Pivot);
-        foreach (var (first, last) in new[] { (a, b), (c, d) })
-        {
-            Blk leaf = store.New(BlockType.Leaf);
-            for (int n = first; n <= last; n++)
-            {
-                byte[] value = NextValue();
-                leaf.SetValue(Key(n), value);
-                Remember(Key(n), value);
-            }
-
-            store.Enqueue(leaf);
-            root.SetPointer(Key(first), leaf.Pointer, leaf.Fill);
-        }
-
-        store.Enqueue(root);
-        tree = new Tree(store, root.Pointer, 2);
+        tree = new Tree(store, Pivot(Items(leaves).Select(l => Leaf(Numbers(l), small, size)), []).Pointer, 2);
     }
 
-    [Given(@"^its root buffers (.*)$")]
-    public void GivenRootBuffers(string messages)
+    [Given(@"^a tree 2 high whose root points at (\d+) one-entry leaves for keys (\d+) to (\d+)$")]
+    public void GivenOneEntryLeaves(int count, int first, int last)
     {
-        Blk old = store.Get(tree!.Root);
-        Blk root = store.Duplicate(old);
-        foreach (string item in Items(messages))
-        {
-            string[] words = item.Split(' ');
-            Message m = Parse(words[1], Key(int.Parse(words[^1])));
-            root.SetMessage(m);
-            Apply(m);
-        }
-
-        store.Enqueue(root);
-        store.Free(old.Pointer);
-        tree = new Tree(store, root.Pointer, 2);
+        store = new MemoryStore();
+        tree = new Tree(store, Pivot(Enumerable.Range(first, count).Select(n => Leaf([n], -1, 0)), []).Pointer, 2);
+        Assert.Equal(last, first + count - 1);
     }
+
+    [Given(@"^a tree 3 high whose root points at a pivot over one-entry leaves for keys (\d+) to (\d+) and a pivot over one-entry leaves for keys (\d+) to (\d+), the second buffering (\d+)-byte inserts of keys (.*)$")]
+    public void GivenTwoPivots(int a, int b, int c, int d, int size, string buffered)
+    {
+        store = new MemoryStore();
+        var first = Pivot(Enumerable.Range(a, b - a + 1).Select(n => Leaf([n], -1, 0)), []);
+        var second = Pivot(Enumerable.Range(c, d - c + 1).Select(n => Leaf([n], -1, 0)), Inserts(size, buffered));
+        tree = new Tree(store, Pivot([first, second], []).Pointer, 3);
+    }
+
+    [Given(@"^its root buffers (\d+)-byte inserts of keys (.*)$")]
+    public void GivenRootBuffersInserts(int size, string keys) => Buffer(Inserts(size, keys));
+
+    [Given(@"^its root buffers (an? .*)$")]
+    public void GivenRootBuffers(string messages) => Buffer([.. Items(messages).Select(item => item.Split(' ')).Select(words => Parse(words[1], Key(int.Parse(words[^1]))))]);
 
     [Given(@"^a leaf root recorded as (\d+) high$")]
     public void GivenTallLeaf(int height)
@@ -106,6 +101,15 @@ public sealed class TreeSteps
     [When(@"^keys? (.*) (?:is|are) inserted in one upsert$")]
     public void WhenInsertedTogether(string keys)
         => Upsert([.. Numbers(keys).Select(n => new Message(MessageOp.Insert, Key(n), NextValue()))]);
+
+    [When(@"^keys (.*) are inserted one at a time, key (\d+) with a (\d+)-byte value$")]
+    public void WhenInsertedEachSmall(string keys, int small, int size)
+    {
+        foreach (int n in Numbers(keys))
+        {
+            Upsert(new Message(MessageOp.Insert, Key(n), n == small ? new byte[size] : NextValue()));
+        }
+    }
 
     [When(@"^key (\d+) is inserted$")]
     public void WhenInserted(int n) => Upsert(new Message(MessageOp.Insert, Key(n), NextValue()));
@@ -320,6 +324,29 @@ public sealed class TreeSteps
             Enumerable.Range(0, root.MessageCount).Select(i => Hex(root.GetMessage(i).Key)));
     }
 
+    [Then(@"^its root points at leaves of (.*)$")]
+    public void ThenRootLeaves(string leaves)
+    {
+        Assert.Equal(
+            Items(leaves).Select(item => item.Split(' ')).Select(words => (Hex(Key(int.Parse(words[^1]))), BlockType.Leaf, int.Parse(words[0]))),
+            Children().Select(c => (Hex(c.Key), store.Get(c.Child).Type, store.Get(c.Child).ValueCount)));
+    }
+
+    [Then(@"^its root points at pivots of (\d+) pointers from key (\d+) and (\d+) pointers from key (\d+)$")]
+    public void ThenRootPivots(int left, int leftKey, int right, int rightKey)
+    {
+        Assert.Equal(
+            [(Hex(Key(leftKey)), BlockType.Pivot, left), (Hex(Key(rightKey)), BlockType.Pivot, right)],
+            Children().Select(c => (Hex(c.Key), store.Get(c.Child).Type, store.Get(c.Child).ValueCount)));
+    }
+
+    [Then(@"^the pivot from key (\d+) buffers messages for keys? (.*)$")]
+    public void ThenPivotBuffers(int key, string keys)
+    {
+        Blk pivot = store.Get(Children().Single(c => Hex(c.Key) == Hex(Key(key))).Child);
+        Assert.Equal(Numbers(keys).Select(n => Hex(Key(n))), Enumerable.Range(0, pivot.MessageCount).Select(i => Hex(pivot.GetMessage(i).Key)));
+    }
+
     [Then("only the root was rewritten, and only the old root was freed")]
     public void ThenOnlyRoot()
     {
@@ -348,6 +375,9 @@ public sealed class TreeSteps
 
     [Then(@"^looking up key (\d+) fails with ""(.*)""$")]
     public void ThenLookupFails(int n, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => tree!.Lookup(Key(n))).Message);
+
+    [Then(@"^scanning the whole tree fails with ""(.*)""$")]
+    public void ThenScanFails(string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => ScanAll([0x10])).Message);
 
     [Then("a scan of the whole tree gives nothing")]
     public void ThenScanNothing() => Assert.Empty(ScanAll([0x10]));
@@ -424,10 +454,11 @@ public sealed class TreeSteps
     {
         foreach (string item in Items(text))
         {
-            string[] range = item.Split(" to ");
+            int step = item.EndsWith(" by twos", StringComparison.Ordinal) ? 2 : 1;
+            string[] range = item.Replace(" by twos", string.Empty, StringComparison.Ordinal).Split(" to ");
             int first = int.Parse(range[0]);
             int last = int.Parse(range[^1]);
-            for (int n = first; n <= last; n++)
+            for (int n = first; n <= last; n += step)
             {
                 yield return n;
             }
@@ -436,6 +467,63 @@ public sealed class TreeSteps
 
     private static string Hex(byte[] bytes) => Convert.ToHexString(bytes);
 
+    private void Buffer(List<Message> messages)
+    {
+        Blk old = store.Get(tree!.Root);
+        Blk root = store.Duplicate(old);
+        foreach (Message m in messages)
+        {
+            root.SetMessage(m);
+            Apply(m);
+        }
+
+        store.Enqueue(root);
+        store.Free(old.Pointer);
+        tree = new Tree(store, root.Pointer, tree.Height);
+    }
+
+    private List<Message> Inserts(int size, string keys)
+        => [.. Numbers(keys).Select(n => new Message(MessageOp.Insert, Key(n), Sized(size)))];
+
+    private byte[] Sized(int size)
+    {
+        var value = new byte[size];
+        BinaryPrimitives.WriteInt32BigEndian(value, ++version);
+        return value;
+    }
+
+    private (byte[] Key, Bptr Pointer, int Fill) Leaf(IEnumerable<int> keys, int small, int size)
+    {
+        Blk leaf = store.New(BlockType.Leaf);
+        foreach (int n in keys)
+        {
+            byte[] value = n == small ? new byte[size] : NextValue();
+            leaf.SetValue(Key(n), value);
+            Remember(Key(n), value);
+        }
+
+        store.Enqueue(leaf);
+        return (leaf.GetValue(0).Key, leaf.Pointer, leaf.Fill);
+    }
+
+    private (byte[] Key, Bptr Pointer, int Fill) Pivot(IEnumerable<(byte[] Key, Bptr Pointer, int Fill)> children, List<Message> buffered)
+    {
+        Blk pivot = store.New(BlockType.Pivot);
+        foreach (var (key, pointer, fill) in children)
+        {
+            pivot.SetPointer(key, pointer, fill);
+        }
+
+        foreach (Message m in buffered)
+        {
+            pivot.SetMessage(m);
+            Apply(m);
+        }
+
+        store.Enqueue(pivot);
+        return (pivot.GetValue(0).Key, pivot.Pointer, pivot.Fill);
+    }
+
     private byte[] Pointer(string block)
     {
         var value = new byte[Format.PointerSize];
@@ -443,12 +531,7 @@ public sealed class TreeSteps
         return value;
     }
 
-    private byte[] NextValue()
-    {
-        var value = new byte[500];
-        BinaryPrimitives.WriteInt32BigEndian(value, ++version);
-        return value;
-    }
+    private byte[] NextValue() => Sized(500);
 
     private void Upsert(params Message[] messages)
     {
