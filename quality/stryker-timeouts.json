@@ -622,5 +622,41 @@
     "mutator": "Block removal mutation",
     "line": "&& (p.B.ValueCount == 1 || (pp.Op == PathOp.Merge && p.B.ValueCount == 2))) {",
     "reason": "the root never gives way to its only child, so the upsert retries forever"
+  },
+  {
+    "file": "Blk.cs",
+    "mutator": "Equality mutation",
+    "line": "public bool LeafFull(int needed) => (2 * (ValueCount + 1)) + ValueSize + needed > LeafSpace;",
+    "reason": "every leaf with room counts as full, so upserts split leaves forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
+    "line": "if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)",
+    "reason": "once the parent's next message does not fit, updatepiv stops advancing through its own messages and loops forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "reason": "the split never moves to its right half, or does so before it has taken anything, so the leaf it leaves is as full as before and the upsert splits it forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "reason": "the split never moves to its right half, or does so before it has taken anything, so the leaf it leaves is as full as before and the upsert splits it forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "reason": "the split never moves to its right half, or does so before it has taken anything, so the leaf it leaves is as full as before and the upsert splits it forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
+    "line": "if (!p.B.LeafFull(path[at - 1].Size))",
+    "reason": "leaves are split when they have room and rewritten when they do not, so upserts never settle"
   }
 ]
