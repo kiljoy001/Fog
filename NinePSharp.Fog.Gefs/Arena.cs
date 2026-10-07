@@ -70,7 +70,7 @@ internal sealed class Arena
     // up to the barrier of the generation the superblock committed.
     public static Arena Load(Device device, Bptr pointer, long syncGen)
     {
-        Blk h = ReadHeader(device, pointer) ?? ReadHeader(device, pointer with { Addr = pointer.Addr + B }) ?? throw new GefsException("internal error");
+        Blk h = ReadHeader(device, pointer);
         ReadOnlySpan<byte> p = h.Data;
         long logHead = BinaryPrimitives.ReadInt64BigEndian(p);
         var a = new Arena(device, pointer.Addr, BinaryPrimitives.ReadInt64BigEndian(p[8..]), NewLog(logHead)) { Pointer = pointer, LogHead = logHead };
@@ -207,25 +207,33 @@ internal sealed class Arena
         return b;
     }
 
-    private static Blk Read(Device device, long at)
-    {
-        var bytes = new byte[B];
-        device.Read(at, bytes);
-        return Blk.Read(bytes, new Bptr(at, default, default));
-    }
+    private static Blk Read(Device device, long at) => ReadBlock(device, new Bptr(at, default, default));
 
-    private static Blk? ReadHeader(Device device, Bptr pointer)
+    // The first header, or its twin when the first is damaged or stale.
+    private static Blk ReadHeader(Device device, Bptr pointer)
     {
         try
         {
-            var bytes = new byte[B];
-            device.Read(pointer.Addr, bytes);
-            return Blk.Read(bytes, pointer);
+            return ReadBlock(device, pointer);
         }
         catch (GefsException)
         {
-            return null;
+            try
+            {
+                return ReadBlock(device, pointer with { Addr = pointer.Addr + B });
+            }
+            catch (GefsException)
+            {
+                throw new GefsException("internal error");
+            }
         }
+    }
+
+    private static Blk ReadBlock(Device device, Bptr pointer)
+    {
+        var bytes = new byte[B];
+        device.Read(pointer.Addr, bytes);
+        return Blk.Read(bytes, pointer);
     }
 
     private static int Width(LogOp op) => op == LogOp.Free ? 16 : 8;
@@ -264,11 +272,6 @@ internal sealed class Arena
     // block is written then; the new one is the tail, written at the next sync.
     private void Append(long offset, long length, LogOp op)
     {
-        if (op == LogOp.Free1 && length != B)
-        {
-            op = LogOp.Free;
-        }
-
         if (tail.LogSize + Width(op) + 8 > LogSpace)
         {
             long o = Free.TakeHighest() ?? throw new GefsException("file system full");

@@ -113,6 +113,13 @@ Feature: Arenas divide a device's blocks and log every allocation, after 9front'
     When 2047 tree blocks are allocated
     Then all of them came from arena 0, and the next comes from arena 1
 
+  @FOG_GEFS_303
+  Scenario: When the arena whose turn it is has only its reserve left, tree blocks come from another
+    Given a device of 4200 blocks formatted with 2 arenas
+    When 2047 tree blocks are allocated
+    And arena 1 allocates all but its reserve
+    Then the next tree block comes from arena 0
+
   @FOG_GEFS_304
   Scenario Outline: Reopening an arena replays its log up to the barrier of the committed generation
     Given a device of 134 blocks formatted with 2 arenas

@@ -348,6 +348,21 @@ public sealed class ArenaSteps : IDisposable
         Assert.InRange(allocator.New(BlockType.Leaf).Address, b.Start, b.Start + b.Size - 1);
     }
 
+    [When(@"^arena (\d+) allocates all but its reserve$")]
+    public void WhenAllButReserve(int arena)
+    {
+        while (allocator!.Arenas[arena].Allocate() is not null)
+        {
+        }
+    }
+
+    [Then(@"^the next tree block comes from arena (\d+)$")]
+    public void ThenNextFrom(int arena)
+    {
+        Arena a = allocator!.Arenas[arena];
+        Assert.InRange(allocator.New(BlockType.Leaf).Address, a.Start, a.Start + a.Size - 1);
+    }
+
     [When(@"^the arenas are reopened with generation (\d+)'s headers at generation (\d+)$")]
     public void WhenReopenedAt(long headers, long gen) => Try(() => allocator = Allocator.Open(device!, committed[headers], gen));
 

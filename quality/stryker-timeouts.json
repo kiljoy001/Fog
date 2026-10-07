@@ -658,5 +658,17 @@
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "line": "if (!p.B.LeafFull(path[at - 1].Size))",
     "reason": "leaves are split when they have room and rewritten when they do not, so upserts never settle"
+  },
+  {
+    "file": "Arena.cs",
+    "mutator": "Statement mutation",
+    "line": "blocks.Add(Free.TakeLowest()!.Value);",
+    "reason": "compression takes blocks for the log without keeping them, so it never has enough and loops forever"
+  },
+  {
+    "file": "FileDevice.cs",
+    "mutator": "Statement mutation",
+    "line": "throw new GefsException(\"i/o error\");",
+    "reason": "a read past the end gets no bytes and goes round forever"
   }
 ]
