@@ -48,6 +48,13 @@ Feature: A store commits all of its state at once by writing its superblocks, af
     Then the next qid is 4
     And a block allocated now is born in generation 3
 
+  @FOG_GEFS_402
+  Scenario: Commits compress allocation logs that have doubled
+    Given a device of 400 blocks reamed with 2 arenas
+    When key 1 is updated 1100 times, the store committing after every 100
+    Then each arena's log is 1 block long
+    And every block of the device is in its root tree, in a log or free
+
   @FOG_GEFS_403
   Scenario Outline: Opening falls back to the backup superblock when the first is unusable
     Given a device of 400 blocks reamed with 2 arenas

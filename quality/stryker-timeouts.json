@@ -670,5 +670,11 @@
     "mutator": "Statement mutation",
     "line": "throw new GefsException(\"i/o error\");",
     "reason": "a read past the end gets no bytes and goes round forever"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Statement mutation",
+    "line": "path[^1].Vi++;",
+    "reason": "a scan never moves past the leaf value it gave, so it gives the same key forever"
   }
 ]

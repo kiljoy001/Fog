@@ -98,6 +98,22 @@ public sealed class StoreSteps
         }
     }
 
+    [When(@"^key (\d+) is updated (\d+) times, the store committing after every (\d+)$")]
+    public void WhenUpdated(int n, int times, int every)
+    {
+        for (int i = 1; i <= times; i++)
+        {
+            WhenInserted($"{n} to {n}");
+            if (i % every == 0)
+            {
+                Commit();
+            }
+        }
+    }
+
+    [Then("each arena's log is 1 block long")]
+    public void ThenLogsCompressed() => Assert.All(store!.Allocator.Arenas, a => Assert.Single(a.LogAddresses()));
+
     [When(@"^keys (.*) are inserted and keys (.*) deleted$")]
     public void WhenInsertedAndDeleted(string inserted, string deleted)
     {
