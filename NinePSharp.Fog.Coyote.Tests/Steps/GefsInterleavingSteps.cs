@@ -36,7 +36,7 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
         var (device, server) = Ream();
         server.Snap("main", "work", true);
         GefsFs[] trees = [server.Attach("main"), server.Attach("work")];
-        Task[] tasks = [.. Enumerable.Range(0, 4).Select(i => Task.Run(() => Write(trees[i / 2], $"f{i}", $"file {i}", create: true))), Task.Run(server.Sync)];
+        Task[] tasks = [.. Enumerable.Range(0, 4).Select(i => Task.Run(() => WriteAsync(trees[i / 2], $"f{i}", $"file {i}", create: true))), Task.Run(server.Sync)];
         await Task.WhenAll(tasks);
         server.Dispose();
 
@@ -44,11 +44,11 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
         foreach (var (label, first) in new[] { ("main", 0), ("work", 2) })
         {
             GefsFs fs = reopened.Attach(label);
-            string[] names = [.. Run(fs.ReadDirectoryAsync(fs.Root, default)).Select(e => e.Name)];
-            Specification.Assert(names.SequenceEqual([$"f{first}", $"f{first + 1}"]), $"{label} holds {string.Join(", ", names)}");
+            string[] names = (await fs.ReadDirectoryAsync(fs.Root, default)).Select(e => e.Name).ToArray();
+            Specification.Assert(names.SequenceEqual(new[] { $"f{first}", $"f{first + 1}" }), $"{label} holds {string.Join(", ", names)}");
             for (int i = first; i < first + 2; i++)
             {
-                string text = Read(fs, $"f{i}");
+                string text = await ReadAsync(fs, $"f{i}");
                 Specification.Assert(text == $"file {i}", $"{label}'s f{i} holds \"{text}\"");
             }
         }
@@ -71,14 +71,14 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     {
         var (device, server) = Ream();
         GefsFs main = server.Attach("main");
-        Write(main, "notes", "first", create: true);
+        await WriteAsync(main, "notes", "first", create: true);
         server.Sync();
-        await Task.WhenAll(Task.Run(() => Write(main, "notes", "secnd", create: false)), Task.Run(() => server.Snap("main", "monday", false)), Task.Run(server.Sync));
+        await Task.WhenAll(Task.Run(() => WriteAsync(main, "notes", "secnd", create: false)), Task.Run(() => server.Snap("main", "monday", false)), Task.Run(server.Sync));
         server.Dispose();
 
         using GefsServer reopened = Reopen(device, out Store store);
-        string before = Read(reopened.Attach("monday"), "notes");
-        string after = Read(reopened.Attach("main"), "notes");
+        string before = await ReadAsync(reopened.Attach("monday"), "notes");
+        string after = await ReadAsync(reopened.Attach("main"), "notes");
         Specification.Assert(before is "first" or "secnd", $"monday's notes hold \"{before}\"");
         Specification.Assert(after == "secnd", $"main's notes hold \"{after}\"");
         Accounting.Check(store);
@@ -103,25 +103,31 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
         return new GefsServer(device, store, (user, group) => user == group, clock);
     }
 
-    private static T Run<T>(ValueTask<T> operation) => operation.AsTask().GetAwaiter().GetResult();
-
-    private static void Run(ValueTask operation) => operation.AsTask().GetAwaiter().GetResult();
-
-    private string Read(GefsFs fs, string name)
+    // Coyote rewrites awaits of the file server's value tasks, but not other uses of them.
+    private async Task<string> ReadAsync(GefsFs fs, string name)
     {
-        ResourceOpenHandle open = Run(fs.OpenAsync(Run(fs.WalkAsync(fs.Root, name, default))!, NinePConstants.OREAD, Context(), default));
-        string text = Encoding.ASCII.GetString(Run(fs.ReadAsync(open, 0, 100, default)).Span);
-        Run(fs.ClunkAsync(open, Context(), default));
-        return text;
+        ResourceHandle file = (await fs.WalkAsync(fs.Root, name, default))!;
+        ResourceOpenHandle open = await fs.OpenAsync(file, NinePConstants.OREAD, Context(), default);
+        ReadOnlyMemory<byte> data = await fs.ReadAsync(open, 0, 100, default);
+        await fs.ClunkAsync(open, Context(), default);
+        return Encoding.ASCII.GetString(data.Span);
     }
 
-    private void Write(GefsFs fs, string name, string text, bool create)
+    private async Task WriteAsync(GefsFs fs, string name, string text, bool create)
     {
-        ResourceOpenHandle open = create
-            ? Run(fs.CreateAndOpenAsync(fs.Root, name, 0b110_100_100, NinePConstants.OWRITE, Context(), default))
-            : Run(fs.OpenAsync(Run(fs.WalkAsync(fs.Root, name, default))!, NinePConstants.OWRITE, Context(), default));
-        Run(fs.WriteAsync(open, 0, Encoding.ASCII.GetBytes(text), Context(), default));
-        Run(fs.ClunkAsync(open, Context(), default));
+        ResourceOpenHandle open;
+        if (create)
+        {
+            open = await fs.CreateAndOpenAsync(fs.Root, name, 0b110_100_100, NinePConstants.OWRITE, Context(), default);
+        }
+        else
+        {
+            ResourceHandle file = (await fs.WalkAsync(fs.Root, name, default))!;
+            open = await fs.OpenAsync(file, NinePConstants.OWRITE, Context(), default);
+        }
+
+        await fs.WriteAsync(open, 0, Encoding.ASCII.GetBytes(text), Context(), default);
+        await fs.ClunkAsync(open, Context(), default);
     }
 
     private ResourceOperationContext Context() => new(new ResourceOperationId("coyote", Interlocked.Increment(ref sequence)), 1, "adm");
