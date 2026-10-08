@@ -682,5 +682,11 @@
     "mutator": "Statement mutation",
     "line": "path[i - 1].Vi++;",
     "reason": "a scan drops an exhausted level without moving the level above on, so it reloads the same block forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Conditional (false) mutation",
+    "line": "int dh = path[0].Left is not null ? 1 : path[1].Left is not null ? 0 : -1;",
+    "reason": "a split that makes a new root no longer adds a level, so the recorded height falls short of the tree and an upsert walking it never finishes"
   }
 ]
