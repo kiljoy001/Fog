@@ -335,6 +335,20 @@ public sealed class ArenaSteps : IDisposable
         Assert.Equal((2 * B, B), (allocator.Arenas[0].Used, allocator.Arenas[1].Used));
     }
 
+    [Then("the block born in generation 4 is free, and no longer reported")]
+    public void ThenKilledReleased()
+    {
+        Assert.True(IsFree(bornBefore.Addr));
+        Assert.Empty(allocator!.Killed);
+    }
+
+    [Then(@"^arena (\d+)'s log ends: (.*)$")]
+    public void ThenLogEnds(int arena, string entries)
+    {
+        string[] expected = entries.Split(", ");
+        Assert.Equal(expected, Log(allocator!.Arenas[arena]).TakeLast(expected.Length));
+    }
+
     [Then(@"^the lowest free block is (\d+) and the highest (\d+)$")]
     public void ThenLowestHighest(long lowest, long highest)
         => Assert.Equal((lowest * B, highest * B), (ranges!.TakeLowest(), ranges.TakeHighest()));

@@ -191,15 +191,15 @@ Feature: Arenas divide a device's blocks and log every allocation, after 9front'
     And arena 0 has blocks 3 and 65 taken
 
   @FOG_GEFS_306
-  Scenario: Compressing a log rewrites it as the arena's free ranges, and frees the old log only after the sync
+  Scenario: Compressing a log rewrites it as the arena's free ranges, and frees the old log once the sync has committed
     Given a device of 134 blocks formatted with 2 arenas
     When arena 0 allocates and frees a block 1100 times
     And arena 0 allocates 3 blocks
     And the arenas sync generation 1, compressing logs that have doubled
-    Then arena 0's log is 1 block long and reads: free 5-62, barrier 1, free 3, free 65
+    Then arena 0's log is 1 block long and reads: free 5-62, free 3, free 65, barrier 1
     And arena 0 has blocks 4, 63-64 and 66 taken and counts 4 blocks used
     When the arenas are reopened at generation 1
-    Then arena 0 has blocks 3-4 and 63-66 taken
+    Then arena 0 has blocks 4, 63-64 and 66 taken
 
   @FOG_GEFS_306
   Scenario: A log is compressed only once it has doubled since it was last compressed
@@ -272,6 +272,9 @@ Feature: Arenas divide a device's blocks and log every allocation, after 9front'
     Then the blocks born in generation 5 are free again, each in its own arena, and the block born in generation 4 is not
     When the arenas reclaim
     Then arena 0 counts 2 blocks used
+    When the arenas sync generation 5
+    Then the block born in generation 4 is free, and no longer reported
+    And arena 0's log ends: free 66, free 65, barrier 5
 
   @FOG_GEFS_308
   Scenario: Allocation moves to the next arena when one is full, and the device fills

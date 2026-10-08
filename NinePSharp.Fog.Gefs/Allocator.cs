@@ -59,22 +59,38 @@ internal sealed class Allocator : BlockStore
 
     public void Reclaim()
     {
-        // Arenas are the same size and follow the first superblock.
         foreach (Bptr bp in pending)
         {
-            Arenas[(int)((bp.Addr - B) / (Arenas[0].Size + (2 * B)))].Deallocate(bp.Addr);
+            ArenaOf(bp.Addr).Deallocate(bp.Addr);
         }
 
         pending.Clear();
     }
 
-    // sync's part for the arenas. Each log ends with a barrier for the generation and is written,
-    // then the first headers; commit then writes the superblock naming them, and after it the second
+    // sync's part for the arenas. The frees of blocks the previous root used, and of logs replaced by
+    // compression, are logged; each log ends with a barrier for the generation and is written, then
+    // the first headers; commit then writes the superblock naming them, and after it the second
     // headers. A crash before commit leaves the old superblock, whose hashes no longer match the
     // first headers but still match the second; a crash after leaves the new one, matching the first.
+    // Only then are the freed blocks reused.
     public void Sync(long gen, bool compress, Action<IReadOnlyList<Bptr>> commit)
     {
-        List<long>?[] old = [.. Arenas.Select(a => compress && a.LogBlocks >= 2 * a.CompressedBlocks ? a.Compress() : null)];
+        var retired = new List<long>();
+        foreach (Arena a in Arenas)
+        {
+            if (compress && a.LogBlocks >= 2 * a.CompressedBlocks && a.Compress() is { } old)
+            {
+                retired.AddRange(old);
+            }
+        }
+
+        retired.AddRange(killed.Select(k => k.Addr));
+        killed.Clear();
+        foreach (long b in retired)
+        {
+            ArenaOf(b).Retire(b);
+        }
+
         foreach (Arena a in Arenas)
         {
             a.Barrier(gen);
@@ -91,12 +107,9 @@ internal sealed class Allocator : BlockStore
         }
 
         device.Flush();
-        for (int i = 0; i < old.Length; i++)
+        foreach (long b in retired)
         {
-            if (old[i] is { } blocks)
-            {
-                Arenas[i].FreeLog(blocks);
-            }
+            ArenaOf(b).Release(b);
         }
     }
 
@@ -117,4 +130,7 @@ internal sealed class Allocator : BlockStore
     }
 
     protected override void Write(Blk b) => device.Write(b.Address, b.Buffer);
+
+    // Arenas are the same size and follow the first superblock.
+    private Arena ArenaOf(long address) => Arenas[(int)((address - B) / (Arenas[0].Size + (2 * B)))];
 }

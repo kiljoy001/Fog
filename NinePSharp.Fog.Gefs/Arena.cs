@@ -98,7 +98,18 @@ internal sealed class Arena
     // blkdealloc_lk
     public void Deallocate(long b)
     {
-        Append(b, B, LogOp.Free1);
+        Retire(b);
+        Release(b);
+    }
+
+    // A block the generation being committed no longer uses, though the previous root may: its free
+    // is logged before the barrier, so replay at that generation frees it, but it is not reused until
+    // the commit is durable. gefs logs such frees after the barrier, and a crash before the next sync
+    // leaks the block.
+    public void Retire(long b) => Append(b, B, LogOp.Free1);
+
+    public void Release(long b)
+    {
         Free.Free(b, B);
         Used -= B;
     }
@@ -128,7 +139,7 @@ internal sealed class Arena
         }
 
         Used += blocks.Count * B;
-        Blk oldTail = tail;
+        var old = LogAddresses().ToList();
         var ranges = Free.ToList();
         for (int k = 0; k < blocks.Count; k++)
         {
@@ -149,22 +160,15 @@ internal sealed class Arena
             }
         }
 
-        var old = new List<long>();
-        for (long at = LogHead; at != -1; at = (at == oldTail.Address ? oldTail : Read(device, at)).LogNext.Addr)
-        {
-            old.Add(at);
-        }
-
         (LogHead, LogBlocks, CompressedBlocks) = (blocks[0], blocks.Count, blocks.Count);
         return old;
     }
 
-    // The blocks of a log no longer named by any committed header.
-    public void FreeLog(List<long> blocks)
+    public IEnumerable<long> LogAddresses()
     {
-        foreach (long at in blocks)
+        for (long at = LogHead; at != -1; at = (at == tail.Address ? tail : Read(device, at)).LogNext.Addr)
         {
-            Deallocate(at);
+            yield return at;
         }
     }
 
