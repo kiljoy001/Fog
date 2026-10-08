@@ -40,6 +40,16 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     And walking .. from glenda gives the root
 
   @FOG_GEFS_602
+  Scenario Outline: An entry created for no user belongs to the tree's owner, with all the permission its directory gives
+    When the server creates <kind> x in the root
+    Then x is a <kind> "x" owned by adm in group adm, mode <got>, version 0, modified at 100
+
+    Examples:
+      | kind      | got   |
+      | file      | 0664  |
+      | directory | d0775 |
+
+  @FOG_GEFS_602
   Scenario Outline: A created entry has no more permission than its directory gives
     When adm creates directory lib in the root with mode <dir> at time 200
     And adm creates <kind> x in lib with mode <asked> at time 300
@@ -200,6 +210,8 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | 0754 | adm   | adm   | glenda | run   | fails with "permission denied" |
       | 0750 | adm   | dev   | bob    | run   | succeeds                       |
       | 0644 | adm   | adm   | glenda | read with truncation | fails with "permission denied" |
+      | 0644 | adm   | adm   | glenda | read and write       | fails with "permission denied" |
+      | 0640 | adm   | adm   | adm    | read and write       | succeeds                       |
 
   @FOG_GEFS_607
   Scenario: A directory opens only to read

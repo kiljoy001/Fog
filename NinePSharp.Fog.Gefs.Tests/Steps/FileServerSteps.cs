@@ -90,6 +90,10 @@ public sealed class FileServerSteps(StoreContext context)
         Create(user, Resolve(path), name, Mode(mode) | (kind == "directory" ? Directory : 0));
     }
 
+    [When(@"^the server creates (file|directory) (\S+) in the root$")]
+    public void WhenServerCreates(string kind, string name)
+        => fs!.CreateAsync(fs.Root, name, kind == "directory", default).AsTask().GetAwaiter().GetResult();
+
     [When(@"^(\w+) creates files (.+) in (.+) with mode (\d+) at time (\d+)$")]
     public void WhenCreatesMany(string user, string names, string path, string mode, long time)
     {
@@ -184,7 +188,7 @@ public sealed class FileServerSteps(StoreContext context)
         WStat(Resolve(path), user, ResourceWStat.Unchanged() with { Mode = Mode(mode), Group = group, User = owner });
     }
 
-    [Then(@"^(\w+) opening (.+) to (read|write|run|read with truncation) (succeeds|fails with "".*"")$")]
+    [Then(@"^(\w+) opening (.+) to (read|write|run|read with truncation|read and write) (succeeds|fails with "".*"")$")]
     public void ThenOpening(string user, string path, string how, string result)
     {
         byte mode = how switch
@@ -192,6 +196,7 @@ public sealed class FileServerSteps(StoreContext context)
             "read" => NinePConstants.OREAD,
             "write" => NinePConstants.OWRITE,
             "run" => NinePConstants.OEXEC,
+            "read and write" => NinePConstants.ORDWR,
             _ => NinePConstants.OREAD | NinePConstants.OTRUNC,
         };
         if (result == "succeeds")
