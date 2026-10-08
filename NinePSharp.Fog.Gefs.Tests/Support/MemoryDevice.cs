@@ -7,6 +7,7 @@ internal sealed class MemoryDevice(long blocks) : Device
     private readonly Dictionary<long, byte[]> written = [];
     private readonly Dictionary<long, byte[]> cached = [];
     private int? writesLeft;
+    private bool failing;
 
     public override long Size => blocks * Format.BlockSize;
 
@@ -27,6 +28,11 @@ internal sealed class MemoryDevice(long blocks) : Device
     public override void Write(long offset, ReadOnlySpan<byte> block)
     {
         Trace.Add("write");
+        if (failing)
+        {
+            throw new IOException("device write failed");
+        }
+
         if (writesLeft is 0)
         {
             cached[offset] = block.ToArray();
@@ -40,6 +46,8 @@ internal sealed class MemoryDevice(long blocks) : Device
     public override void Flush() => Trace.Add("flush");
 
     public void CrashAfter(int writes) => writesLeft = writes;
+
+    public void FailWrites() => failing = true;
 
     public void Restart()
     {

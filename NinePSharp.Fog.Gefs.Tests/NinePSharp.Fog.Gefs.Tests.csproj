@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="coverlet.msbuild" Version="6.0.4" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Reqnroll.xUnit" Version="2.1.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -18,5 +19,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../NinePSharp.Fog.Gefs/NinePSharp.Fog.Gefs.csproj" />
+    <ProjectReference Include="../NinePSharp.Fog.Kernel/NinePSharp.Fog.Kernel.csproj" />
   </ItemGroup>
 </Project>

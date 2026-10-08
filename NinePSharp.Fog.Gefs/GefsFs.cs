@@ -7,7 +7,7 @@ namespace NinePSharp.Fog.Gefs;
 // fs.c: a tree a label names, served as files. A directory entry lives under its parent's qid and
 // its name; unlike gefs, every entry also keeps the key of its directory entry under its own qid,
 // so a handle alone finds it. A file's data lives in blocks under its qid and offset.
-internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
+public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 {
     private const long B = Format.BlockSize;
     private const int Read = 4;
@@ -24,7 +24,6 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // Each upsert carries at most this many block changes, well within an empty buffer.
     private const int Batch = 64;
 
-    private readonly object gate = new();
     private readonly Store store;
     private readonly Tree tree;
     private readonly string device;
@@ -34,7 +33,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     private readonly HashSet<long> exclusive = [];
 
     // inGroup says whether a user is in a group; every user is in the group of its own name.
-    public GefsFs(Store store, string label, string device, Func<string, string, bool> inGroup, TimeProvider clock)
+    internal GefsFs(Store store, string label, string device, Func<string, string, bool> inGroup, TimeProvider clock)
     {
         this.store = store;
         this.device = device;
@@ -48,7 +47,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     {
         get
         {
-            lock (gate)
+            lock (store.Gate)
             {
                 return Handle(Find(0).Dir);
             }
@@ -57,9 +56,12 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     private long Now => Store.Nanoseconds(clock);
 
+    // A snapshot's tree, or a store whose commit failed, takes no changes.
+    private bool ReadOnly => tree.ReadOnly || store.Broken;
+
     public ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             long qid = Qid(directory);
             if (name == "..")
@@ -74,7 +76,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     public ValueTask<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             Scan scan = Under(KeyType.Entry, Qid(directory));
             var entries = new List<ResourceDirectoryEntry>();
@@ -90,7 +92,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             return ValueTask.FromResult(Handle(Create(Qid(directory), name, directoryEntry ? Directory | 0b111_111_111 : 0b110_110_110, owner)));
         }
@@ -99,7 +101,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // fscreate: refused as gefs refuses, then an entry owned by its creator in the directory's group.
     public ValueTask<ResourceOpenHandle> CreateAndOpenAsync(ResourceHandle directory, string name, uint permissions, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             Dir d;
             try
@@ -124,7 +126,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // with truncation empties the file. An exclusive file opens once at a time.
     public ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             var (key, d) = Find(Qid(resource));
             int bits = Bits(mode);
@@ -155,6 +157,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
             if ((mode & NinePConstants.OTRUNC) != 0 && (d.Mode & Append) == 0)
             {
+                Writable();
                 Change(key, Clear(d.Qid.Path, 0), new WstatChange(Length: 0, Muid: context.User));
                 d = Find(d.Qid.Path).Dir;
             }
@@ -166,7 +169,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // readfile: up to the file's end, holes as zeros.
     public ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             Dir d = Find(Qid(openHandle.Resource)).Dir;
             var reply = new byte[(int)Math.Min(count, (ulong)d.Length - Math.Min(offset, (ulong)d.Length))];
@@ -191,13 +194,14 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // block it replaces; then the length, modification time and last modifier.
     public ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             if ((Bits(openHandle.Mode) & Write) == 0)
             {
                 throw new IOException("resource in use");
             }
 
+            Writable();
             var (key, d) = Find(Qid(openHandle.Resource));
             long start = (d.Mode & Append) != 0 ? d.Length : (long)offset;
             var changes = new List<Message>();
@@ -229,7 +233,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     public ValueTask<ResourceStat> StatAsync(ResourceHandle resource, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             Dir d = Find(Qid(resource)).Dir;
             return ValueTask.FromResult(new ResourceStat(Handle(d), d.Name.Length == 0 ? "/" : d.Name, d.Mode, Seconds(d.Atime), Seconds(d.Mtime), (ulong)d.Length, d.User, d.Group, d.Muid));
@@ -239,7 +243,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // A file opened to be removed on close goes now; it was checked when it was opened.
     public ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             long qid = Qid(openHandle.Resource);
             exclusive.Remove(qid);
@@ -255,7 +259,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // fsremove: an empty directory or a file, by a user who may write its directory; not the root.
     public ValueTask RemoveAsync(ResourceHandle resource, ResourceOpenHandle? openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             var found = Find(Qid(resource));
             CanRemove(found.Dir, context.User);
@@ -271,7 +275,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // names nothing asks for a sync, and commits the store.
     public ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (gate)
+        lock (store.Gate)
         {
             var (key, d) = Find(Qid(resource));
             string user = context.User;
@@ -336,7 +340,11 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
             if (stat.Name.Length == 0 && stat.Length == ulong.MaxValue && stat.Mode == uint.MaxValue && stat.ModificationTime == uint.MaxValue && stat.User.Length == 0 && stat.Group.Length == 0)
             {
-                store.Commit();
+                if (!store.Broken)
+                {
+                    store.Commit();
+                }
+
                 return ValueTask.FromResult(stat.EncodedLength);
             }
 
@@ -364,6 +372,11 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             if (group is not null && !permitted && !(user == d.User && inGroup(user, group)) && !(inGroup(user, d.Group) && inGroup(user, group)))
             {
                 throw Refused("wstat -- not in group");
+            }
+
+            if (ReadOnly)
+            {
+                throw Refused("file system read only");
             }
 
             var change = new WstatChange(length, mode, mtime, null, owner, group, user);
@@ -435,6 +448,14 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         return Grants(d.Mode, bits, 0);
     }
 
+    private void Writable()
+    {
+        if (ReadOnly)
+        {
+            throw new IOException("file system read only");
+        }
+    }
+
     private ResourceHandle Handle(Dir d) => new(new ResourceIdentity("gefs", device, (ulong)d.Qid.Path), (QidType)d.Qid.Type, d.Qid.Version);
 
     // An entry by its qid, through the key its Kup holds.
@@ -459,6 +480,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     private Dir Create(long parent, string name, uint permissions, string user)
     {
+        Writable();
         if (NameError(name) is { } error)
         {
             throw new IOException(error);
@@ -522,6 +544,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     private void Remove((byte[] Key, Dir Dir) found)
     {
+        Writable();
         long qid = found.Dir.Qid.Path;
         long parent = Parent(qid);
         var changes = Clear(qid, 0);

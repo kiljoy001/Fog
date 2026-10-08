@@ -34,16 +34,20 @@ public sealed class FogKernel
         return new FogKernel(programs, files, files.Root, user);
     }
 
+    // The root may hold what an earlier boot left: its directories are kept, and each program's file
+    // is written again.
     public async Task<Process> BootAsync()
     {
-        ResourceHandle bin = await Files.CreateAsync(root, "bin", true, CancellationToken.None);
-        await Files.CreateAsync(root, "tmp", true, CancellationToken.None);
-        ResourceHandle env = await Files.CreateAsync(root, "env", true, CancellationToken.None);
-        ResourceHandle fd = await Files.CreateAsync(root, "fd", true, CancellationToken.None);
-        ResourceHandle dev = await Files.CreateAsync(root, "dev", true, CancellationToken.None);
+        ResourceHandle bin = await DirectoryAsync("bin");
+        await DirectoryAsync("tmp");
+        ResourceHandle env = await DirectoryAsync("env");
+        ResourceHandle fd = await DirectoryAsync("fd");
+        ResourceHandle dev = await DirectoryAsync("dev");
         foreach (string name in programs.Keys)
         {
-            ResourceOpenHandle program = await Files.CreateAndOpenAsync(bin, name, 0b111_111_101, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
+            ResourceOpenHandle program = await Files.WalkAsync(bin, name, CancellationToken.None) is { } installed
+                ? await Files.OpenAsync(installed, NinePConstants.OWRITE | NinePConstants.OTRUNC, Context(0, User), CancellationToken.None)
+                : await Files.CreateAndOpenAsync(bin, name, 0b111_111_101, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
             await Files.WriteAsync(program, 0, Encoding.UTF8.GetBytes($"\0fog {name}\n"), Context(0, User), CancellationToken.None);
             await Files.ClunkAsync(program, Context(0, User), CancellationToken.None);
         }
@@ -62,4 +66,7 @@ public sealed class FogKernel
 
     internal ResourceOperationContext Context(long pid, string user)
         => new(new ResourceOperationId(session, (ulong)Interlocked.Increment(ref sequence)), pid, user);
+
+    private async Task<ResourceHandle> DirectoryAsync(string name)
+        => await Files.WalkAsync(root, name, CancellationToken.None) ?? await Files.CreateAsync(root, name, true, CancellationToken.None);
 }

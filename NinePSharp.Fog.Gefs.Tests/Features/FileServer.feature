@@ -139,7 +139,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
   Scenario: A write is read back, and sets the length, modification time and last modifier
     When adm creates file notes in the root with mode 0666 at time 200
     And adm writes "hello, world" to notes at offset 0 at time 300
-    And adm creates file other in the root with mode 0666 at time 200
+    And adm creates file other in the root with mode 0666 at time 300
     And adm writes "other" to other at offset 0 at time 300
     Then reading 100 bytes of notes at offset 0 gives "hello, world"
     And reading 100 bytes of notes at offset 7 gives "world"

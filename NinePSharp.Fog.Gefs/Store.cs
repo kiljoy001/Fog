@@ -45,6 +45,15 @@ internal sealed class Store : IDeadlists
 
     public long NextQid { get; private set; }
 
+    // The one writer: every tree served from the store changes it under this lock.
+    public Lock Gate { get; } = new();
+
+    // Whether anything changed since the last commit.
+    public bool Changed => Snaps.Dirty || mounts.Values.Any(m => m.Tree.Dirty);
+
+    // A commit failed, so the store is read only from then on, as gefs's rdonly.
+    public bool Broken { get; private set; }
+
     // Deadlists with blocks not yet written; a commit writes them all.
     public int OpenDeadlists => deadlists.Count;
 
@@ -197,24 +206,38 @@ internal sealed class Store : IDeadlists
     // arenas commit it by having both superblocks written between their first and second headers.
     public void Commit()
     {
-        foreach (Mounted m in mounts.Values.Where(m => m.Tree.Dirty).ToList())
+        if (Broken)
         {
-            Update(m);
+            throw new GefsException("file system read only");
         }
 
-        FlushDeadlists();
-        long gen = Generation + 1;
-        Allocator.Sync(gen, true, arenas =>
+        try
         {
-            var sb = new Superblock(Format.BlockSize, Format.BufferSpace, new TreeRoot(Snaps.Height, Snaps.Root), default, default, 0, NextQid, nextGen, gen, [.. arenas]);
-            var block = new byte[B];
-            sb.Write(block);
-            device.Write(0, block);
-            device.Flush();
-            device.Write(device.Size - B, block);
-            device.Flush();
-        });
-        Generation = gen;
+            foreach (Mounted m in mounts.Values.Where(m => m.Tree.Dirty).ToList())
+            {
+                Update(m);
+            }
+
+            FlushDeadlists();
+            long gen = Generation + 1;
+            Allocator.Sync(gen, true, arenas =>
+            {
+                var sb = new Superblock(Format.BlockSize, Format.BufferSpace, new TreeRoot(Snaps.Height, Snaps.Root), default, default, 0, NextQid, nextGen, gen, [.. arenas]);
+                var block = new byte[B];
+                sb.Write(block);
+                device.Write(0, block);
+                device.Flush();
+                device.Write(device.Size - B, block);
+                device.Flush();
+            });
+            Generation = gen;
+            Snaps.Dirty = false;
+        }
+        catch
+        {
+            Broken = true;
+            throw;
+        }
     }
 
     public (long Gen, int Flags)? FindLabel(string label)

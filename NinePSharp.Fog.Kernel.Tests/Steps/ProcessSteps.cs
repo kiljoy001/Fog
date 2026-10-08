@@ -21,34 +21,10 @@ public sealed class ProcessSteps
     private IReadOnlyList<string>? childListed;
 
     [Given(@"^a kernel whose /bin holds the managed programs ""true"", ""false"", ""args"", ""return"" and ""crash""$")]
-    public async Task GivenAKernel()
-    {
-        var kernel = new FogKernel(
-            new Dictionary<string, ProgramMain>
-        {
-            ["true"] = (process, argv) =>
-            {
-                process.Exits(null);
-                return Task.CompletedTask;
-            },
-            ["false"] = (process, argv) =>
-            {
-                process.Exits("false");
-                return Task.CompletedTask;
-            },
-            ["args"] = (process, argv) =>
-            {
-                seen.AddRange(argv);
-                process.Exits(null);
-                return Task.CompletedTask;
-            },
-            ["return"] = (process, argv) => Task.CompletedTask,
-            ["crash"] = (process, argv) => throw new InvalidOperationException("boom"),
-        },
-            files,
-            files.Root);
-        init = await kernel.BootAsync();
-    }
+    public async Task GivenAKernel() => init = await new FogKernel(Programs(), files, files.Root).BootAsync();
+
+    [When("the kernel is booted again on the same files")]
+    public async Task WhenBootedAgain() => init = await new FogKernel(Programs(), files, files.Root).BootAsync();
 
     [Given(@"^the file ""(.*)"" holds ""(.*)""$")]
     public Task GivenFileHolds(string path, string contents)
@@ -350,4 +326,26 @@ public sealed class ProcessSteps
         waited = await init.WaitAsync().WaitAsync(Bound);
         Assert.Equal(string.Empty, waited.Message);
     }
+
+    private Dictionary<string, ProgramMain> Programs() => new()
+    {
+        ["true"] = (process, argv) =>
+        {
+            process.Exits(null);
+            return Task.CompletedTask;
+        },
+        ["false"] = (process, argv) =>
+        {
+            process.Exits("false");
+            return Task.CompletedTask;
+        },
+        ["args"] = (process, argv) =>
+        {
+            seen.AddRange(argv);
+            process.Exits(null);
+            return Task.CompletedTask;
+        },
+        ["return"] = (process, argv) => Task.CompletedTask,
+        ["crash"] = (process, argv) => throw new InvalidOperationException("boom"),
+    };
 }

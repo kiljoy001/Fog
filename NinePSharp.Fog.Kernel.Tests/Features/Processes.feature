@@ -287,3 +287,12 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
     And descriptor 3 has been read to the end
     When a process opens "/tmp/f" with OTRUNC
     Then reading descriptor 3 gives ""
+
+  @FOG_KERNEL_032
+  Scenario: A kernel booted on the files of an earlier one keeps them, and installs its programs again
+    Given the file "/tmp/f" holds "kept"
+    And the file "/bin/false" holds "changed"
+    When the kernel is booted again on the same files
+    And a process runs "/bin/false"
+    Then its parent's wait message for it is "false <pid>: false"
+    And reading "/tmp/f" gives "kept"
