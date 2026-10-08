@@ -20,6 +20,8 @@ public sealed class StoreSteps
     private int arenas;
     private int version;
     private string? failure;
+    private long killer;
+    private List<long> killed = [];
 
     [Given(@"^a device of (\d+) blocks reamed with (\d+) arenas$")]
     public void GivenReamed(long count, int arenaCount)
@@ -36,6 +38,9 @@ public sealed class StoreSteps
         Assert.Equal((count, height, gen, Format.BlockSize, Format.BufferSpace), (first.Arenas.Length, first.Snap.Height, first.SyncGen, first.BlockSize, first.BufferSpace));
         Assert.Equal(store!.Allocator.Arenas.Select(a => a.Pointer.Addr), first.Arenas.Select(a => a.Addr));
     }
+
+    [When("the device is reopened")]
+    public void WhenReopened() => Do(WhenOpened);
 
     [When("the device is opened")]
     public void WhenOpened()
@@ -114,6 +119,86 @@ public sealed class StoreSteps
         Delete(label);
         Commit();
     });
+
+    [When(@"^(\w+) is snapshotted as a name of (\d+) bytes$")]
+    public void WhenSnapshottedLong(string label, int length) => Do(() => Tag(label, new string('n', length), false));
+
+    [Then(@"^the name of (\d+) bytes holds nothing$")]
+    public void ThenLongHolds(int length) => ThenHolds(new string('n', length), "nothing");
+
+    [Then(@"^snapshotting (\w+) as a name of (\d+) bytes fails with ""(.*)""$")]
+    public void ThenLongFails(string label, int length, string message) => ThenTagFails("snapshotting", label, new string('n', length), message);
+
+    [When(@"^(\w+) is given a data block for file (\d+) and the store commits$")]
+    public void WhenGivenData(string label, long file) => Do(() =>
+    {
+        Tree t = store!.Mount(label);
+        Blk data = store.Allocator.New(BlockType.Data, t.Gen);
+        store.Allocator.Enqueue(data);
+        var key = new byte[17];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(1), file);
+        var value = new byte[Format.PointerSize];
+        data.Pointer.Write(value);
+        t.Upsert(new Message(MessageOp.Insert, key, value));
+        Commit();
+    });
+
+    [Then(@"^giving (\w+) key (\d+) fails with ""(.*)""$")]
+    public void ThenGiveFails(string label, int n, string message)
+        => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Mount(label).Upsert(new Message(MessageOp.Insert, Key(n), [1]))).Message);
+
+    [Then("a commit without changes leaves main's snapshot where it was")]
+    public void ThenUnchangedCommit()
+    {
+        long gen = store!.FindLabel("main")!.Value.Gen;
+        Commit();
+        Assert.Equal(gen, store.FindLabel("main")!.Value.Gen);
+    }
+
+    [Then(@"^(\w+)'s snapshot has no predecessor, no successor, (no base|base \w+), (\d+) labels? and (\d+) forks?$")]
+    public void ThenEntry(string label, string from, int labels, int forks)
+    {
+        TreeEntry e = store!.Snapshot(store.FindLabel(label)!.Value.Gen);
+        long expected = from == "no base" ? -1 : store.FindLabel(from.Split(' ')[1])!.Value.Gen;
+        Assert.Equal((-1L, -1L, expected, labels, forks), (e.Pred, e.Succ, e.Base, e.Labels, e.Refs));
+    }
+
+    [Then(@"^(\w+)'s snapshot follows the one (\w+) was forked from$")]
+    public void ThenFollowsBase(string label, string fork)
+        => Assert.Equal(store!.Snapshot(store.FindLabel(fork)!.Value.Gen).Base, store.Snapshot(store.FindLabel(label)!.Value.Gen).Pred);
+
+    [When(@"^a label (\w+) is made naming generation (\d+)$")]
+    public void WhenGhost(string label, long gen)
+    {
+        var value = new byte[13];
+        Keys.Snap(gen).CopyTo(value, 0);
+        store!.Snaps.Upsert(new Message(MessageOp.Insert, Keys.Label(label), value));
+    }
+
+    [When(@"^main's tree lists (\d+) blocks born in generation (\d+) as freed, and the store commits$")]
+    public void WhenKills(int count, long birth)
+    {
+        Tree t = store!.Mount("main");
+        killer = t.Gen;
+        killed = [.. Enumerable.Range(1, count).Select(i => i * B)];
+        foreach (long addr in killed)
+        {
+            store.Kill(t, new Bptr(addr, default, birth));
+        }
+
+        Commit();
+    }
+
+    [Then("no deadlist is open")]
+    public void ThenNoneOpen() => Assert.Equal(0, store!.OpenDeadlists);
+
+    [Then(@"^main's deadlist for generation (\d+) lists those (\d+) blocks in (\d+) blocks$")]
+    public void ThenDeadlist(long birth, int count, int blocks)
+    {
+        Assert.Equal(count, killed.Count);
+        Assert.Equal(killed, store!.DeadlistContents(killer, birth).Order());
+        Assert.Equal(blocks, store.DeadlistBlocks(killer, birth));
+    }
 
     [Then(@"^(\w+) holds (keys .*|nothing)$")]
     public void ThenHolds(string label, string keys)
@@ -261,6 +346,8 @@ public sealed class StoreSteps
             }
         }
 
+        // A deadlist lists only blocks an older snapshot still holds; any other would be leaked.
+        var inTrees = held.ToHashSet();
         foreach (var (_, value) in Scan(store.Snaps, [(byte)KeyType.Deadlist]))
         {
             for (Bptr at = Bptr.Read(value); at.Addr != -1;)
@@ -269,7 +356,8 @@ public sealed class StoreSteps
                 Assert.True(held.Add(at.Addr), $"deadlist block {at.Addr} is also held elsewhere");
                 for (int i = 0; i < b.LogSize; i += 8)
                 {
-                    held.Add(System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(b.Data[i..]));
+                    long listed = System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(b.Data[i..]);
+                    Assert.True(inTrees.Contains(listed), $"deadlisted block {listed} is held by no snapshot");
                 }
 
                 at = b.LogNext;
@@ -317,7 +405,7 @@ public sealed class StoreSteps
     {
         device = new MemoryDevice(blocks);
         store = Store.Ream(device, arenas);
-        models = new() { ["main"] = [] };
+        models = new() { ["main"] = [], ["empty"] = [] };
         committed = new() { [store.Generation] = Clone(models) };
     }
 
@@ -332,7 +420,7 @@ public sealed class StoreSteps
         Tree t = store!.Mount(label);
         foreach (int n in Numbers(keys))
         {
-            string value = $"{label}:{n}:{++version}:" + new string('v', 60);
+            string value = $"{label}:{n}:{++version}:" + new string('v', 400 - $"{label}:{n}:{version}:".Length);
             t.Upsert(new Message(MessageOp.Insert, Key(n), Encoding.ASCII.GetBytes(value)));
             models[label][n] = value;
         }

@@ -10,9 +10,8 @@ namespace NinePSharp.Fog.Gefs;
 // mutable: its tree moves on to a new snapshot at each commit that changed it. A block is held from
 // the snapshot it was born in until the one that freed it, which lists it on a deadlist by birth.
 // Deleting a snapshot frees what only it held. Unlike gefs, a deadlist merged into another is copied
-// rather than spliced in place, the blocks a deleted snapshot freed after its predecessor are freed
-// even when it had no successor, and every free is logged before the barrier of the commit that
-// makes it safe.
+// rather than spliced in place, and every free is logged before the barrier of the commit that makes
+// it safe.
 internal sealed class Store : IDeadlists
 {
     private const long B = Format.BlockSize;
@@ -46,13 +45,16 @@ internal sealed class Store : IDeadlists
 
     public long NextQid { get; private set; }
 
+    // Deadlists with blocks not yet written; a commit writes them all.
+    public int OpenDeadlists => deadlists.Count;
+
     // reamfs: arenas, and a snapshot tree holding an empty snapshot, and main forked from it.
     public static Store Ream(Device device, int arenas)
     {
         Allocator allocator = Allocator.Ream(device, arenas);
         Blk root = allocator.New(BlockType.Leaf, 0);
         allocator.Enqueue(root);
-        var store = new Store(device, allocator, Tree.Create(allocator, 2), 0, 1, 3);
+        var store = new Store(device, allocator, Tree.Create(allocator), 0, 1, 2);
         store.Snaps.Upsert(
             Label("empty", 0, 0),
             Entry(new TreeEntry(1, 1, 1, 0, 0, -1, -1, -1, root.Pointer)),
@@ -98,8 +100,9 @@ internal sealed class Store : IDeadlists
 
         var (gen, flags) = FindLabel(label) ?? throw new GefsException("snap -- does not exist");
         TreeEntry e = Snapshot(gen);
-        var t = new Tree(Allocator, e.Root, e.Height) { Gen = nextGen++, Base = e.Base, Deadlists = this };
-        mounts[label] = new Mounted(label, (flags & Mutable) != 0, gen, t);
+        bool mutable = (flags & Mutable) != 0;
+        var t = new Tree(Allocator, e.Root, e.Height) { Gen = nextGen++, Base = e.Base, Deadlists = this, ReadOnly = !mutable };
+        mounts[label] = new Mounted(label, mutable, gen, t);
         return t;
     }
 
@@ -180,12 +183,16 @@ internal sealed class Store : IDeadlists
 
     public void Kill(Tree t, Bptr bp) => Append((t.Gen, bp.Gen), bp.Addr);
 
+    public List<long> DeadlistContents(long gen, long birth) => Contents(Load((gen, birth)));
+
+    public int DeadlistBlocks(long gen, long birth) => Chain(Load((gen, birth))).Count();
+
     // sync: each mutable tree that changed becomes a new snapshot, the deadlists are written, the
     // blocks freed in this generation go back, and the arenas commit it by having both superblocks
     // written between their first and second headers.
     public void Commit()
     {
-        foreach (Mounted m in mounts.Values.Where(m => m.Mutable && m.Tree.Dirty).ToList())
+        foreach (Mounted m in mounts.Values.Where(m => m.Tree.Dirty).ToList())
         {
             Update(m);
         }
@@ -326,31 +333,24 @@ internal sealed class Store : IDeadlists
         return del && succ == -1;
     }
 
-    // reclaimblocks: blocks the deleted snapshot freed that were born after the snapshot before it
-    // were held by it alone, as were blocks its successor freed born then; both are freed. Blocks it
-    // freed born earlier are still held by that older snapshot: the successor now frees them, or with
-    // no successor, the older snapshot's own tree holds them.
+    // reclaimblocks: blocks the successor freed that were born after the snapshot before the deleted
+    // one were held by the deleted one alone, and are freed. The deleted snapshot's own deadlists hold
+    // only blocks born no later than that older snapshot, which still holds them: their successor
+    // now frees them, or with no successor, the older snapshot's own tree holds them. They were
+    // emptied of later births when it became a snapshot, as this does for the successor now.
     private void Reclaim(long gen, long succ, long older)
     {
         foreach (Deadlist dl in DeadlistsOf(gen))
         {
-            if (dl.Birth > older)
-            {
-                Discard(dl, true);
-            }
-            else if (succ != -1)
+            if (succ != -1)
             {
                 foreach (long addr in Contents(dl))
                 {
                     Append((succ, dl.Birth), addr);
                 }
+            }
 
-                Discard(dl, false);
-            }
-            else
-            {
-                Discard(dl, false);
-            }
+            Discard(dl, false);
         }
 
         if (succ != -1)
@@ -378,7 +378,6 @@ internal sealed class Store : IDeadlists
             }
         }
 
-        scan.Exit();
         FreeTree(s.Root, s.Height, older);
     }
 
@@ -406,20 +405,14 @@ internal sealed class Store : IDeadlists
             found.Add(new Deadlist(gen, BinaryPrimitives.ReadInt64BigEndian(scan.Key.AsSpan(9)), Bptr.Read(scan.Value)));
         }
 
-        scan.Exit();
         return found;
     }
 
+    // A deadlist with a block still open, or as the snapshot tree last recorded it.
     private Deadlist Load((long Gen, long Birth) key)
-    {
-        if (!deadlists.TryGetValue(key, out Deadlist? dl))
-        {
-            dl = new Deadlist(key.Gen, key.Birth, Snaps.Lookup(Keys.Deadlist(key.Gen, key.Birth)) is { } v ? Bptr.Read(v) : None);
-            deadlists[key] = dl;
-        }
-
-        return dl;
-    }
+        => deadlists.TryGetValue(key, out Deadlist? dl)
+            ? dl
+            : new Deadlist(key.Gen, key.Birth, Snaps.Lookup(Keys.Deadlist(key.Gen, key.Birth)) is { } v ? Bptr.Read(v) : None);
 
     // killblk: an address appended to the deadlist's open block, a new one begun when it is full.
     private void Append((long Gen, long Birth) key, long addr)
@@ -436,6 +429,7 @@ internal sealed class Store : IDeadlists
             ins = Allocator.New(BlockType.Deadlist, Snaps.Gen);
             ins.LogNext = dl.Head;
             dl.Ins = ins;
+            deadlists[key] = dl;
         }
 
         BinaryPrimitives.WriteInt64BigEndian(ins.Data[ins.LogSize..], addr);
@@ -476,7 +470,6 @@ internal sealed class Store : IDeadlists
             Allocator.Retire(b.Address);
         }
 
-        deadlists.Remove((dl.Gen, dl.Birth));
         Snaps.Upsert(new Message(MessageOp.Delete, Keys.Deadlist(dl.Gen, dl.Birth), []));
     }
 

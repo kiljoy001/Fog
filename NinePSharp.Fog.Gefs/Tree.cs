@@ -25,7 +25,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     // The generation new blocks are born in, gefs's memgen, and the snapshot this tree forked from.
     public long Gen { get; set; }
 
-    public long Base { get; init; } = -1;
+    public long Base { get; init; }
 
     // Where blocks older snapshots may still use go when this tree frees them; a tree without
     // snapshots has none.
@@ -34,18 +34,26 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     // Whether the root has changed since the tree was opened or last committed.
     public bool Dirty { get; set; }
 
+    // A tree opened from a snapshot no label may change.
+    public bool ReadOnly { get; init; }
+
     internal BlockStore Store => store;
 
-    public static Tree Create(BlockStore store, long gen = 0)
+    public static Tree Create(BlockStore store)
     {
-        Blk b = store.New(BlockType.Leaf, gen);
+        Blk b = store.New(BlockType.Leaf);
         store.Enqueue(b);
-        return new Tree(store, b.Pointer, 1) { Gen = gen };
+        return new Tree(store, b.Pointer, 1);
     }
 
     // btupsert
     public void Upsert(params Message[] messages)
     {
+        if (ReadOnly)
+        {
+            throw new GefsException("snap -- is read only");
+        }
+
         Message[] msg = [.. messages.OrderBy(m => m.Key, KeyOrder)];
         int sz = 0;
         foreach (Message m in msg)
