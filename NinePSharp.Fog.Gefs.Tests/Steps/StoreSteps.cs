@@ -327,52 +327,8 @@ public sealed class StoreSteps(StoreContext context)
         Assert.Equal([before, after], seen.Order());
     }
 
-    // Every block of the device in exactly one place: held by the snapshot tree, a snapshot's tree,
-    // the file data it names or a deadlist; in an arena's log; or free.
     [Then("every block of the device is held, in a log or free")]
-    public void ThenAccounted()
-    {
-        var held = new HashSet<long>();
-        Walk(context.Store!.Snaps.Root, context.Store.Snaps.Height, held);
-        foreach (var (_, value) in Scan(context.Store.Snaps, [(byte)KeyType.Snap]))
-        {
-            TreeEntry e = TreeEntry.Read(value);
-            Walk(e.Root, e.Height, held);
-            foreach (var (_, named) in Scan(new Tree(context.Store.Allocator, e.Root, e.Height), [(byte)KeyType.Data]))
-            {
-                held.Add(Bptr.Read(named).Addr);
-            }
-        }
-
-        // A deadlist lists only blocks an older snapshot still holds; any other would be leaked.
-        var inTrees = held.ToHashSet();
-        foreach (var (key, value) in Scan(context.Store.Snaps, [(byte)KeyType.Deadlist]))
-        {
-            // Each deadlist belongs to a snapshot, and lists only blocks born after its base.
-            long birth = System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(9));
-            Assert.True(birth > context.Store.Snapshot(System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(1))).Base);
-            for (Bptr at = Bptr.Read(value); at.Addr != -1;)
-            {
-                Blk b = context.Store.Allocator.Get(at);
-                Assert.True(held.Add(at.Addr), $"deadlist block {at.Addr} is also held elsewhere");
-                for (int i = 0; i < b.LogSize; i += 8)
-                {
-                    long listed = System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(b.Data[i..]);
-                    Assert.True(inTrees.Contains(listed), $"deadlisted block {listed} is held by no snapshot");
-                }
-
-                at = b.LogNext;
-            }
-        }
-
-        var logs = context.Store.Allocator.Arenas.SelectMany(a => a.LogAddresses()).ToHashSet();
-        var free = context.Store.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / B)).Select(k => r.Offset + (k * B)))).ToHashSet();
-        var data = context.Store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B))).ToHashSet();
-        Assert.Empty(held.Intersect(free));
-        Assert.Empty(held.Intersect(logs));
-        Assert.Empty(logs.Intersect(free));
-        Assert.Equal(data.Order(), held.Concat(logs).Concat(free).Order());
-    }
+    public void ThenAccounted() => Accounting.Check(context.Store!);
 
     private static byte[] Key(int n) => [0x10, (byte)(n >> 8), (byte)n];
 
@@ -385,22 +341,8 @@ public sealed class StoreSteps(StoreContext context)
     private static Dictionary<string, SortedDictionary<int, string>> Clone(Dictionary<string, SortedDictionary<int, string>> from)
         => from.ToDictionary(kv => kv.Key, kv => new SortedDictionary<int, string>(kv.Value));
 
-    private static List<(byte[] Key, byte[] Value)> Scan(Tree t, byte[] prefix)
-    {
-        var scan = new Scan(prefix);
-        scan.Enter(t);
-        var all = new List<(byte[] Key, byte[] Value)>();
-        while (scan.Next())
-        {
-            all.Add((scan.Key, scan.Value));
-        }
-
-        scan.Exit();
-        return all;
-    }
-
     private static List<(int Key, string Value)> Contents(Tree t)
-        => [.. Scan(t, [0x10]).Select(kv => ((kv.Key[1] << 8) | kv.Key[2], Encoding.ASCII.GetString(kv.Value)))];
+        => [.. Accounting.Scan(t, [0x10]).Select(kv => ((kv.Key[1] << 8) | kv.Key[2], Encoding.ASCII.GetString(kv.Value)))];
 
     private void Ream()
     {
@@ -453,15 +395,5 @@ public sealed class StoreSteps(StoreContext context)
     {
         context.Store!.Commit();
         committed[context.Store.Generation] = Clone(models);
-    }
-
-    private void Walk(Bptr bp, int height, HashSet<long> held)
-    {
-        held.Add(bp.Addr);
-        Blk b = context.Store!.Allocator.Get(bp);
-        for (int i = 0; height > 1 && i < b.ValueCount; i++)
-        {
-            Walk(Blk.GetPointer(b.GetValue(i).Value).Pointer, height - 1, held);
-        }
     }
 }

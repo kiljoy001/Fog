@@ -45,8 +45,9 @@ internal sealed class Store : IDeadlists
 
     public long NextQid { get; private set; }
 
-    // The one writer: every tree served from the store changes it under this lock.
-    public Lock Gate { get; } = new();
+    // The one writer: every tree served from the store changes it under this lock, a monitor so
+    // that Coyote controls it.
+    public object Gate { get; } = new();
 
     // Whether anything changed since the last commit.
     public bool Changed => Snaps.Dirty || mounts.Values.Any(m => m.Tree.Dirty);

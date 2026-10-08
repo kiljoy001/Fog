@@ -10,9 +10,13 @@ internal static class Explorer
 {
     internal const uint Iterations = 500;
 
-    internal static TestReport Explore(Func<Task> test, IReqnrollOutputHelper output)
+    // With memoryAccesses, Coyote also switches tasks at the memory accesses of assemblies rewritten to
+    // check data races, as well as at their collection accesses.
+    internal static TestReport Explore(Func<Task> test, IReqnrollOutputHelper output, bool memoryAccesses = false)
     {
-        using var engine = TestingEngine.Create(Configuration.Create().WithTestingIterations(Iterations).WithMaxSchedulingSteps(5000), test);
+        Configuration configuration = Configuration.Create().WithTestingIterations(Iterations).WithMaxSchedulingSteps(5000)
+            .WithMemoryAccessRaceCheckingEnabled(memoryAccesses);
+        using var engine = TestingEngine.Create(configuration, test);
         engine.Run();
         TestReport report = engine.TestReport;
         if (report.UncontrolledInvocations.Count != 0)

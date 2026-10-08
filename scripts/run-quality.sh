@@ -102,6 +102,7 @@ scope() {
 
 # Coyote explores interleavings only in assemblies rewritten to hand it their tasks, locks and awaits:
 # the code under test and the test assembly, whose awaits would otherwise run outside its control.
+# Rewriting to check data races also gives it their collection and memory accesses to switch at.
 # A scenario skips when its assemblies were not rewritten, so here a skip fails the gate.
 coyote() {
   step "Coyote interleavings"
@@ -111,7 +112,8 @@ coyote() {
   cat > "$output/rewrite.coyote.json" <<JSON
 {
   "AssembliesPath": ".",
-  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll", "NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll"]
+  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll", "NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll"],
+  "IsDataRaceCheckingEnabled": true
 }
 JSON
   dotnet tool restore
