@@ -48,20 +48,17 @@ internal static class Messages
 
         if (fields.HasFlag(WstatFields.Uid))
         {
-            d = d with { Uid = BinaryPrimitives.ReadInt32BigEndian(p) };
-            p = p[4..];
+            d = d with { User = Names.Read(ref p) };
         }
 
         if (fields.HasFlag(WstatFields.Gid))
         {
-            d = d with { Gid = BinaryPrimitives.ReadInt32BigEndian(p) };
-            p = p[4..];
+            d = d with { Group = Names.Read(ref p) };
         }
 
         if (fields.HasFlag(WstatFields.Muid))
         {
-            d = d with { Muid = BinaryPrimitives.ReadInt32BigEndian(p) };
-            p = p[4..];
+            d = d with { Muid = Names.Read(ref p) };
         }
 
         return p.IsEmpty ? d.Value() : throw new GefsException("malformed stat");

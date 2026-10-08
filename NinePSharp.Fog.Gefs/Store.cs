@@ -48,11 +48,16 @@ internal sealed class Store : IDeadlists
     // Deadlists with blocks not yet written; a commit writes them all.
     public int OpenDeadlists => deadlists.Count;
 
-    // reamfs: arenas, and a snapshot tree holding an empty snapshot, and main forked from it.
-    public static Store Ream(Device device, int arenas)
+    // reamfs: arenas, and a snapshot tree holding an empty snapshot, and main forked from it, both a
+    // root directory owned by the reaming user.
+    public static Store Ream(Device device, int arenas, string owner = "adm", TimeProvider? clock = null)
     {
         Allocator allocator = Allocator.Ream(device, arenas);
         Blk root = allocator.New(BlockType.Leaf, 0);
+        long now = Nanoseconds(clock ?? TimeProvider.System);
+        var dir = new Dir(string.Empty, new Qid(0, 0, 0x80), 0x80000000u | 0b111_111_101, now, now, 0, owner, owner, owner);
+        root.SetValue(dir.Key(-1), dir.Value());
+        root.SetValue(Keys.Up(0), dir.Key(-1));
         allocator.Enqueue(root);
         var store = new Store(device, allocator, Tree.Create(allocator), 0, 1, 2);
         store.Snaps.Upsert(
@@ -86,6 +91,8 @@ internal sealed class Store : IDeadlists
         Allocator allocator = Allocator.Open(device, sb.Arenas, sb.SyncGen);
         return new Store(device, allocator, new Tree(allocator, sb.Snap.Root, sb.Snap.Height), sb.SyncGen, sb.NextQid, sb.NextGen);
     }
+
+    public static long Nanoseconds(TimeProvider clock) => (clock.GetUtcNow() - DateTimeOffset.UnixEpoch).Ticks * 100;
 
     public long NewQid() => NextQid++;
 

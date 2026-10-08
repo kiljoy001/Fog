@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NinePSharp.Namespaces" Version="$(NinePSharpVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="NinePSharp.Fog.Gefs.Tests" />
   </ItemGroup>
 

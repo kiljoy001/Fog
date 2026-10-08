@@ -181,13 +181,13 @@ Feature: Snapshots keep older states of a tree, and deadlists free what only the
       | deleting main                            | snap -- is currently mounted |
       | mounting tuesday                         | snap -- does not exist       |
       | snapshotting tuesday as wednesday        | snap -- does not exist       |
-      | snapshotting main as a name of 246 bytes | name too long                |
+      | snapshotting main as a name of 245 bytes | name too long                |
 
   @FOG_GEFS_506
   Scenario: A label may be as long as an entry's name
     Given a device of 1600 blocks reamed with 2 arenas
-    When main is snapshotted as a name of 245 bytes
-    Then the name of 245 bytes holds nothing
+    When main is snapshotted as a name of 244 bytes
+    Then the name of 244 bytes holds nothing
 
   @FOG_GEFS_506
   Scenario: A tree with uncommitted changes cannot be unmounted

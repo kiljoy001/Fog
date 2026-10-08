@@ -57,6 +57,25 @@ internal static class Keys
         return key;
     }
 
+    // Kup qid[8]: the key of an entry's directory entry, so its handle finds it.
+    public static byte[] Up(long qid)
+    {
+        var key = new byte[1 + 8];
+        key[0] = (byte)KeyType.Up;
+        BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(1), qid);
+        return key;
+    }
+
+    // Kdat qid[8] offset[8]: the data block holding a file's bytes from a block-aligned offset.
+    public static byte[] Data(long qid, long offset)
+    {
+        var key = new byte[1 + 8 + 8];
+        key[0] = (byte)KeyType.Data;
+        BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(1), qid);
+        BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(9), offset);
+        return key;
+    }
+
     // Ksnap snapid[8].
     public static byte[] Snap(long id)
     {

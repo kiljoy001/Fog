@@ -34,14 +34,14 @@ Feature: Keys, values and messages are packed as 9front's gefs packs them
     Then they are in the order "z" in directory 1, "a" in directory 2, "b" in directory 2
 
   @FOG_GEFS_002
-  Scenario Outline: A name is at most 245 bytes, so that its entry key fits
+  Scenario Outline: A name is at most 244 bytes, so that its entry key fits in 256
     When the entry key for a name of <length> bytes in directory 2 is packed
     Then packing <result>
 
     Examples:
       | length | result                      |
-      | 245    | succeeds                    |
-      | 246    | fails with "name too long"  |
+      | 244    | gives a key of 256 bytes    |
+      | 245    | fails with "name too long"  |
 
   @FOG_GEFS_002
   Scenario: A snapshot's key is its type and its id
@@ -49,10 +49,10 @@ Feature: Keys, values and messages are packed as 9front's gefs packs them
     Then its bytes are 04 0000000000000028
 
   @FOG_GEFS_003
-  Scenario: A directory entry's value is 61 bytes and unpacks to the entry that was packed
-    Given an entry "notes" with qid 7 version 3, mode 0644, length 11, atime 5, mtime 6, user 1, group 2 and muid 3, flagged 5
+  Scenario: A directory entry's value is 49 bytes and its three names, and unpacks to the entry that was packed
+    Given an entry "notes" with qid 7 version 3, mode 0644, length 11, atime 5, mtime 6, user glenda, group sys and muid adm, flagged 5
     When its key and value are packed
-    Then the value is 61 bytes long
+    Then the value is 67 bytes long
     And they unpack to the same entry
 
   @FOG_GEFS_004
@@ -90,7 +90,7 @@ Feature: Keys, values and messages are packed as 9front's gefs packs them
 
   @FOG_GEFS_007
   Scenario Outline: A wstat changes only the fields its flags name, and bumps the qid version
-    Given an entry "notes" with qid 7 version 3, mode 0644, length 11, atime 5, mtime 6, user 1, group 2 and muid 3
+    Given an entry "notes" with qid 7 version 3, mode 0644, length 11, atime 5, mtime 6, user glenda, group sys and muid adm
     When a wstat setting <fields> is applied to it
     Then the entry has <changed>, qid version 4, and every other field as it was
 
@@ -100,12 +100,12 @@ Feature: Keys, values and messages are packed as 9front's gefs packs them
       | mode 0600                  | mode 0600                  |
       | mode d0755                 | mode d0755 and qid type 80 |
       | mtime 70 and atime 80      | mtime 70 and atime 80      |
-      | user 9, group 8 and muid 7 | user 9, group 8 and muid 7 |
+      | user bob, group dev and muid ken | user bob, group dev and muid ken |
       | nothing                    | nothing                    |
 
   @FOG_GEFS_007
   Scenario: A wstat carrying bytes its flags do not account for is refused
-    Given an entry "notes" with qid 7 version 3, mode 0644, length 11, atime 5, mtime 6, user 1, group 2 and muid 3
+    Given an entry "notes" with qid 7 version 3, mode 0644, length 11, atime 5, mtime 6, user glenda, group sys and muid adm
     When a wstat setting length 99 is applied to it, with 4 bytes too many
     Then applying fails with "malformed stat"
 

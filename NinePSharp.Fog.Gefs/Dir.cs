@@ -2,12 +2,17 @@ using System.Buffers.Binary;
 
 namespace NinePSharp.Fog.Gefs;
 
-// An Xdir: the name is in its Kent key, the rest packed in its value.
-internal sealed record Dir(string Name, Qid Qid, uint Mode, long Atime, long Mtime, long Length, int Uid, int Gid, int Muid, long Flag = 0)
+// An Xdir: the name is in its Kent key, the rest packed in its value. Unlike gefs, which keeps
+// numeric ids from a user table of its own, Fog's entries name their owner, group and last
+// modifier, as Fog's users come from its auth server.
+internal sealed record Dir(string Name, Qid Qid, uint Mode, long Atime, long Mtime, long Length, string User, string Group, string Muid, long Flag = 0)
 {
+    public const int FixedSize = 8 + 8 + 4 + 1 + 4 + 8 + 8 + 8;
+
     public static Dir Read(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value)
     {
         string name = Keys.ReadEntry(key, out _);
+        ReadOnlySpan<byte> names = value[FixedSize..];
         return new Dir(
             name,
             new Qid(BinaryPrimitives.ReadInt64BigEndian(value[8..]), BinaryPrimitives.ReadUInt32BigEndian(value[16..]), value[20]),
@@ -15,9 +20,9 @@ internal sealed record Dir(string Name, Qid Qid, uint Mode, long Atime, long Mti
             BinaryPrimitives.ReadInt64BigEndian(value[25..]),
             BinaryPrimitives.ReadInt64BigEndian(value[33..]),
             BinaryPrimitives.ReadInt64BigEndian(value[41..]),
-            BinaryPrimitives.ReadInt32BigEndian(value[49..]),
-            BinaryPrimitives.ReadInt32BigEndian(value[53..]),
-            BinaryPrimitives.ReadInt32BigEndian(value[57..]),
+            Names.Read(ref names),
+            Names.Read(ref names),
+            Names.Read(ref names),
             BinaryPrimitives.ReadInt64BigEndian(value));
     }
 
@@ -25,7 +30,7 @@ internal sealed record Dir(string Name, Qid Qid, uint Mode, long Atime, long Mti
 
     public byte[] Value()
     {
-        var p = new byte[Format.DirSize];
+        var p = new byte[FixedSize];
         BinaryPrimitives.WriteInt64BigEndian(p, Flag);
         BinaryPrimitives.WriteInt64BigEndian(p.AsSpan(8), Qid.Path);
         BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(16), Qid.Version);
@@ -34,9 +39,6 @@ internal sealed record Dir(string Name, Qid Qid, uint Mode, long Atime, long Mti
         BinaryPrimitives.WriteInt64BigEndian(p.AsSpan(25), Atime);
         BinaryPrimitives.WriteInt64BigEndian(p.AsSpan(33), Mtime);
         BinaryPrimitives.WriteInt64BigEndian(p.AsSpan(41), Length);
-        BinaryPrimitives.WriteInt32BigEndian(p.AsSpan(49), Uid);
-        BinaryPrimitives.WriteInt32BigEndian(p.AsSpan(53), Gid);
-        BinaryPrimitives.WriteInt32BigEndian(p.AsSpan(57), Muid);
-        return p;
+        return [.. p, .. Names.Pack(User), .. Names.Pack(Group), .. Names.Pack(Muid)];
     }
 }

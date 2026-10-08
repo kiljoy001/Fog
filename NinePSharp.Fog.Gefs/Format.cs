@@ -6,11 +6,13 @@ internal static class Format
     public const int BlockShift = 14;
     public const int BlockSize = 1 << BlockShift;
     public const int MaxEntry = 256;
-    public const int MaxName = MaxEntry - 1 - 9 - 1;
+
+    // gefs takes Maxent-1-9-1, one more than its own packstr asserts room for: a name's key holds its type,
+    // directory, length and terminator.
+    public const int MaxName = MaxEntry - 1 - 8 - 2 - 1;
     public const int MaxInline = 512;
     public const int HashSize = 32;
     public const int PointerSize = 8 + HashSize + 8;
-    public const int DirSize = 8 + 8 + 4 + 1 + 4 + 8 + 8 + 8 + 4 + 4 + 4;
     public const int TreeSize = 4 + 4 + 4 + 4 + 8 + 8 + 8 + 8 + PointerSize;
     public const int PivotHeaderSize = 10;
     public const int BufferSpace = (BlockSize - PivotHeaderSize) / 2;

@@ -48,6 +48,14 @@ internal sealed class Allocator : BlockStore
         return Blk.Read(bytes, bp);
     }
 
+    // A file's data block, which has no header to tell its type: its bytes, checked against its hash.
+    public byte[] ReadData(Bptr bp)
+    {
+        var bytes = new byte[B];
+        device.Read(bp.Addr, bytes);
+        return Blk.Read(bytes, bp, ReadFlags.Raw).Buffer;
+    }
+
     // freeblk and freebp: a block a snapshot tree frees that was born before the generation it is
     // writing may be in an older snapshot, so it goes on a deadlist, unless it was born at or before
     // the snapshot the tree forked from, whose own chain still holds it. Any other block is retired:

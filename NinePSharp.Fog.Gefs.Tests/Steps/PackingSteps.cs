@@ -36,6 +36,9 @@ public sealed class PackingSteps
     [Then("packing succeeds")]
     public void ThenPackingSucceeds() => Assert.Null(failure);
 
+    [Then(@"^packing gives a key of (\d+) bytes$")]
+    public void ThenKeyLength(int length) => Assert.Equal(length, key!.Length);
+
     [Then(@"^its bytes are (.*)$")]
     public void ThenBytes(string hex) => Assert.Equal(hex.Replace(" ", string.Empty, StringComparison.Ordinal), Convert.ToHexStringLower(key!));
 
@@ -57,15 +60,15 @@ public sealed class PackingSteps
     public void ThenOrder(string a, long pa, string b, long pb, string c, long pc)
         => Assert.Equal([Keys.Entry(pa, a), Keys.Entry(pb, b), Keys.Entry(pc, c)], sorted);
 
-    [Given(@"^an entry ""(.*)"" with qid (\d+) version (\d+), mode (\d+), length (\d+), atime (\d+), mtime (\d+), user (\d+), group (\d+) and muid (\d+), flagged (\d+)$")]
-    public void GivenFlaggedEntry(string name, long path, uint version, string mode, long length, long atime, long mtime, int uid, int gid, int muid, long flag)
+    [Given(@"^an entry ""(.*)"" with qid (\d+) version (\d+), mode (\d+), length (\d+), atime (\d+), mtime (\d+), user (\w+), group (\w+) and muid (\w+), flagged (\d+)$")]
+    public void GivenFlaggedEntry(string name, long path, uint version, string mode, long length, long atime, long mtime, string uid, string gid, string muid, long flag)
     {
         GivenEntry(name, path, version, mode, length, atime, mtime, uid, gid, muid);
         entry = entry! with { Flag = flag };
     }
 
-    [Given(@"^an entry ""(.*)"" with qid (\d+) version (\d+), mode (\d+), length (\d+), atime (\d+), mtime (\d+), user (\d+), group (\d+) and muid (\d+)$")]
-    public void GivenEntry(string name, long path, uint version, string mode, long length, long atime, long mtime, int uid, int gid, int muid)
+    [Given(@"^an entry ""(.*)"" with qid (\d+) version (\d+), mode (\d+), length (\d+), atime (\d+), mtime (\d+), user (\w+), group (\w+) and muid (\w+)$")]
+    public void GivenEntry(string name, long path, uint version, string mode, long length, long atime, long mtime, string uid, string gid, string muid)
     {
         uint permissions = Convert.ToUInt32(mode, 8);
         entry = new Dir(name, new Qid(path, version, (byte)(permissions >> 24)), permissions, atime, mtime, length, uid, gid, muid);
@@ -151,7 +154,7 @@ public sealed class PackingSteps
     [Then(@"^the entry has (.*), qid version (\d+), and every other field as it was$")]
     public void ThenWstatApplied(string changed, uint version)
     {
-        Dir original = new("notes", new Qid(7, 3, 0), Convert.ToUInt32("0644", 8), 5, 6, 11, 1, 2, 3);
+        Dir original = new("notes", new Qid(7, 3, 0), Convert.ToUInt32("0644", 8), 5, 6, 11, "glenda", "sys", "adm");
         WstatChange change = Wstat(changed.Replace(" and qid type 80", string.Empty, StringComparison.Ordinal));
         uint mode = change.Mode ?? original.Mode;
         Dir expected = original with
@@ -161,8 +164,8 @@ public sealed class PackingSteps
             Length = change.Length ?? original.Length,
             Mtime = change.Mtime ?? original.Mtime,
             Atime = change.Atime ?? original.Atime,
-            Uid = change.Uid ?? original.Uid,
-            Gid = change.Gid ?? original.Gid,
+            User = change.User ?? original.User,
+            Group = change.Group ?? original.Group,
             Muid = change.Muid ?? original.Muid,
         };
         Assert.Equal(expected, entry);
@@ -255,9 +258,9 @@ public sealed class PackingSteps
                 "mode" => change with { Mode = words[1][0] == 'd' ? 0x80000000u | Convert.ToUInt32(words[1][1..], 8) : Convert.ToUInt32(words[1], 8) },
                 "mtime" => change with { Mtime = long.Parse(words[1]) },
                 "atime" => change with { Atime = long.Parse(words[1]) },
-                "user" => change with { Uid = int.Parse(words[1]) },
-                "group" => change with { Gid = int.Parse(words[1]) },
-                "muid" => change with { Muid = int.Parse(words[1]) },
+                "user" => change with { User = words[1] },
+                "group" => change with { Group = words[1] },
+                "muid" => change with { Muid = words[1] },
                 _ => change,
             };
         }

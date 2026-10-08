@@ -270,7 +270,7 @@ public sealed class TreeSteps
     [When(@"^the entry ""(.*)"" in directory (\d+), (\d+) bytes long and modified at (\d+), is inserted$")]
     public void WhenEntryInserted(string name, long parent, long length, long mtime)
     {
-        entry = new Dir(name, new Qid(7, 0, 0), 0b110_100_100, 0, mtime, length, 0, 0, 0);
+        entry = new Dir(name, new Qid(7, 0, 0), 0b110_100_100, 0, mtime, length, "glenda", "sys", "glenda");
         entryKey = entry.Key(parent);
         Upsert(new Message(MessageOp.Insert, entryKey, entry.Value()));
     }

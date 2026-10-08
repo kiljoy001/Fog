@@ -6,7 +6,7 @@ using Xunit;
 namespace NinePSharp.Fog.Gefs.Tests.Steps;
 
 [Binding]
-public sealed class StoreSteps
+public sealed class StoreSteps(StoreContext context)
 {
     private const long B = Format.BlockSize;
 
@@ -14,8 +14,6 @@ public sealed class StoreSteps
     private readonly List<Action> script = [];
     private Dictionary<string, SortedDictionary<int, string>> models = [];
     private Dictionary<long, Dictionary<string, SortedDictionary<int, string>>> committed = [];
-    private MemoryDevice? device;
-    private Store? store;
     private long blocks;
     private int arenas;
     private int version;
@@ -33,10 +31,10 @@ public sealed class StoreSteps
     [Then(@"^both superblocks name (\d+) arenas and a snapshot tree (\d+) high, committed at generation (\d+)$")]
     public void ThenSuperblocks(int count, int height, long gen)
     {
-        Superblock first = Superblock.Read(device!.Block(0));
-        Assert.Equal(device.Block(0), device.Block((device.Size / B) - 1));
+        Superblock first = Superblock.Read(context.Device!.Block(0));
+        Assert.Equal(context.Device.Block(0), context.Device.Block((context.Device.Size / B) - 1));
         Assert.Equal((count, height, gen, Format.BlockSize, Format.BufferSpace), (first.Arenas.Length, first.Snap.Height, first.SyncGen, first.BlockSize, first.BufferSpace));
-        Assert.Equal(store!.Allocator.Arenas.Select(a => a.Pointer.Addr), first.Arenas.Select(a => a.Addr));
+        Assert.Equal(context.Store!.Allocator.Arenas.Select(a => a.Pointer.Addr), first.Arenas.Select(a => a.Addr));
     }
 
     [When("the device is reopened")]
@@ -48,8 +46,8 @@ public sealed class StoreSteps
         failure = null;
         try
         {
-            store = Store.Open(device!);
-            models = Clone(committed[store.Generation]);
+            context.Store = Store.Open(context.Device!);
+            models = Clone(committed[context.Store.Generation]);
         }
         catch (GefsException error)
         {
@@ -61,7 +59,7 @@ public sealed class StoreSteps
     public void ThenAtGeneration(long gen, string keys)
     {
         Assert.Null(failure);
-        Assert.Equal(gen, store!.Generation);
+        Assert.Equal(gen, context.Store!.Generation);
         ThenHolds("main", keys);
     }
 
@@ -108,7 +106,7 @@ public sealed class StoreSteps
     public void WhenForked(string label, string name) => Do(() => Tag(label, name, true));
 
     [When(@"^(\w+) is unmounted$")]
-    public void WhenUnmounted(string label) => Do(() => store!.Unmount(label));
+    public void WhenUnmounted(string label) => Do(() => context.Store!.Unmount(label));
 
     [When(@"^(\w+) is deleted$")]
     public void WhenRemoved(string label) => Do(() => Delete(label));
@@ -132,9 +130,9 @@ public sealed class StoreSteps
     [When(@"^(\w+) is given a data block for file (\d+) and the store commits$")]
     public void WhenGivenData(string label, long file) => Do(() =>
     {
-        Tree t = store!.Mount(label);
-        Blk data = store.Allocator.New(BlockType.Data, t.Gen);
-        store.Allocator.Enqueue(data);
+        Tree t = context.Store!.Mount(label);
+        Blk data = context.Store.Allocator.New(BlockType.Data, t.Gen);
+        context.Store.Allocator.Enqueue(data);
         var key = new byte[17];
         System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(1), file);
         var value = new byte[Format.PointerSize];
@@ -145,128 +143,128 @@ public sealed class StoreSteps
 
     [Then(@"^giving (\w+) key (\d+) fails with ""(.*)""$")]
     public void ThenGiveFails(string label, int n, string message)
-        => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Mount(label).Upsert(new Message(MessageOp.Insert, Key(n), [1]))).Message);
+        => Assert.Equal(message, Assert.Throws<GefsException>(() => context.Store!.Mount(label).Upsert(new Message(MessageOp.Insert, Key(n), [1]))).Message);
 
     [Then("a commit without changes leaves main's snapshot where it was")]
     public void ThenUnchangedCommit()
     {
-        long gen = store!.FindLabel("main")!.Value.Gen;
+        long gen = context.Store!.FindLabel("main")!.Value.Gen;
         Commit();
-        Assert.Equal(gen, store.FindLabel("main")!.Value.Gen);
+        Assert.Equal(gen, context.Store.FindLabel("main")!.Value.Gen);
     }
 
     [Then(@"^(\w+)'s snapshot has no predecessor, no successor, (no base|base \w+), (\d+) labels? and (\d+) forks?$")]
     public void ThenEntry(string label, string from, int labels, int forks)
     {
-        TreeEntry e = store!.Snapshot(store.FindLabel(label)!.Value.Gen);
-        long expected = from == "no base" ? -1 : store.FindLabel(from.Split(' ')[1])!.Value.Gen;
+        TreeEntry e = context.Store!.Snapshot(context.Store.FindLabel(label)!.Value.Gen);
+        long expected = from == "no base" ? -1 : context.Store.FindLabel(from.Split(' ')[1])!.Value.Gen;
         Assert.Equal((-1L, -1L, expected, labels, forks), (e.Pred, e.Succ, e.Base, e.Labels, e.Refs));
     }
 
     [Then(@"^(\w+)'s snapshot follows the one (\w+) was forked from$")]
     public void ThenFollowsBase(string label, string fork)
-        => Assert.Equal(store!.Snapshot(store.FindLabel(fork)!.Value.Gen).Base, store.Snapshot(store.FindLabel(label)!.Value.Gen).Pred);
+        => Assert.Equal(context.Store!.Snapshot(context.Store.FindLabel(fork)!.Value.Gen).Base, context.Store.Snapshot(context.Store.FindLabel(label)!.Value.Gen).Pred);
 
     [When(@"^a label (\w+) is made naming generation (\d+)$")]
     public void WhenGhost(string label, long gen)
     {
         var value = new byte[13];
         Keys.Snap(gen).CopyTo(value, 0);
-        store!.Snaps.Upsert(new Message(MessageOp.Insert, Keys.Label(label), value));
+        context.Store!.Snaps.Upsert(new Message(MessageOp.Insert, Keys.Label(label), value));
     }
 
     [When(@"^main's tree lists (\d+) blocks born in generation (\d+) as freed, and the store commits$")]
     public void WhenKills(int count, long birth)
     {
-        Tree t = store!.Mount("main");
+        Tree t = context.Store!.Mount("main");
         killer = t.Gen;
         killed = [.. Enumerable.Range(1, count).Select(i => i * B)];
         foreach (long addr in killed)
         {
-            store.Kill(t, new Bptr(addr, default, birth));
+            context.Store.Kill(t, new Bptr(addr, default, birth));
         }
 
         Commit();
     }
 
     [Then("no deadlist is open")]
-    public void ThenNoneOpen() => Assert.Equal(0, store!.OpenDeadlists);
+    public void ThenNoneOpen() => Assert.Equal(0, context.Store!.OpenDeadlists);
 
     [Then(@"^main's deadlist for generation (\d+) lists those (\d+) blocks in (\d+) blocks$")]
     public void ThenDeadlist(long birth, int count, int blocks)
     {
         Assert.Equal(count, killed.Count);
-        Assert.Equal(killed, store!.DeadlistContents(killer, birth).Order());
-        Assert.Equal(blocks, store.DeadlistBlocks(killer, birth));
+        Assert.Equal(killed, context.Store!.DeadlistContents(killer, birth).Order());
+        Assert.Equal(blocks, context.Store.DeadlistBlocks(killer, birth));
     }
 
     [Then(@"^(\w+) holds (keys .*|nothing)$")]
     public void ThenHolds(string label, string keys)
     {
         var expected = keys == "nothing" ? [] : Numbers(keys.Split(' ', 2)[1]).ToList();
-        var held = Contents(store!.Mount(label));
+        var held = Contents(context.Store!.Mount(label));
         Assert.Equal(expected, held.Select(kv => kv.Key));
         Assert.Equal(models[label].Select(kv => (kv.Key, kv.Value)), held);
     }
 
     [Then(@"^(\w+) does not exist$")]
-    public void ThenGone(string label) => Assert.Null(store!.FindLabel(label));
+    public void ThenGone(string label) => Assert.Null(context.Store!.FindLabel(label));
 
     [Then(@"^(\w+)'s snapshot has no predecessor$")]
-    public void ThenNoPredecessor(string label) => Assert.Equal(-1, store!.Snapshot(store.FindLabel(label)!.Value.Gen).Pred);
+    public void ThenNoPredecessor(string label) => Assert.Equal(-1, context.Store!.Snapshot(context.Store.FindLabel(label)!.Value.Gen).Pred);
 
     [Then(@"^(\w+)'s snapshot follows (\w+)'s$")]
     public void ThenFollows(string label, string older)
-        => Assert.Equal(store!.FindLabel(older)!.Value.Gen, store.Snapshot(store.FindLabel(label)!.Value.Gen).Pred);
+        => Assert.Equal(context.Store!.FindLabel(older)!.Value.Gen, context.Store.Snapshot(context.Store.FindLabel(label)!.Value.Gen).Pred);
 
     [Then(@"^(snapshotting|forking) (\w+) as (\w+) fails with ""(.*)""$")]
     public void ThenTagFails(string how, string label, string name, string message)
-        => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Tag(label, name, how == "forking")).Message);
+        => Assert.Equal(message, Assert.Throws<GefsException>(() => context.Store!.Tag(label, name, how == "forking")).Message);
 
     [Then(@"^deleting (\w+) fails with ""(.*)""$")]
-    public void ThenDeleteFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Delete(label)).Message);
+    public void ThenDeleteFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => context.Store!.Delete(label)).Message);
 
     [Then(@"^mounting (\w+) fails with ""(.*)""$")]
-    public void ThenMountFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Mount(label)).Message);
+    public void ThenMountFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => context.Store!.Mount(label)).Message);
 
     [Then(@"^unmounting (\w+) fails with ""(.*)""$")]
-    public void ThenUnmountFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Unmount(label)).Message);
+    public void ThenUnmountFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => context.Store!.Unmount(label)).Message);
 
     [When(@"^(\d+) qids are taken and the store commits$")]
     public void WhenQids(int count)
     {
         for (int i = 0; i < count; i++)
         {
-            store!.NewQid();
+            context.Store!.NewQid();
         }
 
         Commit();
     }
 
     [Then(@"^the next qid is (\d+)$")]
-    public void ThenNextQid(long qid) => Assert.Equal(qid, store!.NewQid());
+    public void ThenNextQid(long qid) => Assert.Equal(qid, context.Store!.NewQid());
 
     [Then(@"^main writes in generation (\d+)$")]
-    public void ThenWritesIn(long gen) => Assert.Equal(gen, store!.Mount("main").Gen);
+    public void ThenWritesIn(long gen) => Assert.Equal(gen, context.Store!.Mount("main").Gen);
 
     [Then("each arena's log is 1 block long")]
-    public void ThenLogsCompressed() => Assert.All(store!.Allocator.Arenas, a => Assert.Single(a.LogAddresses()));
+    public void ThenLogsCompressed() => Assert.All(context.Store!.Allocator.Arenas, a => Assert.Single(a.LogAddresses()));
 
     [When(@"^the (first|backup|both) superblocks? (?:is|are) (damaged|written by another version)$")]
     public void WhenSuperblockChanged(string which, string change)
     {
-        long last = (device!.Size / B) - 1;
+        long last = (context.Device!.Size / B) - 1;
         foreach (long n in which switch { "first" => [0L], "backup" => [last], _ => new[] { 0L, last } })
         {
             if (change == "damaged")
             {
-                device.Damage(n);
+                context.Device.Damage(n);
             }
             else
             {
-                byte[] block = device.Block(n);
+                byte[] block = context.Device.Block(n);
                 "gefs9.00"u8.CopyTo(block);
-                device.Put(n, block);
+                context.Device.Put(n, block);
             }
         }
     }
@@ -274,24 +272,24 @@ public sealed class StoreSteps
     [When(@"^both superblocks are rewritten claiming (blocks|buffers) of (\d+) bytes$")]
     public void WhenRewritten(string what, int size)
     {
-        long last = (device!.Size / B) - 1;
-        Superblock sb = Superblock.Read(device.Block(0));
+        long last = (context.Device!.Size / B) - 1;
+        Superblock sb = Superblock.Read(context.Device.Block(0));
         sb = what == "blocks" ? sb with { BlockSize = size } : sb with { BufferSpace = size };
         var block = new byte[B];
         sb.Write(block);
-        device.Put(0, block);
-        device.Put(last, block);
+        context.Device.Put(0, block);
+        context.Device.Put(last, block);
     }
 
     [When("the device's record is cleared and the store commits")]
     public void WhenTracedCommit()
     {
-        device!.Trace.Clear();
+        context.Device!.Trace.Clear();
         Commit();
     }
 
     [Then(@"^the device recorded: (.*)$")]
-    public void ThenRecorded(string events) => Assert.Equal(events.Split(", "), device!.Trace);
+    public void ThenRecorded(string events) => Assert.Equal(events.Split(", "), context.Device!.Trace);
 
     [Then(@"^a crash after any number of the next commit's writes opens as generation (\d+) or (\d+), as committed, every block held, in a log or free$")]
     public void ThenCrashes(long before, long after)
@@ -305,18 +303,18 @@ public sealed class StoreSteps
                 step();
             }
 
-            int writes = device!.Writes;
-            device.CrashAfter(k);
+            int writes = context.Device!.Writes;
+            context.Device.CrashAfter(k);
             Commit();
-            device.Restart();
-            bool whole = device.Writes - writes <= k;
+            context.Device.Restart();
+            bool whole = context.Device.Writes - writes <= k;
             WhenOpened();
             Assert.Null(failure);
-            Assert.Contains(store!.Generation, (long[])[before, after]);
-            seen.Add(store.Generation);
+            Assert.Contains(context.Store!.Generation, (long[])[before, after]);
+            seen.Add(context.Store.Generation);
             foreach (string label in models.Keys)
             {
-                Assert.Equal(models[label].Select(kv => (kv.Key, kv.Value)), Contents(store.Mount(label)));
+                Assert.Equal(models[label].Select(kv => (kv.Key, kv.Value)), Contents(context.Store.Mount(label)));
             }
 
             ThenAccounted();
@@ -335,12 +333,12 @@ public sealed class StoreSteps
     public void ThenAccounted()
     {
         var held = new HashSet<long>();
-        Walk(store!.Snaps.Root, store.Snaps.Height, held);
-        foreach (var (_, value) in Scan(store.Snaps, [(byte)KeyType.Snap]))
+        Walk(context.Store!.Snaps.Root, context.Store.Snaps.Height, held);
+        foreach (var (_, value) in Scan(context.Store.Snaps, [(byte)KeyType.Snap]))
         {
             TreeEntry e = TreeEntry.Read(value);
             Walk(e.Root, e.Height, held);
-            foreach (var (_, named) in Scan(new Tree(store.Allocator, e.Root, e.Height), [(byte)KeyType.Data]))
+            foreach (var (_, named) in Scan(new Tree(context.Store.Allocator, e.Root, e.Height), [(byte)KeyType.Data]))
             {
                 held.Add(Bptr.Read(named).Addr);
             }
@@ -348,14 +346,14 @@ public sealed class StoreSteps
 
         // A deadlist lists only blocks an older snapshot still holds; any other would be leaked.
         var inTrees = held.ToHashSet();
-        foreach (var (key, value) in Scan(store.Snaps, [(byte)KeyType.Deadlist]))
+        foreach (var (key, value) in Scan(context.Store.Snaps, [(byte)KeyType.Deadlist]))
         {
             // Each deadlist belongs to a snapshot, and lists only blocks born after its base.
             long birth = System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(9));
-            Assert.True(birth > store.Snapshot(System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(1))).Base);
+            Assert.True(birth > context.Store.Snapshot(System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(1))).Base);
             for (Bptr at = Bptr.Read(value); at.Addr != -1;)
             {
-                Blk b = store.Allocator.Get(at);
+                Blk b = context.Store.Allocator.Get(at);
                 Assert.True(held.Add(at.Addr), $"deadlist block {at.Addr} is also held elsewhere");
                 for (int i = 0; i < b.LogSize; i += 8)
                 {
@@ -367,9 +365,9 @@ public sealed class StoreSteps
             }
         }
 
-        var logs = store.Allocator.Arenas.SelectMany(a => a.LogAddresses()).ToHashSet();
-        var free = store.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / B)).Select(k => r.Offset + (k * B)))).ToHashSet();
-        var data = store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B))).ToHashSet();
+        var logs = context.Store.Allocator.Arenas.SelectMany(a => a.LogAddresses()).ToHashSet();
+        var free = context.Store.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / B)).Select(k => r.Offset + (k * B)))).ToHashSet();
+        var data = context.Store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B))).ToHashSet();
         Assert.Empty(held.Intersect(free));
         Assert.Empty(held.Intersect(logs));
         Assert.Empty(logs.Intersect(free));
@@ -406,10 +404,10 @@ public sealed class StoreSteps
 
     private void Ream()
     {
-        device = new MemoryDevice(blocks);
-        store = Store.Ream(device, arenas);
+        context.Device = new MemoryDevice(blocks);
+        context.Store = Store.Ream(context.Device, arenas);
         models = new() { ["main"] = [], ["empty"] = [] };
-        committed = new() { [store.Generation] = Clone(models) };
+        committed = new() { [context.Store.Generation] = Clone(models) };
     }
 
     private void Do(Action step)
@@ -420,7 +418,7 @@ public sealed class StoreSteps
 
     private void Give(string label, string keys)
     {
-        Tree t = store!.Mount(label);
+        Tree t = context.Store!.Mount(label);
         foreach (int n in Numbers(keys))
         {
             string value = $"{label}:{n}:{++version}:" + new string('v', 400 - $"{label}:{n}:{version}:".Length);
@@ -431,7 +429,7 @@ public sealed class StoreSteps
 
     private void Remove(string label, string keys)
     {
-        Tree t = store!.Mount(label);
+        Tree t = context.Store!.Mount(label);
         foreach (int n in Numbers(keys))
         {
             t.Upsert(new Message(MessageOp.Delete, Key(n), []));
@@ -441,26 +439,26 @@ public sealed class StoreSteps
 
     private void Tag(string label, string name, bool mutable)
     {
-        store!.Tag(label, name, mutable);
+        context.Store!.Tag(label, name, mutable);
         models[name] = new SortedDictionary<int, string>(models[label]);
     }
 
     private void Delete(string label)
     {
-        store!.Delete(label);
+        context.Store!.Delete(label);
         models.Remove(label);
     }
 
     private void Commit()
     {
-        store!.Commit();
-        committed[store.Generation] = Clone(models);
+        context.Store!.Commit();
+        committed[context.Store.Generation] = Clone(models);
     }
 
     private void Walk(Bptr bp, int height, HashSet<long> held)
     {
         held.Add(bp.Addr);
-        Blk b = store!.Allocator.Get(bp);
+        Blk b = context.Store!.Allocator.Get(bp);
         for (int i = 0; height > 1 && i < b.ValueCount; i++)
         {
             Walk(Blk.GetPointer(b.GetValue(i).Value).Pointer, height - 1, held);
