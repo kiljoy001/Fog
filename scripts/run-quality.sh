@@ -102,7 +102,9 @@ scope() {
 
 # Coyote explores interleavings only in assemblies rewritten to hand it their tasks, locks and awaits:
 # the code under test and the test assembly, whose awaits would otherwise run outside its control.
-# Rewriting to check data races also gives it their collection and memory accesses to switch at.
+# Rewriting Fog's assemblies to check data races also gives it their collection and memory accesses to
+# switch at; the test assembly is rewritten without it, as its memory accesses rewritten that way do
+# not run.
 # A scenario skips when its assemblies were not rewritten, so here a skip fails the gate.
 coyote() {
   step "Coyote interleavings"
@@ -112,12 +114,18 @@ coyote() {
   cat > "$output/rewrite.coyote.json" <<JSON
 {
   "AssembliesPath": ".",
-  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll", "NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll"],
+  "Assemblies": ["NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll"],
   "IsDataRaceCheckingEnabled": true
 }
 JSON
+  cat > "$output/rewrite-tests.coyote.json" <<JSON
+{
+  "AssembliesPath": ".",
+  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll"]
+}
+JSON
   dotnet tool restore
-  (cd "$output" && dotnet tool run coyote rewrite rewrite.coyote.json)
+  (cd "$output" && dotnet tool run coyote rewrite rewrite.coyote.json && dotnet tool run coyote rewrite rewrite-tests.coyote.json)
   dotnet test "$output/NinePSharp.Fog.Coyote.Tests.dll" --logger "trx;LogFileName=coyote.trx" --results-directory "$output/results"
   python3 - "$output/results/coyote.trx" <<'PY'
 import sys
