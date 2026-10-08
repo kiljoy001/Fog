@@ -22,14 +22,12 @@ internal sealed class FileDevice : Device, IDisposable
 
     public static FileDevice Open(string path)
     {
-        SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-        if (RandomAccess.GetLength(handle) % Format.BlockSize != 0)
+        if (new FileInfo(path).Length % Format.BlockSize != 0)
         {
-            handle.Dispose();
             throw new GefsException("device size is not a whole number of blocks");
         }
 
-        return new FileDevice(handle);
+        return new FileDevice(File.OpenHandle(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None));
     }
 
     public override void Read(long offset, Span<byte> block)
