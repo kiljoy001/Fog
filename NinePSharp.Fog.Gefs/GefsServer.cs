@@ -38,7 +38,7 @@ public sealed class GefsServer : IDisposable
         return new GefsServer(file, Store.Open(file), inGroup, clock);
     }
 
-    // fsattach: a leading % dropped, and no name meaning main.
+    // fsattach: a leading % dropped, and no name meaning main. Dump is reserved, so never a label.
     public GefsFs Attach(string aname)
     {
         string label = aname.StartsWith('%') ? aname[1..] : aname;
@@ -47,7 +47,7 @@ public sealed class GefsServer : IDisposable
         {
             if (!served.TryGetValue(label, out GefsFs? fs))
             {
-                if (label == "dump" || store.FindLabel(label) is null)
+                if (store.FindLabel(label) is null)
                 {
                     throw new GefsException("attach -- bad specifier");
                 }

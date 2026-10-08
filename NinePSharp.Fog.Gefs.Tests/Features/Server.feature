@@ -69,6 +69,23 @@ Feature: A store serves its trees by attach name, commits every five seconds and
     Then reading 100 bytes of notes at offset 0 gives "kept"
 
   @FOG_GEFS_702
+  Scenario: A change to one of several trees served is committed
+    When the server snapshots main as monday
+    And 5 seconds pass
+    And adm attaches to "monday"
+    And adm attaches to "main"
+    And adm creates file notes in the root with mode 0644 at time 200
+    And 5 seconds pass
+    Then the store is at generation 3
+
+  @FOG_GEFS_702
+  Scenario: A closed server commits nothing more
+    When adm attaches to "main"
+    And the server is closed
+    And adm creates file late in the root with mode 0644 at time 200
+    Then no write reaches the device when 10 more seconds pass
+
+  @FOG_GEFS_702
   Scenario: Closing the server commits what changed since the last commit
     When adm attaches to "main"
     And adm creates file notes in the root with mode 0644 at time 200
