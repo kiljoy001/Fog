@@ -15,7 +15,6 @@ public sealed class ArenaSteps : IDisposable
     private readonly Dictionary<long, List<(long Offset, long Length)>> freeAt = [];
     private readonly Dictionary<byte[], byte[]> given = new(ByteArrayComparer.Instance);
     private long lastGen;
-    private Tree? writer;
     private Bptr bornThere;
     private MemoryDevice? device;
     private Allocator? allocator;
@@ -23,7 +22,6 @@ public sealed class ArenaSteps : IDisposable
     private Tree? tree;
     private List<long> gave = [];
     private Bptr bornNow;
-    private Bptr bornBefore;
     private string? failure;
     private string? path;
     private FileDevice? file;
@@ -45,13 +43,6 @@ public sealed class ArenaSteps : IDisposable
         device = new MemoryDevice(blocks);
         allocator = Allocator.Ream(device, arenas);
         Remember(0, [.. allocator.Arenas.Select(a => a.Pointer)]);
-    }
-
-    [Given(@"^a device of (\d+) blocks formatted with (\d+) arenas, writing generation (\d+)$")]
-    public void GivenWriting(long blocks, int arenas, long gen)
-    {
-        GivenFormatted(blocks, arenas);
-        writer = new Tree(allocator!, default, 1) { Gen = gen };
     }
 
     [Given(@"^a device of (\d+) blocks$")]
@@ -298,47 +289,32 @@ public sealed class ArenaSteps : IDisposable
         Assert.Equal(message, Assert.Throws<GefsException>(() => tree.Lookup(given.Keys.First())).Message);
     }
 
-    [When(@"^a block born in generation (\d+) in each arena and a block born in generation (\d+) are allocated and freed$")]
-    public void WhenBornAndFreed(long now, long before)
+    [When("a block in each arena is allocated and freed")]
+    public void WhenEachFreed()
     {
-        Blk current = allocator!.New(BlockType.Leaf, now);
-        Blk older = allocator.New(BlockType.Leaf, before);
-        allocator.Enqueue(current);
-        allocator.Enqueue(older);
-        (bornNow, bornBefore) = (current.Pointer, older.Pointer);
-        bornThere = new Bptr(allocator.Arenas[1].Allocate()!.Value, default, now);
-        allocator.Free(writer!, bornNow);
-        allocator.Free(writer!, bornThere);
-        allocator.Free(writer!, bornBefore);
+        var writer = new Tree(allocator!, default, 1);
+        Blk mine = allocator!.New(BlockType.Leaf);
+        allocator.Enqueue(mine);
+        (bornNow, bornThere) = (mine.Pointer, new Bptr(allocator.Arenas[1].Allocate()!.Value, default, default));
+        allocator.Free(writer, bornNow);
+        allocator.Free(writer, bornThere);
     }
 
-    [Then(@"^none is free yet, and the block born in generation (\d+) is reported for its deadlist$")]
-    public void ThenNoneFree(long before)
+    [Then("neither is free yet, and both are retired")]
+    public void ThenRetired()
     {
         Assert.False(IsFree(bornNow.Addr));
         Assert.False(IsFree(bornThere.Addr));
-        Assert.False(IsFree(bornBefore.Addr));
-        Assert.Equal([(bornBefore.Addr, before)], allocator!.Killed.Select(k => (k.Addr, k.Gen)));
+        Assert.Equal([bornNow.Addr, bornThere.Addr], allocator!.Killed.Select(k => k.Addr));
     }
 
-    [When("the arenas reclaim")]
-    public void WhenReclaim() => allocator!.Reclaim();
-
-    [Then(@"^the blocks born in generation (\d+) are free again, each in its own arena, and the block born in generation (\d+) is not$")]
-    public void ThenReclaimed(long now, long before)
+    [Then("both are free again, each in its own arena, and none is retired")]
+    public void ThenReleased()
     {
-        Assert.Equal((now, now, before), (bornNow.Gen, bornThere.Gen, bornBefore.Gen));
         Assert.Contains(allocator!.Arenas[0].Free, r => r.Offset <= bornNow.Addr && bornNow.Addr < r.Offset + r.Length);
         Assert.Contains(allocator.Arenas[1].Free, r => r.Offset <= bornThere.Addr && bornThere.Addr < r.Offset + r.Length);
-        Assert.False(IsFree(bornBefore.Addr));
-        Assert.Equal((2 * B, B), (allocator.Arenas[0].Used, allocator.Arenas[1].Used));
-    }
-
-    [Then("the block born in generation 4 is free, and no longer reported")]
-    public void ThenKilledReleased()
-    {
-        Assert.True(IsFree(bornBefore.Addr));
-        Assert.Empty(allocator!.Killed);
+        Assert.Empty(allocator.Killed);
+        Assert.Equal((B, B), (allocator.Arenas[0].Used, allocator.Arenas[1].Used));
     }
 
     [Then(@"^arena (\d+)'s log ends: (.*)$")]

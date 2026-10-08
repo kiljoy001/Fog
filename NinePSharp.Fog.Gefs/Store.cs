@@ -84,8 +84,7 @@ internal sealed class Store : IDeadlists
         }
 
         Allocator allocator = Allocator.Open(device, sb.Arenas, sb.SyncGen);
-        var snaps = new Tree(allocator, sb.Snap.Root, sb.Snap.Height) { Gen = sb.NextGen };
-        return new Store(device, allocator, snaps, sb.SyncGen, sb.NextQid, sb.NextGen + 1);
+        return new Store(device, allocator, new Tree(allocator, sb.Snap.Root, sb.Snap.Height), sb.SyncGen, sb.NextQid, sb.NextGen);
     }
 
     public long NewQid() => NextQid++;
@@ -146,7 +145,7 @@ internal sealed class Store : IDeadlists
         {
             long fork = nextGen++;
             Snaps.Upsert(
-                Retag(MessageOp.Incref, s.Gen, -1, 0, 1),
+                Retag(MessageOp.Incref, s.Gen, 0, 0, 1),
                 Label(name, fork, Mutable),
                 Entry(new TreeEntry(0, 1, s.Height, s.Flag, fork, -1, -1, s.Gen, s.Root)));
         }
@@ -187,9 +186,8 @@ internal sealed class Store : IDeadlists
 
     public int DeadlistBlocks(long gen, long birth) => Chain(Load((gen, birth))).Count();
 
-    // sync: each mutable tree that changed becomes a new snapshot, the deadlists are written, the
-    // blocks freed in this generation go back, and the arenas commit it by having both superblocks
-    // written between their first and second headers.
+    // sync: each mutable tree that changed becomes a new snapshot, the deadlists are written, and the
+    // arenas commit it by having both superblocks written between their first and second headers.
     public void Commit()
     {
         foreach (Mounted m in mounts.Values.Where(m => m.Tree.Dirty).ToList())
@@ -198,9 +196,7 @@ internal sealed class Store : IDeadlists
         }
 
         FlushDeadlists();
-        Allocator.Reclaim();
         long gen = Generation + 1;
-        long snapGen = nextGen++;
         Allocator.Sync(gen, true, arenas =>
         {
             var sb = new Superblock(Format.BlockSize, Format.BufferSpace, new TreeRoot(Snaps.Height, Snaps.Root), default, default, 0, NextQid, nextGen, gen, [.. arenas]);
@@ -212,7 +208,6 @@ internal sealed class Store : IDeadlists
             device.Flush();
         });
         Generation = gen;
-        Snaps.Gen = snapGen;
     }
 
     public (long Gen, int Flags)? FindLabel(string label)
@@ -314,7 +309,7 @@ internal sealed class Store : IDeadlists
 
             if (s.Pred == -1 && succ == -1)
             {
-                msgs.Add(Retag(MessageOp.Incref, s.Base, -1, 0, -1));
+                msgs.Add(Retag(MessageOp.Incref, s.Base, 0, 0, -1));
             }
 
             msgs.Add(new Message(MessageOp.Delete, Keys.Snap(s.Gen), []));
@@ -353,12 +348,9 @@ internal sealed class Store : IDeadlists
             Discard(dl, false);
         }
 
-        if (succ != -1)
+        foreach (Deadlist dl in DeadlistsOf(succ).Where(dl => dl.Birth > older))
         {
-            foreach (Deadlist dl in DeadlistsOf(succ).Where(dl => dl.Birth > older))
-            {
-                Discard(dl, true);
-            }
+            Discard(dl, true);
         }
     }
 
@@ -436,13 +428,9 @@ internal sealed class Store : IDeadlists
         ins.LogSize += 8;
     }
 
+    // A written deadlist's blocks; only Append and FlushDeadlists see one with an open block.
     private IEnumerable<Blk> Chain(Deadlist dl)
     {
-        if (dl.Ins is { } ins)
-        {
-            yield return ins;
-        }
-
         for (Bptr at = dl.Head; at.Addr != -1;)
         {
             Blk b = Allocator.Get(at);

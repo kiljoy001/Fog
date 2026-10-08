@@ -264,17 +264,14 @@ Feature: Arenas divide a device's blocks and log every allocation, after 9front'
     And a block of the tree read with a byte changed fails with "block contents corrupted"
 
   @FOG_GEFS_308
-  Scenario: Blocks freed in the generation being written are reused after reclaiming; older ones are only reported
-    Given a device of 134 blocks formatted with 2 arenas, writing generation 5
-    When a block born in generation 5 in each arena and a block born in generation 4 are allocated and freed
-    Then none is free yet, and the block born in generation 4 is reported for its deadlist
-    When the arenas reclaim
-    Then the blocks born in generation 5 are free again, each in its own arena, and the block born in generation 4 is not
-    When the arenas reclaim
-    Then arena 0 counts 2 blocks used
-    When the arenas sync generation 5
-    Then the block born in generation 4 is free, and no longer reported
-    And arena 0's log ends: free 66, free 65, barrier 5
+  Scenario: Freed blocks are reused only once the sync after them has committed, each in its own arena
+    Given a device of 134 blocks formatted with 2 arenas
+    When a block in each arena is allocated and freed
+    Then neither is free yet, and both are retired
+    When the arenas sync generation 1
+    Then both are free again, each in its own arena, and none is retired
+    And arena 0's log ends: free 66, barrier 1
+    And arena 1's log ends: free 132, barrier 1
 
   @FOG_GEFS_308
   Scenario: Allocation moves to the next arena when one is full, and the device fills

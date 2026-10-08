@@ -153,6 +153,17 @@ Feature: Snapshots keep older states of a tree, and deadlists free what only the
     And main's snapshot has no predecessor
     And every block of the device is held, in a log or free
 
+  @FOG_GEFS_505
+  Scenario: Deleting a fork keeps the file data it shared with the snapshot it forked from
+    Given a device of 1600 blocks reamed with 2 arenas
+    When main is given a data block for file 1 and the store commits
+    And main is forked as f
+    And f is given keys 1 to 20 and the store commits
+    And f is unmounted
+    And f is deleted and the store commits
+    Then main holds nothing
+    And every block of the device is held, in a log or free
+
   @FOG_GEFS_506
   Scenario Outline: Naming, deleting and opening snapshots refuse what cannot be done
     Given a device of 1600 blocks reamed with 2 arenas

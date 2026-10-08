@@ -46,7 +46,7 @@ Feature: A store commits all of its state at once by writing its superblocks, af
     When 3 qids are taken and the store commits
     And the device is opened
     Then the next qid is 4
-    And main writes in generation 5
+    And main writes in generation 2
 
   @FOG_GEFS_402
   Scenario: Commits compress allocation logs that have doubled

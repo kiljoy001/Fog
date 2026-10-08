@@ -676,5 +676,11 @@
     "mutator": "Statement mutation",
     "line": "path[^1].Vi++;",
     "reason": "a scan never moves past the leaf value it gave, so it gives the same key forever"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Statement mutation",
+    "line": "path[i - 1].Vi++;",
+    "reason": "a scan drops an exhausted level without moving the level above on, so it reloads the same block forever"
   }
 ]

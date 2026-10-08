@@ -7,7 +7,6 @@ internal sealed class Allocator : BlockStore
     private const long B = Format.BlockSize;
 
     private readonly Device device;
-    private readonly List<Bptr> pending = [];
     private readonly List<Bptr> killed = [];
     private long roundRobin;
 
@@ -21,8 +20,7 @@ internal sealed class Allocator : BlockStore
 
     public bool UseReserve { get; set; }
 
-    // Blocks freed since the last commit that its root may still use, and so are reused only once the
-    // next commit is durable.
+    // Blocks freed since the last commit, reused only once the next commit is durable.
     public IReadOnlyList<Bptr> Killed => killed;
 
     // ream's arenas: the first and last blocks kept for superblocks, the rest divided evenly. A
@@ -50,17 +48,14 @@ internal sealed class Allocator : BlockStore
         return Blk.Read(bytes, bp);
     }
 
-    // freeblk and freebp: a block born in the generation its tree is writing goes back to its arena
-    // once nothing can still be reading it. One born earlier is in a committed root: a tree without
-    // snapshots retires it at the next commit, and a snapshot tree puts it on a deadlist, unless it
-    // was born at or before the snapshot the tree forked from, whose own chain still holds it.
+    // freeblk and freebp: a block a snapshot tree frees that was born before the generation it is
+    // writing may be in an older snapshot, so it goes on a deadlist, unless it was born at or before
+    // the snapshot the tree forked from, whose own chain still holds it. Any other block is retired:
+    // its free is logged with the next commit and it is reused once that commit is durable. gefs
+    // reuses blocks born and freed in one generation sooner; Fog keeps them until the commit.
     public override void Free(Tree t, Bptr bp)
     {
-        if (bp.Gen >= t.Gen)
-        {
-            pending.Add(bp);
-        }
-        else if (t.Deadlists is not { } deadlists)
+        if (t.Deadlists is not { } deadlists || bp.Gen >= t.Gen)
         {
             killed.Add(bp);
         }
@@ -72,16 +67,6 @@ internal sealed class Allocator : BlockStore
 
     // A block no committed root will use once the next commit is durable.
     public void Retire(long address) => killed.Add(new Bptr(address, default, default));
-
-    public void Reclaim()
-    {
-        foreach (Bptr bp in pending)
-        {
-            ArenaOf(bp.Addr).Deallocate(bp.Addr);
-        }
-
-        pending.Clear();
-    }
 
     // sync's part for the arenas. The frees of blocks the previous root used, and of logs replaced by
     // compression, are logged; each log ends with a barrier for the generation and is written, then

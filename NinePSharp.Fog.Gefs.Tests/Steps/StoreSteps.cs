@@ -348,8 +348,11 @@ public sealed class StoreSteps
 
         // A deadlist lists only blocks an older snapshot still holds; any other would be leaked.
         var inTrees = held.ToHashSet();
-        foreach (var (_, value) in Scan(store.Snaps, [(byte)KeyType.Deadlist]))
+        foreach (var (key, value) in Scan(store.Snaps, [(byte)KeyType.Deadlist]))
         {
+            // Each deadlist belongs to a snapshot, and lists only blocks born after its base.
+            long birth = System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(9));
+            Assert.True(birth > store.Snapshot(System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(key.AsSpan(1))).Base);
             for (Bptr at = Bptr.Read(value); at.Addr != -1;)
             {
                 Blk b = store.Allocator.Get(at);
