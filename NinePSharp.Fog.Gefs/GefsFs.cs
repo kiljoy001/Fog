@@ -34,12 +34,12 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     private readonly HashSet<long> exclusive = [];
 
     // inGroup says whether a user is in a group; every user is in the group of its own name.
-    public GefsFs(Store store, string label, string device, Func<string, string, bool> inGroup, TimeProvider? clock = null)
+    public GefsFs(Store store, string label, string device, Func<string, string, bool> inGroup, TimeProvider clock)
     {
         this.store = store;
         this.device = device;
         this.inGroup = inGroup;
-        this.clock = clock ?? TimeProvider.System;
+        this.clock = clock;
         tree = store.Mount(label);
         owner = Find(0).Dir.User;
     }
@@ -76,11 +76,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     {
         lock (gate)
         {
-            var prefix = new byte[9];
-            prefix[0] = (byte)KeyType.Entry;
-            BinaryPrimitives.WriteInt64BigEndian(prefix.AsSpan(1), Qid(directory));
-            var scan = new Scan(prefix);
-            scan.Enter(tree);
+            Scan scan = Under(KeyType.Entry, Qid(directory));
             var entries = new List<ResourceDirectoryEntry>();
             while (scan.Next())
             {
@@ -137,7 +133,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
                 throw new IOException("permission denied");
             }
 
-            if ((d.Qid.Type & (byte)QidType.QTEXCL) != 0 && exclusive.Contains(d.Qid.Path))
+            if (exclusive.Contains(d.Qid.Path))
             {
                 throw new IOException("open/create -- file is locked");
             }
@@ -159,7 +155,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
             if ((mode & NinePConstants.OTRUNC) != 0 && (d.Mode & Append) == 0)
             {
-                Change(key, Clear(d.Qid.Path, 0, d.Length), new WstatChange(Length: 0, Muid: context.User));
+                Change(key, Clear(d.Qid.Path, 0), new WstatChange(Length: 0, Muid: context.User));
                 d = Find(d.Qid.Path).Dir;
             }
 
@@ -173,12 +169,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         lock (gate)
         {
             Dir d = Find(Qid(openHandle.Resource)).Dir;
-            if (IsDirectory(d) || offset >= (ulong)d.Length)
-            {
-                return ValueTask.FromResult(ReadOnlyMemory<byte>.Empty);
-            }
-
-            var reply = new byte[(int)Math.Min(count, (ulong)d.Length - offset)];
+            var reply = new byte[(int)Math.Min(count, (ulong)d.Length - Math.Min(offset, (ulong)d.Length))];
             for (int done = 0; done < reply.Length;)
             {
                 long at = (long)offset + done;
@@ -217,7 +208,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
                 int within = (int)(at - fb);
                 int n = Math.Min((int)B - within, data.Length - done);
                 Blk b = store.Allocator.New(BlockType.Data, tree.Gen);
-                if (fb < d.Length && n != B && tree.Lookup(Keys.Data(d.Qid.Path, fb)) is { } old)
+                if (n != B && tree.Lookup(Keys.Data(d.Qid.Path, fb)) is { } old)
                 {
                     store.Allocator.ReadData(Bptr.Read(old)).CopyTo(b.Buffer, 0);
                 }
@@ -231,7 +222,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             }
 
             long end = start + data.Length;
-            Change(key, changes, new WstatChange(Length: end > d.Length ? end : null, Mtime: Now, Muid: context.User));
+            Change(key, changes, new WstatChange(Length: Math.Max(end, d.Length), Mtime: Now, Muid: context.User));
             return ValueTask.FromResult((uint)data.Length);
         }
     }
@@ -290,11 +281,6 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             }
 
             bool rename = stat.Name.Length != 0 && stat.Name != d.Name;
-            if (stat.Name.Length != 0 && System.Text.Encoding.UTF8.GetByteCount(stat.Name) > Format.MaxName)
-            {
-                throw Refused("name too long");
-            }
-
             if (rename)
             {
                 if (NameError(stat.Name) is { } error)
@@ -336,6 +322,11 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             }
 
             long? mtime = stat.ModificationTime == uint.MaxValue || stat.ModificationTime * 1_000_000_000L == d.Mtime ? null : stat.ModificationTime * 1_000_000_000L;
+            if (TooLong(stat.User) || TooLong(stat.Group))
+            {
+                throw Refused("name too long");
+            }
+
             string? owner = stat.User.Length == 0 || stat.User == d.User ? null : stat.User;
             string? group = stat.Group.Length == 0 || stat.Group == d.Group ? null : stat.Group;
             if (stat.LastModifier.Length != 0)
@@ -376,7 +367,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             }
 
             var change = new WstatChange(length, mode, mtime, null, owner, group, user);
-            List<Message> cleared = length is { } l && l < d.Length ? Clear(d.Qid.Path, l, d.Length) : [];
+            List<Message> cleared = length is { } l ? Clear(d.Qid.Path, l) : [];
             if (rename)
             {
                 Dir n = Dir.Read(key, Messages.Apply(d.Value(), new Message(MessageOp.Wstat, key, change.Pack()))) with { Name = stat.Name };
@@ -423,21 +414,25 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         return (mode & NinePConstants.OTRUNC) != 0 ? bits | Write : bits;
     }
 
+    private static bool TooLong(string name) => System.Text.Encoding.UTF8.GetByteCount(name) > Format.MaxName;
+
+    private static bool Grants(uint mode, int bits, int shift) => (mode & ((uint)bits << shift)) == (uint)bits << shift;
+
     // okname
     private static string? NameError(string name)
         => name.Length == 0 || name is "." or ".." || name.Any(c => c < ' ' || c == '/') ? "create/wstat -- bad character in file name"
-            : System.Text.Encoding.UTF8.GetByteCount(name) > Format.MaxName ? "name too long"
+            : TooLong(name) ? "name too long"
             : null;
 
     // fsaccess: the owner's bits, then the group's, then everyone's; none gets only everyone's.
     private bool Allowed(Dir d, string user, int bits)
     {
-        if (user != "none" && ((user == d.User && ((d.Mode >> 6) & bits) == bits) || (inGroup(user, d.Group) && ((d.Mode >> 3) & bits) == bits)))
+        if (user != "none" && ((user == d.User && Grants(d.Mode, bits, 6)) || (inGroup(user, d.Group) && Grants(d.Mode, bits, 3))))
         {
             return true;
         }
 
-        return (d.Mode & bits) == bits;
+        return Grants(d.Mode, bits, 0);
     }
 
     private ResourceHandle Handle(Dir d) => new(new ResourceIdentity("gefs", device, (ulong)d.Qid.Path), (QidType)d.Qid.Type, d.Qid.Version);
@@ -455,7 +450,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     private long Parent(long qid)
     {
-        Keys.ReadEntry(tree.Lookup(Keys.Up(qid)) ?? throw new IOException("phase error -- use after remove"), out long parent);
+        Keys.ReadEntry(Find(qid).Key, out long parent);
         return parent;
     }
 
@@ -499,7 +494,7 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             ? permissions & (~0b111_111_111u | (dir.Mode & 0b111_111_111))
             : permissions & (~0b110_110_110u | (dir.Mode & 0b110_110_110));
         long now = Now;
-        var d = new Dir(name, new Qid(store.NewQid(), 0, (byte)(mode >> 24)), mode, now, now, 0, user, dir.Group, user);
+        var d = new Dir(name, new Qid(store.NewQid(), 0, (byte)(mode / (1u << 24))), mode, now, now, 0, user, dir.Group, user);
         byte[] key = d.Key(parent);
         Upsert(new Message(MessageOp.Insert, key, d.Value()), new Message(MessageOp.Insert, Keys.Up(d.Qid.Path), key), Touch(parent));
         return d;
@@ -522,19 +517,14 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     private bool HasChildren(long qid)
     {
-        var prefix = new byte[9];
-        prefix[0] = (byte)KeyType.Entry;
-        BinaryPrimitives.WriteInt64BigEndian(prefix.AsSpan(1), qid);
-        var scan = new Scan(prefix);
-        scan.Enter(tree);
-        return scan.Next();
+        return Under(KeyType.Entry, qid).Next();
     }
 
     private void Remove((byte[] Key, Dir Dir) found)
     {
         long qid = found.Dir.Qid.Path;
         long parent = Parent(qid);
-        var changes = Clear(qid, 0, found.Dir.Length);
+        var changes = Clear(qid, 0);
         changes.Add(new Message(MessageOp.Delete, found.Key, []));
         changes.Add(new Message(MessageOp.Delete, Keys.Up(qid), []));
         changes.Add(Touch(parent));
@@ -544,28 +534,44 @@ internal sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         }
     }
 
-    // The data blocks from a length to the end of the file cleared; a block the new length ends in is
-    // written anew with zeros past it, so lengthening the file again reads zeros there.
-    private List<Message> Clear(long qid, long length, long end)
+    // The data blocks past a length cleared; a block the length ends in is written anew with zeros
+    // past it, so lengthening the file again reads zeros there.
+    private List<Message> Clear(long qid, long length)
     {
         var changes = new List<Message>();
-        long first = length + ((B - (length % B)) % B);
-        for (long fb = first; fb < end; fb += B)
+        long last = length - (length % B);
+        Scan scan = Under(KeyType.Data, qid);
+        while (scan.Next())
         {
-            changes.Add(new Message(MessageOp.ClearBlock, Keys.Data(qid, fb), []));
-        }
-
-        if (length % B != 0 && tree.Lookup(Keys.Data(qid, length - (length % B))) is { } old)
-        {
-            Blk b = store.Allocator.New(BlockType.Data, tree.Gen);
-            store.Allocator.ReadData(Bptr.Read(old)).AsSpan(0, (int)(length % B)).CopyTo(b.Buffer);
-            store.Allocator.Enqueue(b);
-            var bp = new byte[Format.PointerSize];
-            b.Pointer.Write(bp);
-            changes.Add(new Message(MessageOp.Insert, Keys.Data(qid, length - (length % B)), bp));
+            if (BinaryPrimitives.ReadInt64BigEndian(scan.Key.AsSpan(9)) is var fb && fb >= last)
+            {
+                changes.Add(fb == last && length != last ? Truncated(scan.Key, scan.Value, (int)(length - last)) : new Message(MessageOp.ClearBlock, scan.Key, []));
+            }
         }
 
         return changes;
+    }
+
+    // A data block written anew with only its first bytes.
+    private Message Truncated(byte[] key, byte[] value, int keep)
+    {
+        Blk b = store.Allocator.New(BlockType.Data, tree.Gen);
+        store.Allocator.ReadData(Bptr.Read(value)).AsSpan(0, keep).CopyTo(b.Buffer);
+        store.Allocator.Enqueue(b);
+        var bp = new byte[Format.PointerSize];
+        b.Pointer.Write(bp);
+        return new Message(MessageOp.Insert, key, bp);
+    }
+
+    // The keys of one type under a qid: a directory's entries or a file's data blocks.
+    private Scan Under(KeyType type, long qid)
+    {
+        var prefix = new byte[9];
+        prefix[0] = (byte)type;
+        BinaryPrimitives.WriteInt64BigEndian(prefix.AsSpan(1), qid);
+        var scan = new Scan(prefix);
+        scan.Enter(tree);
+        return scan;
     }
 
     // Block changes in batches, then the entry's stat change.

@@ -55,6 +55,17 @@ Feature: Keys, values and messages are packed as 9front's gefs packs them
     Then the value is 67 bytes long
     And they unpack to the same entry
 
+  @FOG_GEFS_003
+  Scenario Outline: A user in a directory entry is named in at most 244 bytes, as a file is
+    Given an entry "notes" owned by a user named in <length> bytes, in group sys, last changed by adm
+    When its value is packed
+    Then packing <result>
+
+    Examples:
+      | length | result                     |
+      | 244    | gives a value of 305 bytes |
+      | 245    | fails with "name too long" |
+
   @FOG_GEFS_004
   Scenario: A block pointer is the block's address, SHA-256 hash and birth generation
     Given a block holding "hello" at address 32768 born in generation 9

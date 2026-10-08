@@ -84,6 +84,11 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     When adm creates a file named in 244 bytes in the root
     Then the root lists the name of 244 bytes
 
+  @FOG_GEFS_604
+  Scenario: A name may hold spaces
+    When adm creates a file named with a space in the root
+    Then the root lists a b
+
   @FOG_GEFS_605
   Scenario: Removing a file takes it out of its directory, and frees its data once committed
     When adm creates file notes in the root with mode 0644 at time 200
@@ -94,8 +99,16 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     Then the root lists nothing
     And walking notes from the root finds nothing
     And the root is a directory "/" owned by adm in group adm, mode d0775, version 2, modified at 100
-    And statting the removed notes fails with "phase error -- use after remove"
     And every block of the device is held, in a log or free
+    When adm creates file notes in the root with mode 0644 at time 400
+    Then statting the removed notes fails with "phase error -- use after remove"
+
+  @FOG_GEFS_605
+  Scenario: Removing an empty directory leaves the entries beside it
+    When adm creates directory usr in the root with mode d0775 at time 200
+    And adm creates file notes in the root with mode 0644 at time 200
+    And adm removes usr
+    Then the root lists notes
 
   @FOG_GEFS_605
   Scenario Outline: Removing refuses what gefs refuses
@@ -116,9 +129,13 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
   Scenario: A write is read back, and sets the length, modification time and last modifier
     When adm creates file notes in the root with mode 0666 at time 200
     And adm writes "hello, world" to notes at offset 0 at time 300
+    And adm creates file other in the root with mode 0666 at time 200
+    And adm writes "other" to other at offset 0 at time 300
     Then reading 100 bytes of notes at offset 0 gives "hello, world"
     And reading 100 bytes of notes at offset 7 gives "world"
     And reading 100 bytes of notes at offset 12 gives nothing
+    And reading 100 bytes of notes at offset 50 gives nothing
+    And reading 100 bytes of other at offset 0 gives "other"
     And notes is a file "notes" owned by adm in group adm, mode 0664, version 1, modified at 300, 12 bytes long, last changed by adm
 
   @FOG_GEFS_606
@@ -182,6 +199,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | 0755 | adm   | adm   | glenda | run   | succeeds                       |
       | 0754 | adm   | adm   | glenda | run   | fails with "permission denied" |
       | 0750 | adm   | dev   | bob    | run   | succeeds                       |
+      | 0644 | adm   | adm   | glenda | read with truncation | fails with "permission denied" |
 
   @FOG_GEFS_607
   Scenario: A directory opens only to read
@@ -214,6 +232,9 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     Then adm opening lock to read fails with "open/create -- file is locked"
     When adm closes lock
     Then adm opening lock to read succeeds
+    When adm creates file plain in the root with mode 0666 at time 200
+    And adm opens plain to read
+    Then adm opening plain to read succeeds
 
   @FOG_GEFS_608
   Scenario: Committed files are there when the device is opened again, and later changes are not
@@ -257,6 +278,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | the group to sys    | adm    | sys   | 0644 | 300   | 12     |
       | the length to 5     | adm    | adm   | 0644 | 300   | 5      |
       | the length to 20000 | adm    | adm   | 0644 | 300   | 20000  |
+      | the length to 9223372036854775807 | adm | adm | 0644 | 300 | 9223372036854775807 |
 
   @FOG_GEFS_609
   Scenario: Shortening a file frees the blocks past its end, and lengthening it again reads zeros there
@@ -269,6 +291,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     And the store commits
     Then reading 16390 bytes of data at offset 0 gives the first 16390 bytes written
     And reading 10 bytes of data at offset 16390 gives 10 zeros
+    And reading 10 bytes of data at offset 32768 gives 10 zeros
     And reading 10 bytes of data at offset 39990 gives 10 zeros
     And every block of the device is held, in a log or free
 
@@ -298,6 +321,28 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | glenda | the group to sys               | usr/notes | wstat -- not in group                      |
       | adm    | the last modifier to glenda    | usr/notes | wstat -- attempt to change muid            |
       | adm    | the qid                        | usr/notes | wstat -- attempt to change qid             |
+      | adm    | the qid's path                 | usr/notes | wstat -- attempt to change qid             |
+      | adm    | the qid's version              | usr/notes | wstat -- attempt to change qid             |
+      | adm    | the length to 9223372036854775808 | usr/notes | wstat -- attempt to make length negative |
+      | adm    | the owner to a name of 245 bytes | usr/notes | name too long                            |
+      | adm    | the group to a name of 245 bytes | usr/notes | name too long                            |
+
+  @FOG_GEFS_609
+  Scenario Outline: A wstat that names what is already there needs no permission, and records who sent it
+    When adm creates directory usr in the root with mode d0775 at time 200
+    And adm creates file notes in usr with mode 0644 at time 200
+    And adm sets usr/notes's mode to 0664, group to dev and owner to bob at time 200
+    And glenda sets <change> of usr/notes at time 300
+    Then usr/notes is a file "notes" owned by bob in group dev, mode 0664, version 2, modified at 200, 0 bytes long, last changed by glenda
+
+    Examples:
+      | change            |
+      | the length to 0   |
+      | the mode to 0664  |
+      | the mtime to 200  |
+      | the owner to bob  |
+      | the group to dev  |
+      | the name to notes |
 
   @FOG_GEFS_609
   Scenario Outline: The owner, a group leader or a member of adm may change a mode or a group
@@ -314,6 +359,14 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | bob    | dev  | bob    | group | bob   |
       | adm    | dev  | bob    | group | bob   |
       | glenda | adm  | adm    | group | sys   |
+
+  @FOG_GEFS_609
+  Scenario: An owner or group may be named in as many bytes as a file
+    When adm creates file notes in the root with mode 0644 at time 200
+    And adm sets the owner to a name of 244 bytes of notes at time 300
+    And adm sets the group to a name of 244 bytes of notes at time 300
+    Then notes's owner is a name of 244 bytes
+    And notes's group is a name of 244 bytes
 
   @FOG_GEFS_609
   Scenario: A wstat that changes nothing commits the store

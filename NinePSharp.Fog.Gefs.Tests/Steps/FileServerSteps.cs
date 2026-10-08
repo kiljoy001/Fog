@@ -110,6 +110,9 @@ public sealed class FileServerSteps(StoreContext context)
     [When(@"^(\w+) creates a file named in (\d+) bytes in the root$")]
     public void WhenCreatesLong(string user, int length) => Create(user, fs!.Root, new string('n', length), 0b110_100_100);
 
+    [When(@"^(\w+) creates a file named with a space in the root$")]
+    public void WhenCreatesSpaced(string user) => Create(user, fs!.Root, "a b", 0b110_100_100);
+
     [Then(@"^(\w+) creating (.+) fails with ""(.*)""$")]
     public void ThenCreateFails(string user, string what, string error)
     {
@@ -181,10 +184,16 @@ public sealed class FileServerSteps(StoreContext context)
         WStat(Resolve(path), user, ResourceWStat.Unchanged() with { Mode = Mode(mode), Group = group, User = owner });
     }
 
-    [Then(@"^(\w+) opening (.+) to (read|write|run) (succeeds|fails with "".*"")$")]
+    [Then(@"^(\w+) opening (.+) to (read|write|run|read with truncation) (succeeds|fails with "".*"")$")]
     public void ThenOpening(string user, string path, string how, string result)
     {
-        byte mode = how switch { "read" => NinePConstants.OREAD, "write" => NinePConstants.OWRITE, _ => NinePConstants.OEXEC };
+        byte mode = how switch
+        {
+            "read" => NinePConstants.OREAD,
+            "write" => NinePConstants.OWRITE,
+            "run" => NinePConstants.OEXEC,
+            _ => NinePConstants.OREAD | NinePConstants.OTRUNC,
+        };
         if (result == "succeeds")
         {
             Clunk(user, Open(user, path, mode));
@@ -230,11 +239,11 @@ public sealed class FileServerSteps(StoreContext context)
     public void ThenSetFails(string user, string change, string path, string error)
         => Assert.Equal(error, Assert.Throws<ResourceWStatRejectedException>(() => WStat(Resolve(path), user, Change(change))).Message);
 
-    [Then(@"^(\S+)'s (mode|group) is (\S+)$")]
+    [Then(@"^(\S+)'s (mode|group|owner) is (.+)$")]
     public void ThenField(string path, string field, string value)
     {
         ResourceStat stat = Stat(path);
-        Assert.Equal(value, field == "mode" ? Convert.ToString(stat.Mode & 0b111_111_111, 8).PadLeft(4, '0') : stat.Group);
+        Assert.Equal(Name(value), field switch { "mode" => Convert.ToString(stat.Mode & 0b111_111_111, 8).PadLeft(4, '0'), "group" => stat.Group, _ => stat.User });
     }
 
     [Then("the store has committed once since it was reamed")]
@@ -244,24 +253,31 @@ public sealed class FileServerSteps(StoreContext context)
 
     private static uint Mode(string mode) => mode[0] == 'd' ? Directory | Convert.ToUInt32(mode[1..], 8) : Convert.ToUInt32(mode, 8);
 
+    private static string Name(string value) => value.StartsWith("a name of ", StringComparison.Ordinal) ? new string('n', int.Parse(value.Split(' ')[3])) : value;
+
     private static ResourceWStat Change(string change)
     {
-        string[] words = change.Split(' ');
-        return change switch
+        ResourceWStat none = ResourceWStat.Unchanged();
+        if (change.StartsWith("a name of ", StringComparison.Ordinal))
         {
-            "the qid" => ResourceWStat.Unchanged() with { Qid = new NinePSharp.Constants.Qid(QidType.QTFILE, 0, 0) },
-            "the mode to 0664 with unknown bits" => ResourceWStat.Unchanged() with { Mode = 0x00100000u | 0b110_110_100 },
-            _ when change.StartsWith("a name of", StringComparison.Ordinal) => ResourceWStat.Unchanged() with { Name = new string('n', int.Parse(words[3])) },
-            _ => words[1] switch
-            {
-                "mode" => ResourceWStat.Unchanged() with { Mode = Mode(words[3]) },
-                "mtime" => ResourceWStat.Unchanged() with { ModificationTime = uint.Parse(words[3]) },
-                "owner" => ResourceWStat.Unchanged() with { User = words[3] },
-                "group" => ResourceWStat.Unchanged() with { Group = words[3] },
-                "length" => ResourceWStat.Unchanged() with { Length = ulong.Parse(words[3]) },
-                "name" => ResourceWStat.Unchanged() with { Name = words[3] },
-                _ => ResourceWStat.Unchanged() with { LastModifier = words[^1] },
-            },
+            return none with { Name = Name(change) };
+        }
+
+        string[] parts = change["the ".Length..].Split(" to ", 2);
+        string value = parts.Length == 2 ? Name(parts[1]) : string.Empty;
+        return parts[0] switch
+        {
+            "qid" => none with { Qid = new NinePSharp.Constants.Qid(QidType.QTFILE, 0, 0) },
+            "qid's path" => none with { Qid = new NinePSharp.Constants.Qid((QidType)0xff, uint.MaxValue, 0) },
+            "qid's version" => none with { Qid = new NinePSharp.Constants.Qid((QidType)0xff, 0, ulong.MaxValue) },
+            "mode" when value.EndsWith(" with unknown bits", StringComparison.Ordinal) => none with { Mode = 0x00100000u | Mode(value.Split(' ')[0]) },
+            "mode" => none with { Mode = Mode(value) },
+            "mtime" => none with { ModificationTime = uint.Parse(value) },
+            "owner" => none with { User = value },
+            "group" => none with { Group = value },
+            "length" => none with { Length = ulong.Parse(value) },
+            "name" => none with { Name = value },
+            _ => none with { LastModifier = value },
         };
     }
 

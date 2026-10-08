@@ -688,5 +688,11 @@
     "mutator": "Conditional (false) mutation",
     "line": "int dh = path[0].Left is not null ? 1 : path[1].Left is not null ? 0 : -1;",
     "reason": "a split that makes a new root no longer adds a level, so the recorded height falls short of the tree and an upsert walking it never finishes"
+  },
+  {
+    "file": "GefsFs.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int done = 0; done < reply.Length;)",
+    "reason": "the read loop takes nothing once the reply is full, so it never reaches past its end"
   }
 ]

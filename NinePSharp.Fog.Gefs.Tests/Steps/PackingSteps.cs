@@ -74,6 +74,16 @@ public sealed class PackingSteps
         entry = new Dir(name, new Qid(path, version, (byte)(permissions >> 24)), permissions, atime, mtime, length, uid, gid, muid);
     }
 
+    [Given(@"^an entry ""(.*)"" owned by a user named in (\d+) bytes, in group (\w+), last changed by (\w+)$")]
+    public void GivenLongUser(string name, int length, string gid, string muid)
+        => entry = new Dir(name, new Qid(7, 0, 0), 0b110_100_100, 0, 0, 0, new string('u', length), gid, muid);
+
+    [When("its value is packed")]
+    public void WhenValuePacked() => Try(() => value = entry!.Value());
+
+    [Then(@"^packing gives a value of (\d+) bytes$")]
+    public void ThenPackedValueLength(int length) => Assert.Equal(length, value!.Length);
+
     [When("its key and value are packed")]
     public void WhenEntryPacked()
     {
