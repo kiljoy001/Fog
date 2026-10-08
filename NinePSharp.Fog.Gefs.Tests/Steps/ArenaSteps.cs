@@ -15,6 +15,7 @@ public sealed class ArenaSteps : IDisposable
     private readonly Dictionary<long, List<(long Offset, long Length)>> freeAt = [];
     private readonly Dictionary<byte[], byte[]> given = new(ByteArrayComparer.Instance);
     private long lastGen;
+    private Tree? writer;
     private Bptr bornThere;
     private MemoryDevice? device;
     private Allocator? allocator;
@@ -50,7 +51,7 @@ public sealed class ArenaSteps : IDisposable
     public void GivenWriting(long blocks, int arenas, long gen)
     {
         GivenFormatted(blocks, arenas);
-        allocator!.Gen = gen;
+        writer = new Tree(allocator!, default, 1) { Gen = gen };
     }
 
     [Given(@"^a device of (\d+) blocks$")]
@@ -300,17 +301,15 @@ public sealed class ArenaSteps : IDisposable
     [When(@"^a block born in generation (\d+) in each arena and a block born in generation (\d+) are allocated and freed$")]
     public void WhenBornAndFreed(long now, long before)
     {
-        Blk current = allocator!.New(BlockType.Leaf);
-        allocator.Gen = before;
-        Blk older = allocator.New(BlockType.Leaf);
-        allocator.Gen = now;
+        Blk current = allocator!.New(BlockType.Leaf, now);
+        Blk older = allocator.New(BlockType.Leaf, before);
         allocator.Enqueue(current);
         allocator.Enqueue(older);
         (bornNow, bornBefore) = (current.Pointer, older.Pointer);
         bornThere = new Bptr(allocator.Arenas[1].Allocate()!.Value, default, now);
-        allocator.Free(bornNow);
-        allocator.Free(bornThere);
-        allocator.Free(bornBefore);
+        allocator.Free(writer!, bornNow);
+        allocator.Free(writer!, bornThere);
+        allocator.Free(writer!, bornBefore);
     }
 
     [Then(@"^none is free yet, and the block born in generation (\d+) is reported for its deadlist$")]

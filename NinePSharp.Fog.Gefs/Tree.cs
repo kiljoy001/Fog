@@ -22,13 +22,25 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
     public int Height => GetRoot().Height;
 
+    // The generation new blocks are born in, gefs's memgen, and the snapshot this tree forked from.
+    public long Gen { get; set; }
+
+    public long Base { get; init; } = -1;
+
+    // Where blocks older snapshots may still use go when this tree frees them; a tree without
+    // snapshots has none.
+    public IDeadlists? Deadlists { get; init; }
+
+    // Whether the root has changed since the tree was opened or last committed.
+    public bool Dirty { get; set; }
+
     internal BlockStore Store => store;
 
-    public static Tree Create(BlockStore store)
+    public static Tree Create(BlockStore store, long gen = 0)
     {
-        Blk b = store.New(BlockType.Leaf);
+        Blk b = store.New(BlockType.Leaf, gen);
         store.Enqueue(b);
-        return new Tree(store, b.Pointer, 1);
+        return new Tree(store, b.Pointer, 1) { Gen = gen };
     }
 
     // btupsert
@@ -102,7 +114,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             else
             {
                 // gefs never empties a tree; here a tree whose every entry is gone is an empty leaf again.
-                Blk empty = store.New(BlockType.Leaf);
+                Blk empty = store.New(BlockType.Leaf, Gen);
                 store.Enqueue(empty);
                 SetRoot(empty.Pointer, 1);
                 degen = false;
@@ -300,13 +312,15 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         {
             (root, height) = (bp, h);
         }
+
+        Dirty = true;
     }
 
     // fastupsert: a pivot root with room takes the messages into its buffer, each after those
     // already there for its key.
     private void FastUpsert(Blk b, Message[] msg)
     {
-        Blk r = store.Duplicate(b);
+        Blk r = store.Duplicate(b, Gen);
         int nbuf = r.MessageCount;
         foreach (Message m in msg)
         {
@@ -335,7 +349,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
         store.Enqueue(r);
         SetRoot(r.Pointer, Height);
-        store.Free(b.Pointer);
+        store.Free(this, b.Pointer);
     }
 
     // setb
@@ -343,12 +357,12 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     {
         if (old is not null)
         {
-            store.Free(old.Pointer);
+            store.Free(this, old.Pointer);
         }
 
         if (b.ValueCount == 0)
         {
-            store.Free(b.Pointer);
+            store.Free(this, b.Pointer);
             return null;
         }
 
@@ -361,7 +375,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     {
         if (IsData(key) && m.Op is MessageOp.ClearBlock or MessageOp.Insert or MessageOp.Delete)
         {
-            store.Free(Bptr.Read(value));
+            store.Free(this, Bptr.Read(value));
         }
     }
 
@@ -416,7 +430,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     private void UpdateLeaf(Path up, Path p)
     {
         Blk b = p.B!;
-        Blk n = store.New(b.Type);
+        Blk n = store.New(b.Type, Gen);
         int i = 0;
         int j = up.Lo;
         int spc = int.MaxValue;
@@ -456,7 +470,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     private void UpdatePivot(Path up, Path p, Path? pp)
     {
         Blk b = p.B!;
-        Blk n = store.New(b.Type);
+        Blk n = store.New(b.Type, Gen);
         for (int i = 0; i < b.ValueCount; i++)
         {
             if (pp is not null && i == p.Midx)
@@ -521,8 +535,8 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     private void SplitLeaf(Path up, Path p)
     {
         Blk b = p.B!;
-        Blk l = store.New(b.Type);
-        Blk r = store.New(b.Type);
+        Blk l = store.New(b.Type, Gen);
+        Blk r = store.New(b.Type, Gen);
         Blk d = l;
         int i = 0;
         int j = up.Lo;
@@ -586,8 +600,8 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     private void SplitPivot(Path p, Path? pp)
     {
         Blk b = p.B!;
-        Blk l = store.New(b.Type);
-        Blk r = store.New(b.Type);
+        Blk l = store.New(b.Type, Gen);
+        Blk r = store.New(b.Type, Gen);
         Blk d = l;
         int copied = 0;
         int halfsz = ((2 * b.ValueCount) + b.ValueSize) / 2;
@@ -630,7 +644,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
     private void Merge(Path p, Path pp, int idx, Blk a, Blk b)
     {
-        Blk d = store.New(a.Type);
+        Blk d = store.New(a.Type, Gen);
         foreach (Blk s in (Blk[])[a, b])
         {
             for (int i = 0; i < s.ValueCount; i++)
@@ -657,8 +671,8 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     // going with the pointers they will flush to.
     private void Rotate(Path p, Path pp, int midx, Blk a, Blk b, int halfpiv)
     {
-        Blk l = store.New(a.Type);
-        Blk r = store.New(a.Type);
+        Blk l = store.New(a.Type, Gen);
+        Blk r = store.New(a.Type, Gen);
         Blk d = l;
         int sz = 0;
         int sp = 0;
@@ -818,7 +832,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         if (pp!.Left is not null && pp.Right is not null)
         {
             rp = path[0];
-            Blk n = store.New(BlockType.Pivot);
+            Blk n = store.New(BlockType.Pivot, Gen);
             rp.Npull = pp.Npull;
             CopyUp(n, pp);
             store.Enqueue(n);
@@ -836,12 +850,12 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         {
             if (path[i].B is { } b)
             {
-                store.Free(b.Pointer);
+                store.Free(this, b.Pointer);
             }
 
             if (path[i].S is { } s)
             {
-                store.Free(s.Pointer);
+                store.Free(this, s.Pointer);
             }
         }
     }

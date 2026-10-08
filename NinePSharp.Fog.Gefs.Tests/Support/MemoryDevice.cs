@@ -1,10 +1,11 @@
 namespace NinePSharp.Fog.Gefs.Tests.Support;
 
 // A device in memory, holding only the blocks written to it, that can lose power: after a crash
-// point, writes no longer reach it.
+// point, writes stay readable, as if cached, until it restarts, when they are gone.
 internal sealed class MemoryDevice(long blocks) : Device
 {
     private readonly Dictionary<long, byte[]> written = [];
+    private readonly Dictionary<long, byte[]> cached = [];
     private int? writesLeft;
 
     public override long Size => blocks * Format.BlockSize;
@@ -12,10 +13,12 @@ internal sealed class MemoryDevice(long blocks) : Device
     // Each write and flush, in order.
     public List<string> Trace { get; } = [];
 
+    public int Writes => Trace.Count(e => e == "write");
+
     public override void Read(long offset, Span<byte> block)
     {
         block.Clear();
-        if (written.TryGetValue(offset, out byte[]? bytes))
+        if (cached.TryGetValue(offset, out byte[]? bytes) || written.TryGetValue(offset, out bytes))
         {
             bytes.CopyTo(block);
         }
@@ -26,6 +29,7 @@ internal sealed class MemoryDevice(long blocks) : Device
         Trace.Add("write");
         if (writesLeft is 0)
         {
+            cached[offset] = block.ToArray();
             return;
         }
 
@@ -37,7 +41,11 @@ internal sealed class MemoryDevice(long blocks) : Device
 
     public void CrashAfter(int writes) => writesLeft = writes;
 
-    public void Restart() => writesLeft = null;
+    public void Restart()
+    {
+        writesLeft = null;
+        cached.Clear();
+    }
 
     public byte[] Block(long n)
     {

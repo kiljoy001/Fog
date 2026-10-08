@@ -15,7 +15,9 @@ internal sealed class MemoryStore : BlockStore
     public override Blk Get(Bptr bp)
         => Live.Contains(bp.Addr) ? Blk.Read(written[bp.Addr], bp) : throw new InvalidOperationException($"block {bp.Addr} read after it was freed");
 
-    public override void Free(Bptr bp)
+    public override void Free(Tree t, Bptr bp) => Free(bp);
+
+    public void Free(Bptr bp)
     {
         if (!Live.Remove(bp.Addr))
         {
@@ -26,13 +28,13 @@ internal sealed class MemoryStore : BlockStore
         Freed.Add(bp.Addr);
     }
 
-    protected override (long Address, long Gen) Allocate(BlockType type)
+    protected override long Allocate(BlockType type)
     {
         long address = next;
         next += Format.BlockSize;
         Live.Add(address);
         Allocations++;
-        return (address, 1);
+        return address;
     }
 
     protected override void Write(Blk b) => written[b.Address] = b.Buffer.ToArray();

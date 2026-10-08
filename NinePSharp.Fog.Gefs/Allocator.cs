@@ -19,13 +19,10 @@ internal sealed class Allocator : BlockStore
 
     public IReadOnlyList<Arena> Arenas { get; }
 
-    // The generation blocks are born in: the one being written.
-    public long Gen { get; set; }
-
     public bool UseReserve { get; set; }
 
-    // Blocks of earlier generations freed since; committed roots may still use them, so they belong
-    // to a deadlist rather than back in an arena.
+    // Blocks freed since the last commit that its root may still use, and so are reused only once the
+    // next commit is durable.
     public IReadOnlyList<Bptr> Killed => killed;
 
     // ream's arenas: the first and last blocks kept for superblocks, the rest divided evenly. A
@@ -53,9 +50,28 @@ internal sealed class Allocator : BlockStore
         return Blk.Read(bytes, bp);
     }
 
-    // freeblk and freebp: a block born in the generation being written goes back to its arena once
-    // nothing can still be reading it; one born earlier may be in a committed tree.
-    public override void Free(Bptr bp) => (bp.Gen < Gen ? killed : pending).Add(bp);
+    // freeblk and freebp: a block born in the generation its tree is writing goes back to its arena
+    // once nothing can still be reading it. One born earlier is in a committed root: a tree without
+    // snapshots retires it at the next commit, and a snapshot tree puts it on a deadlist, unless it
+    // was born at or before the snapshot the tree forked from, whose own chain still holds it.
+    public override void Free(Tree t, Bptr bp)
+    {
+        if (bp.Gen >= t.Gen)
+        {
+            pending.Add(bp);
+        }
+        else if (t.Deadlists is not { } deadlists)
+        {
+            killed.Add(bp);
+        }
+        else if (bp.Gen > t.Base)
+        {
+            deadlists.Kill(t, bp);
+        }
+    }
+
+    // A block no committed root will use once the next commit is durable.
+    public void Retire(long address) => killed.Add(new Bptr(address, default, default));
 
     public void Reclaim()
     {
@@ -115,14 +131,14 @@ internal sealed class Allocator : BlockStore
 
     // pickarena and blkalloc: arenas taken in turn, moving on every 2048 allocations, and the next
     // tried when one is full.
-    protected override (long Address, long Gen) Allocate(BlockType type)
+    protected override long Allocate(BlockType type)
     {
         int first = (int)((++roundRobin / 2048) % Arenas.Count);
         foreach (Arena a in Arenas.Skip(first).Concat(Arenas.Take(first)))
         {
             if (a.Allocate(useReserve: UseReserve) is { } b)
             {
-                return (b, Gen);
+                return b;
             }
         }
 

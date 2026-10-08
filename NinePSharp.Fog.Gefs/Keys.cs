@@ -32,6 +32,31 @@ internal static class Keys
         return Encoding.UTF8.GetString(key.Slice(11, length));
     }
 
+    // Klabel name[]: a snapshot's name.
+    public static byte[] Label(string name)
+    {
+        int length = Encoding.UTF8.GetByteCount(name);
+        if (length > Format.MaxName)
+        {
+            throw new GefsException("name too long");
+        }
+
+        var key = new byte[1 + length];
+        key[0] = (byte)KeyType.Label;
+        Encoding.UTF8.GetBytes(name, key.AsSpan(1));
+        return key;
+    }
+
+    // Kdlist snapid[8] birth[8]: the deadlist of blocks a snapshot freed that were born in one generation.
+    public static byte[] Deadlist(long gen, long birth)
+    {
+        var key = new byte[1 + 8 + 8];
+        key[0] = (byte)KeyType.Deadlist;
+        BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(1), gen);
+        BinaryPrimitives.WriteInt64BigEndian(key.AsSpan(9), birth);
+        return key;
+    }
+
     // Ksnap snapid[8].
     public static byte[] Snap(long id)
     {

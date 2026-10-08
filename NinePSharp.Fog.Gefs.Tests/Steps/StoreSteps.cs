@@ -10,29 +10,31 @@ public sealed class StoreSteps
 {
     private const long B = Format.BlockSize;
 
-    private readonly SortedDictionary<int, string> model = [];
-    private readonly Dictionary<long, Dictionary<int, string>> committed = [];
+    // Each step that changes the store, so a crash can be tried at every write of the next commit.
+    private readonly List<Action> script = [];
+    private Dictionary<string, SortedDictionary<int, string>> models = [];
+    private Dictionary<long, Dictionary<string, SortedDictionary<int, string>>> committed = [];
     private MemoryDevice? device;
     private Store? store;
+    private long blocks;
+    private int arenas;
     private int version;
     private string? failure;
 
     [Given(@"^a device of (\d+) blocks reamed with (\d+) arenas$")]
-    public void GivenReamed(long blocks, int arenas)
+    public void GivenReamed(long count, int arenaCount)
     {
-        device = new MemoryDevice(blocks);
-        store = Store.Ream(device, arenas);
-        committed[store.Generation] = new(model);
+        (blocks, arenas) = (count, arenaCount);
+        Ream();
     }
 
-    [Then(@"^both superblocks name (\d+) arenas and a root tree (\d+) high, committed at generation (\d+)$")]
-    public void ThenSuperblocks(int arenas, int height, long gen)
+    [Then(@"^both superblocks name (\d+) arenas and a snapshot tree (\d+) high, committed at generation (\d+)$")]
+    public void ThenSuperblocks(int count, int height, long gen)
     {
         Superblock first = Superblock.Read(device!.Block(0));
-        Superblock backup = Superblock.Read(device.Block((device.Size / B) - 1));
         Assert.Equal(device.Block(0), device.Block((device.Size / B) - 1));
-        Assert.Equal((arenas, height, gen, gen + 1, Format.BlockSize, Format.BufferSpace), (first.Arenas.Length, first.Snap.Height, first.SyncGen, first.NextGen, first.BlockSize, first.BufferSpace));
-        Assert.Equal(store!.Allocator.Arenas.Select(a => a.Pointer.Addr), backup.Arenas.Select(a => a.Addr));
+        Assert.Equal((count, height, gen, Format.BlockSize, Format.BufferSpace), (first.Arenas.Length, first.Snap.Height, first.SyncGen, first.BlockSize, first.BufferSpace));
+        Assert.Equal(store!.Allocator.Arenas.Select(a => a.Pointer.Addr), first.Arenas.Select(a => a.Addr));
     }
 
     [When("the device is opened")]
@@ -42,6 +44,7 @@ public sealed class StoreSteps
         try
         {
             store = Store.Open(device!);
+            models = Clone(committed[store.Generation]);
         }
         catch (GefsException error)
         {
@@ -49,99 +52,100 @@ public sealed class StoreSteps
         }
     }
 
-    [Then(@"^the store is at generation (\d+) and its root tree holds (keys .*|nothing)$")]
-    public void ThenHolds(long gen, string keys)
+    [Then(@"^the store is at generation (\d+) and main holds (keys .*|nothing)$")]
+    public void ThenAtGeneration(long gen, string keys)
     {
         Assert.Null(failure);
         Assert.Equal(gen, store!.Generation);
-        var expected = keys == "nothing" ? [] : Numbers(keys.Split(' ', 2)[1]).ToList();
-        Assert.Equal(expected, Scan().Select(kv => kv.Key));
-        foreach (var (key, value) in Scan())
-        {
-            Assert.Equal(committed[gen][key], value);
-        }
+        ThenHolds("main", keys);
     }
 
     [Then(@"^opening fails with ""(.*)""$")]
     public void ThenOpeningFails(string message) => Assert.Equal(message, failure);
 
-    [When(@"^keys (.*) are inserted and the store commits$")]
-    public void WhenInsertedAndCommitted(string keys)
+    [When(@"^(\w+) is given keys ((?:(?! and ).)*)$")]
+    public void WhenGiven(string label, string keys) => Do(() => Give(label, keys));
+
+    [When(@"^(\w+) is given keys (.*) and the store commits$")]
+    public void WhenGivenAndCommitted(string label, string keys) => Do(() =>
     {
-        WhenInserted(keys);
+        Give(label, keys);
         Commit();
-    }
+    });
 
-    [When(@"^keys (.*) are inserted again and the store commits$")]
-    public void WhenInsertedAgain(string keys) => WhenInsertedAndCommitted(keys);
+    [When(@"^(\w+) has keys ((?:(?! and ).)*) deleted$")]
+    public void WhenDeleted(string label, string keys) => Do(() => Remove(label, keys));
 
-    [When(@"^keys (.*) are deleted and the store commits$")]
-    public void WhenDeletedAndCommitted(string keys)
+    [When(@"^(\w+) has keys (.*) deleted and the store commits$")]
+    public void WhenDeletedAndCommitted(string label, string keys) => Do(() =>
     {
-        foreach (int n in Numbers(keys))
-        {
-            store!.Root.Upsert(new Message(MessageOp.Delete, Key(n), []));
-            model.Remove(n);
-        }
-
+        Remove(label, keys);
         Commit();
-    }
+    });
 
-    [When(@"^keys (.*) are inserted$")]
-    public void WhenInserted(string keys)
-    {
-        foreach (int n in Numbers(keys))
-        {
-            string value = $"{n}:{++version}:" + new string('v', 80);
-            store!.Root.Upsert(new Message(MessageOp.Insert, Key(n), Encoding.ASCII.GetBytes(value)));
-            model[n] = value;
-        }
-    }
-
-    [When(@"^key (\d+) is updated (\d+) times, the store committing after every (\d+)$")]
-    public void WhenUpdated(int n, int times, int every)
+    [When(@"^(\w+) is given key (\d+) (\d+) times, the store committing after every (\d+)$")]
+    public void WhenUpdated(string label, int n, int times, int every) => Do(() =>
     {
         for (int i = 1; i <= times; i++)
         {
-            WhenInserted($"{n} to {n}");
+            Give(label, $"{n} to {n}");
             if (i % every == 0)
             {
                 Commit();
             }
         }
-    }
+    });
 
-    [Then("each arena's log is 1 block long")]
-    public void ThenLogsCompressed() => Assert.All(store!.Allocator.Arenas, a => Assert.Single(a.LogAddresses()));
+    [When(@"^(\w+) is snapshotted as (\w+)$")]
+    public void WhenSnapshotted(string label, string name) => Do(() => Tag(label, name, false));
 
-    [When(@"^keys (.*) are inserted and keys (.*) deleted$")]
-    public void WhenInsertedAndDeleted(string inserted, string deleted)
+    [When(@"^(\w+) is forked as (\w+)$")]
+    public void WhenForked(string label, string name) => Do(() => Tag(label, name, true));
+
+    [When(@"^(\w+) is unmounted$")]
+    public void WhenUnmounted(string label) => Do(() => store!.Unmount(label));
+
+    [When(@"^(\w+) is deleted$")]
+    public void WhenRemoved(string label) => Do(() => Delete(label));
+
+    [When(@"^(\w+) is deleted and the store commits$")]
+    public void WhenRemovedAndCommitted(string label) => Do(() =>
     {
-        WhenInserted(inserted);
-        foreach (int n in Numbers(deleted))
-        {
-            store!.Root.Upsert(new Message(MessageOp.Delete, Key(n), []));
-            model.Remove(n);
-        }
-    }
-
-    [When(@"^the store commits, the device crashing after (\d+) of the commit's writes$")]
-    public void WhenCrashingCommit(int writes)
-    {
-        device!.CrashAfter(writes);
+        Delete(label);
         Commit();
-        device.Restart();
-    }
+    });
 
-    [When("the device's record is cleared and the store commits")]
-    public void WhenTracedCommit()
+    [Then(@"^(\w+) holds (keys .*|nothing)$")]
+    public void ThenHolds(string label, string keys)
     {
-        device!.Trace.Clear();
-        Commit();
+        var expected = keys == "nothing" ? [] : Numbers(keys.Split(' ', 2)[1]).ToList();
+        var held = Contents(store!.Mount(label));
+        Assert.Equal(expected, held.Select(kv => kv.Key));
+        Assert.Equal(models[label].Select(kv => (kv.Key, kv.Value)), held);
     }
 
-    [Then(@"^the device recorded: (.*)$")]
-    public void ThenRecorded(string events) => Assert.Equal(events.Split(", "), device!.Trace);
+    [Then(@"^(\w+) does not exist$")]
+    public void ThenGone(string label) => Assert.Null(store!.FindLabel(label));
+
+    [Then(@"^(\w+)'s snapshot has no predecessor$")]
+    public void ThenNoPredecessor(string label) => Assert.Equal(-1, store!.Snapshot(store.FindLabel(label)!.Value.Gen).Pred);
+
+    [Then(@"^(\w+)'s snapshot follows (\w+)'s$")]
+    public void ThenFollows(string label, string older)
+        => Assert.Equal(store!.FindLabel(older)!.Value.Gen, store.Snapshot(store.FindLabel(label)!.Value.Gen).Pred);
+
+    [Then(@"^(snapshotting|forking) (\w+) as (\w+) fails with ""(.*)""$")]
+    public void ThenTagFails(string how, string label, string name, string message)
+        => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Tag(label, name, how == "forking")).Message);
+
+    [Then(@"^deleting (\w+) fails with ""(.*)""$")]
+    public void ThenDeleteFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Delete(label)).Message);
+
+    [Then(@"^mounting (\w+) fails with ""(.*)""$")]
+    public void ThenMountFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Mount(label)).Message);
+
+    [Then(@"^unmounting (\w+) fails with ""(.*)""$")]
+    public void ThenUnmountFails(string label, string message) => Assert.Equal(message, Assert.Throws<GefsException>(() => store!.Unmount(label)).Message);
 
     [When(@"^(\d+) qids are taken and the store commits$")]
     public void WhenQids(int count)
@@ -157,8 +161,11 @@ public sealed class StoreSteps
     [Then(@"^the next qid is (\d+)$")]
     public void ThenNextQid(long qid) => Assert.Equal(qid, store!.NewQid());
 
-    [Then(@"^a block allocated now is born in generation (\d+)$")]
-    public void ThenBorn(long gen) => Assert.Equal(gen, store!.Allocator.New(BlockType.Leaf).Gen);
+    [Then(@"^main writes in generation (\d+)$")]
+    public void ThenWritesIn(long gen) => Assert.Equal(gen, store!.Mount("main").Gen);
+
+    [Then("each arena's log is 1 block long")]
+    public void ThenLogsCompressed() => Assert.All(store!.Allocator.Arenas, a => Assert.Single(a.LogAddresses()));
 
     [When(@"^the (first|backup|both) superblocks? (?:is|are) (damaged|written by another version)$")]
     public void WhenSuperblockChanged(string which, string change)
@@ -191,25 +198,91 @@ public sealed class StoreSteps
         device.Put(last, block);
     }
 
-    [Then("every block of the device is in its root tree, in a log or free")]
-    public void ThenAccounted()
+    [When("the device's record is cleared and the store commits")]
+    public void WhenTracedCommit()
     {
-        var reached = new List<long>();
-        Walk(store!.Root.Root, store.Root.Height, reached);
-        foreach (Arena a in store.Allocator.Arenas)
+        device!.Trace.Clear();
+        Commit();
+    }
+
+    [Then(@"^the device recorded: (.*)$")]
+    public void ThenRecorded(string events) => Assert.Equal(events.Split(", "), device!.Trace);
+
+    [Then(@"^a crash after any number of the next commit's writes opens as generation (\d+) or (\d+), as committed, every block held, in a log or free$")]
+    public void ThenCrashes(long before, long after)
+    {
+        var seen = new HashSet<long>();
+        for (int k = 0; ; k++)
         {
-            reached.AddRange(a.LogAddresses());
-            foreach (var (offset, length) in a.Free)
+            Ream();
+            foreach (Action step in script)
             {
-                for (long at = offset; at < offset + length; at += B)
-                {
-                    reached.Add(at);
-                }
+                step();
+            }
+
+            int writes = device!.Writes;
+            device.CrashAfter(k);
+            Commit();
+            device.Restart();
+            bool whole = device.Writes - writes <= k;
+            WhenOpened();
+            Assert.Null(failure);
+            Assert.Contains(store!.Generation, (long[])[before, after]);
+            seen.Add(store.Generation);
+            foreach (string label in models.Keys)
+            {
+                Assert.Equal(models[label].Select(kv => (kv.Key, kv.Value)), Contents(store.Mount(label)));
+            }
+
+            ThenAccounted();
+            if (whole)
+            {
+                break;
             }
         }
 
-        var data = store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B)));
-        Assert.Equal(data.Order(), reached.Order());
+        Assert.Equal([before, after], seen.Order());
+    }
+
+    // Every block of the device in exactly one place: held by the snapshot tree, a snapshot's tree,
+    // the file data it names or a deadlist; in an arena's log; or free.
+    [Then("every block of the device is held, in a log or free")]
+    public void ThenAccounted()
+    {
+        var held = new HashSet<long>();
+        Walk(store!.Snaps.Root, store.Snaps.Height, held);
+        foreach (var (_, value) in Scan(store.Snaps, [(byte)KeyType.Snap]))
+        {
+            TreeEntry e = TreeEntry.Read(value);
+            Walk(e.Root, e.Height, held);
+            foreach (var (_, named) in Scan(new Tree(store.Allocator, e.Root, e.Height), [(byte)KeyType.Data]))
+            {
+                held.Add(Bptr.Read(named).Addr);
+            }
+        }
+
+        foreach (var (_, value) in Scan(store.Snaps, [(byte)KeyType.Deadlist]))
+        {
+            for (Bptr at = Bptr.Read(value); at.Addr != -1;)
+            {
+                Blk b = store.Allocator.Get(at);
+                Assert.True(held.Add(at.Addr), $"deadlist block {at.Addr} is also held elsewhere");
+                for (int i = 0; i < b.LogSize; i += 8)
+                {
+                    held.Add(System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(b.Data[i..]));
+                }
+
+                at = b.LogNext;
+            }
+        }
+
+        var logs = store.Allocator.Arenas.SelectMany(a => a.LogAddresses()).ToHashSet();
+        var free = store.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / B)).Select(k => r.Offset + (k * B)))).ToHashSet();
+        var data = store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B))).ToHashSet();
+        Assert.Empty(held.Intersect(free));
+        Assert.Empty(held.Intersect(logs));
+        Assert.Empty(logs.Intersect(free));
+        Assert.Equal(data.Order(), held.Concat(logs).Concat(free).Order());
     }
 
     private static byte[] Key(int n) => [0x10, (byte)(n >> 8), (byte)n];
@@ -220,32 +293,86 @@ public sealed class StoreSteps
         return Enumerable.Range(int.Parse(ends[0]), int.Parse(ends[^1]) - int.Parse(ends[0]) + 1);
     }
 
-    private void Walk(Bptr bp, int height, List<long> reached)
+    private static Dictionary<string, SortedDictionary<int, string>> Clone(Dictionary<string, SortedDictionary<int, string>> from)
+        => from.ToDictionary(kv => kv.Key, kv => new SortedDictionary<int, string>(kv.Value));
+
+    private static List<(byte[] Key, byte[] Value)> Scan(Tree t, byte[] prefix)
     {
-        reached.Add(bp.Addr);
-        Blk b = store!.Allocator.Get(bp);
-        for (int i = 0; height > 1 && i < b.ValueCount; i++)
+        var scan = new Scan(prefix);
+        scan.Enter(t);
+        var all = new List<(byte[] Key, byte[] Value)>();
+        while (scan.Next())
         {
-            Walk(Blk.GetPointer(b.GetValue(i).Value).Pointer, height - 1, reached);
+            all.Add((scan.Key, scan.Value));
+        }
+
+        scan.Exit();
+        return all;
+    }
+
+    private static List<(int Key, string Value)> Contents(Tree t)
+        => [.. Scan(t, [0x10]).Select(kv => ((kv.Key[1] << 8) | kv.Key[2], Encoding.ASCII.GetString(kv.Value)))];
+
+    private void Ream()
+    {
+        device = new MemoryDevice(blocks);
+        store = Store.Ream(device, arenas);
+        models = new() { ["main"] = [] };
+        committed = new() { [store.Generation] = Clone(models) };
+    }
+
+    private void Do(Action step)
+    {
+        script.Add(step);
+        step();
+    }
+
+    private void Give(string label, string keys)
+    {
+        Tree t = store!.Mount(label);
+        foreach (int n in Numbers(keys))
+        {
+            string value = $"{label}:{n}:{++version}:" + new string('v', 60);
+            t.Upsert(new Message(MessageOp.Insert, Key(n), Encoding.ASCII.GetBytes(value)));
+            models[label][n] = value;
         }
     }
 
-    private List<(int Key, string Value)> Scan()
+    private void Remove(string label, string keys)
     {
-        var scan = new Scan([0x10]);
-        scan.Enter(store!.Root);
-        var all = new List<(int Key, string Value)>();
-        while (scan.Next())
+        Tree t = store!.Mount(label);
+        foreach (int n in Numbers(keys))
         {
-            all.Add(((scan.Key[1] << 8) | scan.Key[2], Encoding.ASCII.GetString(scan.Value)));
+            t.Upsert(new Message(MessageOp.Delete, Key(n), []));
+            models[label].Remove(n);
         }
+    }
 
-        return all;
+    private void Tag(string label, string name, bool mutable)
+    {
+        store!.Tag(label, name, mutable);
+        models[name] = new SortedDictionary<int, string>(models[label]);
+    }
+
+    private void Delete(string label)
+    {
+        store!.Delete(label);
+        models.Remove(label);
     }
 
     private void Commit()
     {
         store!.Commit();
-        committed[store.Generation] = new(model);
+        committed[store.Generation] = Clone(models);
+    }
+
+    private void Walk(Bptr bp, int height, HashSet<long> held)
+    {
+        held.Add(bp.Addr);
+        Blk b = store!.Allocator.Get(bp);
+        for (int i = 0; height > 1 && i < b.ValueCount; i++)
+        {
+            Walk(Blk.GetPointer(b.GetValue(i).Value).Pointer, height - 1, held);
+        }
     }
 }
