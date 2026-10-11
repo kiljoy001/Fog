@@ -243,7 +243,8 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     And adm opens lock to read
     Then adm opening lock to read fails with "open/create -- file is locked"
     When adm closes lock
-    Then adm opening lock to read succeeds
+    Then glenda opening lock to write fails with "permission denied"
+    And adm opening lock to read succeeds
     When adm creates file plain in the root with mode 0666 at time 200
     And adm opens plain to read
     Then adm opening plain to read succeeds
@@ -281,6 +282,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     And adm writes "hello, world" to notes at offset 0 at time 300
     And adm sets <change> of notes at time 400
     Then notes is a file "notes" owned by <owner> in group <group>, mode <mode>, version 2, modified at <mtime>, <length> bytes long, last changed by adm
+    And the store has not committed since it was reamed
 
     Examples:
       | change              | owner  | group | mode | mtime | length |

@@ -10,9 +10,12 @@ namespace NinePSharp.Fog.Gefs.Tests.Steps;
 [Binding]
 public sealed class ConcurrencySteps(StoreContext context)
 {
+    private readonly Dictionary<int, int> reads = [];
+    private readonly Dictionary<int, HashSet<long>> changes = [];
     private Task? change;
     private Task? commit;
     private Task? second;
+    private Task? open;
     private int epoch = -1;
     private Tree? taken;
     private HashSet<long> freed = [];
@@ -41,6 +44,54 @@ public sealed class ConcurrencySteps(StoreContext context)
 
     [Then("the change finishes")]
     public void ThenChangeFinishes() => Finish(change!);
+
+    [When(@"^adm starts opening (\S+) with truncation$")]
+    public void WhenTruncating(string name)
+    {
+        GefsFs fs = context.Files!;
+        open = Task.Run(async () =>
+        {
+            ResourceHandle file = (await fs.WalkAsync(fs.Root, name, default))!;
+            await fs.OpenAsync(file, NinePConstants.OWRITE | NinePConstants.OTRUNC, Context(), default);
+        });
+    }
+
+    [Then("the open is still waiting")]
+    public void ThenOpenWaits() => Assert.False(open!.Wait(TimeSpan.FromMilliseconds(200)));
+
+    [Then("the open finishes")]
+    public void ThenOpenFinishes() => Finish(open!);
+
+    [When(@"^read (\d+) takes main's root$")]
+    public void WhenNumberedRead(int read) => reads[read] = context.Store!.Allocator.Epochs.Start();
+
+    [When(@"^read (\d+) finishes$")]
+    public void WhenNumberedReadFinishes(int read) => context.Store!.Allocator.Epochs.End(reads[read]);
+
+    [When(@"^change (\d+) writes ""(.*)"" to notes, and the server commits$")]
+    public void WhenNumberedChange(int number, string text)
+    {
+        GefsFs fs = context.Files!;
+        HashSet<long> used = Accounting.Used(context.Store!.Mount("main").Pinned());
+        Finish(Task.Run(async () =>
+        {
+            ResourceHandle file = (await fs.WalkAsync(fs.Root, "notes", default))!;
+            ResourceOpenHandle opened = await fs.OpenAsync(file, NinePConstants.OWRITE, Context(), default);
+            await fs.WriteAsync(opened, 0, Encoding.ASCII.GetBytes(text), Context(), default);
+            await fs.ClunkAsync(opened, Context(), default);
+        }));
+        WhenCommits();
+        used.ExceptWith(Accounting.Held(context.Store));
+        Assert.NotEmpty(used);
+        changes[number] = used;
+    }
+
+    [Then(@"^the blocks change (\d+) freed are (free|waiting for reads)$")]
+    public void ThenChangeFreed(int number, string state)
+    {
+        var free = context.Store!.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / Format.BlockSize)).Select(k => r.Offset + (k * Format.BlockSize)))).ToHashSet();
+        Assert.True((state == "free" ? free : context.Store.Allocator.Epochs.Waiting.ToHashSet()).IsSupersetOf(changes[number]));
+    }
 
     [When("a commit starts, and stops at its first device flush")]
     public void WhenCommitHeld()

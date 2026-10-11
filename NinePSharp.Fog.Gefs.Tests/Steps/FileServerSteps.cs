@@ -254,6 +254,9 @@ public sealed class FileServerSteps(StoreContext context)
     [Then("the store has committed once since it was reamed")]
     public void ThenCommittedOnce() => Assert.Equal(2, context.Store!.Generation);
 
+    [Then("the store has not committed since it was reamed")]
+    public void ThenNotCommitted() => Assert.Equal(1, context.Store!.Generation);
+
     private static uint Mode(string mode) => mode[0] == 'd' ? Directory | Convert.ToUInt32(mode[1..], 8) : Convert.ToUInt32(mode, 8);
 
     private static string Name(string value) => value.StartsWith("a name of ", StringComparison.Ordinal) ? new string('n', int.Parse(value.Split(' ')[3])) : value;

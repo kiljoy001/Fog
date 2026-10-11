@@ -48,6 +48,16 @@ Feature: Reads run beside the writer, and a commit writes to the device without 
     And every block of the device is held, in a log or free
 
   @FOG_GEFS_802
+  Scenario: An open that truncates is a change, and waits for the change holding the writer
+    When adm starts writing "other" to a new file other, and the change stops at its first device write
+    And adm starts opening notes with truncation
+    Then the open is still waiting
+    When the device lets the write go
+    Then the change finishes
+    And the open finishes
+    And reading 100 bytes of notes at offset 0 gives nothing
+
+  @FOG_GEFS_802
   Scenario: A second commit waits for the first to finish
     When adm writes "later" to notes at offset 0 at time 300
     And a commit starts, and stops at its first device flush
@@ -72,6 +82,21 @@ Feature: Reads run beside the writer, and a commit writes to the device without 
     And the server commits
     Then the blocks main's root used, and the change freed, are free
     And every block of the device is held, in a log or free
+
+  @FOG_GEFS_803
+  Scenario: While reads run in turn, a block goes back once every read that began before it was freed has finished
+    When read 1 takes main's root
+    And change 1 writes "first" to notes, and the server commits
+    And read 1 finishes
+    And read 2 takes main's root
+    And change 2 writes "secnd" to notes, and the server commits
+    And read 2 finishes
+    And read 3 takes main's root
+    And change 3 writes "third" to notes, and the server commits
+    Then the blocks change 1 freed are free
+    And the blocks change 2 freed are waiting for reads
+    And the blocks change 3 freed are waiting for reads
+    And every block of the device is held, in a log, waiting for reads, or free
 
   @FOG_GEFS_803
   Scenario: With no reads running, blocks a commit frees are free once it finishes

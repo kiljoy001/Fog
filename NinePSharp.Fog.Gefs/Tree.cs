@@ -50,7 +50,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
     public Tree Pinned()
     {
         var (bp, h) = GetRoot();
-        return new Tree(store, bp, h) { ReadOnly = true };
+        return new Tree(store, bp, h);
     }
 
     // btupsert

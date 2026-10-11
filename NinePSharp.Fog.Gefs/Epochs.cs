@@ -1,9 +1,11 @@
 namespace NinePSharp.Fog.Gefs;
 
-// blk.c's epochs and limbo. A read runs inside the epoch current when it starts. A freed block waits
-// in the current epoch's limbo, and goes back to the arenas only after the epoch has moved on twice,
-// which it does only when no read is still inside an earlier one. gefs keeps an epoch for each worker
+// blk.c's epochs and limbo. A read runs inside the epoch current when it starts, and takes the root
+// it reads only after that, so a block freed before then is not in its tree. A freed block waits in
+// the current epoch's limbo, and goes back to the arenas only after the epoch has moved on twice,
+// which it does only when no read is inside an earlier one. gefs keeps an epoch for each worker
 // process; Fog, whose reads run on any thread, counts the reads inside each of the three instead.
+// With no read running at all, nothing in limbo can be in use, and it all goes back at once.
 internal sealed class Epochs
 {
     private readonly int[] active = new int[3];
@@ -13,20 +15,13 @@ internal sealed class Epochs
     // The blocks waiting in limbo.
     public IEnumerable<long> Waiting => limbo.SelectMany(l => l);
 
-    // epochstart: inside the current epoch, retrying if it moved on before the read was counted.
+    // epochstart: a read counted in the epoch it saw, which holds back any later move even if the
+    // epoch moved on as it was counted.
     public int Start()
     {
-        while (true)
-        {
-            int e = Volatile.Read(ref epoch);
-            Interlocked.Increment(ref active[e]);
-            if (Volatile.Read(ref epoch) == e)
-            {
-                return e;
-            }
-
-            Interlocked.Decrement(ref active[e]);
-        }
+        int e = Volatile.Read(ref epoch);
+        Interlocked.Increment(ref active[e]);
+        return e;
     }
 
     // epochend
@@ -35,24 +30,25 @@ internal sealed class Epochs
     // limbo, by the writer only.
     public void Defer(long block) => limbo[epoch].Add(block);
 
-    // epochclean, by the writer only: the epoch moves on while every read is inside the current one,
-    // and each move frees the limbo of the epoch before the previous one. Three moves free it all.
+    // epochclean, by the writer only.
     public List<long> Clean()
     {
-        var freed = new List<long>();
-        for (int moves = 0; moves < 3; moves++)
+        int ge = epoch;
+        if (Volatile.Read(ref active[0]) == 0 && Volatile.Read(ref active[1]) == 0 && Volatile.Read(ref active[2]) == 0)
         {
-            int ge = epoch;
-            if (Volatile.Read(ref active[(ge + 1) % 3]) != 0 || Volatile.Read(ref active[(ge + 2) % 3]) != 0)
-            {
-                break;
-            }
-
-            freed.AddRange(limbo[(ge + 1) % 3]);
-            limbo[(ge + 1) % 3].Clear();
-            Volatile.Write(ref epoch, (ge + 1) % 3);
+            List<long> all = [.. Waiting];
+            Array.ForEach(limbo, l => l.Clear());
+            return all;
         }
 
+        if (Volatile.Read(ref active[(ge + 1) % 3]) != 0 || Volatile.Read(ref active[(ge + 2) % 3]) != 0)
+        {
+            return [];
+        }
+
+        List<long> freed = [.. limbo[(ge + 1) % 3]];
+        limbo[(ge + 1) % 3].Clear();
+        Volatile.Write(ref epoch, (ge + 1) % 3);
         return freed;
     }
 }
