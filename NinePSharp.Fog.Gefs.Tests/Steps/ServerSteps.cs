@@ -47,6 +47,7 @@ public sealed class ServerSteps(StoreContext context)
         context.Server = new GefsServer(context.Device!, context.Store, StoreContext.InGroup, context.Clock);
     }
 
+    [Given(@"^(\w+) attaches to ""(.*)""$")]
     [When(@"^(\w+) attaches to ""(.*)""$")]
     public void WhenAttaches(string user, string aname) => context.Files = context.Server!.Attach(aname);
 

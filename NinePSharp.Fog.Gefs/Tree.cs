@@ -46,6 +46,13 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         return new Tree(store, b.Pointer, 1);
     }
 
+    // getroot for a read: the tree as it is now, which later changes leave be.
+    public Tree Pinned()
+    {
+        var (bp, h) = GetRoot();
+        return new Tree(store, bp, h) { ReadOnly = true };
+    }
+
     // btupsert
     public void Upsert(params Message[] messages)
     {

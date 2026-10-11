@@ -22,9 +22,11 @@ internal sealed class Store : IDeadlists
     private static readonly string[] Reserved = ["empty", "dump"];
 
     private readonly Device device;
+    private readonly object sync = new();
     private readonly Dictionary<string, Mounted> mounts = [];
     private readonly Dictionary<(long Gen, long Birth), Deadlist> deadlists = [];
     private long nextGen;
+    private bool broken;
 
     private Store(Device device, Allocator allocator, Tree snaps, long generation, long nextQid, long nextGen)
     {
@@ -53,7 +55,11 @@ internal sealed class Store : IDeadlists
     public bool Changed => Snaps.Dirty || mounts.Values.Any(m => m.Tree.Dirty);
 
     // A commit failed, so the store is read only from then on, as gefs's rdonly.
-    public bool Broken { get; private set; }
+    public bool Broken
+    {
+        get => Volatile.Read(ref broken);
+        private set => Volatile.Write(ref broken, value);
+    }
 
     // Deadlists with blocks not yet written; a commit writes them all.
     public int OpenDeadlists => deadlists.Count;
@@ -203,41 +209,65 @@ internal sealed class Store : IDeadlists
 
     public int DeadlistBlocks(long gen, long birth) => Chain(Load((gen, birth))).Count();
 
-    // sync: each mutable tree that changed becomes a new snapshot, the deadlists are written, and the
-    // arenas commit it by having both superblocks written between their first and second headers.
+    // sync: each mutable tree that changed becomes a new snapshot, the deadlists and logs are written
+    // and the headers and superblocks packed, all under the writer's lock; then, with it released,
+    // the arenas commit it by having both superblocks written between their first and second
+    // headers. One commit runs at a time.
     public void Commit()
     {
-        if (Broken)
+        lock (sync)
         {
-            throw new GefsException("file system read only");
-        }
-
-        try
-        {
-            foreach (Mounted m in mounts.Values.Where(m => m.Tree.Dirty).ToList())
+            Pending pending;
+            byte[] superblock = new byte[B];
+            long gen;
+            lock (Gate)
             {
-                Update(m);
+                if (Broken)
+                {
+                    throw new GefsException("file system read only");
+                }
+
+                try
+                {
+                    foreach (Mounted m in mounts.Values.Where(m => m.Tree.Dirty).ToList())
+                    {
+                        Update(m);
+                    }
+
+                    FlushDeadlists();
+                    gen = Generation + 1;
+                    pending = Allocator.Prepare(gen, true);
+                    new Superblock(Format.BlockSize, Format.BufferSpace, new TreeRoot(Snaps.Height, Snaps.Root), default, default, 0, NextQid, nextGen, gen, [.. pending.Pointers]).Write(superblock);
+                    Snaps.Dirty = false;
+                }
+                catch
+                {
+                    Broken = true;
+                    throw;
+                }
             }
 
-            FlushDeadlists();
-            long gen = Generation + 1;
-            Allocator.Sync(gen, true, arenas =>
+            try
             {
-                var sb = new Superblock(Format.BlockSize, Format.BufferSpace, new TreeRoot(Snaps.Height, Snaps.Root), default, default, 0, NextQid, nextGen, gen, [.. arenas]);
-                var block = new byte[B];
-                sb.Write(block);
-                device.Write(0, block);
-                device.Flush();
-                device.Write(device.Size - B, block);
-                device.Flush();
-            });
-            Generation = gen;
-            Snaps.Dirty = false;
-        }
-        catch
-        {
-            Broken = true;
-            throw;
+                Allocator.WriteOut(pending, _ =>
+                {
+                    device.Write(0, superblock);
+                    device.Flush();
+                    device.Write(device.Size - B, superblock);
+                    device.Flush();
+                });
+            }
+            catch
+            {
+                Broken = true;
+                throw;
+            }
+
+            lock (Gate)
+            {
+                Allocator.Finish(pending);
+                Generation = gen;
+            }
         }
     }
 

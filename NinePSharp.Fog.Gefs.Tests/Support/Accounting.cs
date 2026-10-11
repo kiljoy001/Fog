@@ -4,19 +4,40 @@ using Xunit;
 namespace NinePSharp.Fog.Gefs.Tests.Support;
 
 // Every block of the device in exactly one place: held by the snapshot tree, a snapshot's tree, the
-// file data it names or a deadlist; in an arena's log; or free.
+// file data it names or a deadlist; in an arena's log; waiting for reads, if that is allowed; or free.
 internal static class Accounting
 {
     private const long B = Format.BlockSize;
 
-    public static void Check(Store store)
+    public static void Check(Store store, bool waiting = false)
+    {
+        HashSet<long> held = Held(store);
+        var limbo = store.Allocator.Epochs.Waiting.ToHashSet();
+        if (!waiting)
+        {
+            Assert.Empty(limbo);
+        }
+
+        var logs = store.Allocator.Arenas.SelectMany(a => a.LogAddresses()).ToHashSet();
+        var free = store.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / B)).Select(k => r.Offset + (k * B)))).ToHashSet();
+        var data = store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B))).ToHashSet();
+        Assert.Empty(held.Intersect(free));
+        Assert.Empty(held.Intersect(logs));
+        Assert.Empty(held.Intersect(limbo));
+        Assert.Empty(logs.Intersect(free));
+        Assert.Empty(limbo.Intersect(free));
+        Assert.Equal(data.Order(), held.Concat(logs).Concat(limbo).Concat(free).Order());
+    }
+
+    // The blocks the committed trees and deadlists hold.
+    public static HashSet<long> Held(Store store)
     {
         var held = new HashSet<long>();
-        Walk(store, store.Snaps.Root, store.Snaps.Height, held);
+        Walk(store.Allocator, store.Snaps.Root, store.Snaps.Height, held);
         foreach (var (_, value) in Scan(store.Snaps, [(byte)KeyType.Snap]))
         {
             TreeEntry e = TreeEntry.Read(value);
-            Walk(store, e.Root, e.Height, held);
+            Walk(store.Allocator, e.Root, e.Height, held);
             foreach (var (_, named) in Scan(new Tree(store.Allocator, e.Root, e.Height), [(byte)KeyType.Data]))
             {
                 held.Add(Bptr.Read(named).Addr);
@@ -24,7 +45,7 @@ internal static class Accounting
         }
 
         // A deadlist lists only blocks an older snapshot still holds; any other would be leaked.
-        var inTrees = held.ToHashSet();
+        var trees = held.ToHashSet();
         foreach (var (key, value) in Scan(store.Snaps, [(byte)KeyType.Deadlist]))
         {
             // Each deadlist belongs to a snapshot, and lists only blocks born after its base.
@@ -37,20 +58,27 @@ internal static class Accounting
                 for (int i = 0; i < b.LogSize; i += 8)
                 {
                     long listed = BinaryPrimitives.ReadInt64BigEndian(b.Data[i..]);
-                    Assert.True(inTrees.Contains(listed), $"deadlisted block {listed} is held by no snapshot");
+                    Assert.True(trees.Contains(listed), $"deadlisted block {listed} is held by no snapshot");
                 }
 
                 at = b.LogNext;
             }
         }
 
-        var logs = store.Allocator.Arenas.SelectMany(a => a.LogAddresses()).ToHashSet();
-        var free = store.Allocator.Arenas.SelectMany(a => a.Free.SelectMany(r => Enumerable.Range(0, (int)(r.Length / B)).Select(k => r.Offset + (k * B)))).ToHashSet();
-        var data = store.Allocator.Arenas.SelectMany(a => Enumerable.Range(0, (int)(a.Size / B)).Select(k => a.Start + (k * B))).ToHashSet();
-        Assert.Empty(held.Intersect(free));
-        Assert.Empty(held.Intersect(logs));
-        Assert.Empty(logs.Intersect(free));
-        Assert.Equal(data.Order(), held.Concat(logs).Concat(free).Order());
+        return held;
+    }
+
+    // The blocks a tree uses, and the file data its keys name.
+    public static HashSet<long> Used(Tree t)
+    {
+        var used = new HashSet<long>();
+        Walk(t.Store, t.Root, t.Height, used);
+        foreach (var (_, named) in Scan(t, [(byte)KeyType.Data]))
+        {
+            used.Add(Bptr.Read(named).Addr);
+        }
+
+        return used;
     }
 
     public static List<(byte[] Key, byte[] Value)> Scan(Tree t, byte[] prefix)
@@ -67,10 +95,10 @@ internal static class Accounting
         return all;
     }
 
-    private static void Walk(Store store, Bptr bp, int height, HashSet<long> held)
+    private static void Walk(BlockStore store, Bptr bp, int height, HashSet<long> held)
     {
         held.Add(bp.Addr);
-        Blk b = store.Allocator.Get(bp);
+        Blk b = store.Get(bp);
         for (int i = 0; height > 1 && i < b.ValueCount; i++)
         {
             Walk(store, Blk.GetPointer(b.GetValue(i).Value).Pointer, height - 1, held);

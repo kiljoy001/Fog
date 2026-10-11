@@ -18,6 +18,8 @@ internal sealed class Allocator : BlockStore
 
     public IReadOnlyList<Arena> Arenas { get; }
 
+    public Epochs Epochs { get; } = new();
+
     public bool UseReserve { get; set; }
 
     // Blocks freed since the last commit, reused only once the next commit is durable.
@@ -84,6 +86,15 @@ internal sealed class Allocator : BlockStore
     // Only then are the freed blocks reused.
     public void Sync(long gen, bool compress, Action<IReadOnlyList<Bptr>> commit)
     {
+        Pending pending = Prepare(gen, compress);
+        WriteOut(pending, commit);
+        Finish(pending);
+    }
+
+    // sync's first pass, under the writer's lock: the logs compressed, every free since the last
+    // commit logged, a barrier for the generation, the logs written and the headers packed.
+    public Pending Prepare(long gen, bool compress)
+    {
         var retired = new List<long>();
         foreach (Arena a in Arenas)
         {
@@ -104,19 +115,42 @@ internal sealed class Allocator : BlockStore
         {
             a.Barrier(gen);
             a.FlushLog();
+            a.PackHeader();
+        }
+
+        return new Pending(retired, [.. Arenas.Select(a => a.Pointer)]);
+    }
+
+    // The passes that wait for the device, with the writer's lock released: the first headers, then
+    // the superblocks the commit writes, then the second headers, each flushed before the next.
+    public void WriteOut(Pending pending, Action<IReadOnlyList<Bptr>> commit)
+    {
+        device.Flush();
+        foreach (Arena a in Arenas)
+        {
+            a.WriteHeader(0);
         }
 
         device.Flush();
-        Bptr[] pointers = [.. Arenas.Select(a => a.WriteHeader(0))];
-        device.Flush();
-        commit(pointers);
+        commit(pending.Pointers);
         foreach (Arena a in Arenas)
         {
             a.WriteHeader(1);
         }
 
         device.Flush();
-        foreach (long b in retired)
+    }
+
+    // Under the writer's lock again: what the commit freed waits in limbo for the reads that may
+    // still use it, and what earlier commits freed goes back to the arenas once they have finished.
+    public void Finish(Pending pending)
+    {
+        foreach (long b in pending.Retired)
+        {
+            Epochs.Defer(b);
+        }
+
+        foreach (long b in Epochs.Clean())
         {
             ArenaOf(b).Release(b);
         }

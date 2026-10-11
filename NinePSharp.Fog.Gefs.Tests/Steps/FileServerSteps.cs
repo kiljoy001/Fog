@@ -71,7 +71,7 @@ public sealed class FileServerSteps(StoreContext context)
             "the name of 244 bytes" => [new string('n', 244)],
             _ => names.Replace(" and ", ", ", StringComparison.Ordinal).Split(", "),
         };
-        Assert.Equal(expected, Fs.ReadDirectoryAsync(Resolve(path), default).AsTask().Result.Select(e => e.Name));
+        Assert.Equal(expected, Bounded.Run(() => Fs.ReadDirectoryAsync(Resolve(path), default)).Select(e => e.Name));
     }
 
     [When(@"^(\w+) sets the root's mode to (d?\d+) at time (\d+)$")]
@@ -81,6 +81,7 @@ public sealed class FileServerSteps(StoreContext context)
         WStat(Fs.Root, user, ResourceWStat.Unchanged() with { Mode = Mode(mode) });
     }
 
+    [Given(@"^(\w+) creates (file|directory) (\S+) in (.+) with mode (d?\d+) at time (\d+)$")]
     [When(@"^(\w+) creates (file|directory) (\S+) in (.+) with mode (d?\d+) at time (\d+)$")]
     public void WhenCreates(string user, string kind, string name, string path, string mode, long time)
     {
@@ -90,7 +91,7 @@ public sealed class FileServerSteps(StoreContext context)
 
     [When(@"^the server creates (file|directory) (\S+) in the root$")]
     public void WhenServerCreates(string kind, string name)
-        => Fs.CreateAsync(Fs.Root, name, kind == "directory", default).AsTask().GetAwaiter().GetResult();
+        => Bounded.Run(() => Fs.CreateAsync(Fs.Root, name, kind == "directory", default));
 
     [When(@"^(\w+) creates files (.+) in (.+) with mode (\d+) at time (\d+)$")]
     public void WhenCreatesMany(string user, string names, string path, string mode, long time)
@@ -132,6 +133,7 @@ public sealed class FileServerSteps(StoreContext context)
         Assert.Equal(error, refused.Message);
     }
 
+    [Given(@"^(\w+) writes ""(.*)"" to (\S+) at offset (\d+) at time (\d+)$")]
     [When(@"^(\w+) writes ""(.*)"" to (\S+) at offset (\d+) at time (\d+)$")]
     public void WhenWritesText(string user, string text, string path, ulong offset, long time) => Write(user, path, offset, Encoding.ASCII.GetBytes(text), time);
 
@@ -162,15 +164,15 @@ public sealed class FileServerSteps(StoreContext context)
     public void ThenWriteRefused(string user, string path, string error)
     {
         ResourceOpenHandle open = Open(user, path, NinePConstants.OREAD);
-        Assert.Equal(error, Assert.Throws<IOException>(() => Fs.WriteAsync(open, 0, new byte[1], Context(user), default).AsTask().GetAwaiter().GetResult()).Message);
+        Assert.Equal(error, Assert.Throws<IOException>(() => Bounded.Run(() => Fs.WriteAsync(open, 0, new byte[1], Context(user), default))).Message);
     }
 
     [When(@"^(\w+) removes (\S+)$")]
-    public void WhenRemoves(string user, string path) => Fs.RemoveAsync(Resolve(path), null, Context(user), default).AsTask().GetAwaiter().GetResult();
+    public void WhenRemoves(string user, string path) => Bounded.Run(() => Fs.RemoveAsync(Resolve(path), null, Context(user), default));
 
     [Then(@"^statting the removed (\S+) fails with ""(.*)""$")]
     public void ThenStatRemoved(string path, string error)
-        => Assert.Equal(error, Assert.Throws<IOException>(() => Fs.StatAsync(seen[path], default).AsTask().GetAwaiter().GetResult()).Message);
+        => Assert.Equal(error, Assert.Throws<IOException>(() => Bounded.Run(() => Fs.StatAsync(seen[path], default))).Message);
 
     [Then(@"^(\w+) removing (.+) fails with ""(.*)""$")]
     public void ThenRemoveFails(string user, string path, string error)
@@ -288,7 +290,7 @@ public sealed class FileServerSteps(StoreContext context)
 
     private ResourceOperationContext Context(string user) => new(new ResourceOperationId("test", ++sequence), 1, user);
 
-    private ResourceHandle? Walk(ResourceHandle from, string name) => Fs.WalkAsync(from, name, default).AsTask().Result;
+    private ResourceHandle? Walk(ResourceHandle from, string name) => Bounded.Run(() => Fs.WalkAsync(from, name, default));
 
     private ResourceHandle Resolve(string path)
     {
@@ -310,29 +312,29 @@ public sealed class FileServerSteps(StoreContext context)
         return at;
     }
 
-    private ResourceStat Stat(string path) => Fs.StatAsync(Resolve(path), default).AsTask().GetAwaiter().GetResult();
+    private ResourceStat Stat(string path) => Bounded.Run(() => Fs.StatAsync(Resolve(path), default));
 
     private ResourceOpenHandle Create(string user, ResourceHandle directory, string name, uint mode)
-        => Fs.CreateAndOpenAsync(directory, name, mode, NinePConstants.ORDWR, Context(user), default).AsTask().GetAwaiter().GetResult();
+        => Bounded.Run(() => Fs.CreateAndOpenAsync(directory, name, mode, NinePConstants.ORDWR, Context(user), default));
 
-    private ResourceOpenHandle Open(string user, string path, byte mode) => Fs.OpenAsync(Resolve(path), mode, Context(user), default).AsTask().GetAwaiter().GetResult();
+    private ResourceOpenHandle Open(string user, string path, byte mode) => Bounded.Run(() => Fs.OpenAsync(Resolve(path), mode, Context(user), default));
 
-    private void Clunk(string user, ResourceOpenHandle open) => Fs.ClunkAsync(open, Context(user), default).AsTask().GetAwaiter().GetResult();
+    private void Clunk(string user, ResourceOpenHandle open) => Bounded.Run(() => Fs.ClunkAsync(open, Context(user), default));
 
-    private void WStat(ResourceHandle at, string user, ResourceWStat stat) => Fs.WStatAsync(at, stat, Context(user), default).AsTask().GetAwaiter().GetResult();
+    private void WStat(ResourceHandle at, string user, ResourceWStat stat) => Bounded.Run(() => Fs.WStatAsync(at, stat, Context(user), default));
 
     private void Write(string user, string path, ulong offset, byte[] data, long time)
     {
         At(time);
         ResourceOpenHandle open = Open(user, path, NinePConstants.OWRITE);
-        Assert.Equal((uint)data.Length, Fs.WriteAsync(open, offset, data, Context(user), default).AsTask().GetAwaiter().GetResult());
+        Assert.Equal((uint)data.Length, Bounded.Run(() => Fs.WriteAsync(open, offset, data, Context(user), default)));
         Clunk(user, open);
     }
 
     private byte[] Read(string path, ulong offset, uint count)
     {
         ResourceOpenHandle open = Open("adm", path, NinePConstants.OREAD);
-        byte[] data = Fs.ReadAsync(open, offset, count, default).AsTask().GetAwaiter().GetResult().ToArray();
+        byte[] data = Bounded.Run(() => Fs.ReadAsync(open, offset, count, default)).ToArray();
         Clunk("adm", open);
         return data;
     }

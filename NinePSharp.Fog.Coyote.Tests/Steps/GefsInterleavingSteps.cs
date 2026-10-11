@@ -22,6 +22,7 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     [Given("a store serving main and work, a fork of main")]
     [Given("a store with main snapshotted as monday")]
     [Given(@"^a store serving main, with notes holding ""first"" committed$")]
+    [Given(@"^a store serving main, with notes holding 2 blocks of ""a"" committed$")]
     public void GivenStore()
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(GefsServer).Assembly))
@@ -84,8 +85,38 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
         Accounting.Check(store);
     };
 
+    [When(@"^2 readers each read notes while a writer rewrites it as 2 blocks of ""b"" and then of ""c"", committing after each$")]
+    public void WhenReadsRaceWriter() => race = async () =>
+    {
+        const int Size = 2 * Format.BlockSize;
+        var (device, server) = Ream();
+        GefsFs main = server.Attach("main");
+        await WriteAsync(main, "notes", new string('a', Size), create: true);
+        server.Sync();
+        Task<string>[] reads = [Task.Run(() => ReadAsync(main, "notes", Size)), Task.Run(() => ReadAsync(main, "notes", Size))];
+        Task writer = Task.Run(async () =>
+        {
+            foreach (char letter in "bc")
+            {
+                await WriteAsync(main, "notes", new string(letter, Size), create: false);
+                server.Sync();
+            }
+        });
+        await Task.WhenAll(writer, Task.WhenAll(reads));
+        foreach (Task<string> read in reads)
+        {
+            string text = read.Result;
+            Specification.Assert(text.Length == Size && text.Distinct().Count() == 1 && "abc".Contains(text[0], StringComparison.Ordinal), $"a read gave {text.Length} bytes of {string.Concat(text.Distinct())}");
+        }
+
+        server.Dispose();
+        using GefsServer reopened = Reopen(device, out Store store);
+        Accounting.Check(store);
+    };
+
     [Then("in every explored schedule, once the device is opened again, main and work each hold their writers' files with what was written, and every block of the device is held, in a log or free")]
     [Then("in every explored schedule both attaches serve the same tree")]
+    [Then("in every explored schedule each read gives 2 blocks of one letter, a, b or c, and once the device is opened again every block of it is held, in a log or free")]
     [Then(@"^in every explored schedule, once the device is opened again, monday's notes hold ""first"" or ""secnd"", main's hold ""secnd"", and every block of the device is held, in a log or free$")]
     public void ThenExplored() => Explorer.Explore(race!, output, memoryAccesses: true);
 
@@ -104,11 +135,11 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     }
 
     // Coyote rewrites awaits of the file server's value tasks, but not other uses of them.
-    private async Task<string> ReadAsync(GefsFs fs, string name)
+    private async Task<string> ReadAsync(GefsFs fs, string name, uint count = 100)
     {
         ResourceHandle file = (await fs.WalkAsync(fs.Root, name, default))!;
         ResourceOpenHandle open = await fs.OpenAsync(file, NinePConstants.OREAD, Context(), default);
-        ReadOnlyMemory<byte> data = await fs.ReadAsync(open, 0, 100, default);
+        ReadOnlyMemory<byte> data = await fs.ReadAsync(open, 0, count, default);
         await fs.ClunkAsync(open, Context(), default);
         return Encoding.ASCII.GetString(data.Span);
     }

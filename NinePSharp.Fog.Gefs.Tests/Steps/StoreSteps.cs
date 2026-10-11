@@ -330,6 +330,9 @@ public sealed class StoreSteps(StoreContext context)
     [Then("every block of the device is held, in a log or free")]
     public void ThenAccounted() => Accounting.Check(context.Store!);
 
+    [Then("every block of the device is held, in a log, waiting for reads, or free")]
+    public void ThenAccountedWaiting() => Accounting.Check(context.Store!, waiting: true);
+
     private static byte[] Key(int n) => [0x10, (byte)(n >> 8), (byte)n];
 
     private static IEnumerable<int> Numbers(string text)

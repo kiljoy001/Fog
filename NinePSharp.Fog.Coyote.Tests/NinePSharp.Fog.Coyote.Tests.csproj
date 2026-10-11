@@ -25,5 +25,6 @@
     <Compile Include="../NinePSharp.Fog.Server.Tests/RecordingLogger.cs" Link="Support/RecordingLogger.cs" />
     <Compile Include="../NinePSharp.Fog.Gefs.Tests/Support/Accounting.cs" Link="Support/Accounting.cs" />
     <Compile Include="../NinePSharp.Fog.Gefs.Tests/Support/MemoryDevice.cs" Link="Support/MemoryDevice.cs" />
+    <Compile Include="../NinePSharp.Fog.Gefs.Tests/Support/Bounded.cs" Link="Support/GefsBounded.cs" />
   </ItemGroup>
 </Project>

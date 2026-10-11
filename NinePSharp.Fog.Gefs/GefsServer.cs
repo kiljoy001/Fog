@@ -70,24 +70,16 @@ public sealed class GefsServer : IDisposable
         }
     }
 
-    // A commit now, as the console's sync asks.
-    public void Sync()
-    {
-        lock (store.Gate)
-        {
-            store.Commit();
-        }
-    }
+    // A commit now, as the console's sync asks. The commit takes the writer's lock itself, and
+    // releases it while it waits for the device.
+    public void Sync() => store.Commit();
 
     public void Dispose()
     {
         timer.Dispose();
-        lock (store.Gate)
+        if (Changed())
         {
-            if (store.Changed && !store.Broken)
-            {
-                store.Commit();
-            }
+            store.Commit();
         }
 
         (device as IDisposable)?.Dispose();
@@ -96,19 +88,24 @@ public sealed class GefsServer : IDisposable
     // A failed commit has made the store read only, and the next tick finds it so.
     private void Tick()
     {
+        if (Changed())
+        {
+            try
+            {
+                store.Commit();
+            }
+            catch (Exception failed) when (failed is GefsException or IOException)
+            {
+                Failure = failed;
+            }
+        }
+    }
+
+    private bool Changed()
+    {
         lock (store.Gate)
         {
-            if (store.Changed && !store.Broken)
-            {
-                try
-                {
-                    store.Commit();
-                }
-                catch (Exception failed) when (failed is GefsException or IOException)
-                {
-                    Failure = failed;
-                }
-            }
+            return store.Changed && !store.Broken;
         }
     }
 }

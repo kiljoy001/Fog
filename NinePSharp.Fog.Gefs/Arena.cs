@@ -61,6 +61,7 @@ internal sealed class Arena
         a.Append(start, B, LogOp.Alloc1);
         a.Barrier(0);
         a.FlushLog();
+        a.PackHeader();
         a.WriteHeader(0);
         a.WriteHeader(1);
         return a;
@@ -172,23 +173,19 @@ internal sealed class Arena
         }
     }
 
-    // packarena into the first header, or the same bytes into the second.
-    public Bptr WriteHeader(int which)
+    // packarena: the header as it stands, written later into both header blocks.
+    public void PackHeader()
     {
-        if (which == 0)
-        {
-            Blk h = Blk.New(BlockType.Arena, header, default);
-            Span<byte> p = h.Data;
-            BinaryPrimitives.WriteInt64BigEndian(p, LogHead);
-            BinaryPrimitives.WriteInt64BigEndian(p[8..], Size);
-            h.Seal();
-            packed = h.Buffer;
-            Pointer = new Bptr(header, h.Hash!.Value, default);
-        }
-
-        device.Write(header + (which * B), packed);
-        return Pointer;
+        Blk h = Blk.New(BlockType.Arena, header, default);
+        Span<byte> p = h.Data;
+        BinaryPrimitives.WriteInt64BigEndian(p, LogHead);
+        BinaryPrimitives.WriteInt64BigEndian(p[8..], Size);
+        h.Seal();
+        packed = h.Buffer;
+        Pointer = new Bptr(header, h.Hash!.Value, default);
     }
+
+    public void WriteHeader(int which) => device.Write(header + (which * B), packed);
 
     public IEnumerable<LogEntry> ReadLog()
     {

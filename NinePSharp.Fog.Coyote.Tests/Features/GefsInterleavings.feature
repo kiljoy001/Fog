@@ -1,12 +1,15 @@
 @fog_coyote
 Feature: A gefs store's one writer keeps its trees whole in every interleaving Coyote explores
   Every tree served from one store changes it under the store's lock, so changes through different
-  trees, commits and snapshots run one at a time. Coyote controls the tasks and the lock, and the
-  gefs assembly is rewritten to check data races, so Coyote also switches tasks at its memory and
-  collection accesses: a change made outside the lock races where Coyote can run another task
-  into it. Each scenario repeats a race many times in different orders, then commits, opens the
-  device again and checks what each tree holds and that every block of the device is held, in a
-  log or free. Scenarios are skipped unless the assemblies were rewritten with coyote rewrite.
+  trees, snapshots and the first pass of a commit run one at a time; a commit waits for the device
+  with the lock released. Reads take no lock: each takes a tree's root once, inside an epoch, and
+  a block a commit frees waits in limbo until every read that might use it has finished. Coyote
+  controls the tasks and the lock, and the gefs assembly is rewritten to check data races, so
+  Coyote also switches tasks at its memory and collection accesses: a change made outside the
+  lock, or a block reused under a read, races where Coyote can run another task into it. Each
+  scenario repeats a race many times in different orders, then checks what each tree holds and
+  that every block of the device is held, in a log or free. Scenarios are skipped unless the
+  assemblies were rewritten with coyote rewrite.
 
   @FOG_COYOTE_201
   Scenario: Writers in two trees of one store, racing a commit, leave every file whole
@@ -25,3 +28,9 @@ Feature: A gefs store's one writer keeps its trees whole in every interleaving C
     Given a store serving main, with notes holding "first" committed
     When a writer writes "secnd" to notes while another task snapshots main as monday and a third commits
     Then in every explored schedule, once the device is opened again, monday's notes hold "first" or "secnd", main's hold "secnd", and every block of the device is held, in a log or free
+
+  @FOG_COYOTE_204
+  Scenario: Reads racing a writer and its commits each see the file whole, as one root held it
+    Given a store serving main, with notes holding 2 blocks of "a" committed
+    When 2 readers each read notes while a writer rewrites it as 2 blocks of "b" and then of "c", committing after each
+    Then in every explored schedule each read gives 2 blocks of one letter, a, b or c, and once the device is opened again every block of it is held, in a log or free

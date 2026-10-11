@@ -40,19 +40,10 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         this.inGroup = inGroup;
         this.clock = clock;
         tree = store.Mount(label);
-        owner = Find(0).Dir.User;
+        owner = Find(tree, 0).Dir.User;
     }
 
-    public ResourceHandle Root
-    {
-        get
-        {
-            lock (store.Gate)
-            {
-                return Handle(Find(0).Dir);
-            }
-        }
-    }
+    public ResourceHandle Root => Reading(view => Handle(Find(view, 0).Dir));
 
     private long Now => Store.Nanoseconds(clock);
 
@@ -60,25 +51,22 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     private bool ReadOnly => tree.ReadOnly || store.Broken;
 
     public ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => ValueTask.FromResult(Reading(view =>
         {
             long qid = Qid(directory);
             if (name == "..")
             {
-                long parent = Parent(qid);
-                return ValueTask.FromResult<ResourceHandle?>(Handle(Find(parent == -1 ? qid : parent).Dir));
+                long parent = Parent(view, qid);
+                return Handle(Find(view, parent == -1 ? qid : parent).Dir);
             }
 
-            return ValueTask.FromResult(tree.Lookup(Keys.Entry(qid, name)) is { } value ? Handle(Dir.Read(Keys.Entry(qid, name), value)) : null);
-        }
-    }
+            return view.Lookup(Keys.Entry(qid, name)) is { } value ? Handle(Dir.Read(Keys.Entry(qid, name), value)) : null;
+        }));
 
     public ValueTask<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => ValueTask.FromResult<IReadOnlyList<ResourceDirectoryEntry>>(Reading(view =>
         {
-            Scan scan = Under(KeyType.Entry, Qid(directory));
+            Scan scan = Under(view, KeyType.Entry, Qid(directory));
             var entries = new List<ResourceDirectoryEntry>();
             while (scan.Next())
             {
@@ -86,9 +74,8 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
                 entries.Add(new ResourceDirectoryEntry(d.Name, Handle(d)));
             }
 
-            return ValueTask.FromResult<IReadOnlyList<ResourceDirectoryEntry>>(entries);
-        }
-    }
+            return entries;
+        }));
 
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
     {
@@ -115,7 +102,10 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
             if ((d.Qid.Type & (byte)QidType.QTEXCL) != 0)
             {
-                exclusive.Add(d.Qid.Path);
+                lock (exclusive)
+                {
+                    exclusive.Add(d.Qid.Path);
+                }
             }
 
             return ValueTask.FromResult(new ResourceOpenHandle(Handle(d), HandleId(context), mode, 0));
@@ -123,62 +113,33 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     }
 
     // fsopen: a directory opens only to read; removing on close needs what removing needs; opening
-    // with truncation empties the file. An exclusive file opens once at a time.
+    // with truncation empties the file. An exclusive file opens once at a time. As in gefs, an open
+    // that truncates or removes on close is a change, and the rest are reads.
     public ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
+        if ((mode & (NinePConstants.OTRUNC | NinePConstants.ORCLOSE)) == 0)
+        {
+            return ValueTask.FromResult(Reading(view => Open(view, resource, mode, context)));
+        }
+
         lock (store.Gate)
         {
-            var (key, d) = Find(Qid(resource));
-            int bits = Bits(mode);
-            if (IsDirectory(d) && (bits & Write) != 0)
-            {
-                throw new IOException("permission denied");
-            }
-
-            if (exclusive.Contains(d.Qid.Path))
-            {
-                throw new IOException("open/create -- file is locked");
-            }
-
-            if ((mode & NinePConstants.ORCLOSE) != 0)
-            {
-                CanRemove(d, context.User);
-            }
-
-            if (!Allowed(d, context.User, bits))
-            {
-                throw new IOException("permission denied");
-            }
-
-            if ((d.Qid.Type & (byte)QidType.QTEXCL) != 0)
-            {
-                exclusive.Add(d.Qid.Path);
-            }
-
-            if ((mode & NinePConstants.OTRUNC) != 0 && (d.Mode & Append) == 0)
-            {
-                Writable();
-                Change(key, Clear(d.Qid.Path, 0), new WstatChange(Length: 0, Muid: context.User));
-                d = Find(d.Qid.Path).Dir;
-            }
-
-            return ValueTask.FromResult(new ResourceOpenHandle(Handle(d), HandleId(context), mode, 0));
+            return ValueTask.FromResult(Open(tree, resource, mode, context));
         }
     }
 
     // readfile: up to the file's end, holes as zeros.
     public ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => ValueTask.FromResult<ReadOnlyMemory<byte>>(Reading(view =>
         {
-            Dir d = Find(Qid(openHandle.Resource)).Dir;
+            Dir d = Find(view, Qid(openHandle.Resource)).Dir;
             var reply = new byte[(int)Math.Min(count, (ulong)d.Length - Math.Min(offset, (ulong)d.Length))];
             for (int done = 0; done < reply.Length;)
             {
                 long at = (long)offset + done;
                 int within = (int)(at % B);
                 int n = Math.Min((int)B - within, reply.Length - done);
-                if (tree.Lookup(Keys.Data(d.Qid.Path, at - within)) is { } bp)
+                if (view.Lookup(Keys.Data(d.Qid.Path, at - within)) is { } bp)
                 {
                     store.Allocator.ReadData(Bptr.Read(bp)).AsSpan(within, n).CopyTo(reply.AsSpan(done));
                 }
@@ -186,9 +147,8 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
                 done += n;
             }
 
-            return ValueTask.FromResult<ReadOnlyMemory<byte>>(reply);
-        }
-    }
+            return reply;
+        }));
 
     // fswrite and writeb: each block touched written anew, keeping the bytes around the write from the
     // block it replaces; then the length, modification time and last modifier.
@@ -202,7 +162,7 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             }
 
             Writable();
-            var (key, d) = Find(Qid(openHandle.Resource));
+            var (key, d) = Find(tree, Qid(openHandle.Resource));
             long start = (d.Mode & Append) != 0 ? d.Length : (long)offset;
             var changes = new List<Message>();
             for (int done = 0; done < data.Length;)
@@ -232,28 +192,30 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     }
 
     public ValueTask<ResourceStat> StatAsync(ResourceHandle resource, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => ValueTask.FromResult(Reading(view =>
         {
-            Dir d = Find(Qid(resource)).Dir;
-            return ValueTask.FromResult(new ResourceStat(Handle(d), d.Name.Length == 0 ? "/" : d.Name, d.Mode, Seconds(d.Atime), Seconds(d.Mtime), (ulong)d.Length, d.User, d.Group, d.Muid));
-        }
-    }
+            Dir d = Find(view, Qid(resource)).Dir;
+            return new ResourceStat(Handle(d), d.Name.Length == 0 ? "/" : d.Name, d.Mode, Seconds(d.Atime), Seconds(d.Mtime), (ulong)d.Length, d.User, d.Group, d.Muid);
+        }));
 
     // A file opened to be removed on close goes now; it was checked when it was opened.
     public ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        lock (store.Gate)
+        long qid = Qid(openHandle.Resource);
+        lock (exclusive)
         {
-            long qid = Qid(openHandle.Resource);
             exclusive.Remove(qid);
-            if ((openHandle.Mode & NinePConstants.ORCLOSE) != 0)
-            {
-                Remove(Find(qid));
-            }
-
-            return ValueTask.CompletedTask;
         }
+
+        if ((openHandle.Mode & NinePConstants.ORCLOSE) != 0)
+        {
+            lock (store.Gate)
+            {
+                Remove(Find(tree, qid));
+            }
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     // fsremove: an empty directory or a file, by a user who may write its directory; not the root.
@@ -261,7 +223,7 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     {
         lock (store.Gate)
         {
-            var found = Find(Qid(resource));
+            var found = Find(tree, Qid(resource));
             CanRemove(found.Dir, context.User);
             Remove(found);
             return ValueTask.CompletedTask;
@@ -272,136 +234,21 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         => WStatAsync(handle.Resource, stat, context, cancellationToken);
 
     // fswstat: every field checked, then every permission, before anything changes. A wstat that
-    // names nothing asks for a sync, and commits the store.
+    // names nothing asks for a sync, and commits the store once the writer's lock is released.
     public ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
     {
+        bool sync;
         lock (store.Gate)
         {
-            var (key, d) = Find(Qid(resource));
-            string user = context.User;
-            if (stat.Qid.Path != ulong.MaxValue || stat.Qid.Version != uint.MaxValue || stat.Qid.Type != (QidType)0xff || stat.Type != ushort.MaxValue || stat.Device != uint.MaxValue)
-            {
-                throw Refused("wstat -- attempt to change qid");
-            }
-
-            bool rename = stat.Name.Length != 0 && stat.Name != d.Name;
-            if (rename)
-            {
-                if (NameError(stat.Name) is { } error)
-                {
-                    throw Refused(error);
-                }
-
-                if (tree.Lookup(Keys.Entry(Parent(d.Qid.Path), stat.Name)) is not null)
-                {
-                    throw Refused("create/wstat -- file exists");
-                }
-            }
-
-            long? length = null;
-            if (stat.Length != ulong.MaxValue)
-            {
-                if (IsDirectory(d) || stat.Length > long.MaxValue)
-                {
-                    throw Refused("wstat -- attempt to make length negative");
-                }
-
-                length = stat.Length == (ulong)d.Length ? null : (long)stat.Length;
-            }
-
-            uint? mode = null;
-            if (stat.Mode != uint.MaxValue)
-            {
-                if (((stat.Mode ^ d.Mode) & Directory) != 0)
-                {
-                    throw Refused("wstat -- attempt to change directory");
-                }
-
-                if ((stat.Mode & ~Settable) != 0)
-                {
-                    throw Refused("wstat -- unknown bits in qid.type/mode");
-                }
-
-                mode = stat.Mode == d.Mode ? null : stat.Mode;
-            }
-
-            long? mtime = stat.ModificationTime == uint.MaxValue || stat.ModificationTime * 1_000_000_000L == d.Mtime ? null : stat.ModificationTime * 1_000_000_000L;
-            if (TooLong(stat.User) || TooLong(stat.Group))
-            {
-                throw Refused("name too long");
-            }
-
-            string? owner = stat.User.Length == 0 || stat.User == d.User ? null : stat.User;
-            string? group = stat.Group.Length == 0 || stat.Group == d.Group ? null : stat.Group;
-            if (stat.LastModifier.Length != 0)
-            {
-                throw Refused("wstat -- attempt to change muid");
-            }
-
-            if (stat.Name.Length == 0 && stat.Length == ulong.MaxValue && stat.Mode == uint.MaxValue && stat.ModificationTime == uint.MaxValue && stat.User.Length == 0 && stat.Group.Length == 0)
-            {
-                if (!store.Broken)
-                {
-                    store.Commit();
-                }
-
-                return ValueTask.FromResult(stat.EncodedLength);
-            }
-
-            bool permitted = inGroup(user, "adm");
-            if (rename && !Allowed(Find(Parent(d.Qid.Path)).Dir, user, Write))
-            {
-                throw Refused("permission denied");
-            }
-
-            if (length is not null && !Allowed(d, user, Write))
-            {
-                throw Refused("permission denied");
-            }
-
-            if ((mode is not null || mtime is not null) && !permitted && user != d.User && !inGroup(user, d.Group))
-            {
-                throw Refused("wstat -- not owner or group leader");
-            }
-
-            if (owner is not null && !permitted)
-            {
-                throw Refused("wstat -- not owner");
-            }
-
-            if (group is not null && !permitted && !(user == d.User && inGroup(user, group)) && !(inGroup(user, d.Group) && inGroup(user, group)))
-            {
-                throw Refused("wstat -- not in group");
-            }
-
-            if (ReadOnly)
-            {
-                throw Refused("file system read only");
-            }
-
-            var change = new WstatChange(length, mode, mtime, null, owner, group, user);
-            List<Message> cleared = length is { } l ? Clear(d.Qid.Path, l) : [];
-            if (rename)
-            {
-                Dir n = Dir.Read(key, Messages.Apply(d.Value(), new Message(MessageOp.Wstat, key, change.Pack()))) with { Name = stat.Name };
-                byte[] renamed = n.Key(Parent(d.Qid.Path));
-                cleared.AddRange([
-                    new Message(MessageOp.Clobber, key, []),
-                    new Message(MessageOp.Insert, renamed, n.Value()),
-                    new Message(MessageOp.Insert, Keys.Up(d.Qid.Path), renamed),
-                    Touch(Parent(d.Qid.Path))]);
-                foreach (Message[] batch in cleared.Chunk(Batch))
-                {
-                    Upsert(batch);
-                }
-            }
-            else
-            {
-                Change(key, cleared, change);
-            }
-
-            return ValueTask.FromResult(stat.EncodedLength);
+            sync = WStat(resource, stat, context);
         }
+
+        if (sync && !store.Broken)
+        {
+            store.Commit();
+        }
+
+        return ValueTask.FromResult(stat.EncodedLength);
     }
 
     private static long Qid(ResourceHandle handle) => (long)handle.Identity.Path;
@@ -437,6 +284,234 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             : TooLong(name) ? "name too long"
             : null;
 
+    // An entry by its qid, through the key its Kup holds.
+    private static (byte[] Key, Dir Dir) Find(Tree t, long qid)
+    {
+        if (t.Lookup(Keys.Up(qid)) is not { } key || t.Lookup(key) is not { } value)
+        {
+            throw new IOException("phase error -- use after remove");
+        }
+
+        return (key, Dir.Read(key, value));
+    }
+
+    private static long Parent(Tree t, long qid)
+    {
+        Keys.ReadEntry(Find(t, qid).Key, out long parent);
+        return parent;
+    }
+
+    private static bool HasChildren(Tree t, long qid)
+    {
+        return Under(t, KeyType.Entry, qid).Next();
+    }
+
+    // The keys of one type under a qid: a directory's entries or a file's data blocks.
+    private static Scan Under(Tree t, KeyType type, long qid)
+    {
+        var prefix = new byte[9];
+        prefix[0] = (byte)type;
+        BinaryPrimitives.WriteInt64BigEndian(prefix.AsSpan(1), qid);
+        var scan = new Scan(prefix);
+        scan.Enter(t);
+        return scan;
+    }
+
+    // The wstat's checks and changes, under the writer's lock; whether it named nothing.
+    private bool WStat(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context)
+    {
+        var (key, d) = Find(tree, Qid(resource));
+        string user = context.User;
+        if (stat.Qid.Path != ulong.MaxValue || stat.Qid.Version != uint.MaxValue || stat.Qid.Type != (QidType)0xff || stat.Type != ushort.MaxValue || stat.Device != uint.MaxValue)
+        {
+            throw Refused("wstat -- attempt to change qid");
+        }
+
+        bool rename = stat.Name.Length != 0 && stat.Name != d.Name;
+        if (rename)
+        {
+            if (NameError(stat.Name) is { } error)
+            {
+                throw Refused(error);
+            }
+
+            if (tree.Lookup(Keys.Entry(Parent(tree, d.Qid.Path), stat.Name)) is not null)
+            {
+                throw Refused("create/wstat -- file exists");
+            }
+        }
+
+        long? length = null;
+        if (stat.Length != ulong.MaxValue)
+        {
+            if (IsDirectory(d) || stat.Length > long.MaxValue)
+            {
+                throw Refused("wstat -- attempt to make length negative");
+            }
+
+            length = stat.Length == (ulong)d.Length ? null : (long)stat.Length;
+        }
+
+        uint? mode = null;
+        if (stat.Mode != uint.MaxValue)
+        {
+            if (((stat.Mode ^ d.Mode) & Directory) != 0)
+            {
+                throw Refused("wstat -- attempt to change directory");
+            }
+
+            if ((stat.Mode & ~Settable) != 0)
+            {
+                throw Refused("wstat -- unknown bits in qid.type/mode");
+            }
+
+            mode = stat.Mode == d.Mode ? null : stat.Mode;
+        }
+
+        long? mtime = stat.ModificationTime == uint.MaxValue || stat.ModificationTime * 1_000_000_000L == d.Mtime ? null : stat.ModificationTime * 1_000_000_000L;
+        if (TooLong(stat.User) || TooLong(stat.Group))
+        {
+            throw Refused("name too long");
+        }
+
+        string? owner = stat.User.Length == 0 || stat.User == d.User ? null : stat.User;
+        string? group = stat.Group.Length == 0 || stat.Group == d.Group ? null : stat.Group;
+        if (stat.LastModifier.Length != 0)
+        {
+            throw Refused("wstat -- attempt to change muid");
+        }
+
+        if (stat.Name.Length == 0 && stat.Length == ulong.MaxValue && stat.Mode == uint.MaxValue && stat.ModificationTime == uint.MaxValue && stat.User.Length == 0 && stat.Group.Length == 0)
+        {
+            return true;
+        }
+
+        bool permitted = inGroup(user, "adm");
+        if (rename && !Allowed(Find(tree, Parent(tree, d.Qid.Path)).Dir, user, Write))
+        {
+            throw Refused("permission denied");
+        }
+
+        if (length is not null && !Allowed(d, user, Write))
+        {
+            throw Refused("permission denied");
+        }
+
+        if ((mode is not null || mtime is not null) && !permitted && user != d.User && !inGroup(user, d.Group))
+        {
+            throw Refused("wstat -- not owner or group leader");
+        }
+
+        if (owner is not null && !permitted)
+        {
+            throw Refused("wstat -- not owner");
+        }
+
+        if (group is not null && !permitted && !(user == d.User && inGroup(user, group)) && !(inGroup(user, d.Group) && inGroup(user, group)))
+        {
+            throw Refused("wstat -- not in group");
+        }
+
+        if (ReadOnly)
+        {
+            throw Refused("file system read only");
+        }
+
+        var change = new WstatChange(length, mode, mtime, null, owner, group, user);
+        List<Message> cleared = length is { } l ? Clear(d.Qid.Path, l) : [];
+        if (rename)
+        {
+            Dir n = Dir.Read(key, Messages.Apply(d.Value(), new Message(MessageOp.Wstat, key, change.Pack()))) with { Name = stat.Name };
+            byte[] renamed = n.Key(Parent(tree, d.Qid.Path));
+            cleared.AddRange([
+                new Message(MessageOp.Clobber, key, []),
+                new Message(MessageOp.Insert, renamed, n.Value()),
+                new Message(MessageOp.Insert, Keys.Up(d.Qid.Path), renamed),
+                Touch(Parent(tree, d.Qid.Path))]);
+            foreach (Message[] batch in cleared.Chunk(Batch))
+            {
+                Upsert(batch);
+            }
+        }
+        else
+        {
+            Change(key, cleared, change);
+        }
+
+        return false;
+    }
+
+    // fsopen's checks: an exclusive file locked, then a directory opened to write, removing on close,
+    // and the permissions asked for. An exclusive file is claimed before the checks, and given back if
+    // one fails.
+    private ResourceOpenHandle Open(Tree t, ResourceHandle resource, byte mode, ResourceOperationContext context)
+    {
+        var (key, d) = Find(t, Qid(resource));
+        bool claimed = (d.Qid.Type & (byte)QidType.QTEXCL) != 0;
+        if (claimed)
+        {
+            lock (exclusive)
+            {
+                if (!exclusive.Add(d.Qid.Path))
+                {
+                    throw new IOException("open/create -- file is locked");
+                }
+            }
+        }
+
+        try
+        {
+            int bits = Bits(mode);
+            if (IsDirectory(d) && (bits & Write) != 0)
+            {
+                throw new IOException("permission denied");
+            }
+
+            if ((mode & NinePConstants.ORCLOSE) != 0)
+            {
+                CanRemove(d, context.User);
+            }
+
+            if (!Allowed(d, context.User, bits))
+            {
+                throw new IOException("permission denied");
+            }
+
+            if ((mode & NinePConstants.OTRUNC) != 0 && (d.Mode & Append) == 0)
+            {
+                Writable();
+                Change(key, Clear(d.Qid.Path, 0), new WstatChange(Length: 0, Muid: context.User));
+                d = Find(t, d.Qid.Path).Dir;
+            }
+
+            return new ResourceOpenHandle(Handle(d), HandleId(context), mode, 0);
+        }
+        catch when (claimed)
+        {
+            lock (exclusive)
+            {
+                exclusive.Remove(d.Qid.Path);
+            }
+
+            throw;
+        }
+    }
+
+    // A read on the tree as it is when the read starts, inside an epoch so the blocks it uses are not
+    // reused until it is done.
+    private T Reading<T>(Func<Tree, T> read)
+    {
+        int epoch = store.Allocator.Epochs.Start();
+        try
+        {
+            return read(tree.Pinned());
+        }
+        finally
+        {
+            store.Allocator.Epochs.End(epoch);
+        }
+    }
+
     // fsaccess: the owner's bits, then the group's, then everyone's; none gets only everyone's.
     private bool Allowed(Dir d, string user, int bits)
     {
@@ -458,25 +533,8 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
     private ResourceHandle Handle(Dir d) => new(new ResourceIdentity("gefs", device, (ulong)d.Qid.Path), (QidType)d.Qid.Type, d.Qid.Version);
 
-    // An entry by its qid, through the key its Kup holds.
-    private (byte[] Key, Dir Dir) Find(long qid)
-    {
-        if (tree.Lookup(Keys.Up(qid)) is not { } key || tree.Lookup(key) is not { } value)
-        {
-            throw new IOException("phase error -- use after remove");
-        }
-
-        return (key, Dir.Read(key, value));
-    }
-
-    private long Parent(long qid)
-    {
-        Keys.ReadEntry(Find(qid).Key, out long parent);
-        return parent;
-    }
-
     // touch: a wstat changing nothing, which bumps a directory's version.
-    private Message Touch(long qid) => new(MessageOp.Wstat, Find(qid).Key, [0]);
+    private Message Touch(long qid) => new(MessageOp.Wstat, Find(tree, qid).Key, [0]);
 
     private Dir Create(long parent, string name, uint permissions, string user)
     {
@@ -496,7 +554,7 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             throw new IOException("wstat -- unknown bits in qid.type/mode");
         }
 
-        var (_, dir) = Find(parent);
+        var (_, dir) = Find(tree, parent);
         if (tree.Lookup(Keys.Entry(parent, name)) is not null)
         {
             throw new IOException("create/wstat -- file exists");
@@ -525,28 +583,23 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // candelete and fsremove's permission check.
     private void CanRemove(Dir d, string user)
     {
-        if (IsDirectory(d) && HasChildren(d.Qid.Path))
+        if (IsDirectory(d) && HasChildren(tree, d.Qid.Path))
         {
             throw new IOException("directory is not empty");
         }
 
-        long parent = Parent(d.Qid.Path);
-        if (parent == -1 || !Allowed(Find(parent).Dir, user, Write))
+        long parent = Parent(tree, d.Qid.Path);
+        if (parent == -1 || !Allowed(Find(tree, parent).Dir, user, Write))
         {
             throw new IOException("permission denied");
         }
-    }
-
-    private bool HasChildren(long qid)
-    {
-        return Under(KeyType.Entry, qid).Next();
     }
 
     private void Remove((byte[] Key, Dir Dir) found)
     {
         Writable();
         long qid = found.Dir.Qid.Path;
-        long parent = Parent(qid);
+        long parent = Parent(tree, qid);
         var changes = Clear(qid, 0);
         changes.Add(new Message(MessageOp.Delete, found.Key, []));
         changes.Add(new Message(MessageOp.Delete, Keys.Up(qid), []));
@@ -563,7 +616,7 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     {
         var changes = new List<Message>();
         long last = length - (length % B);
-        Scan scan = Under(KeyType.Data, qid);
+        Scan scan = Under(tree, KeyType.Data, qid);
         while (scan.Next())
         {
             if (BinaryPrimitives.ReadInt64BigEndian(scan.Key.AsSpan(9)) is var fb && fb >= last)
@@ -584,17 +637,6 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         var bp = new byte[Format.PointerSize];
         b.Pointer.Write(bp);
         return new Message(MessageOp.Insert, key, bp);
-    }
-
-    // The keys of one type under a qid: a directory's entries or a file's data blocks.
-    private Scan Under(KeyType type, long qid)
-    {
-        var prefix = new byte[9];
-        prefix[0] = (byte)type;
-        BinaryPrimitives.WriteInt64BigEndian(prefix.AsSpan(1), qid);
-        var scan = new Scan(prefix);
-        scan.Enter(tree);
-        return scan;
     }
 
     // Block changes in batches, then the entry's stat change.
