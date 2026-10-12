@@ -2,8 +2,9 @@
 
 > The [Fog architecture](../fog-architecture/README.md) supersedes the job, worker and control-node model these profiles assume; see its list of disagreements.
 
-Primary workload target: dotnet-webassembly applications using a WASI bridge over
-Plan 9 namespace/file operations. Production execution remains pending; its requirements
+Primary workload target: WASM applications, WASI Preview 1 core modules and Preview 2
+components, running on dotnet-webassembly with WASI bridges over Plan 9 namespace/file
+operations. Production execution remains pending; its requirements
 now drive the next namespace syscall slice.
 
 Status: proposed contracts, with a partial implementation tracked below. These
@@ -24,7 +25,7 @@ README for implemented boundaries, tests and remaining integration work.
 | --- | --- |
 | AAN establishment and resumption | [AanSession.md](AanSession.md): authenticated 9P bootstrap, explicit switch barrier, stock AAN data phase, fresh signed resume intent |
 | Orleans membership | [Membership.md](Membership.md): Orleans 10.3.1 API mapping to a single control-host 9P transaction service |
-| Primary WASM workload | [Runtimes.md](Runtimes.md): dotnet-webassembly with namespace-backed WASIp1 imports |
+| Primary WASM workload | [Wasm.md](Wasm.md): applications as Fog processes, with namespace-backed WASI Preview 1 imports and WASI 0.2 components |
 | Persistent resources | [Storage.md](Storage.md): optional single-host transactional blob store over 9P, local SQLite WAL/FULL, conditional grain-state writes |
 | Worker coordination and authority | [WorkerControl.md](WorkerControl.md): pull assignments, immutable scopes, timed leases, resource-side scope attaches and fenced completion |
 | Execution-process boundary | [Isolation.md](Isolation.md): Linux process-per-job supervision, cgroup v2, namespaces, seccomp and two private 9P channels |

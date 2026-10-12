@@ -247,7 +247,8 @@ Plan 9 client. The shell is Fog's port of 9front rc, running as a process like a
 3. Devices behind resource grains, with placement rules for machine-bound resources.
 4. The services as programs a process execs: control-export sessions, keyfs, authsrv, the
    listeners and the transaction service, each keeping its behaviour tests.
-5. The WASM exec format and WASI bridge.
+5. The WASM exec formats and the WASI bridges: Preview 1 core modules, then Preview 2
+   components with the component layer and canonical ABI.
 
 Each step follows the usual gate: features, then failing tests, then code, with mutation,
 fuzz and Coyote checks.

@@ -1,11 +1,13 @@
 @fog_v1_profiles @design
-Feature: A WASM application runs as a Fog process and uses its namespace through WASI
+Feature: A WASM application runs as a Fog process and uses its namespace through WASI Preview 1
   Each application is one Fog kernel process: its parent forks it and execs the module at
-  /bin/{app}, which exec recognises by its \0asm header. The module's WASI Preview 1 imports
-  act on that process: its descriptors, its namespace, its environment and its exit. The
-  descriptors it starts with are the ones its parent left open, and the directories among
-  them are its preopens. dotnet-webassembly provides the execution engine. These acceptance
-  scenarios are pending production bindings.
+  /bin/{app}, which exec recognises as a core module by its preamble. The module's WASI
+  Preview 1 imports act on that process: its descriptors, its namespace, its environment and
+  its exit. The descriptors it starts with are the ones its parent left open, and the
+  directories among them are its preopens. dotnet-webassembly provides the execution engine.
+  Preview 2 components use the same process, paths, rights and errors through the same layer;
+  WasiPreview2.feature and WasmComponents.feature describe what differs. The functions follow
+  the Preview 1 WITX at a2b96e81. These acceptance scenarios are pending production bindings.
 
   Background:
     Given a booted Fog kernel
@@ -55,11 +57,11 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
     Then the parent's wait returns a Waitmsg with the status "<status>"
 
     Examples:
-      | ends                          | status                       |
-      | returns from _start           |                              |
-      | calls proc_exit with 0        |                              |
-      | calls proc_exit with 3        | wasm-exit 3                  |
-      | executes unreachable          | wasm-trap: unreachable       |
+      | ends                   | status                 |
+      | returns from _start    |                        |
+      | calls proc_exit with 0 |                        |
+      | calls proc_exit with 3 | wasm-exit 3            |
+      | executes unreachable   | wasm-trap: unreachable |
 
   @WASI_NS_019
   Scenario: The application's environment is its process's environment
@@ -74,10 +76,11 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
     Then it fails with NOTCAPABLE and nothing outside "/data" is walked or opened
 
     Examples:
-      | path                       |
-      | /secret                    |
-      | ../secret                  |
-      | child/../../secret         |
+      | path                                                         |
+      | /secret                                                      |
+      | ../secret                                                    |
+      | child/../../secret                                           |
+      | child/../../data/report                                      |
       | a name bound over "/secret" by a mount it does not authorize |
 
   @WASI_NS_003 @security
@@ -89,11 +92,26 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
     And a matching path prefix alone grants nothing in the new mount
 
   @WASI_NS_004 @property
-  Scenario: Rights come from the open mode and only shrink
-    Given a process with "/data" open for reading as descriptor 3
-    When the application asks path_open or fd_fdstat_set_rights for write rights beneath it
-    Then it fails with NOTCAPABLE before any provider changes anything
-    And rights narrowed by fd_fdstat_set_rights cannot be restored
+  Scenario: A preopen starts with every right, and rights only narrow
+    Given a process with "/data" open as descriptor 3
+    When it execs an application
+    Then fd_fdstat_get reports every right on descriptor 3
+    When the application narrows descriptor 3 to reading with fd_fdstat_set_rights
+    Then asking path_open or fd_fdstat_set_rights for write rights beneath it fails with NOTCAPABLE before any provider changes anything
+    And no call restores the rights it gave up
+
+  @WASI_NS_020 @security
+  Scenario: Every right a preopen has is still checked by the file server
+    Given a process running as "glenda" with "/data" open as descriptor 3
+    And "/data/locked" is a file "glenda" may not write
+    When the application calls path_open on "locked" for writing
+    Then it fails with ACCES, as the file server refuses the open
+
+  @WASI_NS_021
+  Scenario: A path may walk back up within its directory
+    Given a process with "/data" open as descriptor 3 and "/data/report" holding report data
+    When the application calls path_open on descriptor 3 with "sub/../report"
+    Then it opens "/data/report"
 
   @WASI_NS_005
   Scenario Outline: WASI open flags keep their distinct meanings
@@ -102,11 +120,11 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
     Then the result is <result>
 
     Examples:
-      | flags       | result                           |
-      | CREATE      | open with existing contents      |
-      | CREATE EXCL | EXIST with contents unchanged    |
-      | TRUNC       | open with length zero            |
-      | DIRECTORY   | NOTDIR with contents unchanged   |
+      | flags       | result                         |
+      | CREATE      | open with existing contents    |
+      | CREATE EXCL | EXIST with contents unchanged  |
+      | TRUNC       | open with length zero          |
+      | DIRECTORY   | NOTDIR with contents unchanged |
 
   @WASI_NS_006
   Scenario: fd_renumber is the process's renumber
@@ -148,7 +166,8 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
   Scenario: fd_readdir continues from its cookies over a union directory
     Given a process with a union directory holding repeated names open as descriptor 3
     When the application calls fd_readdir with small buffers, passing back each cookie it got
-    Then it receives every entry in union order, repeated names included, as WASI dirents
+    Then it receives "." and ".." first, as the Preview 1 WITX says, and then every entry in union order, repeated names included, as WASI dirents
+    And ".." reports nothing about the directory above "/data"
     And a record cut short by the buffer is completed by the next call, as Preview 1 says
     And a cookie of zero starts again from the first entry
     And a cookie it was never given fails without disturbing the directory
@@ -174,7 +193,7 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
     Then it fails with NOTSUP and no copy, delete or emulation takes place
 
     Examples:
-      | call                                                |
+      | call                                                 |
       | path_rename from "/data/a" to "/data/sub/a"          |
       | path_symlink                                         |
       | path_link                                            |
@@ -187,3 +206,79 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
     Then the parent's wait returns a Waitmsg whose status starts "wasm-trap: "
     And "/data/out" holds "partial"
     And "/tmp/scratch" has been removed, as when any process exits
+
+  @WASI_NS_022
+  Scenario Outline: Kernel errors reach the application as Preview 1 errnos
+    Given a process with "/data" open as descriptor 3
+    When the application calls <call> and the kernel fails with "<error>"
+    Then the call returns <errno>
+
+    Examples:
+      | call                                   | error                              | errno    |
+      | path_open on "missing"                 | file does not exist                | NOENT    |
+      | path_open on "report" with CREATE EXCL | file already exists                | EXIST    |
+      | path_open on "locked" for writing      | permission denied                  | ACCES    |
+      | path_unlink_file on "sub"              | file is a directory                | ISDIR    |
+      | path_remove_directory on "report"      | not a directory                    | NOTDIR   |
+      | path_remove_directory on "full"        | directory is not empty             | NOTEMPTY |
+      | fd_write on a file in "/data"          | file system full                   | NOSPC    |
+      | path_create_directory on "union/new"   | mounted directory forbids creation | ROFS     |
+      | fd_read on a file in "/data"           | i/o timeout                        | IO       |
+
+  @WASI_NS_023
+  Scenario: poll_oneoff waits on descriptors and clocks, holding only the application's thread
+    Given an application with an empty pipe as descriptor 0
+    When it calls poll_oneoff with an fd_read subscription on descriptor 0 and a relative clock subscription of one second
+    Then the clock subscription's event is returned after one second, and the read subscription's is not
+    When it calls poll_oneoff again with the same subscriptions, and the pipe's other end writes "x"
+    Then the read subscription's event is returned, with one byte ready
+    And poll_oneoff with no subscriptions fails with INVAL
+
+  @WASI_NS_024
+  Scenario Outline: Clocks and randomness come from the host and grant nothing else
+    Given an application
+    When it calls <call>
+    Then <result>
+
+    Examples:
+      | call                                         | result                                                    |
+      | clock_time_get on the monotonic clock twice  | the second time is not before the first                   |
+      | clock_time_get on the realtime clock         | it returns the host's time in nanoseconds since the epoch |
+      | clock_time_get on the process CPU-time clock | it fails with NOTSUP                                      |
+      | clock_time_get on the thread CPU-time clock  | it fails with NOTSUP                                      |
+      | random_get for 32 bytes twice                | the two results differ                                    |
+      | sched_yield                                  | it returns success                                        |
+      | proc_raise                                   | it fails with NOSYS                                       |
+
+  @WASI_NS_025
+  Scenario Outline: No descriptor is a socket
+    Given a process with a pipe open as descriptor 3
+    When the application calls <call> on descriptor 3
+    Then it fails with NOTSOCK
+
+    Examples:
+      | call          |
+      | sock_accept   |
+      | sock_recv     |
+      | sock_send     |
+      | sock_shutdown |
+
+  @WASI_NS_026
+  Scenario: fd_filestat_get converts the file's stat without inventing POSIX identity
+    Given a process with "/data/report" open as descriptor 3, last modified at 2026-10-01 12:00 UTC
+    When the application calls fd_filestat_get on descriptor 3
+    Then the filestat's type is a regular file, its size is the file's length and its inode is the file's qid path
+    And its modification time, and its status-change time, are 2026-10-01 12:00 UTC in nanoseconds
+    And its link count is 1 and its device is 0
+
+  @WASI_NS_027
+  Scenario: fd_sync on gefs commits what the application wrote
+    Given a process with a file on gefs open for writing as descriptor 3
+    When the application writes "kept" and calls fd_sync on descriptor 3
+    Then gefs has committed, and "kept" is in the file after the store is opened again
+
+  @WASI_NS_028
+  Scenario: The Preview 1 tests of wasi-testsuite pass
+    Given wasi-testsuite at 5ea11d8, and Fog's list of expected failures with the reason for each
+    When its Preview 1 tests run as Fog applications
+    Then every test passes except those listed, and each listed one still fails as its reason says
