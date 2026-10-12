@@ -13,8 +13,6 @@ internal static class Preview1
 
     public static readonly IReadOnlyDictionary<string, string> Unprovided = new Dictionary<string, string>
     {
-        ["clock_res_get"] = "ii",
-        ["clock_time_get"] = "iIi",
         ["fd_datasync"] = "i",
         ["fd_prestat_get"] = "ii",
         ["fd_prestat_dir_name"] = "iii",
@@ -32,12 +30,6 @@ internal static class Preview1
         ["path_unlink_file"] = "iii",
         ["poll_oneoff"] = "iiii",
         ["proc_raise"] = "i",
-        ["sched_yield"] = string.Empty,
-        ["random_get"] = "ii",
-        ["sock_accept"] = "iii",
-        ["sock_recv"] = "iiiiii",
-        ["sock_send"] = "iiiii",
-        ["sock_shutdown"] = "ii",
     };
 
     // A function Fog does not provide: it takes its arguments and returns NOSYS. The engine wants a

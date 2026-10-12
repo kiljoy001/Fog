@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
@@ -54,6 +55,14 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         "fd_filestat_set_times" => new Func<int, long, long, int, int>((fd, atim, mtim, flags) => Call(() => SetTimes(Require(fd, Rights.FdFilestatSetTimes), mtim, flags))),
         "fd_advise" => new Func<int, long, long, int, int>((fd, offset, length, advice) => Call(() => Advise(Require(fd, Rights.FdAdvise), advice))),
         "fd_allocate" => new Func<int, long, long, int>((fd, offset, length) => Call(() => Allocate(Require(fd, Rights.FdAllocate)))),
+        "clock_res_get" => new Func<int, int, int>((id, resolution) => Call(() => Clock(id, (uint)resolution, Resolution))),
+        "clock_time_get" => new Func<int, long, int, int>((id, precision, time) => Call(() => Clock(id, (uint)time, Now))),
+        "random_get" => new Func<int, int, int>((buffer, length) => Call(() => Random((uint)buffer, (uint)length))),
+        "sched_yield" => new Func<int>(() => (int)Errno.Success),
+        "sock_accept" => new Func<int, int, int, int>((fd, flags, opened) => Call(() => NotSocket(fd))),
+        "sock_recv" => new Func<int, int, int, int, int, int, int>((fd, vector, count, flags, read, returned) => Call(() => NotSocket(fd))),
+        "sock_send" => new Func<int, int, int, int, int, int>((fd, vector, count, flags, written) => Call(() => NotSocket(fd))),
+        "sock_shutdown" => new Func<int, int, int>((fd, how) => Call(() => NotSocket(fd))),
         "proc_exit" => new Action<int>(code => throw new ProcExitException((uint)code)),
         _ => Preview1.Unsupported(Preview1.Unprovided[name]),
     };
@@ -223,6 +232,41 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     {
         Stat(fd);
         throw new NotSupportedByFogException();
+    }
+
+    // The realtime and monotonic clocks are the host's; a process or thread CPU-time clock is NOTSUP.
+    private Errno Clock(int id, uint pointer, Func<int, ulong> read)
+    {
+        const int Realtime = 0, Monotonic = 1, ProcessTime = 2, ThreadTime = 3;
+        ulong value = id switch
+        {
+            Realtime or Monotonic => read(id),
+            ProcessTime or ThreadTime => throw new NotSupportedByFogException(),
+            _ => throw new InvalidArgumentException(),
+        };
+        memory.WriteUInt64(pointer, value);
+        return Errno.Success;
+    }
+
+    // Realtime is counted in 100-nanosecond ticks, monotonic time in the clock's own.
+    private ulong Resolution(int id) => id == 0 ? 100 : (ulong)Math.Max(1, Nanoseconds / (ulong)clock.TimestampFrequency);
+
+    private ulong Now(int id) => id == 0
+        ? (ulong)(clock.GetUtcNow() - DateTimeOffset.UnixEpoch).Ticks * 100
+        : (ulong)((Int128)clock.GetTimestamp() * (Int128)Nanoseconds / clock.TimestampFrequency);
+
+    // The host's cryptographic random source, fresh on every call, straight into guest memory.
+    private Errno Random(uint buffer, uint length)
+    {
+        memory.Fill(buffer, length, RandomNumberGenerator.Fill);
+        return Errno.Success;
+    }
+
+    // No descriptor is a socket.
+    private Errno NotSocket(int fd)
+    {
+        Stat(fd);
+        return Errno.Notsock;
     }
 
     private Errno Sizes(IReadOnlyList<string> strings, uint count, uint size)

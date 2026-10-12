@@ -82,6 +82,19 @@ public sealed class TraceSteps(WasmDriver driver)
         Assert.True(matches, $"the interpreter ended \"{status}\" after the trace:\n{trace}");
     }
 
+    [Then(@"^the trace has (\d+) lines, the first two of (\d+) random bytes that differ$")]
+    public void ThenRandom(int lines, int bytes)
+    {
+        string[] got = trace.TrimEnd('\n').Split('\n');
+        string[] draws = [.. got.Take(2).Select(line => Regex.Unescape(line[(line.IndexOf("-> ok \"", StringComparison.Ordinal) + 7)..^1]))];
+        Assert.Equal(lines, got.Length);
+        Assert.All(draws, draw => Assert.Equal(bytes, draw.Length));
+        Assert.NotEqual(draws[0], draws[1]);
+    }
+
+    [Then(@"^its last line is ""(.*)""$")]
+    public void ThenLastLine(string line) => Assert.Equal(line, trace.TrimEnd('\n').Split('\n')[^1]);
+
     [Then(@"^descriptors (\d+) and (\d+) report one inode and descriptor (\d+) another$")]
     public void ThenInodes(int fd, int same, int other)
     {

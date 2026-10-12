@@ -9,6 +9,8 @@ namespace NinePSharp.Fog.Wasm;
 // slice outlives the access that took it.
 internal sealed class GuestMemory(UnmanagedMemory memory)
 {
+    public delegate void SpanAction(Span<byte> range);
+
     public uint ReadUInt32(uint pointer) => BinaryPrimitives.ReadUInt32LittleEndian(Range(pointer, 4));
 
     public void WriteUInt32(uint pointer, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(Range(pointer, 4), value);
@@ -18,6 +20,9 @@ internal sealed class GuestMemory(UnmanagedMemory memory)
     public byte[] Read(uint pointer, uint length) => Range(pointer, length).ToArray();
 
     public void Write(uint pointer, byte[] source) => source.CopyTo(Range(pointer, (uint)source.Length));
+
+    // Lets fill write the range in place, without a copy.
+    public void Fill(uint pointer, uint length, SpanAction fill) => fill(Range(pointer, length));
 
     // Faults unless the whole range lies inside memory.
     public void Check(uint pointer, uint length) => _ = Range(pointer, length);

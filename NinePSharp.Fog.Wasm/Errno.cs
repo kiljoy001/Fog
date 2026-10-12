@@ -10,6 +10,7 @@ internal enum Errno
     Io = 29,
     Isdir = 31,
     Nosys = 52,
+    Notsock = 57,
     Notsup = 58,
     Notcapable = 76,
 }

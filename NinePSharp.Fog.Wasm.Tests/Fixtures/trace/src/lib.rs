@@ -610,10 +610,11 @@ fn call(name: &[u8], a: &mut Args) -> i32 {
             }
             b"random_get" => {
                 let len = a.i32();
-                let e = random_get(alloc(len as usize), len);
+                let buf = alloc(len as usize);
+                let e = random_get(buf, len);
                 if e == 0 {
                     emit(b" ok ");
-                    emit_u64(len as u64);
+                    emit_quoted(mem(buf, len as usize));
                 }
                 return e;
             }
