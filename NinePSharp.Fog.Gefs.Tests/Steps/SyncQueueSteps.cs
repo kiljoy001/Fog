@@ -45,6 +45,10 @@ public sealed class SyncQueueSteps(StoreContext context)
     [Then(@"^the fence fails with ""(.*)""$")]
     public void ThenFenceFails(string error) => Assert.Equal(error, Assert.Throws<GefsException>(() => Finish(fence!)).Message);
 
+    [Then(@"^waiting on the queue fails with ""(.*)""$")]
+    public void ThenWaitFails(string error)
+        => Assert.Equal(error, Assert.Throws<GefsException>(() => Bounded.Run(() => new ValueTask(Task.Run(queue!.Wait)))).Message);
+
     [Then(@"^block (\d+) reads back from the queue$")]
     public void ThenOneReadsBack(long block) => Assert.Equal(Block(block), queue!.Find(block * Format.BlockSize));
 

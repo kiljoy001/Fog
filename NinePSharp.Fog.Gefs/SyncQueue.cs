@@ -91,20 +91,8 @@ internal sealed class SyncQueue(Device device, int room = SyncQueue.Room)
 
     private void Run()
     {
-        while (true)
+        while (Next() is { } e)
         {
-            Entry e;
-            lock (gate)
-            {
-                if (!heap.TryDequeue(out e!, out _))
-                {
-                    running = false;
-                    return;
-                }
-
-                Monitor.PulseAll(gate);
-            }
-
             if (e.Fence is { } fence)
             {
                 if (Failure is { } failed)
@@ -128,6 +116,22 @@ internal sealed class SyncQueue(Device device, int room = SyncQueue.Room)
                     Fail(failed);
                 }
             }
+        }
+    }
+
+    // The next entry, making room for one waiting to be queued; with none left the task ends.
+    private Entry? Next()
+    {
+        lock (gate)
+        {
+            if (heap.TryDequeue(out Entry? e, out _))
+            {
+                Monitor.PulseAll(gate);
+                return e;
+            }
+
+            running = false;
+            return null;
         }
     }
 

@@ -3,70 +3,51 @@ namespace NinePSharp.Fog.Gefs;
 // runmutate: changes run one at a time, in the order they were asked for, each under the writer's
 // lock, and after each, what waits in limbo goes back once its reads have finished, as epochclean
 // does. The task runs while changes wait for it; the change it is running stays at the head of the
-// queue, so one asked for meanwhile finds it busy and waits its turn.
+// queue, so one asked for meanwhile finds it busy and waits its turn. A change is a task of its own,
+// run where the writer is, and keeps whatever it threw for the one who asked.
 internal sealed class Writer(object gate, Allocator allocator)
 {
-    private readonly Queue<Action> changes = [];
+    private readonly Queue<Task> changes = [];
 
-    public async Task<T> Run<T>(Func<T> change)
-    {
-        T result = default!;
-        await Run(() =>
-        {
-            result = change();
-        });
-        return result;
-    }
+    public Task<T> Run<T>(Func<T> change) => Ask(new Task<T>(change, TaskCreationOptions.RunContinuationsAsynchronously));
 
-    public Task Run(Action change)
+    public Task Run(Action change) => Ask(new Task(change, TaskCreationOptions.RunContinuationsAsynchronously));
+
+    private T Ask<T>(T change)
+        where T : Task
     {
-        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (changes)
         {
-            changes.Enqueue(() =>
-            {
-                try
-                {
-                    change();
-                    done.SetResult();
-                }
-                catch (Exception failed)
-                {
-                    done.SetException(failed);
-                }
-            });
+            changes.Enqueue(change);
             if (changes.Count == 1)
             {
                 _ = Task.Run(Drain);
             }
         }
 
-        return done.Task;
+        return change;
     }
 
     private void Drain()
     {
-        Action next;
+        Task? next;
         lock (changes)
         {
             next = changes.Peek();
         }
 
-        while (true)
+        while (next is not null)
         {
             lock (gate)
             {
-                next();
+                next.RunSynchronously();
                 allocator.Clean();
             }
 
             lock (changes)
             {
                 changes.Dequeue();
-                if (!changes.TryPeek(out next!))
-                {
-                    return;
-                }
+                changes.TryPeek(out next);
             }
         }
     }

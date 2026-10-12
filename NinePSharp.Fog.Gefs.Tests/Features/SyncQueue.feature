@@ -72,3 +72,10 @@ Feature: Blocks wait in a sync queue, written by its own task in gefs's order, a
     Then the fence fails with "file system full"
     And the device was written at blocks 40, in that order
     And block 20 reads back from the queue
+
+  @FOG_GEFS_805
+  Scenario: Waiting on a failed queue gives the failure that stopped it
+    Given a write queue with room for 8 blocks, on a device of 100 blocks
+    When block 40 is queued
+    And the queue is told the store failed with "file system full"
+    Then waiting on the queue fails with "file system full"
