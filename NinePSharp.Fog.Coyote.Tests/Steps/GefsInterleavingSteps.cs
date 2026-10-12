@@ -23,6 +23,7 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     [Given("a store with main snapshotted as monday")]
     [Given(@"^a store serving main, with notes holding ""first"" committed$")]
     [Given(@"^a store serving main, with notes holding 2 blocks of ""a"" committed$")]
+    [Given("a store serving main, writing through a queue with room for 2 blocks")]
     public void GivenStore()
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(GefsServer).Assembly))
@@ -114,17 +115,68 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
         Accounting.Check(store);
     };
 
+    [When(@"^a writer asks to write ""secnd"" and then ""third"" to notes, without waiting between them, while another task commits$")]
+    public void WhenAsksRaceCommit() => race = async () =>
+    {
+        var (device, server) = Ream();
+        GefsFs main = server.Attach("main");
+        await WriteAsync(main, "notes", "first", create: true);
+        server.Sync();
+        ResourceHandle file = (await main.WalkAsync(main.Root, "notes", default))!;
+        ResourceOpenHandle open = await main.OpenAsync(file, NinePConstants.OWRITE, Context(), default);
+        Task writer = Task.Run(async () =>
+        {
+            Task<uint> second = main.WriteAsync(open, 0, Encoding.ASCII.GetBytes("secnd"), Context(), default).AsTask();
+            Task<uint> third = main.WriteAsync(open, 0, Encoding.ASCII.GetBytes("third"), Context(), default).AsTask();
+            await Task.WhenAll(second, third);
+        });
+        await Task.WhenAll(writer, Task.Run(server.Sync));
+        server.Dispose();
+
+        using GefsServer reopened = Reopen(device, out Store store);
+        string text = await ReadAsync(reopened.Attach("main"), "notes");
+        Specification.Assert(text == "third", $"main's notes hold \"{text}\"");
+        Accounting.Check(store);
+    };
+
+    [When("2 writers each write a file of 2 blocks while another task commits twice")]
+    public void WhenWritersRaceSmallQueue() => race = async () =>
+    {
+        const int Size = 2 * Format.BlockSize;
+        var (device, server) = Ream(room: 2);
+        GefsFs main = server.Attach("main");
+        Task commits = Task.Run(() =>
+        {
+            server.Sync();
+            server.Sync();
+        });
+        await Task.WhenAll(Task.Run(() => WriteAsync(main, "f0", new string('a', Size), create: true)), Task.Run(() => WriteAsync(main, "f1", new string('b', Size), create: true)), commits);
+        server.Dispose();
+
+        using GefsServer reopened = Reopen(device, out Store store);
+        GefsFs fs = reopened.Attach("main");
+        foreach (var (name, letter) in new[] { ("f0", 'a'), ("f1", 'b') })
+        {
+            string text = await ReadAsync(fs, name, Size);
+            Specification.Assert(text == new string(letter, Size), $"{name} holds {text.Length} bytes of {string.Concat(text.Distinct())}");
+        }
+
+        Accounting.Check(store);
+    };
+
+    [Then(@"^in every explored schedule, once the device is opened again, main's notes hold ""third"", and every block of the device is held, in a log or free$")]
+    [Then("in every explored schedule, once the device is opened again, main holds both files with what was written, and every block of the device is held, in a log or free")]
     [Then("in every explored schedule, once the device is opened again, main and work each hold their writers' files with what was written, and every block of the device is held, in a log or free")]
     [Then("in every explored schedule both attaches serve the same tree")]
     [Then("in every explored schedule each read gives 2 blocks of one letter, a, b or c, and once the device is opened again every block of it is held, in a log or free")]
     [Then(@"^in every explored schedule, once the device is opened again, monday's notes hold ""first"" or ""secnd"", main's hold ""secnd"", and every block of the device is held, in a log or free$")]
     public void ThenExplored() => Explorer.Explore(race!, output, memoryAccesses: true);
 
-    private static (MemoryDevice Device, GefsServer Server) Ream()
+    private static (MemoryDevice Device, GefsServer Server) Ream(int room = SyncQueue.Room)
     {
         var device = new MemoryDevice(800);
         var clock = new FakeTimeProvider();
-        return (device, new GefsServer(device, Store.Ream(device, 2, "adm", clock), (user, group) => user == group, clock));
+        return (device, new GefsServer(device, Store.Ream(device, 2, "adm", clock, room), (user, group) => user == group, clock));
     }
 
     private static GefsServer Reopen(MemoryDevice device, out Store store)

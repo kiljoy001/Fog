@@ -1,18 +1,17 @@
 namespace NinePSharp.Fog.Gefs.Tests.Support;
 
 // A device in memory, holding only the blocks written to it, that can lose power: after a crash
-// point, writes stay readable, as if cached, until it restarts, when they are gone. Its next write or
-// flush can be held until a scenario lets it go, and it may be used from many tasks at once.
+// point, writes stay readable, as if cached, until it restarts, when they are gone. Its next write,
+// its next flush, or both, can be held until a scenario lets them go, and it may be used from many
+// tasks at once.
 internal sealed class MemoryDevice(long blocks) : Device
 {
     private readonly object gate = new();
     private readonly Dictionary<long, byte[]> written = [];
     private readonly Dictionary<long, byte[]> cached = [];
+    private readonly Dictionary<string, Holding> holds = [];
     private int? writesLeft;
     private bool failing;
-    private string? holding;
-    private ManualResetEventSlim held = new();
-    private ManualResetEventSlim let = new();
 
     public override long Size => blocks * Format.BlockSize;
 
@@ -20,6 +19,9 @@ internal sealed class MemoryDevice(long blocks) : Device
     public List<string> Trace { get; } = [];
 
     public int Writes => Trace.Count(e => e == "write");
+
+    // Where each write went, by block, in order.
+    public List<long> Written { get; } = [];
 
     public override void Read(long offset, Span<byte> block)
     {
@@ -39,6 +41,7 @@ internal sealed class MemoryDevice(long blocks) : Device
         lock (gate)
         {
             Trace.Add("write");
+            Written.Add(offset / Format.BlockSize);
             if (failing)
             {
                 throw new IOException("device write failed");
@@ -67,20 +70,21 @@ internal sealed class MemoryDevice(long blocks) : Device
     // The next write or flush waits, once it starts, until Let.
     public void HoldNext(string operation)
     {
-        held = new ManualResetEventSlim();
-        let = new ManualResetEventSlim();
-        holding = operation;
-    }
-
-    public void WaitHeld()
-    {
-        if (!held.Wait(Bounded.Limit))
+        lock (gate)
         {
-            throw new TimeoutException($"no {holding} reached the device");
+            holds[operation] = new Holding();
         }
     }
 
-    public void Let() => let.Set();
+    public void WaitHeld(string operation)
+    {
+        if (!Of(operation).Held.Wait(Bounded.Limit))
+        {
+            throw new TimeoutException($"no {operation} reached the device");
+        }
+    }
+
+    public void Let(string operation) => Of(operation).Let.Set();
 
     public void CrashAfter(int writes) => writesLeft = writes;
 
@@ -108,15 +112,40 @@ internal sealed class MemoryDevice(long blocks) : Device
 
     public void Put(long n, byte[] block) => written[n * Format.BlockSize] = block;
 
+    private Holding Of(string operation)
+    {
+        lock (gate)
+        {
+            return holds[operation];
+        }
+    }
+
     private void Hold(string operation)
     {
-        if (Interlocked.CompareExchange(ref holding, null, operation) == operation)
+        Holding? hold;
+        lock (gate)
         {
-            held.Set();
-            if (!let.Wait(Bounded.Limit))
+            if (!holds.TryGetValue(operation, out hold) || hold.Taken)
             {
-                throw new TimeoutException($"the held {operation} was never let go");
+                return;
             }
+
+            hold.Taken = true;
         }
+
+        hold.Held.Set();
+        if (!hold.Let.Wait(Bounded.Limit))
+        {
+            throw new TimeoutException($"the held {operation} was never let go");
+        }
+    }
+
+    private sealed class Holding
+    {
+        public ManualResetEventSlim Held { get; } = new();
+
+        public ManualResetEventSlim Let { get; } = new();
+
+        public bool Taken { get; set; }
     }
 }

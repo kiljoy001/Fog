@@ -78,17 +78,11 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         }));
 
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
-        {
-            return ValueTask.FromResult(Handle(Create(Qid(directory), name, directoryEntry ? Directory | 0b111_111_111 : 0b110_110_110, owner)));
-        }
-    }
+        => new(store.Writer.Run(() => Handle(Create(Qid(directory), name, directoryEntry ? Directory | 0b111_111_111 : 0b110_110_110, owner))));
 
     // fscreate: refused as gefs refuses, then an entry owned by its creator in the directory's group.
     public ValueTask<ResourceOpenHandle> CreateAndOpenAsync(ResourceHandle directory, string name, uint permissions, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => new(store.Writer.Run(() =>
         {
             Dir d;
             try
@@ -108,9 +102,8 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
                 }
             }
 
-            return ValueTask.FromResult(new ResourceOpenHandle(Handle(d), HandleId(context), mode, 0));
-        }
-    }
+            return new ResourceOpenHandle(Handle(d), HandleId(context), mode, 0);
+        }));
 
     // fsopen: a directory opens only to read; removing on close needs what removing needs; opening
     // with truncation empties the file. An exclusive file opens once at a time. As in gefs, an open
@@ -122,10 +115,7 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             return ValueTask.FromResult(Reading(view => Open(view, resource, mode, context)));
         }
 
-        lock (store.Gate)
-        {
-            return ValueTask.FromResult(Open(tree, resource, mode, context));
-        }
+        return new(store.Writer.Run(() => Open(tree, resource, mode, context)));
     }
 
     // readfile: up to the file's end, holes as zeros.
@@ -153,8 +143,7 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     // fswrite and writeb: each block touched written anew, keeping the bytes around the write from the
     // block it replaces; then the length, modification time and last modifier.
     public ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => new(store.Writer.Run(() =>
         {
             if ((Bits(openHandle.Mode) & Write) == 0)
             {
@@ -187,9 +176,8 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
             long end = start + data.Length;
             Change(key, changes, new WstatChange(Length: Math.Max(end, d.Length), Mtime: Now, Muid: context.User));
-            return ValueTask.FromResult((uint)data.Length);
-        }
-    }
+            return (uint)data.Length;
+        }));
 
     public ValueTask<ResourceStat> StatAsync(ResourceHandle resource, CancellationToken cancellationToken)
         => ValueTask.FromResult(Reading(view =>
@@ -207,48 +195,31 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             exclusive.Remove(qid);
         }
 
-        if ((openHandle.Mode & NinePConstants.ORCLOSE) != 0)
-        {
-            lock (store.Gate)
-            {
-                Remove(Find(tree, qid));
-            }
-        }
-
-        return ValueTask.CompletedTask;
+        return (openHandle.Mode & NinePConstants.ORCLOSE) != 0 ? new(store.Writer.Run(() => Remove(Find(tree, qid)))) : ValueTask.CompletedTask;
     }
 
     // fsremove: an empty directory or a file, by a user who may write its directory; not the root.
     public ValueTask RemoveAsync(ResourceHandle resource, ResourceOpenHandle? openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
-    {
-        lock (store.Gate)
+        => new(store.Writer.Run(() =>
         {
             var found = Find(tree, Qid(resource));
             CanRemove(found.Dir, context.User);
             Remove(found);
-            return ValueTask.CompletedTask;
-        }
-    }
+        }));
 
     public ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
         => WStatAsync(handle.Resource, stat, context, cancellationToken);
 
     // fswstat: every field checked, then every permission, before anything changes. A wstat that
-    // names nothing asks for a sync, and commits the store once the writer's lock is released.
-    public ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
+    // names nothing asks for a sync, and commits the store once the writer has run it.
+    public async ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        bool sync;
-        lock (store.Gate)
-        {
-            sync = WStat(resource, stat, context);
-        }
-
-        if (sync && !store.Broken)
+        if (await store.Writer.Run(() => WStat(resource, stat, context)) && !store.Broken)
         {
             store.Commit();
         }
 
-        return ValueTask.FromResult(stat.EncodedLength);
+        return stat.EncodedLength;
     }
 
     private static long Qid(ResourceHandle handle) => (long)handle.Identity.Path;

@@ -1,18 +1,20 @@
 namespace NinePSharp.Fog.Gefs;
 
-// The block store on a device: blocks allocated from its arenas, written in place and read back
-// checked against their pointers' hashes.
+// The block store on a device: blocks allocated from its arenas, queued to be written in place and
+// read back, from the queue until they are written, checked against their pointers' hashes.
 internal sealed class Allocator : BlockStore
 {
     private const long B = Format.BlockSize;
 
     private readonly Device device;
+    private readonly SyncQueue queue;
     private readonly List<Bptr> killed = [];
     private long roundRobin;
 
-    private Allocator(Device device, Arena[] arenas)
+    private Allocator(Device device, Arena[] arenas, int room)
     {
         this.device = device;
+        queue = new SyncQueue(device, room);
         Arenas = arenas;
     }
 
@@ -22,12 +24,15 @@ internal sealed class Allocator : BlockStore
 
     public bool UseReserve { get; set; }
 
+    // Why the device took no more blocks, once it failed one.
+    public Exception? Failure => queue.Failure;
+
     // Blocks freed since the last commit, reused only once the next commit is durable.
     public IReadOnlyList<Bptr> Killed => killed;
 
     // ream's arenas: the first and last blocks kept for superblocks, the rest divided evenly. A
     // device is always a whole number of blocks.
-    public static Allocator Ream(Device device, int arenas)
+    public static Allocator Ream(Device device, int arenas, int room = SyncQueue.Room)
     {
         long size = device.Size - (2 * B);
         long span = size / arenas;
@@ -37,26 +42,16 @@ internal sealed class Allocator : BlockStore
             throw new GefsException("device too small");
         }
 
-        return new Allocator(device, [.. Enumerable.Range(0, arenas).Select(i => Arena.Ream(device, B + (i * span), span - (2 * B)))]);
+        return new Allocator(device, [.. Enumerable.Range(0, arenas).Select(i => Arena.Ream(device, B + (i * span), span - (2 * B)))], room);
     }
 
-    public static Allocator Open(Device device, IReadOnlyList<Bptr> arenas, long syncGen)
-        => new(device, [.. arenas.Select(p => Arena.Load(device, p, syncGen))]);
+    public static Allocator Open(Device device, IReadOnlyList<Bptr> arenas, long syncGen, int room = SyncQueue.Room)
+        => new(device, [.. arenas.Select(p => Arena.Load(device, p, syncGen))], room);
 
-    public override Blk Get(Bptr bp)
-    {
-        var bytes = new byte[B];
-        device.Read(bp.Addr, bytes);
-        return Blk.Read(bytes, bp);
-    }
+    public override Blk Get(Bptr bp) => Blk.Read(Load(bp.Addr), bp);
 
     // A file's data block, which has no header to tell its type: its bytes, checked against its hash.
-    public byte[] ReadData(Bptr bp)
-    {
-        var bytes = new byte[B];
-        device.Read(bp.Addr, bytes);
-        return Blk.Read(bytes, bp, ReadFlags.Raw).Buffer;
-    }
+    public byte[] ReadData(Bptr bp) => Blk.Read(Load(bp.Addr), bp, ReadFlags.Raw).Buffer;
 
     // freeblk and freebp: a block a snapshot tree frees that was born before the generation it is
     // writing may be in an older snapshot, so it goes on a deadlist, unless it was born at or before
@@ -121,10 +116,12 @@ internal sealed class Allocator : BlockStore
         return new Pending(retired, [.. Arenas.Select(a => a.Pointer)]);
     }
 
-    // The passes that wait for the device, with the writer's lock released: the first headers, then
-    // the superblocks the commit writes, then the second headers, each flushed before the next.
+    // The passes that wait for the device, with the writer's lock released: the blocks queued so far,
+    // then the first headers, the superblocks the commit writes and the second headers, each flushed
+    // before the next.
     public void WriteOut(Pending pending, Action<IReadOnlyList<Bptr>> commit)
     {
+        queue.Fence().GetAwaiter().GetResult();
         device.Flush();
         foreach (Arena a in Arenas)
         {
@@ -150,6 +147,13 @@ internal sealed class Allocator : BlockStore
             Epochs.Defer(b);
         }
 
+        Clean();
+    }
+
+    // epochclean: what waits in limbo goes back to the arenas once the reads that might use it have
+    // finished.
+    public void Clean()
+    {
         foreach (long b in Epochs.Clean())
         {
             ArenaOf(b).Release(b);
@@ -172,7 +176,22 @@ internal sealed class Allocator : BlockStore
         throw new GefsException("file system full");
     }
 
-    protected override void Write(Blk b) => device.Write(b.Address, b.Buffer);
+    protected override void Write(Blk b) => queue.Write(b.Address, b.Buffer);
+
+    private byte[] Load(long address)
+    {
+        var bytes = new byte[B];
+        if (queue.Find(address) is { } queued)
+        {
+            queued.CopyTo(bytes, 0);
+        }
+        else
+        {
+            device.Read(address, bytes);
+        }
+
+        return bytes;
+    }
 
     // Arenas are the same size and follow the first superblock.
     private Arena ArenaOf(long address) => Arenas[(int)((address - B) / (Arenas[0].Size + (2 * B)))];

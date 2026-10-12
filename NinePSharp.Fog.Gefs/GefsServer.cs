@@ -22,8 +22,8 @@ public sealed class GefsServer : IDisposable
         timer = clock.CreateTimer(_ => Tick(), null, SyncPeriod, SyncPeriod);
     }
 
-    // Why the store became read only, if a commit failed.
-    public Exception? Failure { get; private set; }
+    // Why the store became read only, if a commit or a queued write failed.
+    public Exception? Failure => store.Failure;
 
     // A new store in a file of the given size, its root owned by owner.
     public static GefsServer Create(string path, long blocks, int arenas, string owner, Func<string, string, bool> inGroup, TimeProvider clock)
@@ -85,7 +85,7 @@ public sealed class GefsServer : IDisposable
         (device as IDisposable)?.Dispose();
     }
 
-    // A failed commit has made the store read only, and the next tick finds it so.
+    // A failed commit leaves the store read only, holding why, and the next tick finds it so.
     private void Tick()
     {
         if (Changed())
@@ -96,7 +96,7 @@ public sealed class GefsServer : IDisposable
             }
             catch (Exception failed) when (failed is GefsException or IOException)
             {
-                Failure = failed;
+                // The store keeps why, and takes no more changes.
             }
         }
     }

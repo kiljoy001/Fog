@@ -28,6 +28,15 @@ public sealed class ServerSteps(StoreContext context)
         context.Server = new GefsServer(context.Device, context.Store, StoreContext.InGroup, context.Clock);
     }
 
+    [Given(@"^a device of (\d+) blocks reamed with (\d+) arenas by (\w+) at time (\d+), with room for (\d+) blocks? in its write queue, served by a server$")]
+    public void GivenServedWithRoom(long blocks, int arenas, string owner, long time, int room)
+    {
+        context.At(time);
+        context.Device = new MemoryDevice(blocks);
+        context.Store = Store.Ream(context.Device, arenas, owner, context.Clock, room);
+        context.Server = new GefsServer(context.Device, context.Store, StoreContext.InGroup, context.Clock);
+    }
+
     [Given(@"^a store made in a new file of (\d+) blocks with (\d+) arenas by (\w+)$")]
     public void GivenFile(long blocks, int arenas, string owner)
     {

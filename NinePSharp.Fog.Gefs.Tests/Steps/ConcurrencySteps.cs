@@ -16,6 +16,7 @@ public sealed class ConcurrencySteps(StoreContext context)
     private Task? commit;
     private Task? second;
     private Task? open;
+    private Task<(Task<uint> First, Task<uint> Second)>? asks;
     private int epoch = -1;
     private Tree? taken;
     private HashSet<long> freed = [];
@@ -25,22 +26,56 @@ public sealed class ConcurrencySteps(StoreContext context)
     [When("the server commits")]
     public void WhenCommits() => Finish(Task.Run(context.Server!.Sync));
 
-    [When(@"^adm starts writing ""(.*)"" to a new file (\S+), and the change stops at its first device write$")]
+    [When(@"^the device holds its next (write|flush)$")]
+    public void WhenHolds(string operation) => context.Device!.HoldNext(operation);
+
+    [When(@"^adm starts writing ""(.*)"" to a new file (\S+), and the change waits for room in the write queue$")]
     public void WhenChangeHeld(string text, string name)
     {
         GefsFs fs = context.Files!;
-        context.Device!.HoldNext("write");
         change = Task.Run(async () =>
         {
             ResourceOpenHandle open = await fs.CreateAndOpenAsync(fs.Root, name, 0b110_110_110, NinePConstants.ORDWR, Context(), default);
             await fs.WriteAsync(open, 0, Encoding.ASCII.GetBytes(text), Context(), default);
             await fs.ClunkAsync(open, Context(), default);
         });
-        context.Device.WaitHeld();
+        context.Device!.WaitHeld("write");
+        Assert.False(change.Wait(TimeSpan.FromMilliseconds(200)));
     }
 
-    [When(@"^the device lets the (?:write|flush) go$")]
-    public void WhenLet() => context.Device!.Let();
+    [When(@"^the device lets the (write|flush) go$")]
+    public void WhenLet(string operation) => context.Device!.Let(operation);
+
+    [When(@"^adm asks to write ""(.*)"" to notes at offset 0, and then ""(.*)""$")]
+    public void WhenAsks(string first, string second)
+    {
+        ResourceOpenHandle opened = Opened(NinePConstants.OWRITE);
+        Ask(opened, first, opened, second);
+    }
+
+    [When(@"^adm asks to write ""(.*)"" to a file opened only to read, and then ""(.*)"" to notes at offset 0$")]
+    public void WhenAsksRefused(string first, string second)
+        => Ask(Opened(NinePConstants.OREAD), first, Opened(NinePConstants.OWRITE), second);
+
+    [Then("the asks have returned, and both writes are still waiting")]
+    public void ThenAsksWaiting()
+    {
+        var (first, second) = Asked();
+        Assert.False(Task.WhenAll(first, second).Wait(TimeSpan.FromMilliseconds(200)));
+    }
+
+    [Then("both writes finish")]
+    public void ThenWritesFinish()
+    {
+        var (first, second) = Asked();
+        Finish(Task.WhenAll(first, second));
+    }
+
+    [Then(@"^the first write fails with ""(.*)""$")]
+    public void ThenFirstFails(string error) => Assert.Equal(error, Assert.Throws<IOException>(() => Finish(Asked().First)).Message);
+
+    [Then("the second write finishes")]
+    public void ThenSecondWriteFinishes() => Finish(Asked().Second);
 
     [Then("the change finishes")]
     public void ThenChangeFinishes() => Finish(change!);
@@ -98,8 +133,14 @@ public sealed class ConcurrencySteps(StoreContext context)
     {
         context.Device!.HoldNext("flush");
         commit = Task.Run(context.Server!.Sync);
-        context.Device.WaitHeld();
+        context.Device.WaitHeld("flush");
     }
+
+    [When("a commit starts")]
+    public void WhenCommitStarts() => commit = Task.Run(context.Server!.Sync);
+
+    [Then("the commit is still waiting")]
+    public void ThenCommitWaits() => Assert.False(commit!.Wait(TimeSpan.FromMilliseconds(200)));
 
     [When("a second commit starts")]
     public void WhenSecondCommit() => second = Task.Run(context.Server!.Sync);
@@ -150,6 +191,27 @@ public sealed class ConcurrencySteps(StoreContext context)
     public void ThenNoneWaiting() => Assert.Empty(context.Store!.Allocator.Epochs.Waiting);
 
     private static void Finish(Task task) => task.WaitAsync(Bounded.Limit).GetAwaiter().GetResult();
+
+    private ResourceOpenHandle Opened(byte mode)
+    {
+        GefsFs fs = context.Files!;
+        return Bounded.Run(async () => await fs.OpenAsync((await fs.WalkAsync(fs.Root, "notes", default))!, mode, Context(), default));
+    }
+
+    // Both writes asked for from one task, one after the other; asking returns before they run.
+    private void Ask(ResourceOpenHandle first, string firstText, ResourceOpenHandle second, string secondText)
+    {
+        GefsFs fs = context.Files!;
+        asks = Task.Run(() => (
+            fs.WriteAsync(first, 0, Encoding.ASCII.GetBytes(firstText), Context(), default).AsTask(),
+            fs.WriteAsync(second, 0, Encoding.ASCII.GetBytes(secondText), Context(), default).AsTask()));
+    }
+
+    private (Task<uint> First, Task<uint> Second) Asked()
+    {
+        Assert.True(asks!.Wait(Bounded.Limit), "asking for the writes did not return");
+        return asks.Result;
+    }
 
     private ResourceOperationContext Context() => new(new ResourceOperationId("concurrency", Interlocked.Increment(ref sequence)), 1, "adm");
 }

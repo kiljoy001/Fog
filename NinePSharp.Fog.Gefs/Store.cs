@@ -26,7 +26,7 @@ internal sealed class Store : IDeadlists
     private readonly Dictionary<string, Mounted> mounts = [];
     private readonly Dictionary<(long Gen, long Birth), Deadlist> deadlists = [];
     private long nextGen;
-    private bool broken;
+    private Exception? failure;
 
     private Store(Device device, Allocator allocator, Tree snaps, long generation, long nextQid, long nextGen)
     {
@@ -36,6 +36,7 @@ internal sealed class Store : IDeadlists
         Snaps = snaps;
         Generation = generation;
         NextQid = nextQid;
+        Writer = new Writer(Gate, allocator);
     }
 
     public Allocator Allocator { get; }
@@ -47,28 +48,30 @@ internal sealed class Store : IDeadlists
 
     public long NextQid { get; private set; }
 
-    // The one writer: every tree served from the store changes it under this lock, a monitor so
+    // The writer's lock: every tree served from the store changes it under this lock, a monitor so
     // that Coyote controls it.
     public object Gate { get; } = new();
+
+    // The one writer, which runs every change to a tree served from the store.
+    public Writer Writer { get; }
 
     // Whether anything changed since the last commit.
     public bool Changed => Snaps.Dirty || mounts.Values.Any(m => m.Tree.Dirty);
 
-    // A commit failed, so the store is read only from then on, as gefs's rdonly.
-    public bool Broken
-    {
-        get => Volatile.Read(ref broken);
-        private set => Volatile.Write(ref broken, value);
-    }
+    // Why a commit failed, or the device failed a queued block; the store is read only from then on,
+    // as gefs's rdonly.
+    public Exception? Failure => Volatile.Read(ref failure) ?? Allocator.Failure;
+
+    public bool Broken => Failure is not null;
 
     // Deadlists with blocks not yet written; a commit writes them all.
     public int OpenDeadlists => deadlists.Count;
 
     // reamfs: arenas, and a snapshot tree holding an empty snapshot, and main forked from it, both a
     // root directory owned by the reaming user.
-    public static Store Ream(Device device, int arenas, string owner = "adm", TimeProvider? clock = null)
+    public static Store Ream(Device device, int arenas, string owner = "adm", TimeProvider? clock = null, int room = SyncQueue.Room)
     {
-        Allocator allocator = Allocator.Ream(device, arenas);
+        Allocator allocator = Allocator.Ream(device, arenas, room);
         Blk root = allocator.New(BlockType.Leaf, 0);
         long now = Nanoseconds(clock ?? TimeProvider.System);
         var dir = new Dir(string.Empty, new Qid(0, 0, 0x80), 0x80000000u | 0b111_111_101, now, now, 0, owner, owner, owner);
@@ -87,7 +90,7 @@ internal sealed class Store : IDeadlists
 
     // loadfs: the first superblock, or the backup when the first is unusable, then the arenas
     // replayed to the generation it committed.
-    public static Store Open(Device device)
+    public static Store Open(Device device, int room = SyncQueue.Room)
     {
         Superblock sb;
         try
@@ -104,7 +107,7 @@ internal sealed class Store : IDeadlists
             throw new GefsException("incompatible block size");
         }
 
-        Allocator allocator = Allocator.Open(device, sb.Arenas, sb.SyncGen);
+        Allocator allocator = Allocator.Open(device, sb.Arenas, sb.SyncGen, room);
         return new Store(device, allocator, new Tree(allocator, sb.Snap.Root, sb.Snap.Height), sb.SyncGen, sb.NextQid, sb.NextGen);
     }
 
@@ -240,9 +243,9 @@ internal sealed class Store : IDeadlists
                     new Superblock(Format.BlockSize, Format.BufferSpace, new TreeRoot(Snaps.Height, Snaps.Root), default, default, 0, NextQid, nextGen, gen, [.. pending.Pointers]).Write(superblock);
                     Snaps.Dirty = false;
                 }
-                catch
+                catch (Exception failed)
                 {
-                    Broken = true;
+                    Fail(failed);
                     throw;
                 }
             }
@@ -257,9 +260,9 @@ internal sealed class Store : IDeadlists
                     device.Flush();
                 });
             }
-            catch
+            catch (Exception failed)
             {
-                Broken = true;
+                Fail(failed);
                 throw;
             }
 
@@ -313,6 +316,8 @@ internal sealed class Store : IDeadlists
 
     // The newest snapshot older than s that it shares blocks with.
     private static long Older(TreeEntry s) => s.Pred != -1 ? s.Pred : s.Base;
+
+    private void Fail(Exception failed) => Interlocked.CompareExchange(ref failure, failed, null);
 
     // updatesnap: the tree's state becomes the snapshot its generation names. The old snapshot keeps
     // its place in the chain if another label or a fork keeps it, and is deleted otherwise.
