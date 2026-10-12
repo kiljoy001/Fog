@@ -32,8 +32,12 @@ case "$TARGET" in
     CORPUS="$ROOT/corpus/fog-dispatcher"
     INSTRUMENT=("NinePSharp.Fog.Server.dll" "NinePSharp.Fog.dll")
     ;;
+  fog-wasm)
+    CORPUS="$ROOT/corpus/fog-wasm"
+    INSTRUMENT=("NinePSharp.Fog.Wasm.dll" "WebAssembly.dll")
+    ;;
   *)
-    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [fog|fog-files|fog-dispatcher]" >&2
+    echo "usage: FUZZ_SECONDS=30 scripts/fuzz.sh [fog|fog-files|fog-dispatcher|fog-wasm]" >&2
     exit 2
     ;;
 esac

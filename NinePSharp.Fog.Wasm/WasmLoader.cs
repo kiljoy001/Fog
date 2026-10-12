@@ -18,6 +18,6 @@ public static class WasmLoader
             return null;
         }
 
-        return Preview1Module.Admit(await process.ReadImageAsync(path, ImageLimit)).RunAsync;
+        return Preview1Module.Load(await process.ReadImageAsync(path, ImageLimit), process).RunAsync;
     }
 }

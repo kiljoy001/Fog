@@ -4,8 +4,9 @@ Feature: A WASI Preview 1 core module runs as a Fog process
   a module inside the profile: one memory of its own with a finite maximum, exported as "memory",
   no start section, an exported _start of no parameters and no results, and imports only of
   wasi_snapshot_preview1 functions with exactly the types the Preview 1 WITX at a2b96e81 gives them.
-  A refused module fails exec with "exec header invalid" and leaves the process running its own
-  program. An admitted module runs on a thread of its own, and its imports act on its process: the
+  A module that cannot be read, checked, compiled or set up is refused: exec fails with "exec header
+  invalid" and leaves the process running its own program. The module is set up, its data and
+  elements placed, before exec commits. An admitted module runs on a thread of its own, and its imports act on its process: the
   argv exec was given, the process's environment, and its descriptors. How the application ends is
   its exit status: nothing when _start returns or proc_exit is given 0, "wasm-exit N" for any other
   code, and "wasm-trap: " and the trap otherwise, named as WASI runtimes name it where the engine's
@@ -86,6 +87,24 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | wrong-result      | importing a profile function with the wrong result   |
       | imported-global   | importing a global                                   |
       | start-with-param  | with a _start that takes a parameter                 |
+
+  @WASI_NS_017
+  Scenario Outline: Exec refuses a module it cannot set up and leaves the process as it was
+    Given "/bin/bad" holds the application "<fixture>"
+    When a child with "/tmp/f" open as descriptor 3 execs "/bin/bad"
+    Then exec fails with "exec header invalid"
+    And the child still has descriptor 3 open and its own name
+
+    Examples:
+      | fixture         | defect                                 |
+      | data-outside    | with data that does not fit its memory |
+      | element-outside | with elements that do not fit its table |
+
+  @WASI_NS_017 @property @fuzz
+  Scenario: A module with any byte changed is either admitted or refused, and fails no other way
+    Given the applications the other scenarios admit
+    When any one byte of one of them is changed
+    Then loading it either gives a program or fails with "exec header invalid"
 
   @WASI_NS_017
   Scenario: A module may import every Preview 1 function with the type its WITX gives it

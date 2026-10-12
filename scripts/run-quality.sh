@@ -137,6 +137,9 @@ fuzz() {
 
   step "SharpFuzz/AFL fog dispatcher session campaign"
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog-dispatcher
+
+  step "SharpFuzz/AFL WASM module admission campaign"
+  FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog-wasm
 }
 
 case "$MODE" in

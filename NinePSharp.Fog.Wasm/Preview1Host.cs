@@ -8,14 +8,23 @@ namespace NinePSharp.Fog.Wasm;
 // the guest's thread and blocks it, and only it, on the kernel call. A call reads what it needs from
 // guest memory and checks where its results go before any kernel call; any access outside memory is
 // FAULT.
-internal sealed class Preview1Host(Process process, IReadOnlyList<string> argv, IReadOnlyList<string> environment)
+internal sealed class Preview1Host(Process process)
 {
     // The most one call copies between guest memory and the kernel; a longer write is short.
     public const int CopyLimit = 1 << 20;
 
     private GuestMemory memory = null!;
+    private IReadOnlyList<string> argv = [];
+    private IReadOnlyList<string> environment = [];
 
     public void Attach(UnmanagedMemory guest) => memory = new GuestMemory(guest);
+
+    // What the guest sees of its process once exec has committed.
+    public void Start(IReadOnlyList<string> arguments, IReadOnlyList<string> variables)
+    {
+        argv = arguments;
+        environment = variables;
+    }
 
     public Delegate Function(string name) => name switch
     {
@@ -25,7 +34,7 @@ internal sealed class Preview1Host(Process process, IReadOnlyList<string> argv, 
         "environ_sizes_get" => new Func<int, int, int>((count, size) => Call(() => Sizes(environment, (uint)count, (uint)size))),
         "fd_write" => new Func<int, int, int, int, int>((fd, vector, count, written) => Call(() => FdWrite(fd, (uint)vector, (uint)count, (uint)written))),
         "proc_exit" => new Action<int>(code => throw new ProcExitException((uint)code)),
-        _ => Preview1.Unsupported(Preview1.Functions[name]),
+        _ => Preview1.Unsupported(Preview1.Unprovided[name]),
     };
 
     private static int Call(Func<Errno> call)

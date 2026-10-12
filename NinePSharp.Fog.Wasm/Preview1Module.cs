@@ -7,70 +7,75 @@ using WebAssembly.Runtime;
 
 namespace NinePSharp.Fog.Wasm;
 
-// A core module admitted to run under WASI Preview 1: one memory of its own with a finite maximum
-// of at most MaxPages, exported as "memory"; no start section, which would run imports before the
-// host holds the memory; an exported _start: () -> (); and imports only of Preview 1 functions with
-// their exact types. dotnet-webassembly ignores a memory's shared flag, so it is read from the binary.
+// A core module admitted to run under WASI Preview 1. Admission checks what the engine would allow:
+// a start section, which would run before the host holds the memory, and the one memory the module
+// defines, which must be 32-bit with a finite maximum of at most MaxPages and not shared;
+// dotnet-webassembly ignores the shared flag, so it is read from the binary. The rest holds because
+// the module is set up when exec loads it: imports are bound only as Preview 1's functions with
+// their WITX types, so any other import fails to bind; the exports must hold a memory named "memory"
+// and a _start: () -> (). A module that cannot be set up is refused before exec commits; one loaded
+// and never run is left to the collector, which frees its memory.
 internal sealed class Preview1Module
 {
     public const ulong MaxPages = 16384;
     private const byte MemorySection = 5;
     private const uint Shared = 2;
-    private readonly Module module;
-    private readonly InstanceCreator<object> creator;
+    private readonly Preview1Host host;
+    private readonly Instance<object> instance;
+    private readonly Action start;
 
-    private Preview1Module(Module module, InstanceCreator<object> creator)
+    private Preview1Module(Preview1Host host, Instance<object> instance, Action start)
     {
-        this.module = module;
-        this.creator = creator;
+        this.host = host;
+        this.instance = instance;
+        this.start = start;
     }
 
-    public static Preview1Module Admit(byte[] image)
+    public static Preview1Module Load(byte[] image, Process process) => TryLoad(image, process) ?? throw new SyscallException(Errors.BadExec);
+
+    public async Task RunAsync(Process process, IReadOnlyList<string> argv)
+    {
+        using (instance)
+        {
+            host.Start(argv, await EnvironmentAsync(process));
+            process.Exits(await Guest.RunAsync(start));
+        }
+    }
+
+    private static Preview1Module? TryLoad(byte[] image, Process process)
     {
         try
         {
             Module module = Module.ReadFromBinary(new MemoryStream(image));
-            if (!Admissible(module) || SharesMemory(image))
+            if (Admissible(module) && !SharesMemory(image))
             {
-                throw new SyscallException(Errors.BadExec);
+                return Instantiate(module, image, process);
             }
-
-            return new Preview1Module(module, Compile.FromBinary<object>(new MemoryStream(image)));
         }
-        catch (Exception refused) when (refused is ModuleLoadException or CompilerException)
+        catch (Exception)
         {
-            throw new SyscallException(Errors.BadExec);
+            // However an untrusted image fails to be read, compiled or set up, it is not a program.
         }
+
+        return null;
     }
 
-    public async Task RunAsync(Process process, IReadOnlyList<string> argv)
+    private static bool Admissible(Module module)
+        => module.Start is null && module.Memories is [{ ResizableLimits: { Is64Bit: false, Maximum64: <= MaxPages } }];
+
+    private static Preview1Module Instantiate(Module module, byte[] image, Process process)
     {
-        var host = new Preview1Host(process, argv, await EnvironmentAsync(process));
+        var host = new Preview1Host(process);
         var imports = new ImportDictionary();
-        foreach (Import.Function function in module.Imports.Cast<Import.Function>())
+        foreach (Import.Function function in module.Imports.OfType<Import.Function>())
         {
             imports.Add(Preview1.Module, function.Field, new FunctionImport(host.Function(function.Field)));
         }
 
-        using Instance<object> instance = creator(imports);
+        Instance<object> instance = Compile.FromBinary<object>(new MemoryStream(image))(imports);
         object exports = instance.Exports;
         host.Attach((UnmanagedMemory)exports.GetType().GetProperty("memory")!.GetValue(exports)!);
-        process.Exits(await Guest.RunAsync((Action)Delegate.CreateDelegate(typeof(Action), exports, "_start")));
-    }
-
-    private static bool Admissible(Module module)
-    {
-        int imported = module.Imports.Count;
-        return module.Start is null
-            && module.Memories is [{ ResizableLimits: { Is64Bit: false, Maximum64: <= MaxPages } }]
-            && module.Imports.All(import => import is Import.Function function
-                && function.Module == Preview1.Module
-                && Preview1.Functions.TryGetValue(function.Field, out string? signature)
-                && Preview1.Matches(signature, module.Types[(int)function.TypeIndex]))
-            && module.Exports.Any(export => export is { Name: "memory", Kind: ExternalKind.Memory })
-            && module.Exports.FirstOrDefault(export => export is { Name: "_start", Kind: ExternalKind.Function }) is { } start
-            && module.Functions.ElementAtOrDefault((int)start.Index - imported) is { } entry
-            && module.Types[(int)entry.Type] is { Parameters.Count: 0, Returns.Count: 0 };
+        return new Preview1Module(host, instance, (Action)Delegate.CreateDelegate(typeof(Action), exports, "_start"));
     }
 
     // The flags of the one memory the module defines; admission has already found it.

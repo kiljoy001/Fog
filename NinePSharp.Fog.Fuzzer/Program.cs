@@ -10,7 +10,8 @@ public static class Program
             "fog" => FogControlFuzz.Run,
             "fog-files" => FogFileFuzz.Run,
             "fog-dispatcher" => FogDispatcherFuzz.Run,
-            _ => throw new ArgumentException("usage: NinePSharp.Fog.Fuzzer fog|fog-files|fog-dispatcher"),
+            "fog-wasm" => FogWasmFuzz.Run,
+            _ => throw new ArgumentException("usage: NinePSharp.Fog.Fuzzer fog|fog-files|fog-dispatcher|fog-wasm"),
         };
         SharpFuzz.Fuzzer.OutOfProcess.Run(target);
     }

@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog\NinePSharp.Fog.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Server\NinePSharp.Fog.Server.csproj" />
+    <ProjectReference Include="..\NinePSharp.Fog.Wasm\NinePSharp.Fog.Wasm.csproj" />
   </ItemGroup>
 
   <ItemGroup>
