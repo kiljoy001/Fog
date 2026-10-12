@@ -2,15 +2,17 @@
 Feature: Programs run as Plan 9 processes on Fog's namespace
   The kernel runs programs as Plan 9 processes over Fog's virtual process layer: each has a
   namespace, a descriptor table and an environment group, which fork shares or copies as rfork(2)
-  says. exec(2) reads the file's header: #! names an interpreter, and a managed program's file names
-  a .NET program. A process ends with exits(2), and its parent's wait(2) reads a message that is
-  empty on success and otherwise "name pid: status", where name is the last element of the file
-  executed; a program that returns from main exits with "main", as libc's _callmain does. The
-  environment is files in /env, shared by the processes of an environment group. A failed walk
-  names the path as far as the element that failed, as 9front's namec does.
+  says. exec(2) reads the file's header: #! names an interpreter, a managed program's file names
+  a .NET program, and any other header is offered to the kernel's loaders, one of which may claim
+  it, read the whole image and run it. A process ends with exits(2), and its parent's wait(2) reads
+  a message that is empty on success and otherwise "name pid: status", where name is the last
+  element of the file executed; a program that returns from main exits with "main", as libc's
+  _callmain does. The environment is files in /env, shared by the processes of an environment group.
+  A failed walk names the path as far as the element that failed, as 9front's namec does.
 
   Background:
     Given a kernel whose /bin holds the managed programs "true", "false", "args", "return" and "crash"
+    And whose loader claims images beginning "\0img ", reads at most 64 bytes of them, refuses "bad" and runs the rest as "args"
 
   @FOG_KERNEL_001
   Scenario: A program that exits cleanly leaves an empty wait message
@@ -108,6 +110,41 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
       | \0fog true        |
       | x!/bin/true\\n    |
       | #!\0/bin/true\\n  |
+
+  @FOG_KERNEL_002
+  Scenario: A loader runs an image whose header it claims
+    Given the file "/tmp/image" holds "\0img ok\n"
+    When a process runs "/tmp/image" with arguments "a b"
+    Then the loader read "\0img ok\n" from "/tmp/image"
+    And the program saw the arguments "/tmp/image a b"
+    And no file is left open
+
+  @FOG_KERNEL_002
+  Scenario: An image as long as its loader reads runs
+    Given the file "/tmp/image" holds "\0img ok" and 57 more bytes
+    When a process runs "/tmp/image"
+    Then the program saw the arguments "/tmp/image"
+
+  @FOG_KERNEL_002
+  Scenario: A loader that refuses its image leaves the process running its own program
+    Given the file "/tmp/image" holds "\0img bad\n"
+    When a process runs "/tmp/image"
+    Then exec fails with "exec header invalid"
+    And its parent's wait message for it is "*init* <pid>: exec header invalid"
+
+  @FOG_KERNEL_002
+  Scenario: An image longer than its loader reads is an invalid exec header
+    Given the file "/tmp/image" holds "\0img ok" and 64 more bytes
+    When a process runs "/tmp/image"
+    Then exec fails with "exec header invalid"
+
+  @FOG_KERNEL_002
+  Scenario: A #! script may name a loaded image as its interpreter
+    Given the file "/tmp/image" holds "\0img ok\n"
+    And the file "/tmp/script" holds "#!/tmp/image -x\n"
+    When a process runs "/tmp/script" with arguments "a"
+    Then the loader read "\0img ok\n" from "/tmp/image"
+    And the program saw the arguments "script -x /tmp/script a"
 
   @FOG_KERNEL_002
   Scenario: Exec of a missing file fails as open does

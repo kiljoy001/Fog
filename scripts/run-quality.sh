@@ -58,6 +58,7 @@ quality() {
   coverage_test NinePSharp.Fog.Auth.Tests/NinePSharp.Fog.Auth.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
   coverage_test NinePSharp.Fog.Rc.Tests/NinePSharp.Fog.Rc.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
   coverage_test NinePSharp.Fog.Thread.Tests/NinePSharp.Fog.Thread.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+  coverage_test NinePSharp.Fog.Wasm.Tests/NinePSharp.Fog.Wasm.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
   coverage_test NinePSharp.Fog.Kernel.Tests/NinePSharp.Fog.Kernel.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
   step "gate self-tests"
@@ -94,6 +95,7 @@ scope() {
     fog-commands) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-commands.json stryker-fog-commands ;;
     fog-kernel) mutate NinePSharp.Fog.Kernel.Tests stryker-config-fog-kernel.json stryker-fog-kernel ;;
     fog-thread) mutate NinePSharp.Fog.Thread.Tests stryker-config-fog-thread.json stryker-fog-thread ;;
+    fog-wasm) mutate NinePSharp.Fog.Wasm.Tests stryker-config-fog-wasm.json stryker-fog-wasm ;;
     *) echo "unknown mutation scope: $1" >&2; exit 2 ;;
   esac
 }
@@ -142,7 +144,7 @@ case "$MODE" in
   full)
     quality
     step "mutation testing"
-    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-kernel fog-thread; do
+    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-kernel fog-thread fog-wasm; do
       scope "$each"
     done
     coyote

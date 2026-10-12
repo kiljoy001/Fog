@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NinePSharp.Fog.Wasm.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WebAssembly" Version="2.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NinePSharp.Fog.Kernel\NinePSharp.Fog.Kernel.csproj" />
+  </ItemGroup>
+
+</Project>

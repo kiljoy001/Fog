@@ -12,7 +12,9 @@ public sealed class ProcessSteps
 {
     private static readonly TimeSpan Bound = KernelDriver.Bound;
     private readonly List<string> seen = new();
+    private readonly List<(string Path, string Image)> loaded = new();
     private readonly OpenCounter files = new();
+    private Dictionary<string, ProgramMain> programs = new();
     private Process? init;
     private Waitmsg? waited;
     private long child;
@@ -21,10 +23,9 @@ public sealed class ProcessSteps
     private IReadOnlyList<string>? childListed;
 
     [Given(@"^a kernel whose /bin holds the managed programs ""true"", ""false"", ""args"", ""return"" and ""crash""$")]
-    public async Task GivenAKernel()
+    public void GivenAKernel()
     {
-        var kernel = new FogKernel(
-            new Dictionary<string, ProgramMain>
+        programs = new Dictionary<string, ProgramMain>
         {
             ["true"] = (process, argv) =>
             {
@@ -44,15 +45,21 @@ public sealed class ProcessSteps
             },
             ["return"] = (process, argv) => Task.CompletedTask,
             ["crash"] = (process, argv) => throw new InvalidOperationException("boom"),
-        },
-            files,
-            files.Root);
+        };
+    }
+
+    [Given(@"^whose loader claims images beginning ""\\0img "", reads at most 64 bytes of them, refuses ""bad"" and runs the rest as ""args""$")]
+    public async Task GivenALoader()
+    {
+        var kernel = new FogKernel(programs, files, files.Root, loaders: [LoadImageAsync]);
         init = await kernel.BootAsync();
     }
 
     [Given(@"^the file ""(.*)"" holds ""(.*)""$")]
-    public Task GivenFileHolds(string path, string contents)
-        => WriteAsync(path, contents.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\0", "\0", StringComparison.Ordinal));
+    public Task GivenFileHolds(string path, string contents) => WriteAsync(path, Unescape(contents));
+
+    [Given(@"^the file ""(.*)"" holds ""(.*)"" and (\d+) more bytes$")]
+    public Task GivenFileHoldsMore(string path, string contents, int more) => WriteAsync(path, Unescape(contents) + new string('x', more));
 
     [Given(@"^the file ""(.*)"" runs ""(.*)"" with (\d+) interpreter arguments$")]
     public Task GivenInterpreterArguments(string path, string interpreter, int count)
@@ -242,6 +249,9 @@ public sealed class ProcessSteps
     [Then(@"^the program saw (\d+) arguments$")]
     public void ThenSawCount(int count) => Assert.Equal(count, seen.Count);
 
+    [Then(@"^the loader read ""(.*)"" from ""(.*)""$")]
+    public void ThenLoaderRead(string image, string path) => Assert.Contains((path, Unescape(image)), loaded);
+
     [Then(@"^exec fails with ""(.*)""$")]
     public void ThenExecFails(string message)
     {
@@ -310,6 +320,8 @@ public sealed class ProcessSteps
         return contents;
     }
 
+    private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\0", "\0", StringComparison.Ordinal);
+
     private async Task WriteAsync(string path, string contents)
     {
         int fd = await init!.CreateAsync(path, NinePConstants.OWRITE, 0b111_111_101);
@@ -319,6 +331,18 @@ public sealed class ProcessSteps
 
     private async Task WaitFailsAsync()
         => failure = (await Assert.ThrowsAsync<SyscallException>(() => init!.WaitAsync().WaitAsync(Bound))).Message;
+
+    private async ValueTask<ProgramMain?> LoadImageAsync(Process process, string path, ReadOnlyMemory<byte> header)
+    {
+        if (!header.Span.StartsWith("\0img "u8))
+        {
+            return null;
+        }
+
+        byte[] image = await process.ReadImageAsync(path, 64);
+        loaded.Add((path, Encoding.UTF8.GetString(image)));
+        return image.AsSpan(5).StartsWith("bad"u8) ? throw new SyscallException(Errors.BadExec) : programs["args"];
+    }
 
     private async Task RunAsync(string path, string[] arguments)
     {

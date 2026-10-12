@@ -11,12 +11,18 @@ public sealed class FogKernel
     private readonly string session = Guid.NewGuid().ToString();
     private long sequence;
 
-    public FogKernel(IReadOnlyDictionary<string, ProgramMain> programs, IResourceDataOperations files, ResourceHandle root, string user = "none")
+    public FogKernel(
+        IReadOnlyDictionary<string, ProgramMain> programs,
+        IResourceDataOperations files,
+        ResourceHandle root,
+        string user = "none",
+        params IReadOnlyList<ExecLoader> loaders)
     {
         this.programs = programs;
         this.root = root;
         Files = files;
         User = user;
+        Loaders = loaders;
         Pipes = new PipeDevice(user);
     }
 
@@ -28,10 +34,16 @@ public sealed class FogKernel
 
     internal string User { get; }
 
-    public static FogKernel InMemory(IReadOnlyDictionary<string, ProgramMain> programs, string user = "none", TimeProvider? clock = null)
+    internal IReadOnlyList<ExecLoader> Loaders { get; }
+
+    public static FogKernel InMemory(
+        IReadOnlyDictionary<string, ProgramMain> programs,
+        string user = "none",
+        TimeProvider? clock = null,
+        params IReadOnlyList<ExecLoader> loaders)
     {
         var files = new RamFs("ram", "#R", user, clock: clock);
-        return new FogKernel(programs, files, files.Root, user);
+        return new FogKernel(programs, files, files.Root, user, loaders);
     }
 
     public async Task<Process> BootAsync()

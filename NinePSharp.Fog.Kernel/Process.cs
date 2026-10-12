@@ -374,10 +374,11 @@ public sealed class Process
 
         string elem = path[(path.LastIndexOf('/') + 1)..];
         var interpreter = new List<string>();
-        byte[] header = await ReadHeaderAsync(path);
+        string image = path;
+        byte[] header = await ReadHeaderAsync(image);
         ProgramMain? program;
         int indir = 0;
-        while ((program = ManagedProgram(header)) is null)
+        while ((program = await LoadAsync(image, header)) is null)
         {
             int newline = header.AsSpan().StartsWith("#!"u8) ? Array.IndexOf(header, (byte)'\n') : -1;
             if (newline == -1)
@@ -401,7 +402,8 @@ public sealed class Process
             }
 
             interpreter.InsertRange(0, tokens);
-            header = await ReadHeaderAsync(tokens[0]);
+            image = tokens[0];
+            header = await ReadHeaderAsync(image);
             indir++;
         }
 
@@ -416,6 +418,32 @@ public sealed class Process
         Text = elem;
         await program(this, arguments);
         Exits("main");
+    }
+
+    // A loader's read of the image it claimed, as exec opens it; one longer than limit bytes is an
+    // invalid exec header.
+    public async Task<byte[]> ReadImageAsync(string path, int limit)
+    {
+        ResourceOpenHandle opened = await OpenExecutableAsync(path);
+        try
+        {
+            var image = new MemoryStream();
+            for (ReadOnlyMemory<byte> block; !(block = await plane.ReadAsync(opened, (ulong)image.Length, 8192, CancellationToken.None)).IsEmpty;)
+            {
+                if (image.Length + block.Length > limit)
+                {
+                    throw new SyscallException(Errors.BadExec);
+                }
+
+                image.Write(block.Span);
+            }
+
+            return image.ToArray();
+        }
+        finally
+        {
+            await plane.ClunkAsync(opened, kernel.Context(Pid, User), CancellationToken.None);
+        }
     }
 
     [DoesNotReturn]
@@ -570,15 +598,28 @@ public sealed class Process
         return (await plane.WalkAsync(Start(path), names, CancellationToken.None)).Complete(names.Length);
     }
 
-    private async Task<byte[]> ReadHeaderAsync(string path)
+    // A managed program first, then whichever loader claims the header.
+    private async ValueTask<ProgramMain?> LoadAsync(string path, byte[] header)
     {
-        NamespaceChannel file = await ResolveAsync(path);
-        if (file.Current.IsDirectory)
+        if (ManagedProgram(header) is { } managed)
         {
-            throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.ExecDirectory));
+            return managed;
         }
 
-        ResourceOpenHandle opened = await plane.OpenAsync(file, NinePConstants.OEXEC, kernel.Context(Pid, User), CancellationToken.None);
+        foreach (ExecLoader loader in kernel.Loaders)
+        {
+            if (await loader(this, path, header) is { } program)
+            {
+                return program;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<byte[]> ReadHeaderAsync(string path)
+    {
+        ResourceOpenHandle opened = await OpenExecutableAsync(path);
         try
         {
             return (await plane.ReadAsync(opened, 0, HeaderSize, CancellationToken.None)).ToArray();
@@ -587,6 +628,17 @@ public sealed class Process
         {
             await plane.ClunkAsync(opened, kernel.Context(Pid, User), CancellationToken.None);
         }
+    }
+
+    private async Task<ResourceOpenHandle> OpenExecutableAsync(string path)
+    {
+        NamespaceChannel file = await ResolveAsync(path);
+        if (file.Current.IsDirectory)
+        {
+            throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.ExecDirectory));
+        }
+
+        return await plane.OpenAsync(file, NinePConstants.OEXEC, kernel.Context(Pid, User), CancellationToken.None);
     }
 
     private async Task<NamespaceChannel> ResolveAsync(string path)

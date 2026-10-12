@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="NinePSharp.Fog.Kernel.Tests" />
+    <InternalsVisibleTo Include="NinePSharp.Fog.Wasm" />
   </ItemGroup>
 
   <ItemGroup>
