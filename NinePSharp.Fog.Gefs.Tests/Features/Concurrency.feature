@@ -75,6 +75,8 @@ Feature: Reads run beside the writer, and a commit writes to the device without 
     And the server commits
     And adm writes "newer" to notes at offset 0 at time 400
     And the server commits
+    And adm writes "third" to notes at offset 0 at time 500
+    And the server commits
     Then the blocks main's root used, and the change freed, are not free
     And the read that took main's root reads notes as "kept"
     And every block of the device is held, in a log, waiting for reads, or free
