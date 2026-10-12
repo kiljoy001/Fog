@@ -22,7 +22,7 @@ public sealed class Preview1Steps(WasmDriver driver)
     [Given("a kernel that runs WASM applications")]
     public async Task GivenAKernel()
     {
-        FogKernel kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(), loaders: [WasmLoader.LoadAsync]);
+        FogKernel kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(), clock: driver.Clock, loaders: [new WasmLoader(driver.Clock).LoadAsync]);
         driver.Init = await kernel.BootAsync();
     }
 

@@ -31,7 +31,7 @@ internal sealed class Preview1Module
         this.start = start;
     }
 
-    public static Preview1Module Load(byte[] image, Process process) => TryLoad(image, process) ?? throw new SyscallException(Errors.BadExec);
+    public static Preview1Module Load(byte[] image, Process process, TimeProvider clock) => TryLoad(image, process, clock) ?? throw new SyscallException(Errors.BadExec);
 
     public async Task RunAsync(Process process, IReadOnlyList<string> argv)
     {
@@ -42,14 +42,14 @@ internal sealed class Preview1Module
         }
     }
 
-    private static Preview1Module? TryLoad(byte[] image, Process process)
+    private static Preview1Module? TryLoad(byte[] image, Process process, TimeProvider clock)
     {
         try
         {
             Module module = Module.ReadFromBinary(new MemoryStream(image));
             if (Admissible(module) && !SharesMemory(image))
             {
-                return Instantiate(module, image, process);
+                return Instantiate(module, image, process, clock);
             }
         }
         catch (Exception)
@@ -63,9 +63,9 @@ internal sealed class Preview1Module
     private static bool Admissible(Module module)
         => module.Start is null && module.Memories is [{ ResizableLimits: { Is64Bit: false, Maximum64: <= MaxPages } }];
 
-    private static Preview1Module Instantiate(Module module, byte[] image, Process process)
+    private static Preview1Module Instantiate(Module module, byte[] image, Process process, TimeProvider clock)
     {
-        var host = new Preview1Host(process);
+        var host = new Preview1Host(process, clock);
         var imports = new ImportDictionary();
         foreach (Import.Function function in module.Imports.OfType<Import.Function>())
         {

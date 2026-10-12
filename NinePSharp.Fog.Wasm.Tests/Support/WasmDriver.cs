@@ -8,4 +8,7 @@ public sealed class WasmDriver
     public static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
 
     public Process Init { get; set; } = null!;
+
+    // The kernel's and the applications' time: 2026-10-01 12:00 UTC.
+    public FixedClock Clock { get; } = new(DateTimeOffset.FromUnixTimeSeconds(1790856000));
 }

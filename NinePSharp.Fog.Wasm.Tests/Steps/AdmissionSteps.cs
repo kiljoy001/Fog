@@ -49,7 +49,7 @@ public sealed class AdmissionSteps
     {
         try
         {
-            Preview1Module.Load(image, process!);
+            Preview1Module.Load(image, process!, TimeProvider.System);
             return true;
         }
         catch (SyscallException refused) when (refused.Message == "exec header invalid")

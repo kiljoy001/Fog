@@ -15,7 +15,7 @@ public static class FogWasmFuzz
         int length = input.ReadAtLeast(buffer, buffer.Length, false);
         try
         {
-            Preview1Module.Load(buffer[..length], Init);
+            Preview1Module.Load(buffer[..length], Init, TimeProvider.System);
         }
         catch (SyscallException refused) when (refused.Message == "exec header invalid")
         {

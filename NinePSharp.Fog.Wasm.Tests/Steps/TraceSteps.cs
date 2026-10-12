@@ -82,6 +82,15 @@ public sealed class TraceSteps(WasmDriver driver)
         Assert.True(matches, $"the interpreter ended \"{status}\" after the trace:\n{trace}");
     }
 
+    [Then(@"^descriptors (\d+) and (\d+) report one inode and descriptor (\d+) another$")]
+    public void ThenInodes(int fd, int same, int other)
+    {
+        string Inode(int descriptor) => Regex.Match(trace, $@"^fd_filestat_get {descriptor} -> ok dev=0 ino=(\d+) ", RegexOptions.Multiline).Groups[1].Value;
+        Assert.Equal(Inode(fd), Inode(same));
+        Assert.NotEqual(Inode(fd), Inode(other));
+        Assert.NotEmpty(Inode(other));
+    }
+
     [Then(@"^the file ""(.*)"" holds ""(.*)""$")]
     public async Task ThenFileHolds(string path, string text)
     {
