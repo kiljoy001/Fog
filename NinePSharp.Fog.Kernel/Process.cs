@@ -277,9 +277,10 @@ public sealed class Process
         {
             throw new SyscallException(Errors.BadFd);
         }
-        catch (NamespaceFidException)
+        catch (NamespaceFidException error)
         {
-            throw new SyscallException(Errors.IsDirectory);
+            // sysseek: a directory only back to its start, and nothing before a file's.
+            throw new SyscallException(error.Message == "negative offset" ? Errors.NegativeOffset : Errors.IsDirectory);
         }
     }
 

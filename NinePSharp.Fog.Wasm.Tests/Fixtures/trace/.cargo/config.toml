@@ -1,0 +1,4 @@
+[build]
+target = "wasm32-unknown-unknown"
+# A finite maximum (128 pages) and no start section, as Fog admits; a small stack.
+rustflags = ["-C", "link-arg=--max-memory=8388608", "-C", "link-arg=-zstack-size=65536"]

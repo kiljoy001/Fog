@@ -2,17 +2,16 @@ using System.Globalization;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
+using NinePSharp.Fog.Wasm.Tests.Support;
 using Reqnroll;
 using Xunit;
 
 namespace NinePSharp.Fog.Wasm.Tests.Steps;
 
 [Binding]
-public sealed class Preview1Steps
+public sealed class Preview1Steps(WasmDriver driver)
 {
-    // Compiling a module and starting its thread is slower than a kernel call.
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
-    private Process? init;
+    private static readonly TimeSpan Bound = WasmDriver.Bound;
     private Waitmsg? waited;
     private long child;
     private string? failure;
@@ -24,7 +23,7 @@ public sealed class Preview1Steps
     public async Task GivenAKernel()
     {
         FogKernel kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(), loaders: [WasmLoader.LoadAsync]);
-        init = await kernel.BootAsync();
+        driver.Init = await kernel.BootAsync();
     }
 
     [Given(@"^""(.*)"" holds the application ""(.*)""$")]
@@ -44,20 +43,23 @@ public sealed class Preview1Steps
     [When(@"^a child with a pipe as descriptor 1 execs ""([^""]*)""$")]
     public Task WhenPipedExec(string path) => PipedExecAsync(path, [path]);
 
+    [When(@"^a child with ""(.*)"" open for reading as descriptor 3 and a pipe as descriptor 1 execs ""(.*)""$")]
+    public Task WhenPipedExecWithFile(string file, string path) => PipedExecAsync(path, [path], file);
+
     [When(@"^a child with a pipe as descriptor 1 execs ""(.*)"" with the arguments ""(.*)""$")]
     public Task WhenPipedExecWithArguments(string path, string arguments) => PipedExecAsync(path, arguments.Split(' '));
 
     [When(@"^a child with a pipe whose other end is closed as descriptor 1 execs ""(.*)""$")]
     public async Task WhenClosedPipeExec(string path)
     {
-        var (first, second) = await init!.PipeAsync();
-        await init.CloseAsync(second);
-        child = init.Fork(RforkFlags.Fdg, async process =>
+        var (first, second) = await driver.Init.PipeAsync();
+        await driver.Init.CloseAsync(second);
+        child = driver.Init.Fork(RforkFlags.Fdg, async process =>
         {
             await process.DupAsync(first, 1);
             await process.ExecAsync(path, [path]);
         });
-        waited = await init.WaitAsync().WaitAsync(Bound);
+        waited = await driver.Init.WaitAsync().WaitAsync(Bound);
     }
 
     [When(@"^a child with ""(.*)"" open as descriptor 1 execs ""(.*)""$")]
@@ -74,7 +76,7 @@ public sealed class Preview1Steps
     public async Task WhenExecWithDescriptor(string file, string path)
     {
         await WriteAsync(file, "d"u8.ToArray());
-        child = init!.Fork(RforkFlags.Fdg, async process =>
+        child = driver.Init.Fork(RforkFlags.Fdg, async process =>
         {
             await process.DupAsync(await process.OpenAsync(file, NinePConstants.OREAD), 3);
             try
@@ -89,7 +91,7 @@ public sealed class Preview1Steps
                 process.Exits(error.Message);
             }
         });
-        waited = await init.WaitAsync().WaitAsync(Bound);
+        waited = await driver.Init.WaitAsync().WaitAsync(Bound);
     }
 
     [Then(@"^exec fails with ""(.*)""$")]
@@ -118,27 +120,27 @@ public sealed class Preview1Steps
 
     private async Task WriteAsync(string path, byte[] contents)
     {
-        int fd = await init!.CreateAsync(path, NinePConstants.OWRITE, 0b111_111_101);
-        await init.WriteAsync(fd, contents);
-        await init.CloseAsync(fd);
+        int fd = await driver.Init.CreateAsync(path, NinePConstants.OWRITE, 0b111_111_101);
+        await driver.Init.WriteAsync(fd, contents);
+        await driver.Init.CloseAsync(fd);
     }
 
     private async Task ExecWithOutputAsync(string file, int mode, string path)
     {
-        child = init!.Fork(RforkFlags.Fdg, async process =>
+        child = driver.Init.Fork(RforkFlags.Fdg, async process =>
         {
             await process.DupAsync(await process.OpenAsync(file, mode), 1);
             await process.ExecAsync(path, [path]);
         });
-        waited = await init.WaitAsync().WaitAsync(Bound);
+        waited = await driver.Init.WaitAsync().WaitAsync(Bound);
     }
 
     // The child writes to the pipe's first end as descriptor 1; once it and the parent's copy of that
     // end are closed, the second end reads to its end. The ends may themselves be 0 and 1.
-    private async Task PipedExecAsync(string path, string[] argv)
+    private async Task PipedExecAsync(string path, string[] argv, string? file = null)
     {
-        var (first, second) = await init!.PipeAsync();
-        child = init.Fork(RforkFlags.Fdg, async process =>
+        var (first, second) = await driver.Init.PipeAsync();
+        child = driver.Init.Fork(RforkFlags.Fdg, async process =>
         {
             await process.DupAsync(first, 1);
             foreach (int end in new[] { first, second }.Where(end => end != 1))
@@ -146,17 +148,22 @@ public sealed class Preview1Steps
                 await process.CloseAsync(end);
             }
 
+            if (file is not null)
+            {
+                await process.RenumberAsync(await process.OpenAsync(file, NinePConstants.OREAD), 3);
+            }
+
             await process.ExecAsync(path, argv);
         });
-        await init.CloseAsync(first);
+        await driver.Init.CloseAsync(first);
         var output = new StringBuilder();
-        Task<Waitmsg> wait = init.WaitAsync().WaitAsync(Bound);
-        for (ReadOnlyMemory<byte> block; !(block = await init.ReadAsync(second, 8192).AsTask().WaitAsync(Bound)).IsEmpty;)
+        Task<Waitmsg> wait = driver.Init.WaitAsync().WaitAsync(Bound);
+        for (ReadOnlyMemory<byte> block; !(block = await driver.Init.ReadAsync(second, 8192).AsTask().WaitAsync(Bound)).IsEmpty;)
         {
             output.Append(Encoding.UTF8.GetString(block.Span));
         }
 
-        await init.CloseAsync(second);
+        await driver.Init.CloseAsync(second);
         waited = await wait;
         piped = output.ToString();
     }

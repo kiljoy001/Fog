@@ -13,6 +13,8 @@ internal sealed class GuestMemory(UnmanagedMemory memory)
 
     public void WriteUInt32(uint pointer, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(Range(pointer, 4), value);
 
+    public void WriteUInt64(uint pointer, ulong value) => BinaryPrimitives.WriteUInt64LittleEndian(Range(pointer, 8), value);
+
     public byte[] Read(uint pointer, uint length) => Range(pointer, length).ToArray();
 
     public void Write(uint pointer, byte[] source) => source.CopyTo(Range(pointer, (uint)source.Length));

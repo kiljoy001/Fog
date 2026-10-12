@@ -191,6 +191,16 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | args-size-outside   | where args_sizes_get writes the buffer size |
       | args-list-outside   | where args_get writes the pointers          |
       | args-buffer-outside | where args_get writes the strings           |
+      | read-buffer-outside   | a buffer fd_read fills                    |
+      | read-count-outside    | where fd_read writes the count            |
+
+  @WASI_NS_007
+  Scenario: A call whose result cannot be written is FAULT and leaves the descriptor as it was
+    Given "/bin/report" holds the application "seek-position-outside"
+    And the file "/tmp/f" holds "0123456789"
+    When a child with "/tmp/f" open for reading as descriptor 3 and a pipe as descriptor 1 execs "/bin/report"
+    Then the parent's wait message for it is "report <pid>: wasm-exit 21"
+    And the pipe holds "0"
 
   @WASI_NS_007
   Scenario: A buffer may end at the last byte of memory
