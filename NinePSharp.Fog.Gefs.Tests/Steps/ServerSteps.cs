@@ -106,7 +106,31 @@ public sealed class ServerSteps(StoreContext context)
         => Assert.Equal(error, Assert.Throws<IOException>(() => Run(Files.CreateAsync(Files.Root, name, false, default))).Message);
 
     [Then(@"^the server committing fails with ""(.*)""$")]
-    public void ThenSyncFails(string error) => Assert.Equal(error, Assert.Throws<GefsException>(context.Server!.Sync).Message);
+    public void ThenSyncFails(string error)
+    {
+        Exception failed = Assert.ThrowsAny<Exception>(context.Server!.Sync);
+        Assert.True(failed is GefsException or IOException, failed.ToString());
+        Assert.Equal(error, failed.Message);
+    }
+
+    [When(@"^the device's patience is (\d+) seconds?$")]
+    public void WhenPatience(int seconds) => context.Device!.PatientFor(TimeSpan.FromSeconds(seconds));
+
+    [When("the device fails every flush")]
+    public void WhenFlushesFail() => context.Device!.FailFlushes();
+
+    // A queued block fails on the sync task, in its own time.
+    [Then(@"^the store's failure becomes ""(.*)""$")]
+    public void ThenFailureBecomes(string error)
+    {
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (context.Store!.Failure is null && waited.Elapsed < Bounded.Limit)
+        {
+            Thread.Sleep(10);
+        }
+
+        Assert.Equal(error, context.Store.Failure?.Message);
+    }
 
     [When(@"^(\d+) users each write (\d+) files at once, half through ""(\w+)"" and half through ""(\w+)""$")]
     public void WhenWritersRace(int writers, int files, string first, string second)

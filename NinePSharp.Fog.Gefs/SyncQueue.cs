@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.ExceptionServices;
 
 namespace NinePSharp.Fog.Gefs;
 
@@ -6,8 +7,9 @@ namespace NinePSharp.Fog.Gefs;
 // queued in and then by their place on the device, written by a task of their own that runs while
 // anything waits. A fence starts a generation and sorts before its blocks, so it comes out once
 // every block queued before it is written. Until it is written a block reads back from the queue.
-// Once the device fails a write nothing more is written and every fence fails, but each block
-// queued still reads back.
+// Once the device fails a write, or the store fails otherwise, nothing more is written and every
+// fence fails, but each block queued still reads back. Unlike gefs, nothing waits on the device
+// longer than its patience, for room or for a fence; after that the queue has failed.
 internal sealed class SyncQueue(Device device, int room = SyncQueue.Room)
 {
     public const int Room = 4096;
@@ -30,13 +32,35 @@ internal sealed class SyncQueue(Device device, int room = SyncQueue.Room)
         Put(new Entry(address, block, null));
     }
 
-    // wrwait's fence.
+    // wrwait's fence, sorting before every block of its generation.
     public Task Fence()
     {
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Put(new Entry(-1, null, done));
+        Put(new Entry(long.MinValue, null, done));
         return done.Task;
     }
+
+    // wrwait: returns once every block queued before it is written.
+    public void Wait()
+    {
+        Task fence = Fence();
+        try
+        {
+            if (fence.Wait(device.Patience))
+            {
+                return;
+            }
+        }
+        catch (AggregateException failed) when (failed.InnerException is { } inner)
+        {
+            ExceptionDispatchInfo.Throw(inner);
+        }
+
+        throw TimedOut();
+    }
+
+    // The first failure stands.
+    public void Fail(Exception failed) => Interlocked.CompareExchange(ref failure, failed, null);
 
     // qput: a full queue waits for the sync task to take something out.
     private void Put(Entry e)
@@ -45,7 +69,10 @@ internal sealed class SyncQueue(Device device, int room = SyncQueue.Room)
         {
             while (heap.Count == room)
             {
-                Monitor.Wait(gate);
+                if (!Monitor.Wait(gate, device.Patience))
+                {
+                    throw TimedOut();
+                }
             }
 
             if (e.Fence is not null)
@@ -98,10 +125,17 @@ internal sealed class SyncQueue(Device device, int room = SyncQueue.Room)
                 }
                 catch (Exception failed)
                 {
-                    Volatile.Write(ref failure, failed);
+                    Fail(failed);
                 }
             }
         }
+    }
+
+    private GefsException TimedOut()
+    {
+        var timedOut = new GefsException("i/o timeout");
+        Fail(timedOut);
+        return timedOut;
     }
 
     private sealed record Entry(long Address, byte[]? Block, TaskCompletionSource? Fence);

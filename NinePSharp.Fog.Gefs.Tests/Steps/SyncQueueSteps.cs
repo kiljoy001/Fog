@@ -39,6 +39,15 @@ public sealed class SyncQueueSteps(StoreContext context)
     [When("a fence is queued")]
     public void WhenFence() => fence = queue!.Fence();
 
+    [When(@"^the queue is told the store failed with ""(.*)""$")]
+    public void WhenFailed(string error) => queue!.Fail(new GefsException(error));
+
+    [Then(@"^the fence fails with ""(.*)""$")]
+    public void ThenFenceFails(string error) => Assert.Equal(error, Assert.Throws<GefsException>(() => Finish(fence!)).Message);
+
+    [Then(@"^block (\d+) reads back from the queue$")]
+    public void ThenOneReadsBack(long block) => Assert.Equal(Block(block), queue!.Find(block * Format.BlockSize));
+
     [Then("the fence is still waiting")]
     public void ThenFenceWaits() => Assert.False(fence!.Wait(TimeSpan.FromMilliseconds(200)));
 

@@ -24,7 +24,7 @@ internal sealed class Allocator : BlockStore
 
     public bool UseReserve { get; set; }
 
-    // Why the device took no more blocks, once it failed one.
+    // Why the device takes no more blocks: it failed one, or the store failed.
     public Exception? Failure => queue.Failure;
 
     // Blocks freed since the last commit, reused only once the next commit is durable.
@@ -121,7 +121,7 @@ internal sealed class Allocator : BlockStore
     // before the next.
     public void WriteOut(Pending pending, Action<IReadOnlyList<Bptr>> commit)
     {
-        queue.Fence().GetAwaiter().GetResult();
+        queue.Wait();
         device.Flush();
         foreach (Arena a in Arenas)
         {
@@ -149,6 +149,8 @@ internal sealed class Allocator : BlockStore
 
         Clean();
     }
+
+    public void Fail(Exception failed) => queue.Fail(failed);
 
     // epochclean: what waits in limbo goes back to the arenas once the reads that might use it have
     // finished.

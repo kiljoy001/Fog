@@ -6,12 +6,14 @@ Feature: Blocks wait in a sync queue, written by its own task in gefs's order, a
   commit raises the generation and queues a fence, which sorts before the blocks of its
   generation; it comes out once every block queued before it is written, and before any queued
   after it. A queued block is held in memory, so it reads back from the queue until it is written.
-  A full queue makes the next block wait for room.
+  A full queue makes the next block wait for room. Once the device fails a write, or the store
+  fails, the queue writes nothing more, and a block still in it reads back from it.
 
   gefs has one sync process unless told otherwise, and so does Fog. Fog's sync task is started
   when a block is queued and runs until the queue is empty, rather than waiting on it. The queue
   holds 4096 blocks unless made smaller, where gefs's holds twice the blocks of its cache; Fog keeps
-  no cache besides the blocks waiting in the queue.
+  no cache besides the blocks waiting in the queue. gefs waits for room as long as it takes; Fog
+  waits no longer than the device's patience, and then takes the device as failed.
 
   @FOG_GEFS_805
   Scenario: Blocks waiting together go to the device in order of where they lie, and those queued after a fence after it
@@ -57,3 +59,16 @@ Feature: Blocks wait in a sync queue, written by its own task in gefs's order, a
     Given a write queue with room for 8 blocks, on a device of 100 blocks
     When a fence is queued
     Then the fence comes out
+
+  @FOG_GEFS_805
+  Scenario: Once the store fails, the queue writes nothing more, and its blocks still read back
+    Given a write queue with room for 8 blocks, on a device of 100 blocks
+    When the device holds its next write
+    And block 40 is queued, and the device holds it
+    And block 20 is queued
+    And the queue is told the store failed with "file system full"
+    And the device lets the write go
+    And a fence is queued
+    Then the fence fails with "file system full"
+    And the device was written at blocks 40, in that order
+    And block 20 reads back from the queue

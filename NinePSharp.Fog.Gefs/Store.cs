@@ -26,7 +26,6 @@ internal sealed class Store : IDeadlists
     private readonly Dictionary<string, Mounted> mounts = [];
     private readonly Dictionary<(long Gen, long Birth), Deadlist> deadlists = [];
     private long nextGen;
-    private Exception? failure;
 
     private Store(Device device, Allocator allocator, Tree snaps, long generation, long nextQid, long nextGen)
     {
@@ -58,9 +57,9 @@ internal sealed class Store : IDeadlists
     // Whether anything changed since the last commit.
     public bool Changed => Snaps.Dirty || mounts.Values.Any(m => m.Tree.Dirty);
 
-    // Why a commit failed, or the device failed a queued block; the store is read only from then on,
-    // as gefs's rdonly.
-    public Exception? Failure => Volatile.Read(ref failure) ?? Allocator.Failure;
+    // Why a commit failed, or the device failed or kept waiting a queued block; the store is read only
+    // from then on, as gefs's rdonly, and writes nothing more.
+    public Exception? Failure => Allocator.Failure;
 
     public bool Broken => Failure is not null;
 
@@ -245,7 +244,7 @@ internal sealed class Store : IDeadlists
                 }
                 catch (Exception failed)
                 {
-                    Fail(failed);
+                    Allocator.Fail(failed);
                     throw;
                 }
             }
@@ -262,7 +261,7 @@ internal sealed class Store : IDeadlists
             }
             catch (Exception failed)
             {
-                Fail(failed);
+                Allocator.Fail(failed);
                 throw;
             }
 
@@ -316,8 +315,6 @@ internal sealed class Store : IDeadlists
 
     // The newest snapshot older than s that it shares blocks with.
     private static long Older(TreeEntry s) => s.Pred != -1 ? s.Pred : s.Base;
-
-    private void Fail(Exception failed) => Interlocked.CompareExchange(ref failure, failed, null);
 
     // updatesnap: the tree's state becomes the snapshot its generation names. The old snapshot keeps
     // its place in the chain if another label or a fork keeps it, and is deleted otherwise.

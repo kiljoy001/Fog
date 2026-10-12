@@ -77,6 +77,9 @@ public sealed class ConcurrencySteps(StoreContext context)
     [Then("the second write finishes")]
     public void ThenSecondWriteFinishes() => Finish(Asked().Second);
 
+    [Then(@"^the change fails with ""(.*)""$")]
+    public void ThenChangeFails(string error) => Assert.Equal(error, Assert.Throws<GefsException>(() => Finish(change!)).Message);
+
     [Then("the change finishes")]
     public void ThenChangeFinishes() => Finish(change!);
 

@@ -12,7 +12,8 @@ Feature: Changes run one at a time in gefs's writer, reads run beside it, and a 
   write queue, and reads go on.
 
   Fog's writer is a task started when a change is asked for, running until none are left, rather
-  than a process waiting on its channel. Its queue of changes has no bound: a change waiting there
+  than a process waiting on its channel. A change waits for room in the write queue no longer than
+  the device's patience, a minute for a file; then it fails and the store is read only. Its queue of changes has no bound: a change waiting there
   is a request already read, which a bound would not hold back as gefs's full channel holds back
   its connection. A removed file's data is cleared in the change that removes it, rather than by
   gefs's sweep process. Time does not move while a commit is stopped, since the five-second commit
@@ -150,3 +151,14 @@ Feature: Changes run one at a time in gefs's writer, reads run beside it, and a 
     Then the blocks main's root used, and the change freed, are free
     When the server commits
     Then every block of the device is held, in a log or free
+
+  @FOG_GEFS_804
+  Scenario: A change that waits longer than the device's patience for room in the write queue fails, and leaves the store read only
+    When the device's patience is 1 second
+    And the device holds its next write
+    And adm starts writing "other" to a new file other, and the change waits for room in the write queue
+    Then the change fails with "i/o timeout"
+    And the server's failure is "i/o timeout"
+    And adm writing "x" to notes fails with "file system read only"
+    When the device lets the write go
+    Then reading 100 bytes of notes at offset 0 gives "kept"

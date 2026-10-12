@@ -12,8 +12,12 @@ internal sealed class MemoryDevice(long blocks) : Device
     private readonly Dictionary<string, Holding> holds = [];
     private int? writesLeft;
     private bool failing;
+    private bool failingFlushes;
+    private TimeSpan patience = TimeSpan.FromSeconds(5);
 
     public override long Size => blocks * Format.BlockSize;
+
+    public override TimeSpan Patience => patience;
 
     // Each write and flush, in order.
     public List<string> Trace { get; } = [];
@@ -64,6 +68,10 @@ internal sealed class MemoryDevice(long blocks) : Device
         lock (gate)
         {
             Trace.Add("flush");
+            if (failingFlushes)
+            {
+                throw new IOException("device flush failed");
+            }
         }
     }
 
@@ -89,6 +97,10 @@ internal sealed class MemoryDevice(long blocks) : Device
     public void CrashAfter(int writes) => writesLeft = writes;
 
     public void FailWrites() => failing = true;
+
+    public void FailFlushes() => failingFlushes = true;
+
+    public void PatientFor(TimeSpan time) => patience = time;
 
     public void Restart()
     {
