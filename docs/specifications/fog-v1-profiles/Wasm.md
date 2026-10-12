@@ -168,18 +168,35 @@ or `truncate`, fails with `read-only` beneath a directory without `mutate-direct
 ## Paths
 
 Paths resolve relative to the directory descriptor passed to the call, never to the
-process's root or current directory. Fog walks the path one element at a time from that
-directory's channel, keeping the elements it has walked. `..` returns to the element
-before; `..` with none before is an escape. An absolute path is an escape. As
-path-resolution.md requires, a path that steps outside and comes back, such as
-`sub/../../data/f` beneath `/data`, is an escape too, so nothing is learned about what lies
-outside. Each walk crosses only the mounts the directory's channel already reached; a
-mount added over a name beneath it later grants nothing by matching a prefix. Use channel
-identity and bounded walking, not lexical prefix checks, so renames and mount races cannot
-open an escape.
+process's root or current directory. Plan 9 has no open relative to a descriptor, so the
+bridge keeps a map from each directory the application holds, by the path the application
+knows it by, to two things: its true path in the process's namespace, and its identity, the
+file server and qid path it had when the application got it. A preopen enters the map under
+the name it was opened by; a directory opened beneath one enters it under that name and what
+followed.
 
-An escape fails with NOTCAPABLE in Preview 1 and `not-permitted` in Preview 2, and nothing
-outside the directory is walked or opened.
+A call first cleans the application's path. An absolute path is an escape, and so is a `..`
+that climbs above the directory the call names; as path-resolution.md requires, a path that
+steps outside and comes back, such as `sub/../../data/f` beneath `/data`, is an escape too,
+so nothing is learned about what lies outside. An escape fails with NOTCAPABLE in Preview 1
+and `not-permitted` in Preview 2, and nothing is resolved for it. The call then resolves the
+directory's true path by name through the namespace as it is now, checks that what it finds
+has the identity the map holds, and walks the rest of the path from it.
+
+The namespace is the process's authority, as for any Plan 9 process: a bind beneath a
+directory the application holds applies to the application's next call. A directory it
+holds, though, stays the one it was given, as a Plan 9 descriptor keeps what it opened: if
+what the true path now names has another identity, because something was bound over it,
+replaced it or moved it, the call fails with NOENT (`no-entry`) and nothing is walked from it.
+The application's own path_rename and path_remove_directory update the map, so a directory it
+renames stays usable under its new name. A directory moved by another process is not
+followed; reference runtimes, whose descriptors follow it, differ there, and the divergence
+ledger names it.
+
+Only processes that share the application's namespace can change it. A parent that does not
+want that runs the application in a namespace of its own (rfork with RFNAMEG or RFCNAMEG).
+Between the identity check and the open, such a process could still bind over the directory;
+it holds that authority already, and nothing outside its namespace is exposed.
 
 ## Kernel calls behind WASI
 

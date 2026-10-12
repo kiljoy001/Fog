@@ -84,12 +84,23 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
       | a name bound over "/secret" by a mount it does not authorize |
 
   @WASI_NS_003 @security
-  Scenario: Changing the namespace cannot enlarge a descriptor the application holds
-    Given an application holding descriptor 3 on "/data" and a file opened beneath it
-    When its process's namespace is changed by a bind over "/data" during a call
-    Then the call in progress keeps the channel it was admitted with
-    And later path_open calls on descriptor 3 resolve from the directory descriptor 3 names
-    And a matching path prefix alone grants nothing in the new mount
+  Scenario Outline: A directory the application holds stays the one it was given
+    Given an application holding descriptor 3 on "/data"
+    When a process sharing its namespace <change>
+    Then path_open of "report" beneath descriptor 3 <result>
+
+    Examples:
+      | change                                      | result                                  |
+      | binds "/n/extra" over "/data/report"        | opens the file "/n/extra" names         |
+      | binds "/secret" over "/data"                | fails with NOENT and opens nothing      |
+      | removes "/data" and makes a new "/data"     | fails with NOENT and opens nothing      |
+      | renames "/data" to "/old"                   | fails with NOENT and opens nothing      |
+
+  @WASI_NS_003
+  Scenario: A directory the application renames stays usable under its new name
+    Given an application holding descriptor 4 on "/data/sub"
+    When it renames "sub" to "moved" with path_rename beneath descriptor 3 on "/data"
+    Then path_open of "f" beneath descriptor 4 opens "/data/moved/f"
 
   @WASI_NS_004 @property
   Scenario: A preopen starts with every right, and rights only narrow
