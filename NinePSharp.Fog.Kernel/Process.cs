@@ -524,6 +524,15 @@ public sealed class Process
     }
 
     // Notes and rendezvous do not exist yet, so their groups need nothing.
+    // What a pipe end has queued and whether it has hung up, for a program that waits on readiness;
+    // null for a descriptor that is not a pipe's end.
+    internal ValueTask<(long Queued, bool HungUp)?> PipeReadinessAsync(int fd)
+    {
+        DescriptorSlot slot = process.Descriptors.Snapshot().FirstOrDefault(slot => slot.Number == fd) ?? throw new SyscallException(Errors.BadFd);
+        ResourceHandle end = slot.Handle.Resource;
+        return ValueTask.FromResult<(long, bool)?>(end.Identity.Provider == PipeDevice.Provider ? kernel.Pipes.Readiness(end) : null);
+    }
+
     private static void Validate(RforkFlags flags)
     {
         static bool Both(RforkFlags flags, RforkFlags a, RforkFlags b) => (flags & (a | b)) == (a | b);

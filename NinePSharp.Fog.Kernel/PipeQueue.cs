@@ -27,6 +27,18 @@ internal sealed class PipeQueue
         }
     }
 
+    // Whether the other end has gone, so a read past what is queued is end of file.
+    public bool HungUp
+    {
+        get
+        {
+            lock (gate)
+            {
+                return closed;
+            }
+        }
+    }
+
     public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int count, CancellationToken cancellationToken)
     {
         for (; ;)

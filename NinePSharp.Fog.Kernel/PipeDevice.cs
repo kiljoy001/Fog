@@ -92,6 +92,14 @@ internal sealed class PipeDevice(string owner) : IResourceDataOperations, IResou
         return ValueTask.FromResult(new ResourceStat(resource, end == 0 ? "data" : "data1", 0b110_110_110, 0, 0, (ulong)queued, owner, owner, owner));
     }
 
+    // Readiness, which 9P cannot ask: what is queued for an end to read, and whether the other end
+    // has gone.
+    public (long Queued, bool HungUp) Readiness(ResourceHandle end)
+    {
+        PipeQueue queue = Queue(end, 0);
+        return (queue.Length, queue.HungUp);
+    }
+
     public ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
         => WStatAsync(handle.Resource, stat, context, cancellationToken);
 

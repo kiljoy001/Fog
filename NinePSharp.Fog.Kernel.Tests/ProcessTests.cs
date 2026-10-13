@@ -35,4 +35,17 @@ public sealed class ProcessTests
         var error = Assert.Throws<NotSupportedException>(() => init.Fork(RforkFlags.Nomnt, process => Task.CompletedTask));
         Assert.Equal("rfork flags Nomnt are not implemented", error.Message);
     }
+
+    [Fact]
+    public async Task APipeDescriptorReportsItsReadinessAndAnyOtherNone()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        var (first, second) = await init.PipeAsync();
+        await init.WriteAsync(first, "go"u8.ToArray());
+        Assert.Equal((2L, false), await init.PipeReadinessAsync(second));
+        await init.CloseAsync(first);
+        Assert.Equal((2L, true), await init.PipeReadinessAsync(second));
+        Assert.Null(await init.PipeReadinessAsync(await init.OpenAsync("/dev/null", 0)));
+        Assert.Equal("fd out of range or not open", (await Assert.ThrowsAsync<SyscallException>(async () => await init.PipeReadinessAsync(9))).Message);
+    }
 }

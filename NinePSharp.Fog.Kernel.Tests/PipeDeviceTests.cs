@@ -34,4 +34,20 @@ public sealed class PipeDeviceTests
         Assert.Throws<NotSupportedException>(() => device.CreateAndOpenAsync(end, "x", 0, 0, Context, default));
         Assert.Throws<NotSupportedException>(() => device.RemoveAsync(end, null, Context, default));
     }
+
+    [Fact]
+    public async Task AnEndIsReadyWithWhatIsQueuedForItAndHungUpOnceTheOtherEndIsClosed()
+    {
+        var device = new PipeDevice("none");
+        var (first, second) = device.Create();
+        ResourceOpenHandle a = await device.OpenAsync(first, 2, Context, default);
+        ResourceOpenHandle b = await device.OpenAsync(second, 2, Context, default);
+        Assert.Equal((0L, false), device.Readiness(second));
+        await device.WriteAsync(a, 0, "abc"u8.ToArray(), Context, default);
+        Assert.Equal((3L, false), device.Readiness(second));
+        Assert.Equal((0L, false), device.Readiness(first));
+        await device.ClunkAsync(a, Context, default);
+        Assert.Equal((3L, true), device.Readiness(second));
+        await device.ClunkAsync(b, Context, default);
+    }
 }
