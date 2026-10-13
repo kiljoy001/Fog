@@ -7,7 +7,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 commit=70c46c0ee78abbdca92490a1881fe509605c5c3d
-version=2.1.0-fog.2
+version=2.1.0-fog.1
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

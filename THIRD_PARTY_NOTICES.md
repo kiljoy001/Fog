@@ -10,4 +10,4 @@ Reference upstream:
 
 ## WebAssembly for .NET
 
-`packages/WebAssembly.2.1.0-fog.2.nupkg` is built from [dotnet-webassembly](https://github.com/RyanLamansky/dotnet-webassembly) at `70c46c0ee78abbdca92490a1881fe509605c5c3d` (tag `v2.1.0`) with the patches in `third_party/dotnet-webassembly` applied, by `scripts/build-wasm-engine.sh`. dotnet-webassembly is Copyright Ryan Lamansky and licensed under the Apache License 2.0; the patches are under the same license.
+`packages/WebAssembly.2.1.0-fog.1.nupkg` is built from [dotnet-webassembly](https://github.com/RyanLamansky/dotnet-webassembly) at `70c46c0ee78abbdca92490a1881fe509605c5c3d` (tag `v2.1.0`) with the patches in `third_party/dotnet-webassembly` applied, by `scripts/build-wasm-engine.sh`. dotnet-webassembly is Copyright Ryan Lamansky and licensed under the Apache License 2.0; the patches are under the same license.

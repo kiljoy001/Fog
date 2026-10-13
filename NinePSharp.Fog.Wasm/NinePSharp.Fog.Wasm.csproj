@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="WebAssembly" Version="2.1.0-fog.2" />
+    <PackageReference Include="WebAssembly" Version="2.1.0-fog.1" />
   </ItemGroup>
 
   <ItemGroup>
