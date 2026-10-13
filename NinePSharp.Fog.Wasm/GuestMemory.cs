@@ -26,8 +26,8 @@ internal sealed class GuestMemory(UnmanagedMemory memory)
     // Lets fill write the range in place, without a copy.
     public void Fill(uint pointer, uint length, SpanAction fill) => fill(Range(pointer, length));
 
-    // Faults unless the whole range lies inside memory.
-    public void Check(uint pointer, uint length)
+    // Faults unless the whole range lies inside memory; an array's may be longer than 4 GiB.
+    public void Check(uint pointer, ulong length)
     {
         if ((ulong)pointer + length > memory.Size)
         {

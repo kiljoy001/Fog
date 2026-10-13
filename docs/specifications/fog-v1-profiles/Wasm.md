@@ -70,8 +70,13 @@ grow to WebAssembly's own limit for a 32-bit memory, 65536 pages (4 GiB), which 
 toolchains mean by leaving it out. The engine allocates memory as it grows, not up to its
 maximum, and holds addresses in 32 bits, so its last page, the 65536th, can never be
 allocated: growing to it fails as any failed growth does, returning -1. Host calls reach
-the whole memory, above 2 GiB as below it. A Preview 1 module exports its memory as
-`memory`; a component names the memory its canonical options use.
+the whole memory, above 2 GiB as below it, but one call copies at most a mebibyte of
+what it is given, so a guest cannot make the host allocate without bound: a longer write
+is short, a longer vector of buffers or of `poll_oneoff` subscriptions is INVAL, as Linux
+refuses more than IOV_MAX buffers or more descriptors than RLIMIT_NOFILE, and a longer path
+is NAMETOOLONG, as Linux refuses one past PATH_MAX. Anything that runs outside memory is
+FAULT first. A Preview 1 module exports its memory as `memory`; a component names the
+memory its canonical options use.
 
 A Preview 1 module links only exactly typed, named `wasi_snapshot_preview1` functions.
 The import manifest/hash identifies implemented functions and explicit unsupported

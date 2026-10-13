@@ -1,7 +1,7 @@
 @fog_wasm_preview1
 Feature: A WASI Preview 1 core module runs as a Fog process
   exec recognises a core module by its preamble and offers it to the WASM loader, which admits only
-  a module inside the profile: one memory of its own with a finite maximum, exported as "memory",
+  a module inside the profile: one 32-bit memory of its own, exported as "memory",
   no start section, an exported _start of no parameters and no results, and imports only of
   wasi_snapshot_preview1 functions with exactly the types the Preview 1 WITX at a2b96e81 gives them.
   A module that cannot be read, checked, compiled or set up is refused: exec fails with "exec header
@@ -15,7 +15,9 @@ Feature: A WASI Preview 1 core module runs as a Fog process
   returns NOSYS. Guest memory is checked before any kernel call; an access outside it is FAULT. A
   memory may grow to the maximum the module declares, or without one to WebAssembly's own limit for a
   32-bit memory, 65536 pages, and a host call reaches all of it; one call copies at most a mebibyte,
-  so a guest cannot make the host allocate without bound.
+  so a guest cannot make the host allocate without bound. A vector of buffers or of subscriptions
+  longer than that is INVAL, as Linux refuses more than IOV_MAX buffers, and a path longer than that
+  is NAMETOOLONG, as Linux refuses one past PATH_MAX; one that runs outside memory is FAULT first.
 
   Background:
     Given a kernel that runs WASM applications
@@ -133,6 +135,25 @@ Feature: A WASI Preview 1 core module runs as a Fog process
     Given "/bin/report" holds the application "huge-random"
     When a child with a pipe as descriptor 1 execs "/bin/report"
     Then the parent's wait message for it is "report <pid>: wasm-exit 21"
+
+  @WASI_NS_007
+  Scenario Outline: One call copies at most a mebibyte of what it is given out of guest memory
+    Given "/bin/report" holds the application "<fixture>"
+    And the directory "/data"
+    When a child with "/data" open for reading as descriptor 3 and a pipe as descriptor 1 execs "/bin/report"
+    Then the parent's wait message for it is "<message>"
+
+    Examples:
+      | fixture          | message                     | what                                              |
+      | poll-most        |                             | 21845 subscriptions, the most that fit            |
+      | poll-too-many    | report <pid>: wasm-exit 28  | 21846 subscriptions, INVAL                        |
+      | poll-count-huge  | report <pid>: wasm-exit 21  | 2^31 subscriptions, outside memory, FAULT         |
+      | iovs-most        |                             | 131072 buffers, the most that fit                 |
+      | iovs-too-many    | report <pid>: wasm-exit 28  | 131073 buffers, INVAL                             |
+      | iovs-count-huge  | report <pid>: wasm-exit 21  | 2^31 buffers, outside memory, FAULT               |
+      | path-longest     |                             | a mebibyte path, which reaches the kernel         |
+      | path-too-long    | report <pid>: wasm-exit 37  | a mebibyte and a byte, NAMETOOLONG                |
+      | path-length-huge | report <pid>: wasm-exit 21  | 2^31 - 1 bytes, outside memory, FAULT             |
 
   @WASI_NS_017
   Scenario: A host call reaches guest memory above 2 GiB

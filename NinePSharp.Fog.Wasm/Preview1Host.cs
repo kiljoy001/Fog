@@ -16,7 +16,8 @@ namespace NinePSharp.Fog.Wasm;
 // is NOTCAPABLE before anything else.
 internal sealed class Preview1Host(Process process, TimeProvider clock)
 {
-    // The most one call copies between guest memory and the kernel; a longer write is short.
+    // The most one call copies between guest memory and the kernel; a longer write is short, and a
+    // longer vector of buffers or of subscriptions INVAL, or path NAMETOOLONG, once it lies in memory.
     public const int CopyLimit = 1 << 20;
 
     private const ulong Nanoseconds = 1_000_000_000;
@@ -218,7 +219,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     // trailing slash names a directory, so naming anything else with one is NOTDIR.
     private string Path(int fd, uint pointer, uint length)
     {
-        string path = Utf8.GetString(memory.Read(pointer, length));
+        memory.Check(pointer, length);
+        string path = Utf8.GetString(length <= CopyLimit ? memory.Read(pointer, length) : throw new NameTooLongException());
         string resolved = directories.Resolve(fd, path);
         return path.EndsWith('/') && Existing(resolved) is { } stat && !HeldDirectories.IsDirectory(stat) ? throw new SyscallException(Errors.NotDirectory) : resolved;
     }
@@ -545,6 +547,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         const long Step = 10_000_000;
+        Within(subscriptions, 48UL * count);
         byte[][] wanted = [.. Enumerable.Range(0, (int)count).Select(i => memory.Read(subscriptions + (48 * (uint)i), 48))];
         long[] started = [(long)Now(0), (long)Now(1)];
         long waited = 0;
@@ -653,8 +656,19 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return data.ToArray();
     }
 
+    // An array the guest names, which must lie in memory and be no longer than one call copies.
+    private void Within(uint pointer, ulong length)
+    {
+        memory.Check(pointer, length);
+        if (length > CopyLimit)
+        {
+            throw new InvalidArgumentException();
+        }
+    }
+
     private List<(uint Pointer, uint Length)> Buffers(uint vector, uint count)
     {
+        Within(vector, 8UL * count);
         var buffers = new List<(uint, uint)>();
         for (uint i = 0; i < count; i++)
         {
