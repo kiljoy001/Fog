@@ -151,7 +151,7 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | iovs-most        |                             | 131072 buffers, the most that fit                 |
       | iovs-too-many    | report <pid>: wasm-exit 28  | 131073 buffers, INVAL                             |
       | iovs-count-huge  | report <pid>: wasm-exit 21  | 2^31 buffers, outside memory, FAULT               |
-      | path-longest     |                             | a mebibyte path, which reaches the kernel         |
+      | path-longest     | report <pid>: wasm-exit 37  | a mebibyte path, which namec finds too long       |
       | path-too-long    | report <pid>: wasm-exit 37  | a mebibyte and a byte, NAMETOOLONG                |
       | path-length-huge | report <pid>: wasm-exit 21  | 2^31 - 1 bytes, outside memory, FAULT             |
 

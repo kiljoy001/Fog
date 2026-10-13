@@ -255,6 +255,8 @@ Errors are the kernel's error strings, mapped once for both previews:
 | directory is not empty (gefs), has children (lib9p, so ramfs) | NOTEMPTY | not-empty |
 | file system full | NOSPC | insufficient-space |
 | fd out of range or not open | BADF | bad-descriptor |
+| name too long | NAMETOOLONG | name-too-long |
+| bad character in file name | INVAL | invalid |
 | mounted directory forbids creation | ROFS | read-only |
 | i/o timeout, or any other | IO | io |
 

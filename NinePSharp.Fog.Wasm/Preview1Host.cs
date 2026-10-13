@@ -148,6 +148,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         Errors.BadFd => Errno.Badf,
         Errors.IsDirectory => Errno.Isdir,
         Errors.NegativeOffset => Errno.Inval,
+        Errors.TooLong => Errno.Nametoolong,
+        _ when error.StartsWith(Errors.BadChar, StringComparison.Ordinal) => Errno.Inval,
         _ when error.StartsWith(Errors.NotExist, StringComparison.Ordinal) => Errno.Noent,
         _ when error.StartsWith(Errors.NotDirectory, StringComparison.Ordinal) => Errno.Notdir,
         _ when error.StartsWith(AlreadyExists, StringComparison.Ordinal) => Errno.Exist,

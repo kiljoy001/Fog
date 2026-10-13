@@ -11,6 +11,8 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
   does not pass on; a directory opens with a directory's rights, and asking to write or truncate
   one is ISDIR. Creating needs path_create_file on the directory, truncating
   path_filestat_set_size. A trailing slash names a directory, so on anything else it is NOTDIR.
+  The kernel checks each name as namec does: a control character, DEL or NUL in one is INVAL, which
+  Linux would take, and a path of 64 KiB or more NAMETOOLONG.
   CREAT opens what exists, so its contents are kept unless TRUNC is given, and
   with EXCL what exists is EXIST. Removing checks the file's type first. A rename is a wstat of
   the name within one directory; across directories it is NOTSUP rather than a copy, and onto an
@@ -271,6 +273,23 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       path_open 3 0 "report" 0 0x2 0 16 -> NOTSUP
       """
     And the file "/data/report" holds "daily!"
+
+  @WASI_NS_002
+  Scenario: A name with a control character, DEL or NUL is INVAL, and nothing is made
+    When the trace interpreter runs:
+      """
+      path_open 3 0 "a\tb" 1 0x40 0 0
+      path_create_directory 3 "a\x7fb"
+      path_filestat_get 3 0 "report\0"
+      fd_readdir 3 4096 0
+      """
+    Then the trace is:
+      """
+      path_open 3 0 "a\tb" 1 0x40 0 0 -> INVAL
+      path_create_directory 3 "a\x7fb" -> INVAL
+      path_filestat_get 3 0 "report\0" -> INVAL
+      fd_readdir 3 4096 0 -> ok used=* ".":3:1:* "..":3:2:0 "report":4:3:* "sub":3:4:*
+      """
 
   @WASI_NS_002
   Scenario: A trailing slash names a directory, so on anything else it is NOTDIR
