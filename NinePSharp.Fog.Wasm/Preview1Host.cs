@@ -19,7 +19,13 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     public const int CopyLimit = 1 << 20;
 
     private const ulong Nanoseconds = 1_000_000_000;
+    private const string AlreadyExists = "file already exists";
+
+    // lib9p's, which ramfs serves, for removing a directory that is not empty.
+    private const string NotEmpty = "has children";
+    private static readonly Encoding Utf8 = Encoding.GetEncoding("utf-8", EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
     private readonly Dictionary<int, (Rights Base, Rights Inheriting)> rights = [];
+    private readonly HeldDirectories directories = new(process);
     private GuestMemory memory = null!;
     private IReadOnlyList<string> argv = [];
     private IReadOnlyList<string> environment = [];
@@ -27,10 +33,11 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     public void Attach(UnmanagedMemory guest) => memory = new GuestMemory(guest);
 
     // What the guest sees of its process once exec has committed.
-    public void Start(IReadOnlyList<string> arguments, IReadOnlyList<string> variables)
+    public async Task StartAsync(IReadOnlyList<string> arguments, IReadOnlyList<string> variables)
     {
         argv = arguments;
         environment = variables;
+        await directories.FindPreopensAsync();
     }
 
     public Delegate Function(string name) => name switch
@@ -45,12 +52,12 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         "fd_pread" => new Func<int, int, int, long, int, int>((fd, vector, count, offset, read) => Call(() => Read(Require(fd, Rights.FdRead | Rights.FdSeek), (uint)vector, (uint)count, Offset(offset), (uint)read))),
         "fd_seek" => new Func<int, long, int, int, int>((fd, offset, whence, position) => Call(() => Seek(Require(fd, Rights.FdSeek), offset, whence, (uint)position))),
         "fd_tell" => new Func<int, int, int>((fd, position) => Call(() => Seek(Require(fd, Rights.FdTell), 0, 1, (uint)position))),
-        "fd_close" => new Func<int, int>(fd => Call(() => Wait(process.CloseAsync(fd)))),
+        "fd_close" => new Func<int, int>(fd => Call(() => Close(fd))),
         "fd_renumber" => new Func<int, int, int>((fd, to) => Call(() => Renumber(fd, to))),
         "fd_fdstat_get" => new Func<int, int, int>((fd, stat) => Call(() => FdStat(fd, (uint)stat))),
         "fd_fdstat_set_flags" => new Func<int, int, int>((fd, flags) => Call(() => SetFlags(Require(fd, Rights.FdFdstatSetFlags), flags))),
         "fd_fdstat_set_rights" => new Func<int, long, long, int>((fd, held, inheriting) => Call(() => Narrow(fd, (Rights)held, (Rights)inheriting))),
-        "fd_filestat_get" => new Func<int, int, int>((fd, stat) => Call(() => FileStat(Require(fd, Rights.FdFilestatGet), (uint)stat))),
+        "fd_filestat_get" => new Func<int, int, int>((fd, stat) => Call(() => FileStat(Stat(Require(fd, Rights.FdFilestatGet)), (uint)stat))),
         "fd_filestat_set_size" => new Func<int, long, int>((fd, size) => Call(() => SetSize(Require(fd, Rights.FdFilestatSetSize), size))),
         "fd_filestat_set_times" => new Func<int, long, long, int, int>((fd, atim, mtim, flags) => Call(() => SetTimes(Require(fd, Rights.FdFilestatSetTimes), mtim, flags))),
         "fd_advise" => new Func<int, long, long, int, int>((fd, offset, length, advice) => Call(() => Advise(Require(fd, Rights.FdAdvise), advice))),
@@ -63,6 +70,23 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         "sock_recv" => new Func<int, int, int, int, int, int, int>((fd, vector, count, flags, read, returned) => Call(() => NotSocket(fd))),
         "sock_send" => new Func<int, int, int, int, int, int>((fd, vector, count, flags, written) => Call(() => NotSocket(fd))),
         "sock_shutdown" => new Func<int, int, int>((fd, how) => Call(() => NotSocket(fd))),
+        "fd_prestat_get" => new Func<int, int, int>((fd, prestat) => Call(() => Prestat(fd, (uint)prestat))),
+        "fd_prestat_dir_name" => new Func<int, int, int, int>((fd, name, length) => Call(() => PrestatName(fd, (uint)name, (uint)length))),
+        "fd_readdir" => new Func<int, int, int, long, int, int>((fd, buffer, length, cookie, used) => Call(() => ReadDirectory(Require(fd, Rights.FdReaddir), (uint)buffer, (uint)length, (ulong)cookie, (uint)used))),
+        "path_open" => new Func<int, int, int, int, int, long, long, int, int, int>((fd, lookup, path, length, oflags, held, inheriting, fdflags, opened)
+            => Call(() => PathOpen(Require(fd, Rights.PathOpen), Path(fd, (uint)path, (uint)length), oflags, (Rights)held, (Rights)inheriting, fdflags, (uint)opened))),
+        "path_create_directory" => new Func<int, int, int, int>((fd, path, length) => Call(() => MakeDirectory(Path(Require(fd, Rights.PathCreateDirectory), (uint)path, (uint)length)))),
+        "path_remove_directory" => new Func<int, int, int, int>((fd, path, length) => Call(() => Remove(Path(Require(fd, Rights.PathRemoveDirectory), (uint)path, (uint)length), directory: true))),
+        "path_unlink_file" => new Func<int, int, int, int>((fd, path, length) => Call(() => Remove(Path(Require(fd, Rights.PathUnlinkFile), (uint)path, (uint)length), directory: false))),
+        "path_rename" => new Func<int, int, int, int, int, int, int>((fd, from, fromLength, newfd, to, toLength)
+            => Call(() => Rename(Path(Require(fd, Rights.PathRenameSource), (uint)from, (uint)fromLength), Path(Require(newfd, Rights.PathRenameTarget), (uint)to, (uint)toLength)))),
+        "path_filestat_get" => new Func<int, int, int, int, int, int>((fd, lookup, path, length, stat)
+            => Call(() => FileStat(Wait(process.StatAsync(Path(Require(fd, Rights.PathFilestatGet), (uint)path, (uint)length))), (uint)stat))),
+        "path_filestat_set_times" => new Func<int, int, int, int, long, long, int, int>((fd, lookup, path, length, atim, mtim, flags)
+            => Call(() => SetTimes(Path(Require(fd, Rights.PathFilestatSetTimes), (uint)path, (uint)length), mtim, flags))),
+        "path_link" => new Func<int, int, int, int, int, int, int, int>((oldfd, lookup, from, fromLength, newfd, to, toLength) => (int)Errno.Notsup),
+        "path_symlink" => new Func<int, int, int, int, int, int>((from, fromLength, fd, to, toLength) => (int)Errno.Notsup),
+        "path_readlink" => new Func<int, int, int, int, int, int, int>((fd, path, length, buffer, bufferLength, used) => (int)Errno.Notsup),
         "proc_exit" => new Action<int>(code => throw new ProcExitException((uint)code)),
         _ => Preview1.Unsupported(Preview1.Unprovided[name]),
     };
@@ -81,6 +105,10 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         {
             return (int)Errno.Inval;
         }
+        catch (NameTooLongException)
+        {
+            return (int)Errno.Nametoolong;
+        }
         catch (NotCapableException)
         {
             return (int)Errno.Notcapable;
@@ -88,6 +116,10 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         catch (NotSupportedByFogException)
         {
             return (int)Errno.Notsup;
+        }
+        catch (DecoderFallbackException)
+        {
+            return (int)Errno.Ilseq;
         }
         catch (SyscallException error)
         {
@@ -101,6 +133,11 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         Errors.BadFd => Errno.Badf,
         Errors.IsDirectory => Errno.Isdir,
         Errors.NegativeOffset => Errno.Inval,
+        _ when error.StartsWith(Errors.NotExist, StringComparison.Ordinal) => Errno.Noent,
+        _ when error.StartsWith(Errors.NotDirectory, StringComparison.Ordinal) => Errno.Notdir,
+        _ when error.StartsWith(AlreadyExists, StringComparison.Ordinal) => Errno.Exist,
+        _ when error.StartsWith(Errors.Permission, StringComparison.Ordinal) => Errno.Acces,
+        NotEmpty => Errno.Notempty,
         _ => Errno.Io,
     };
 
@@ -119,11 +156,12 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
 
     private static byte Filetype(Stat stat) => (stat.Qid.Type & QidType.QTDIR) != 0 ? (byte)3 : (byte)4;
 
-    // A wstat that changes only the length or the modification time, leaving the rest as nulldir does.
-    private static Stat WStat(ulong length = ulong.MaxValue, uint mtime = uint.MaxValue)
+    // A wstat that changes only the length, the modification time or the name, leaving the rest as
+    // nulldir does; a size of 0 has the record sized for its name.
+    private static Stat WStat(ulong length = ulong.MaxValue, uint mtime = uint.MaxValue, string name = "")
     {
         Stat none = Process.NullDir;
-        return new Stat(none.Size, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, mtime, length, none.Name, none.Uid, none.Gid, none.Muid);
+        return new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, mtime, length, name, none.Uid, none.Gid, none.Muid);
     }
 
     private (Rights Base, Rights Inheriting) Held(int fd) => rights.GetValueOrDefault(fd, (Rights.All, Rights.All));
@@ -137,6 +175,168 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         (Rights, Rights) moved = Held(fd);
         Wait(process.RenumberAsync(fd, to));
         rights[to] = moved;
+        directories.Renumbered(fd, to);
+        return Errno.Success;
+    }
+
+    private Errno Close(int fd)
+    {
+        Wait(process.CloseAsync(fd));
+        directories.Closed(fd);
+        return Errno.Success;
+    }
+
+    // A path read from guest memory, which must be UTF-8, made the true path it names beneath fd.
+    private string Path(int fd, uint pointer, uint length) => directories.Resolve(fd, Utf8.GetString(memory.Read(pointer, length)));
+
+    private string PreopenName(int fd) => directories.Preopen(fd) ?? throw new SyscallException(Errors.BadFd);
+
+    private Errno Prestat(int fd, uint pointer)
+    {
+        var prestat = new byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(prestat.AsSpan(4), (uint)Utf8.GetByteCount(PreopenName(fd)));
+        memory.Write(pointer, prestat);
+        return Errno.Success;
+    }
+
+    private Errno PrestatName(int fd, uint pointer, uint length)
+    {
+        byte[] name = Utf8.GetBytes(PreopenName(fd));
+        memory.Write(pointer, name.Length <= length ? name : throw new NameTooLongException());
+        return Errno.Success;
+    }
+
+    // The open mode is the one the rights ask for: Plan 9 opens a file for reading, writing or
+    // both, and a directory only for reading. CREAT opens what exists before it creates, since a
+    // Plan 9 create truncates; with EXCL, what exists is EXIST.
+    private Errno PathOpen(int fd, string path, int oflags, Rights wanted, Rights inheriting, int fdflags, uint opened)
+    {
+        const int Create = 1, Directory = 2, Exclusive = 4, Truncate = 8;
+        Rights allowed = Held(fd).Inheriting;
+        if ((wanted & ~allowed) != 0 || (inheriting & ~allowed) != 0)
+        {
+            throw new NotCapableException();
+        }
+
+        if (fdflags != 0)
+        {
+            throw new NotSupportedByFogException();
+        }
+
+        memory.Check(opened, 4);
+        Stat? existing = Existing(path);
+        bool truncate = (oflags & Truncate) != 0;
+        if (existing is { } directory && HeldDirectories.IsDirectory(directory))
+        {
+            // A directory opens only for reading, whatever its rights; truncating one is ISDIR.
+            oflags = truncate ? throw new SyscallException(Errors.IsDirectory) : oflags;
+            wanted &= ~(Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize);
+        }
+
+        bool write = (wanted & (Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize)) != 0 || truncate;
+        bool read = (wanted & (Rights.FdRead | Rights.FdReaddir)) != 0 || !write;
+        int mode = (read && write ? NinePConstants.ORDWR : write ? NinePConstants.OWRITE : NinePConstants.OREAD) | (truncate ? NinePConstants.OTRUNC : 0);
+        int newfd = existing is not null && (oflags & Create) != 0 && (oflags & Exclusive) != 0 ? throw new SyscallException(AlreadyExists)
+            : existing is not null || (oflags & Create) == 0 ? Wait(process.OpenAsync(path, mode))
+            : Wait(process.CreateAsync(path, mode, 0b110_110_110));
+        bool isDirectory = HeldDirectories.IsDirectory(Stat(newfd));
+        if ((oflags & Directory) != 0 && !isDirectory)
+        {
+            Wait(process.CloseAsync(newfd));
+            throw new SyscallException(Errors.NotDirectory);
+        }
+
+        rights[newfd] = (wanted, inheriting);
+        if (isDirectory)
+        {
+            directories.Opened(newfd, path);
+        }
+
+        memory.WriteUInt32(opened, (uint)newfd);
+        return Errno.Success;
+    }
+
+    private Stat? Existing(string path)
+    {
+        try
+        {
+            return Wait(process.StatAsync(path));
+        }
+        catch (SyscallException missing) when (missing.Message.StartsWith(Errors.NotExist, StringComparison.Ordinal))
+        {
+            // Nothing is there.
+        }
+
+        return null;
+    }
+
+    private Errno MakeDirectory(string path)
+    {
+        if (Existing(path) is not null)
+        {
+            throw new SyscallException(AlreadyExists);
+        }
+
+        Wait(process.CloseAsync(Wait(process.CreateAsync(path, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_111))));
+        return Errno.Success;
+    }
+
+    // The file's type is checked first, so unlinking a directory is ISDIR and removing a file as a
+    // directory NOTDIR.
+    private Errno Remove(string path, bool directory)
+    {
+        if (HeldDirectories.IsDirectory(Wait(process.StatAsync(path))) != directory)
+        {
+            throw new SyscallException(directory ? Errors.NotDirectory : Errors.IsDirectory);
+        }
+
+        return Wait(process.RemoveAsync(path));
+    }
+
+    // A wstat of the name, within one directory; across directories it is NOTSUP rather than a copy.
+    private Errno Rename(string from, string to)
+    {
+        int slash = from.LastIndexOf('/');
+        if (to.LastIndexOf('/') != slash || !to.StartsWith(from[..(slash + 1)], StringComparison.Ordinal))
+        {
+            throw new NotSupportedByFogException();
+        }
+
+        Wait(process.WStatAsync(from, WStat(name: to[(slash + 1)..])));
+        directories.Renamed(from, to);
+        return Errno.Success;
+    }
+
+    // Entries from the directory's start: . and .. first, then the directory's own in union order.
+    // A cookie counts entries; each dirent is its next cookie, inode, name length and type, then the
+    // name, and the last may be cut short by the buffer's end. .. reports nothing about what is above.
+    private Errno ReadDirectory(int fd, uint buffer, uint length, ulong cookie, uint used)
+    {
+        Stat self = Stat(fd);
+        if (!HeldDirectories.IsDirectory(self))
+        {
+            throw new SyscallException(Errors.NotDirectory);
+        }
+
+        Wait(process.SeekAsync(fd, 0, 0));
+        var entries = new List<(string Name, ulong Inode, byte Type)> { (".", self.Qid.Path, 3), ("..", 0, 3) };
+        entries.AddRange(Wait(process.DirReadAsync(fd)).Select(entry => (entry.Name, entry.Qid.Path, Filetype(entry))));
+        var dirents = new MemoryStream();
+        for (ulong i = cookie; i < (ulong)entries.Count; i++)
+        {
+            byte[] name = Utf8.GetBytes(entries[(int)i].Name);
+            var header = new byte[24];
+            BinaryPrimitives.WriteUInt64LittleEndian(header, i + 1);
+            BinaryPrimitives.WriteUInt64LittleEndian(header.AsSpan(8), entries[(int)i].Inode);
+            BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(16), (uint)name.Length);
+            header[20] = entries[(int)i].Type;
+            dirents.Write(header);
+            dirents.Write(name);
+        }
+
+        byte[] written = dirents.ToArray()[..(int)Math.Min(dirents.Length, length)];
+        memory.Write(buffer, written);
+        memory.WriteUInt32(used, (uint)written.Length);
         return Errno.Success;
     }
 
@@ -173,9 +373,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
 
     // dev is 0, ino the qid path and nlink 1: no POSIX identity is invented. Plan 9 keeps no
     // status-change time, so ctim is the modification time.
-    private Errno FileStat(int fd, uint pointer)
+    private Errno FileStat(Stat stat, uint pointer)
     {
-        Stat stat = Stat(fd);
         var filestat = new byte[64];
         BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(8), stat.Qid.Path);
         filestat[16] = Filetype(stat);
@@ -194,6 +393,20 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     // asking to set the access time is NOTSUP, and both a time and now is INVAL.
     private Errno SetTimes(int fd, long mtim, int flags)
     {
+        uint? mtime = Mtime(mtim, flags);
+        Stat(fd);
+        return mtime is { } seconds ? Wait(process.FWStatAsync(fd, WStat(mtime: seconds))) : Errno.Success;
+    }
+
+    private Errno SetTimes(string path, long mtim, int flags)
+    {
+        uint? mtime = Mtime(mtim, flags);
+        Wait(process.StatAsync(path));
+        return mtime is { } seconds ? Wait(process.WStatAsync(path, WStat(mtime: seconds))) : Errno.Success;
+    }
+
+    private uint? Mtime(long mtim, int flags)
+    {
         const int AccessTime = 1 | 2, ModificationTime = 4, Now = 8;
         if ((flags & AccessTime) != 0)
         {
@@ -205,14 +418,9 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
             throw new InvalidArgumentException();
         }
 
-        Stat(fd);
-        if ((flags & (ModificationTime | Now)) != 0)
-        {
-            ulong seconds = (flags & Now) != 0 ? (ulong)clock.GetUtcNow().ToUnixTimeSeconds() : (ulong)mtim / Nanoseconds;
-            Wait(process.FWStatAsync(fd, WStat(mtime: (uint)seconds)));
-        }
-
-        return Errno.Success;
+        return (flags & Now) != 0 ? (uint)clock.GetUtcNow().ToUnixTimeSeconds()
+            : (flags & ModificationTime) != 0 ? (uint)((ulong)mtim / Nanoseconds)
+            : null;
     }
 
     // Advice is accepted and ignored.

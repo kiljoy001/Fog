@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
 using NinePSharp.Fog.Wasm.Tests.Support;
+using NinePSharp.Messages;
+using NinePSharp.Namespaces;
 using Reqnroll;
 using Xunit;
 
@@ -15,19 +17,52 @@ public sealed class TraceSteps(WasmDriver driver)
 {
     private const int Parked = 10;
     private readonly List<(string Path, int Mode, int Fd)> descriptors = [];
+    private Func<Process, Task>? change;
     private string trace = string.Empty;
     private string status = string.Empty;
 
     [Given(@"^the file ""(.*)"" holds ""(.*)""$")]
     public Task GivenFile(string path, string text) => WriteAsync(path, Encoding.UTF8.GetBytes(Unescape(text)));
 
+    [Given(@"^the (read|write)-only file ""(.*)"" holds ""(.*)""$")]
+    public async Task GivenOneWayFile(string way, string path, string text)
+    {
+        int fd = await driver.Init.CreateAsync(path, NinePConstants.OWRITE, way == "read" ? 0b100_100_100 : 0b010_010_010u);
+        await driver.Init.WriteAsync(fd, Encoding.UTF8.GetBytes(text));
+        await driver.Init.CloseAsync(fd);
+    }
+
     [Given(@"^the directory ""(.*)""$")]
-    public async Task GivenDirectory(string path)
-        => await driver.Init.CloseAsync(await driver.Init.CreateAsync(path, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+    public Task GivenDirectory(string path) => MakeDirectoriesAsync(path);
 
     [Given(@"^the interpreter has ""(.*)"" open for (reading|writing|reading and writing) as descriptor (\d+)$")]
     public void GivenOpen(string path, string mode, int fd)
         => descriptors.Add((path, mode switch { "reading" => NinePConstants.OREAD, "writing" => NinePConstants.OWRITE, _ => NinePConstants.ORDWR }, fd));
+
+    [Given(@"^""(.*)"" is bound (before|after) ""(.*)""$")]
+    public async Task GivenUnion(string name, string where, string old)
+        => await driver.Init.BindAsync(name, old, where == "before" ? MountFlags.Before : MountFlags.After);
+
+    // The interpreter writes to descriptor 7 when it is ready and waits on descriptor 6; between, the
+    // parent, which shares its namespace, makes the change.
+    [Given(@"^once the interpreter is ready, the parent binds ""(.*)"" over ""(.*)""$")]
+    public void GivenBind(string name, string old) => change = process => process.BindAsync(name, old, MountFlags.Replace).AsTask();
+
+    [Given(@"^once the interpreter is ready, the parent removes ""(.*)"" and then ""(.*)"" and makes a new one holding ""(.*)""$")]
+    public void GivenReplace(string inside, string path, string file) => change = async process =>
+    {
+        await process.RemoveAsync(inside);
+        await process.RemoveAsync(path);
+        await process.CloseAsync(await process.CreateAsync(path, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+        await process.CloseAsync(await process.CreateAsync($"{path}/{file}", NinePConstants.OWRITE, 0b110_110_110));
+    };
+
+    [Given(@"^once the interpreter is ready, the parent renames ""(.*)"" to ""(.*)""$")]
+    public void GivenRename(string path, string to) => change = async process =>
+    {
+        Stat none = Process.NullDir;
+        await process.WStatAsync(path, new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, none.Mtime, none.Length, to[(to.LastIndexOf('/') + 1)..], none.Uid, none.Gid, none.Muid));
+    };
 
     [When("the trace interpreter runs:")]
     public async Task WhenRuns(string script)
@@ -35,11 +70,21 @@ public sealed class TraceSteps(WasmDriver driver)
         await WriteAsync("/bin/trace", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "trace.wasm")));
         await WriteAsync("/tmp/script", Encoding.UTF8.GetBytes(script + "\n"));
         var (first, second) = await driver.Init.PipeAsync();
+        (int Fd, int Other) ready = change is null ? (-1, -1) : await driver.Init.PipeAsync();
+        (int Fd, int Other) resume = change is null ? (-1, -1) : await driver.Init.PipeAsync();
         long child = driver.Init.Fork(RforkFlags.Fdg, async process =>
         {
             // Open everything above the numbers it will have, then move each to its number.
             var opened = new List<(int Fd, string Path, int Mode)> { (0, "/tmp/script", NinePConstants.OREAD) };
             opened.AddRange(descriptors.Select(d => (d.Fd, d.Path, d.Mode)));
+            if (change is not null)
+            {
+                await process.RenumberAsync(ready.Fd, 7);
+                await process.RenumberAsync(resume.Fd, 6);
+                await process.CloseAsync(ready.Other);
+                await process.CloseAsync(resume.Other);
+            }
+
             for (int i = 0; i < opened.Count; i++)
             {
                 int fd = await process.OpenAsync(opened[i].Path, opened[i].Mode);
@@ -57,6 +102,15 @@ public sealed class TraceSteps(WasmDriver driver)
             await process.ExecAsync("/bin/trace", ["trace"]);
         });
         await driver.Init.CloseAsync(first);
+        if (change is not null)
+        {
+            await driver.Init.CloseAsync(ready.Fd);
+            await driver.Init.CloseAsync(resume.Fd);
+            await driver.Init.ReadAsync(ready.Other, 16).AsTask().WaitAsync(WasmDriver.Bound);
+            await change(driver.Init);
+            await driver.Init.WriteAsync(resume.Other, "go"u8.ToArray());
+        }
+
         var output = new StringBuilder();
         Task<Waitmsg> wait = driver.Init.WaitAsync().WaitAsync(WasmDriver.Bound);
         for (ReadOnlyMemory<byte> block; !(block = await driver.Init.ReadAsync(second, 8192).AsTask().WaitAsync(WasmDriver.Bound)).IsEmpty;)
@@ -104,6 +158,19 @@ public sealed class TraceSteps(WasmDriver driver)
         Assert.NotEmpty(Inode(other));
     }
 
+    [Then(@"^""(.*)"" does not exist$")]
+    public async Task ThenMissing(string path) => await Assert.ThrowsAsync<SyscallException>(async () => await driver.Init.StatAsync(path));
+
+    [Then(@"^fd_readdir gives ""\."" the inode fd_filestat_get gives descriptor 3, and ""report"" the one path_filestat_get gives it$")]
+    public void ThenReaddirInodes()
+    {
+        string Dirent(string name) => Regex.Match(trace, $"\"{Regex.Escape(name)}\":\\d+:\\d+:(\\d+)").Groups[1].Value;
+        string Stat(string call) => Regex.Match(trace, $"^{Regex.Escape(call)} -> ok dev=0 ino=(\\d+) ", RegexOptions.Multiline).Groups[1].Value;
+        Assert.Equal(Stat("fd_filestat_get 3"), Dirent("."));
+        Assert.Equal(Stat("path_filestat_get 3 0 \"report\""), Dirent("report"));
+        Assert.NotEqual(Dirent("."), Dirent("report"));
+    }
+
     [Then(@"^the file ""(.*)"" holds ""(.*)""$")]
     public async Task ThenFileHolds(string path, string text)
     {
@@ -114,8 +181,31 @@ public sealed class TraceSteps(WasmDriver driver)
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
 
+    // The directory and any missing above it.
+    private async Task MakeDirectoriesAsync(string path)
+    {
+        for (int slash = path.IndexOf('/', 1); ; slash = path.IndexOf('/', slash + 1))
+        {
+            string directory = slash < 0 ? path : path[..slash];
+            try
+            {
+                await driver.Init.StatAsync(directory);
+            }
+            catch (SyscallException)
+            {
+                await driver.Init.CloseAsync(await driver.Init.CreateAsync(directory, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+            }
+
+            if (slash < 0)
+            {
+                return;
+            }
+        }
+    }
+
     private async Task WriteAsync(string path, byte[] contents)
     {
+        await MakeDirectoriesAsync(path[..path.LastIndexOf('/')]);
         int fd = await driver.Init.CreateAsync(path, NinePConstants.ORDWR, 0b111_111_101);
         await driver.Init.WriteAsync(fd, contents);
         await driver.Init.CloseAsync(fd);

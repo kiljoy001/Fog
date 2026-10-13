@@ -37,7 +37,7 @@ internal sealed class Preview1Module
     {
         using (instance)
         {
-            host.Start(argv, await EnvironmentAsync(process));
+            await host.StartAsync(argv, await EnvironmentAsync(process));
             process.Exits(await Guest.RunAsync(start));
         }
     }

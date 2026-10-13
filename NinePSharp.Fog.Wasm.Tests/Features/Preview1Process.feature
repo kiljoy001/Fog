@@ -203,6 +203,14 @@ Feature: A WASI Preview 1 core module runs as a Fog process
     And the pipe holds "0"
 
   @WASI_NS_007
+  Scenario: path_open whose descriptor cannot be written is FAULT and creates nothing
+    Given "/bin/report" holds the application "open-result-outside"
+    And the directory "/data"
+    When a child with "/data" open for reading as descriptor 3 and a pipe as descriptor 1 execs "/bin/report"
+    Then the parent's wait message for it is "report <pid>: wasm-exit 21"
+    And "/data/new" does not exist
+
+  @WASI_NS_007
   Scenario: A buffer may end at the last byte of memory
     Given "/bin/report" holds the application "buffer-at-end"
     When a child with a pipe as descriptor 1 execs "/bin/report"

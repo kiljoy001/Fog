@@ -379,6 +379,8 @@ fn emit_dirents(buf: i32, used: u32) {
         emit_u64(filetype as u64);
         emit(b":");
         emit_u64(next);
+        emit(b":");
+        emit_u64(get_u64(buf + at as i32 + 8));
         at += 24 + namlen;
     }
     if at < used {

@@ -143,7 +143,7 @@ Descriptors 0, 1 and 2 are whatever the parent left open there: a pipe, a consol
 file. Preview 2's stdin, stdout and stderr are streams on them, and the `terminal-*`
 interfaces return a terminal only for a descriptor on the console. Preopens are the
 directories the parent opened before exec: every open descriptor naming a directory is a
-preopen, under the name it was opened by. Preview 1 reports them through
+preopen, under the name it was opened by, which the kernel's fd2path gives. Preview 1 reports them through
 `fd_prestat_get` and `fd_prestat_dir_name`; Preview 2's `get-directories` returns a
 descriptor for each, a duplicate of the preopen, so dropping it closes only the
 duplicate. An application that needs `/data` is given it by its parent opening `/data`,
@@ -204,7 +204,7 @@ The Plan 9 calls stay as they are; WASI is adapted to them.
 
 | Preview 1 | Preview 2 | Kernel calls and adaptation |
 | --- | --- | --- |
-| path_open | open-at | Walk from the directory descriptor, then open or create. Separate create-if-missing, exclusive create, truncate and directory-only. CREATE without TRUNC preserves existing contents. Exclusive creation needs atomic provider support. |
+| path_open | open-at | Resolve beneath the directory descriptor, then open or create. Separate create-if-missing, exclusive create, truncate and directory-only. CREATE without TRUNC preserves existing contents: what exists is opened, since a Plan 9 create truncates. Exclusive creation needs atomic provider support. A directory opens only for reading, whatever its rights, as devopen and lib9p allow; truncating one is ISDIR. |
 | fd_read, fd_write | read-via-stream, write-via-stream, input-stream, output-stream | Preview 1: read and write on the descriptor's shared offset; validated vectors, access rights and short transfers. Preview 2: streams at their own offsets, by pread and pwrite, or by read and write for a descriptor without positions. |
 | fd_pread, fd_pwrite | read, write | pread and pwrite. WASI offsets are unsigned; refuse any offset above the largest signed one, so none can reach Plan 9's -1 implicit-offset sentinel. |
 | fd_seek, fd_tell | (streams have their own offsets) | seek, with checked deltas. A directory seeks only back to its start; a pipe does not seek. |
@@ -215,7 +215,7 @@ The Plan 9 calls stay as they are; WASI is adapted to them.
 | (none) | is-same-object, metadata-hash, metadata-hash-at | Same object: the same qid path on the same file server. The metadata hash covers the qid path and version, the length and mtime, with a secret of the process, so it changes whenever the file does. |
 | fd_filestat_set_size, fd_filestat_set_times, path_filestat_set_times | set-size, set-times, set-times-at | fwstat or wstat of the length or modification time, with every other field as nulldir leaves it. Access time cannot be set and fails NOTSUP (`unsupported`) unless left unchanged. |
 | path_create_directory, path_remove_directory, path_unlink_file | create-directory-at, remove-directory-at, unlink-file-at | create with DMDIR, and remove, walking from the directory descriptor. Remove checks the file's type first, so unlinking a directory fails ISDIR (`is-directory`) and removing a file as a directory fails NOTDIR (`not-directory`). |
-| path_rename | rename-at | wstat of the name, within one directory only; a rename across directories fails NOTSUP in Preview 1 and `cross-device` in Preview 2, rather than copy and delete. |
+| path_rename | rename-at | wstat of the name, within one directory only; a rename across directories fails NOTSUP in Preview 1 and `cross-device` in Preview 2, rather than copy and delete. A Plan 9 wstat does not replace, so a rename onto an existing name is EXIST (`exist`). |
 | fd_sync, fd_datasync | sync, sync-data | The provider's durability: on gefs a null wstat, which commits. A provider without a durability guarantee fails NOTSUP (`unsupported`). Neither has effect on a descriptor not open for writing. |
 | fd_allocate, fd_advise | advise | fd_allocate fails NOTSUP. Advice is accepted and ignored. |
 | (append flag) | append-via-stream | An append-only (DMAPPEND) file appends at its end on every write. Any other file fails NOTSUP (`unsupported`): a seek to the end and a write are not atomic. |
@@ -237,7 +237,7 @@ Errors are the kernel's error strings, mapped once for both previews:
 | permission denied | ACCES | access |
 | file is a directory | ISDIR | is-directory |
 | not a directory | NOTDIR | not-directory |
-| directory is not empty | NOTEMPTY | not-empty |
+| directory is not empty (gefs), has children (lib9p, so ramfs) | NOTEMPTY | not-empty |
 | file system full | NOSPC | insufficient-space |
 | fd out of range or not open | BADF | bad-descriptor |
 | mounted directory forbids creation | ROFS | read-only |
