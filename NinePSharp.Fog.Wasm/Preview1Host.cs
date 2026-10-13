@@ -30,6 +30,11 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     private static readonly Encoding Utf8 = Encoding.GetEncoding("utf-8", EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
     private readonly Dictionary<int, (Rights Base, Rights Inheriting)> rights = [];
     private readonly Dictionary<int, int> flags = [];
+
+    // The modification times this process set, to the nanosecond, by file, each with the whole second
+    // the file server held once it was set. Fog's file servers keep no qid version, so a change made
+    // by another process within that second goes unseen; one made by this process forgets the time.
+    private readonly Dictionary<(ushort Type, uint Dev, ulong Path), (uint Mtime, ulong Set)> times = [];
     private readonly HeldDirectories directories = new(process);
     private GuestMemory memory = null!;
     private IReadOnlyList<string> argv = [];
@@ -170,6 +175,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return happened;
     }
 
+    private static (ushort Type, uint Dev, ulong Path) Identity(Stat stat) => (stat.Type, stat.Dev, stat.Qid.Path);
+
     // From the qid and the device: a directory, a pipe (#|), whose kind Preview 1 has no name for, a
     // console device (#c), or a regular file.
     private static byte Filetype(Stat stat) => (stat.Qid.Type & QidType.QTDIR) != 0 ? (byte)3
@@ -274,6 +281,11 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         {
             Wait(process.CloseAsync(newfd));
             throw new SyscallException(Errors.NotDirectory);
+        }
+
+        if (truncate)
+        {
+            Forget(newfd);
         }
 
         rights[newfd] = (wanted, inheriting);
@@ -412,40 +424,69 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     }
 
     // dev is 0, ino the qid path and nlink 1: no POSIX identity is invented. Plan 9 keeps no
-    // status-change time, so ctim is the modification time.
+    // status-change time, so ctim is the modification time, which is the one this process set while
+    // the file is as that left it.
     private Errno FileStat(Stat stat, uint pointer)
     {
+        ulong mtime = times.TryGetValue(Identity(stat), out var set) && set.Mtime == stat.Mtime ? set.Set : stat.Mtime * Nanoseconds;
         var filestat = new byte[64];
         BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(8), stat.Qid.Path);
         filestat[16] = Filetype(stat);
         BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(24), 1);
         BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(32), stat.Length);
         BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(40), stat.Atime * Nanoseconds);
-        BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(48), stat.Mtime * Nanoseconds);
-        BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(56), stat.Mtime * Nanoseconds);
+        BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(48), mtime);
+        BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(56), mtime);
         memory.Write(pointer, filestat);
         return Errno.Success;
     }
 
-    private Errno SetSize(int fd, long size) => Wait(process.FWStatAsync(fd, WStat(length: (ulong)size)));
+    private Errno SetSize(int fd, long size)
+    {
+        Wait(process.FWStatAsync(fd, WStat(length: (ulong)size)));
+        Forget(fd);
+        return Errno.Success;
+    }
 
-    // Only the modification time can be set, to a time given or to now, in Plan 9's whole seconds;
-    // asking to set the access time is NOTSUP, and both a time and now is INVAL.
+    // Only the modification time can be set, to a time given or to now; the file server is given its
+    // whole seconds. Asking to set the access time is NOTSUP, and both a time and now is INVAL.
     private Errno SetTimes(int fd, long mtim, int flags)
     {
-        uint? mtime = Mtime(mtim, flags);
+        ulong? mtime = Mtime(mtim, flags);
         Stat(fd);
-        return mtime is { } seconds ? Wait(process.FWStatAsync(fd, WStat(mtime: seconds))) : Errno.Success;
+        if (mtime is { } set)
+        {
+            Wait(process.FWStatAsync(fd, WStat(mtime: (uint)(set / Nanoseconds))));
+            Remember(Stat(fd), set);
+        }
+
+        return Errno.Success;
     }
 
     private Errno SetTimes(string path, long mtim, int flags)
     {
-        uint? mtime = Mtime(mtim, flags);
+        ulong? mtime = Mtime(mtim, flags);
         Wait(process.StatAsync(path));
-        return mtime is { } seconds ? Wait(process.WStatAsync(path, WStat(mtime: seconds))) : Errno.Success;
+        if (mtime is { } set)
+        {
+            Wait(process.WStatAsync(path, WStat(mtime: (uint)(set / Nanoseconds))));
+            Remember(Wait(process.StatAsync(path)), set);
+        }
+
+        return Errno.Success;
     }
 
-    private uint? Mtime(long mtim, int which)
+    private void Remember(Stat stat, ulong set) => times[Identity(stat)] = (stat.Mtime, set);
+
+    private void Forget(int fd)
+    {
+        if (times.Count != 0)
+        {
+            times.Remove(Identity(Stat(fd)));
+        }
+    }
+
+    private ulong? Mtime(long mtim, int which)
     {
         const int AccessTime = 1, AccessNow = 2, ModificationTime = 4, Now = 8;
         if ((which & (AccessTime | AccessNow)) == (AccessTime | AccessNow) || (which & (ModificationTime | Now)) == (ModificationTime | Now))
@@ -458,8 +499,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
             throw new NotSupportedByFogException();
         }
 
-        return (which & Now) != 0 ? (uint)clock.GetUtcNow().ToUnixTimeSeconds()
-            : (which & ModificationTime) != 0 ? (uint)((ulong)mtim / Nanoseconds)
+        return (which & Now) != 0 ? (ulong)(clock.GetUtcNow() - DateTimeOffset.UnixEpoch).Ticks * 100
+            : (which & ModificationTime) != 0 ? (ulong)mtim
             : null;
     }
 
@@ -653,6 +694,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         memory.WriteUInt32(written, (uint)Wait(process.PWriteAsync(fd, data, offset)));
+        Forget(fd);
         return Errno.Success;
     }
 

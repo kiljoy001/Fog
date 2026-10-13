@@ -12,8 +12,10 @@ Feature: Preview 1's descriptor status, rights and file status
   kept and changes nothing, since a file or a directory never blocks; on a pipe, which would, it
   is NOTSUP. Setting a sync flag is INVAL, as under both controls. fd_filestat_get converts the file's stat without inventing POSIX identity: device 0, the
   qid path as inode, one link, and the modification time as the status-change time, in nanoseconds.
-  The length and the modification time can be set, the time in Plan 9's whole seconds; the access
-  time cannot. Advice is accepted and ignored, and space cannot be allocated. The kernel's clock
+  The length and the modification time can be set; the access time cannot. The file server keeps
+  the modification time in Plan 9's whole seconds, and the process remembers the nanoseconds it set,
+  reporting them while the file's modification time is the second the set left and the process has
+  not written, resized or truncated the file since; after that, its time is the file server's. Advice is accepted and ignored, and space cannot be allocated. The kernel's clock
   stands at 2026-10-01 12:00 UTC, 1790856000 seconds.
 
   Background:
@@ -253,7 +255,7 @@ Feature: Preview 1's descriptor status, rights and file status
     And the file "/tmp/f" holds "0123"
 
   @WASI_NS_026
-  Scenario: fd_filestat_set_times sets only the modification time, in whole seconds, and a time with now is INVAL for either
+  Scenario: fd_filestat_set_times sets only the modification time, to the nanosecond, and a time with now is INVAL for either
     Given the file "/tmp/f" holds "0123456789"
     And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
     When the trace interpreter runs:
@@ -273,9 +275,9 @@ Feature: Preview 1's descriptor status, rights and file status
     Then the trace is:
       """
       fd_filestat_set_times 3 0 1700000000999999999 4 -> ok
-      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1700000000000000000 ctim=1700000000000000000
+      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1700000000999999999 ctim=1700000000999999999
       fd_filestat_set_times 3 0 0 0 -> ok
-      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1700000000000000000 ctim=1700000000000000000
+      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1700000000999999999 ctim=1700000000999999999
       fd_filestat_set_times 3 0 0 8 -> ok
       fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1790856000000000000 ctim=1790856000000000000
       fd_filestat_set_times 3 1700000000000000000 0 1 -> NOTSUP
@@ -283,6 +285,69 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_filestat_set_times 3 0 1700000000000000000 12 -> INVAL
       fd_filestat_set_times 3 1700000000000000000 0 3 -> INVAL
       fd_filestat_set_times 9 0 0 0 -> BADF
+      """
+
+  @WASI_NS_026
+  Scenario: The file server keeps the whole second, and every descriptor for the file reports the nanoseconds
+    Given the file "/tmp/f" holds "0123456789"
+    And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
+    And the interpreter has "/tmp/f" open for reading as descriptor 4
+    When the trace interpreter runs:
+      """
+      fd_filestat_set_times 3 0 1700000000999999999 4
+      fd_filestat_get 4
+      """
+    Then the trace is:
+      """
+      fd_filestat_set_times 3 0 1700000000999999999 4 -> ok
+      fd_filestat_get 4 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1700000000999999999 ctim=1700000000999999999
+      """
+    And the file "/tmp/f" was last modified at 1700000000
+
+  @WASI_NS_026
+  Scenario Outline: Once the process changes the file, its time is the file server's, even within the second that was set
+    Given the file "/tmp/f" holds "0123456789"
+    And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
+    And the interpreter has "/tmp" open for reading as descriptor 4
+    When the trace interpreter runs:
+      """
+      fd_filestat_set_times 3 0 1790856000500000000 4
+      fd_filestat_get 3
+      <change>
+      fd_filestat_get 3
+      """
+    Then the trace is:
+      """
+      fd_filestat_set_times 3 0 1790856000500000000 4 -> ok
+      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1790856000500000000 ctim=1790856000500000000
+      <change> -> <result>
+      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=* atim=* mtim=1790856000000000000 ctim=1790856000000000000
+      """
+
+    Examples:
+      | change                          | result |
+      | fd_write 3 "x"                  | ok 1   |
+      | fd_filestat_set_size 3 4        | ok     |
+      | path_open 4 0 "f" 8 0x40 0 0    | ok 2   |
+
+  @WASI_NS_026
+  Scenario: Once another process sets the file's time, its time is the file server's
+    Given the file "/tmp/f" holds "0123456789"
+    And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
+    And once the interpreter is ready, the parent sets the modification time of "/tmp/f" to 1700000005
+    When the trace interpreter runs:
+      """
+      fd_filestat_set_times 3 0 1700000000999999999 4
+      fd_write 7 "ready"
+      fd_read 6 2
+      fd_filestat_get 3
+      """
+    Then the trace is:
+      """
+      fd_filestat_set_times 3 0 1700000000999999999 4 -> ok
+      fd_write 7 "ready" -> ok 5
+      fd_read 6 2 -> ok "go"
+      fd_filestat_get 3 -> ok dev=0 ino=* filetype=4 nlink=1 size=10 atim=* mtim=1700000005000000000 ctim=1700000005000000000
       """
 
   @WASI_NS_013

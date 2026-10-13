@@ -462,7 +462,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
     When the trace interpreter runs:
       """
       path_filestat_get 3 0 "report"
-      path_filestat_set_times 3 0 "report" 0 1700000000000000000 4
+      path_filestat_set_times 3 0 "report" 0 1700000000500000000 4
       path_filestat_get 3 0 "report"
       path_filestat_set_times 3 0 "report" 0 0 0
       path_filestat_get 3 0 "sub"
@@ -475,8 +475,8 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
     Then the trace is:
       """
       path_filestat_get 3 0 "report" -> ok dev=0 ino=* filetype=4 nlink=1 size=5 atim=1790856000000000000 mtim=1790856000000000000 ctim=1790856000000000000
-      path_filestat_set_times 3 0 "report" 0 1700000000000000000 4 -> ok
-      path_filestat_get 3 0 "report" -> ok dev=0 ino=* filetype=4 nlink=1 size=5 atim=* mtim=1700000000000000000 ctim=1700000000000000000
+      path_filestat_set_times 3 0 "report" 0 1700000000500000000 4 -> ok
+      path_filestat_get 3 0 "report" -> ok dev=0 ino=* filetype=4 nlink=1 size=5 atim=* mtim=1700000000500000000 ctim=1700000000500000000
       path_filestat_set_times 3 0 "report" 0 0 0 -> ok
       path_filestat_get 3 0 "sub" -> ok dev=0 ino=* filetype=3 nlink=1 size=0 atim=* mtim=* ctim=*
       path_filestat_get 3 0 "missing" -> NOENT

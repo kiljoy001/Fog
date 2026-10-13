@@ -61,6 +61,13 @@ public sealed class TraceSteps(WasmDriver driver)
         await process.CloseAsync(await process.CreateAsync($"{path}/{file}", NinePConstants.OWRITE, 0b110_110_110));
     };
 
+    [Given(@"^once the interpreter is ready, the parent sets the modification time of ""(.*)"" to (\d+)$")]
+    public void GivenTouch(string path, uint mtime) => change = async process =>
+    {
+        Stat none = Process.NullDir;
+        await process.WStatAsync(path, new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, mtime, none.Length, none.Name, none.Uid, none.Gid, none.Muid));
+    };
+
     [Given(@"^once the interpreter is ready, the parent renames ""(.*)"" to ""(.*)""$")]
     public void GivenRename(string path, string to) => change = async process =>
     {
@@ -177,6 +184,9 @@ public sealed class TraceSteps(WasmDriver driver)
         Assert.Equal(Stat("path_filestat_get 3 0 \"report\""), Dirent("report"));
         Assert.NotEqual(Dirent("."), Dirent("report"));
     }
+
+    [Then(@"^the file ""(.*)"" was last modified at (\d+)$")]
+    public async Task ThenModified(string path, uint mtime) => Assert.Equal(mtime, (await driver.Init.StatAsync(path)).Mtime);
 
     [Then(@"^the run took at least (\d+) ms$")]
     public void ThenTook(int milliseconds) => Assert.True(took >= TimeSpan.FromMilliseconds(milliseconds), $"the run took {took}");
