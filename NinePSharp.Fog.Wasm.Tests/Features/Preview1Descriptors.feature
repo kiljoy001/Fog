@@ -8,7 +8,7 @@ Feature: Preview 1 calls on the descriptors an application holds
   the start. A directory has no right to be read, written or seeked, so those are NOTCAPABLE, and
   its 9P directory entries are never given to the application. fd_close closes a descriptor and
   fd_renumber is the process's renumber: it moves a descriptor to another number in one step,
-  closing what that number named. The scenarios run the trace interpreter, which makes each call
+  closing what that number named, or to a number nothing names. The scenarios run the trace interpreter, which makes each call
   of its script and traces the result.
 
   Background:
@@ -137,7 +137,7 @@ Feature: Preview 1 calls on the descriptors an application holds
       """
 
   @WASI_NS_006
-  Scenario: fd_renumber moves a descriptor in one step, closing what the number named
+  Scenario: fd_renumber moves a descriptor in one step, closing what the number named, or to a number nothing names
     Given the file "/tmp/f" holds "0123456789"
     And the file "/tmp/g" holds "abcdefghij"
     And the interpreter has "/tmp/f" open for reading as descriptor 3
@@ -151,6 +151,8 @@ Feature: Preview 1 calls on the descriptors an application holds
       fd_renumber 4 4
       fd_read 4 3
       fd_renumber 9 4
+      fd_renumber 4 7
+      fd_read 7 3
       """
     Then the trace is:
       """
@@ -161,6 +163,8 @@ Feature: Preview 1 calls on the descriptors an application holds
       fd_renumber 4 4 -> ok
       fd_read 4 3 -> ok ""
       fd_renumber 9 4 -> BADF
+      fd_renumber 4 7 -> ok
+      fd_read 7 3 -> ok ""
       """
 
   @WASI_NS_015

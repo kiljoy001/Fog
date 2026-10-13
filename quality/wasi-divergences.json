@@ -1,0 +1,16 @@
+{
+  "comment": "Where Fog's WASI differs from both controls, the difference and the scenario that states Fog's behaviour. scripts/wasi-testsuite.sh expects each wasi-testsuite test named here to fail under Fog, and fails the run on any other failure, on one of these that passes, and on a scenario tag no WASI feature holds.",
+  "testsuite": [
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "path_link", "scenario": "WASI_NS_013", "why": "Plan 9 has no hard links, so path_link is NOTSUP." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "symlink_create", "scenario": "WASI_NS_013", "why": "Plan 9 has no symbolic links, so path_symlink is NOTSUP." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "symlink_filestat", "scenario": "WASI_NS_013", "why": "Plan 9 has no symbolic links, so path_symlink is NOTSUP." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "readlink", "scenario": "WASI_NS_013", "why": "Plan 9 has no symbolic links, so path_symlink is NOTSUP." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "path_exists", "scenario": "WASI_NS_013", "why": "Plan 9 has no symbolic links, so path_symlink is NOTSUP." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "nofollow_errors", "scenario": "WASI_NS_013", "why": "Plan 9 has no symbolic links, so path_symlink is NOTSUP." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "path_symlink_trailing_slashes", "scenario": "WASI_NS_013", "why": "path_symlink is NOTSUP before its target is looked at, where the test expects NOENT for a missing one." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "path_rename", "scenario": "WASI_NS_013", "why": "A Plan 9 rename is a wstat of the name, which does not replace what has the new name, so renaming onto it is EXIST." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "renumber", "scenario": "WASI_NS_006", "why": "fd_renumber is the process's renumber, which may move a descriptor to a number nothing names." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "fd_filestat_set", "scenario": "WASI_NS_026", "why": "9P keeps times in whole seconds, so a modification time set in nanoseconds reads back to the second." },
+    { "suite": "WASI Rust tests [wasm32-wasip1]", "test": "path_filestat", "scenario": "WASI_NS_026", "why": "9P keeps times in whole seconds, so a modification time set in nanoseconds reads back to the second." }
+  ]
+}

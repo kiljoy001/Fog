@@ -5,7 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # No argument runs the build, tests, coverage and CRAP gates; --full adds every mutation scope, the
-# Coyote interleavings and the fuzz campaigns; --mutate SCOPE, --coyote and --fuzz run one alone.
+# Coyote interleavings, the fuzz campaigns and WASI conformance; --mutate SCOPE, --coyote, --fuzz
+# and --conformance run one alone.
 MODE=quality
 SCOPE=""
 case "${1:-}" in
@@ -14,7 +15,8 @@ case "${1:-}" in
   --mutate) MODE=mutate; SCOPE="${2:?--mutate needs a scope}" ;;
   --coyote) MODE=coyote ;;
   --fuzz) MODE=fuzz ;;
-  *) echo "usage: $0 [--full | --mutate SCOPE | --coyote | --fuzz]" >&2; exit 2 ;;
+  --conformance) MODE=conformance ;;
+  *) echo "usage: $0 [--full | --mutate SCOPE | --coyote | --fuzz | --conformance]" >&2; exit 2 ;;
 esac
 
 MIN_LINE="${MIN_LINE:-25}"
@@ -142,6 +144,11 @@ fuzz() {
   FUZZ_SECONDS="${FUZZ_SECONDS:-10}" bash scripts/fuzz.sh fog-wasm
 }
 
+conformance() {
+  step "wasi-testsuite Preview 1 under fog-wasi, against the divergence ledger"
+  bash scripts/wasi-testsuite.sh
+}
+
 case "$MODE" in
   quality) quality ;;
   full)
@@ -152,6 +159,7 @@ case "$MODE" in
     done
     coyote
     fuzz
+    conformance
     ;;
   mutate)
     step "mutation testing: $SCOPE"
@@ -159,6 +167,7 @@ case "$MODE" in
     ;;
   coyote) coyote ;;
   fuzz) fuzz ;;
+  conformance) conformance ;;
 esac
 
 printf '\n\033[32mquality pipeline passed\033[0m\n'
