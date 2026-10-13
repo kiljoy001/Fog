@@ -36,4 +36,8 @@ internal enum Rights : ulong
     SockShutdown = 1 << 28,
     SockAccept = 1 << 29,
     All = (1UL << 30) - 1,
+
+    // What a directory may have, as wazero gives it: nothing that reads, writes, seeks, sizes or
+    // polls the directory itself, nor a socket's rights.
+    Directory = All & ~(FdRead | FdSeek | FdTell | FdWrite | FdAdvise | FdAllocate | FdFilestatSetSize | PollFdReadwrite | SockShutdown | SockAccept),
 }

@@ -5,7 +5,7 @@ Feature: Preview 1 calls on the descriptors an application holds
   the descriptor's alone; a pipe has no offset, so seeking one is SPIPE. A vector of buffers is filled or emptied in order, from one kernel call.
   WASI offsets are unsigned, so one above the largest signed offset, which would reach Plan 9's -1,
   is INVAL. fd_seek moves the offset from the start, from where it is or from the end, never before
-  the start; a directory seeks only back to its start, and fd_read on a directory is ISDIR, since
+  the start. A directory has no right to be read, written or seeked, so those are NOTCAPABLE, and
   its 9P directory entries are never given to the application. fd_close closes a descriptor and
   fd_renumber is the process's renumber: it moves a descriptor to another number in one step,
   closing what that number named. The scenarios run the trace interpreter, which makes each call
@@ -115,21 +115,25 @@ Feature: Preview 1 calls on the descriptors an application holds
       """
 
   @WASI_NS_009
-  Scenario: A directory seeks only back to its start, and fd_read on it is ISDIR
+  Scenario: A directory has no right to be read, written or seeked
     Given the interpreter has "/tmp" open for reading as descriptor 3
     When the trace interpreter runs:
       """
       fd_seek 3 0 set
-      fd_seek 3 5 set
+      fd_tell 3
       fd_read 3 4096
       fd_pread 3 0 4096
+      fd_write 3 "x"
+      fd_filestat_set_size 3 0
       """
     Then the trace is:
       """
-      fd_seek 3 0 set -> ok 0
-      fd_seek 3 5 set -> ISDIR
-      fd_read 3 4096 -> ISDIR
-      fd_pread 3 0 4096 -> ISDIR
+      fd_seek 3 0 set -> NOTCAPABLE
+      fd_tell 3 -> NOTCAPABLE
+      fd_read 3 4096 -> NOTCAPABLE
+      fd_pread 3 0 4096 -> NOTCAPABLE
+      fd_write 3 "x" -> NOTCAPABLE
+      fd_filestat_set_size 3 0 -> NOTCAPABLE
       """
 
   @WASI_NS_006

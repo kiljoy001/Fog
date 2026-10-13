@@ -160,9 +160,12 @@ preopens.
 ## Rights
 
 Plan 9 opens a directory only for reading, so a directory's open mode cannot carry the
-right to change what is in it. A preopen therefore starts with every right; the file
-server still checks each call against the process's user and the file's permissions, as
-it does for any process, and the namespace still decides what names exist. A parent
+right to change what is in it. A directory therefore starts with a directory's rights,
+the set wazero gives one (`0x7bffe19`): every right but those that read, write, seek,
+size or poll the directory itself, and the socket rights. Any other descriptor starts
+with every right. The file server still checks each call against the process's user and
+the file's permissions, as it does for any process, and the namespace still decides what
+names exist. A parent
 grants less the Plan 9 way: through the namespace it builds and the user it runs as.
 
 WASI's rights only narrow from there. In Preview 1, `fd_fdstat_set_rights` narrows a
@@ -181,7 +184,8 @@ file server and qid path it had when the application got it. A preopen enters th
 the name it was opened by; a directory opened beneath one enters it under that name and what
 followed.
 
-A call first cleans the application's path. An absolute path is an escape, and so is a `..`
+A call first cleans the application's path. A trailing slash names a directory, so a path
+with one that names anything else fails NOTDIR. An absolute path is an escape, and so is a `..`
 that climbs above the directory the call names; as path-resolution.md requires, a path that
 steps outside and comes back, such as `sub/../../data/f` beneath `/data`, is an escape too,
 so nothing is learned about what lies outside. An escape fails with NOTCAPABLE in Preview 1
@@ -210,12 +214,12 @@ The Plan 9 calls stay as they are; WASI is adapted to them.
 
 | Preview 1 | Preview 2 | Kernel calls and adaptation |
 | --- | --- | --- |
-| path_open | open-at | Resolve beneath the directory descriptor, then open or create. Separate create-if-missing, exclusive create, truncate and directory-only. CREATE without TRUNC preserves existing contents: what exists is opened, since a Plan 9 create truncates. Exclusive creation needs atomic provider support. A directory opens only for reading, whatever its rights, as devopen and lib9p allow; truncating one is ISDIR. |
+| path_open | open-at | Resolve beneath the directory descriptor, then open or create. Separate create-if-missing, exclusive create, truncate and directory-only. CREATE without TRUNC preserves existing contents: what exists is opened, since a Plan 9 create truncates. Exclusive creation needs atomic provider support. A directory opens only for reading, as devopen and lib9p allow, with a directory's rights; asking to write or truncate one is ISDIR, as under both controls. Creating needs `path_create_file` on the directory and truncating `path_filestat_set_size`. APPEND and NONBLOCK are kept; a sync flag is NOTSUP. |
 | fd_read, fd_write | read-via-stream, write-via-stream, input-stream, output-stream | Preview 1: read and write on the descriptor's shared offset; validated vectors, access rights and short transfers. Preview 2: streams at their own offsets, by pread and pwrite, or by read and write for a descriptor without positions. |
 | fd_pread, fd_pwrite | read, write | pread and pwrite. WASI offsets are unsigned; refuse any offset above the largest signed one, so none can reach Plan 9's -1 implicit-offset sentinel. |
-| fd_seek, fd_tell | (streams have their own offsets) | seek, with checked deltas. A directory seeks only back to its start; a pipe (#\|) has no offset, so seeking one is SPIPE. |
+| fd_seek, fd_tell | (streams have their own offsets) | seek, with checked deltas. A directory has no right to seek; a pipe (#\|) has no offset, so seeking one is SPIPE. |
 | fd_close, fd_renumber | resource drop | close detaches one descriptor. renumber moves a descriptor in one step and closes what the target named; dup then close is not atomic. |
-| fd_prestat_get, fd_prestat_dir_name, fd_fdstat_get, fd_fdstat_set_rights, fd_fdstat_set_flags | get-directories, get-flags, get-type | The open directory descriptors and the names they were opened by; file type from the qid; rights and flags as above. Unsupported append, nonblocking or sync flags fail explicitly. |
+| fd_prestat_get, fd_prestat_dir_name, fd_fdstat_get, fd_fdstat_set_rights, fd_fdstat_set_flags | get-directories, get-flags, get-type | The open directory descriptors and the names they were opened by; file type from the qid; rights and flags as above. APPEND and NONBLOCK are kept; setting a sync flag is INVAL, as under both controls, and NONBLOCK on a pipe, which Fog never makes return AGAIN, is NOTSUP. |
 | fd_readdir | read-directory, directory-entry-stream | dirread from the directory's start. Preview 1 counts entries with its cookie and lists `.` and `..` first, as its WITX says; `..` at a preopen's top reports nothing about what lies above. Preview 2 omits `.` and `..`, and each `read-directory` is a new stream from the start. Entries come in union order, repeated names included; never raw 9P stat records. |
 | fd_filestat_get, path_filestat_get | stat, stat-at | fstat and stat: type from the qid and the stat's device, a directory, a pipe (#\|) as unknown (Preview 2 `fifo`), a console device (#c) as a character device, anything else a regular file; size from the length, modification and access times from mtime and atime; one link; no status-change time (Preview 2 none, Preview 1 the modification time); no fabricated POSIX identity. Preview 1's inode is the qid path. |
 | (none) | is-same-object, metadata-hash, metadata-hash-at | Same object: the same qid path on the same file server. The metadata hash covers the qid path and version, the length and mtime, with a secret of the process, so it changes whenever the file does. |
@@ -224,7 +228,7 @@ The Plan 9 calls stay as they are; WASI is adapted to them.
 | path_rename | rename-at | wstat of the name, within one directory only; a rename across directories fails NOTSUP in Preview 1 and `cross-device` in Preview 2, rather than copy and delete. A Plan 9 wstat does not replace, so a rename onto an existing name is EXIST (`exist`). |
 | fd_sync, fd_datasync | sync, sync-data | The provider's durability: on gefs a null wstat, which commits. A provider without a durability guarantee fails NOTSUP (`unsupported`). Neither has effect on a descriptor not open for writing. |
 | fd_allocate, fd_advise | advise | fd_allocate fails NOTSUP. Advice is accepted and ignored. |
-| (append flag) | append-via-stream | An append-only (DMAPPEND) file appends at its end on every write. Any other file fails NOTSUP (`unsupported`): a seek to the end and a write are not atomic. |
+| (append flag) | append-via-stream | Each write first seeks to the file's end. The seek and the write are two kernel calls: the application's own writes cannot come between them, since its calls run on one thread, but another process's write to the same file can, and then lands first. An append-only (DMAPPEND) file appends atomically on its own. |
 | path_link, path_symlink, path_readlink | link-at, symlink-at, readlink-at | NOTSUP (`unsupported`): Plan 9 has neither links nor symlinks. |
 | args_get, environ_get | get-arguments, get-environment | The argv exec was given, and the process's environment. |
 | proc_exit | exit, exit-with-code, run's result | exits: the process ends with the status below. |

@@ -66,9 +66,9 @@ internal sealed class Preview1Module
     {
         var host = new Preview1Host(process, clock);
         var imports = new ImportDictionary();
-        foreach (Import.Function function in module.Imports.OfType<Import.Function>())
+        foreach (string name in module.Imports.OfType<Import.Function>().Select(function => function.Field).Distinct())
         {
-            imports.Add(Preview1.Module, function.Field, new FunctionImport(host.Function(function.Field)));
+            imports.Add(Preview1.Module, name, new FunctionImport(host.Function(name)));
         }
 
         Instance<object> instance = Compile.FromBinary<object>(new MemoryStream(image))(imports);

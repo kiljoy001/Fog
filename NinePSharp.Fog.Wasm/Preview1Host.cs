@@ -11,20 +11,25 @@ namespace NinePSharp.Fog.Wasm;
 // The Preview 1 functions Fog provides, acting on the process that execed the module. Each runs on
 // the guest's thread and blocks it, and only it, on the kernel call. A call reads what it needs from
 // guest memory and checks where its results go before any kernel call with an effect; any access
-// outside memory is FAULT. Each descriptor starts with every right; fd_fdstat_set_rights only narrows them, and a call
-// needs every right it names, or it is NOTCAPABLE before anything else.
+// outside memory is FAULT. A directory starts with a directory's rights and any other descriptor with
+// every right; fd_fdstat_set_rights only narrows them, and a call needs every right it names, or it
+// is NOTCAPABLE before anything else.
 internal sealed class Preview1Host(Process process, TimeProvider clock)
 {
     // The most one call copies between guest memory and the kernel; a longer write is short.
     public const int CopyLimit = 1 << 20;
 
     private const ulong Nanoseconds = 1_000_000_000;
+    private const int Append = 1;
+    private const int Nonblock = 4;
+    private const int Synced = 2 | 8 | 16;
     private const string AlreadyExists = "file already exists";
 
     // lib9p's, which ramfs serves, for removing a directory that is not empty.
     private const string NotEmpty = "has children";
     private static readonly Encoding Utf8 = Encoding.GetEncoding("utf-8", EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
     private readonly Dictionary<int, (Rights Base, Rights Inheriting)> rights = [];
+    private readonly Dictionary<int, int> flags = [];
     private readonly HeldDirectories directories = new(process);
     private GuestMemory memory = null!;
     private IReadOnlyList<string> argv = [];
@@ -180,7 +185,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, mtime, length, name, none.Uid, none.Gid, none.Muid);
     }
 
-    private (Rights Base, Rights Inheriting) Held(int fd) => rights.GetValueOrDefault(fd, (Rights.All, Rights.All));
+    private (Rights Base, Rights Inheriting) Held(int fd) => rights.GetValueOrDefault(fd, (directories.Holds(fd) ? Rights.Directory : Rights.All, Rights.All));
 
     private int Require(int fd, Rights needed) => (Held(fd).Base & needed) == needed ? fd : throw new NotCapableException();
 
@@ -191,6 +196,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         (Rights, Rights) moved = Held(fd);
         Wait(process.RenumberAsync(fd, to));
         rights[to] = moved;
+        flags[to] = flags.GetValueOrDefault(fd);
+        flags.Remove(fd);
         directories.Renumbered(fd, to);
         return Errno.Success;
     }
@@ -198,12 +205,19 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     private Errno Close(int fd)
     {
         Wait(process.CloseAsync(fd));
+        flags.Remove(fd);
         directories.Closed(fd);
         return Errno.Success;
     }
 
-    // A path read from guest memory, which must be UTF-8, made the true path it names beneath fd.
-    private string Path(int fd, uint pointer, uint length) => directories.Resolve(fd, Utf8.GetString(memory.Read(pointer, length)));
+    // A path read from guest memory, which must be UTF-8, made the true path it names beneath fd. A
+    // trailing slash names a directory, so naming anything else with one is NOTDIR.
+    private string Path(int fd, uint pointer, uint length)
+    {
+        string path = Utf8.GetString(memory.Read(pointer, length));
+        string resolved = directories.Resolve(fd, path);
+        return path.EndsWith('/') && Existing(resolved) is { } stat && !HeldDirectories.IsDirectory(stat) ? throw new SyscallException(Errors.NotDirectory) : resolved;
+    }
 
     private string PreopenName(int fd) => directories.Preopen(fd) ?? throw new SyscallException(Errors.BadFd);
 
@@ -223,33 +237,35 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     }
 
     // The open mode is the one the rights ask for: Plan 9 opens a file for reading, writing or
-    // both, and a directory only for reading. CREAT opens what exists before it creates, since a
-    // Plan 9 create truncates; with EXCL, what exists is EXIST.
+    // both, and a directory only for reading, with a directory's rights, so asking to write or
+    // truncate one is ISDIR. CREAT opens what exists before it creates, since a Plan 9 create
+    // truncates; with EXCL, what exists is EXIST. The sync flags would need the file server to
+    // sync, so they are NOTSUP.
     private Errno PathOpen(int fd, string path, int oflags, Rights wanted, Rights inheriting, int fdflags, uint opened)
     {
         const int Create = 1, Directory = 2, Exclusive = 4, Truncate = 8;
+        const Rights Writing = Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize;
         Rights allowed = Held(fd).Inheriting;
+        bool truncate = (oflags & Truncate) != 0;
+        Require(fd, ((oflags & Create) != 0 ? Rights.PathCreateFile : 0) | (truncate ? Rights.PathFilestatSetSize : 0));
         if ((wanted & ~allowed) != 0 || (inheriting & ~allowed) != 0)
         {
             throw new NotCapableException();
         }
 
-        if (fdflags != 0)
+        if ((fdflags & Synced) != 0)
         {
             throw new NotSupportedByFogException();
         }
 
         memory.Check(opened, 4);
         Stat? existing = Existing(path);
-        bool truncate = (oflags & Truncate) != 0;
         if (existing is { } directory && HeldDirectories.IsDirectory(directory))
         {
-            // A directory opens only for reading, whatever its rights; truncating one is ISDIR.
-            oflags = truncate ? throw new SyscallException(Errors.IsDirectory) : oflags;
-            wanted &= ~(Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize);
+            wanted = (wanted & Writing) != 0 || truncate ? throw new SyscallException(Errors.IsDirectory) : wanted & Rights.Directory;
         }
 
-        bool write = (wanted & (Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize)) != 0 || truncate;
+        bool write = (wanted & Writing) != 0 || truncate;
         bool read = (wanted & (Rights.FdRead | Rights.FdReaddir)) != 0 || !write;
         int mode = (read && write ? NinePConstants.ORDWR : write ? NinePConstants.OWRITE : NinePConstants.OREAD) | (truncate ? NinePConstants.OTRUNC : 0);
         int newfd = existing is not null && (oflags & Create) != 0 && (oflags & Exclusive) != 0 ? throw new SyscallException(AlreadyExists)
@@ -263,11 +279,13 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         rights[newfd] = (wanted, inheriting);
+        flags[newfd] = 0;
         if (isDirectory)
         {
             directories.Opened(newfd, path);
         }
 
+        Flag(newfd, fdflags);
         memory.WriteUInt32(opened, (uint)newfd);
         return Errno.Success;
     }
@@ -361,17 +379,36 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         byte filetype = Filetype(Stat(fd));
         var fdstat = new byte[24];
         fdstat[0] = filetype;
+        BinaryPrimitives.WriteUInt16LittleEndian(fdstat.AsSpan(2), (ushort)flags.GetValueOrDefault(fd));
         BinaryPrimitives.WriteUInt64LittleEndian(fdstat.AsSpan(8), (ulong)Held(fd).Base);
         BinaryPrimitives.WriteUInt64LittleEndian(fdstat.AsSpan(16), (ulong)Held(fd).Inheriting);
         memory.Write(pointer, fdstat);
         return Errno.Success;
     }
 
-    // Fog keeps no append, sync or nonblocking flags on a descriptor; asking for one is NOTSUP.
-    private Errno SetFlags(int fd, int flags)
+    // APPEND and NONBLOCK are kept, and a sync flag is INVAL, as under both controls.
+    private Errno SetFlags(int fd, int wanted)
     {
         Stat(fd);
-        return flags == 0 ? Errno.Success : throw new NotSupportedByFogException();
+        if ((wanted & ~(Append | Nonblock)) != 0)
+        {
+            throw new InvalidArgumentException();
+        }
+
+        Flag(fd, wanted);
+        return Errno.Success;
+    }
+
+    // NONBLOCK changes nothing on a file or directory, which never blocks; a pipe would, and Fog does
+    // not make one return AGAIN, so on a pipe it is NOTSUP.
+    private void Flag(int fd, int wanted)
+    {
+        if ((wanted & Nonblock) != 0 && Stat(fd).Type == '|')
+        {
+            throw new NotSupportedByFogException();
+        }
+
+        flags[fd] = wanted;
     }
 
     private Errno Narrow(int fd, Rights held, Rights inheriting)
@@ -421,21 +458,21 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return mtime is { } seconds ? Wait(process.WStatAsync(path, WStat(mtime: seconds))) : Errno.Success;
     }
 
-    private uint? Mtime(long mtim, int flags)
+    private uint? Mtime(long mtim, int which)
     {
-        const int AccessTime = 1 | 2, ModificationTime = 4, Now = 8;
-        if ((flags & AccessTime) != 0)
-        {
-            throw new NotSupportedByFogException();
-        }
-
-        if ((flags & ModificationTime) != 0 && (flags & Now) != 0)
+        const int AccessTime = 1, AccessNow = 2, ModificationTime = 4, Now = 8;
+        if ((which & (AccessTime | AccessNow)) == (AccessTime | AccessNow) || (which & (ModificationTime | Now)) == (ModificationTime | Now))
         {
             throw new InvalidArgumentException();
         }
 
-        return (flags & Now) != 0 ? (uint)clock.GetUtcNow().ToUnixTimeSeconds()
-            : (flags & ModificationTime) != 0 ? (uint)((ulong)mtim / Nanoseconds)
+        if ((which & (AccessTime | AccessNow)) != 0)
+        {
+            throw new NotSupportedByFogException();
+        }
+
+        return (which & Now) != 0 ? (uint)clock.GetUtcNow().ToUnixTimeSeconds()
+            : (which & ModificationTime) != 0 ? (uint)((ulong)mtim / Nanoseconds)
             : null;
     }
 
@@ -548,7 +585,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
             }
 
             (long Queued, bool HungUp)? pipe = Wait(process.PipeReadinessAsync(fd));
-            long left = pipe?.Queued ?? (stat.Type != 'c' && !HeldDirectories.IsDirectory(stat) ? (long)stat.Length - Wait(process.SeekAsync(fd, 0, 1)) : 0);
+            long left = pipe?.Queued ?? (stat.Type != 'c' ? (long)stat.Length - Wait(process.SeekAsync(fd, 0, 1)) : 0);
             BinaryPrimitives.WriteInt64LittleEndian(happened.AsSpan(16), Math.Max(0, left));
             happened[24] = pipe is { HungUp: true } ? (byte)1 : (byte)0;
             return pipe is not { Queued: 0, HungUp: false } ? happened : null;
@@ -618,16 +655,22 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return buffers;
     }
 
+    // With APPEND, a write at the descriptor's offset first moves it to the file's end.
     private Errno Write(int fd, uint vector, uint count, long offset, uint written)
     {
         byte[] data = Gather(vector, count);
         memory.Check(written, 4);
+        if (offset < 0 && (flags.GetValueOrDefault(fd) & Append) != 0)
+        {
+            Wait(process.SeekAsync(fd, 0, 2));
+        }
+
         memory.WriteUInt32(written, (uint)Wait(process.PWriteAsync(fd, data, offset)));
         return Errno.Success;
     }
 
     // One kernel read of as much as the buffers hold, up to CopyLimit, spread across them in order.
-    // A directory reads as 9P directory entries, which the guest is never given.
+    // A directory has no right to be read, so its 9P directory entries never reach the guest.
     private Errno Read(int fd, uint vector, uint count, long offset, uint read)
     {
         List<(uint Pointer, uint Length)> buffers = Buffers(vector, count);
@@ -637,10 +680,6 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         memory.Check(read, 4);
-        if ((Wait(process.FStatAsync(fd)).Qid.Type & QidType.QTDIR) != 0)
-        {
-            throw new SyscallException(Errors.IsDirectory);
-        }
 
         long room = Math.Min(buffers.Sum(buffer => (long)buffer.Length), CopyLimit);
         ReadOnlyMemory<byte> data = Wait(process.PReadAsync(fd, (int)room, offset));

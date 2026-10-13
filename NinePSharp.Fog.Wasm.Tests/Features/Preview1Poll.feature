@@ -40,7 +40,7 @@ Feature: poll_oneoff waits on descriptors and clocks, holding only the applicati
       """
 
   @WASI_NS_023
-  Scenario: A file is ready at once with what is left past its offset, and writing is ready at once
+  Scenario: A file is ready at once with what is left past its offset, writing is ready at once, and a directory has no right to be polled
     Given the file "/tmp/f" holds "0123456789"
     And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
     And the interpreter has "/tmp" open for reading as descriptor 4
@@ -54,7 +54,7 @@ Feature: poll_oneoff waits on descriptors and clocks, holding only the applicati
     Then the trace is:
       """
       fd_seek 3 4 set -> ok 4
-      poll_oneoff read 3 write 3 read 4 -> ok (0 SUCCESS 1 6 0) (1 SUCCESS 2 0 0) (2 SUCCESS 1 0 0)
+      poll_oneoff read 3 write 3 read 4 -> ok (0 SUCCESS 1 6 0) (1 SUCCESS 2 0 0) (2 NOTCAPABLE 1 0 0)
       fd_seek 3 20 set -> ok 20
       poll_oneoff read 3 -> ok (0 SUCCESS 1 0 0)
       """

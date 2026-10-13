@@ -8,7 +8,10 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
   the call is NOENT: a bind beneath a held directory applies, a bind over it, or its replacement,
   does not. The application's own renames keep the directories it holds usable. path_open opens
   for reading, writing or both as its rights ask, and what it opens gets no right the directory
-  does not pass on; CREAT opens what exists, so its contents are kept unless TRUNC is given, and
+  does not pass on; a directory opens with a directory's rights, and asking to write or truncate
+  one is ISDIR. Creating needs path_create_file on the directory, truncating
+  path_filestat_set_size. A trailing slash names a directory, so on anything else it is NOTDIR.
+  CREAT opens what exists, so its contents are kept unless TRUNC is given, and
   with EXCL what exists is EXIST. Removing checks the file's type first. A rename is a wstat of
   the name within one directory; across directories it is NOTSUP rather than a copy, and onto an
   existing name EXIST, since Plan 9 does not replace. Plan 9 has no links or symlinks, so those
@@ -99,7 +102,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
   Scenario: path_open opens files and directories beneath the directory
     When the trace interpreter runs:
       """
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0
       path_open 2 0 "f" 0 2 0 0
       fd_read 5 10
       path_open 3 0 "report" 2 2 0 0
@@ -110,7 +113,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       """
     Then the trace is:
       """
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0 -> ok 2
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0 -> ok 2
       path_open 2 0 "f" 0 2 0 0 -> ok 5
       fd_read 5 10 -> ok "f"
       path_open 3 0 "report" 2 2 0 0 -> NOTDIR
@@ -146,17 +149,21 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       | fresh  | 5      | ok 2   | ok 3    | new      |
 
   @WASI_NS_005
-  Scenario: A directory opens for reading whatever rights are asked, and truncating one is ISDIR
+  Scenario: A directory opens with a directory's rights, and asking to write or truncate it is ISDIR
     When the trace interpreter runs:
       """
-      path_open 3 0 "sub" 0 0x3fffffff 0x3fffffff 0
+      path_open 3 0 "sub" 0 0x7bffe1b 0x3fffffff 0
       fd_fdstat_get 2
+      path_open 3 0 "sub" 0 0x40 0 0
+      path_open 3 0 "sub" 0 0x3fffffff 0 0
       path_open 3 0 "sub" 8 0x2 0 0
       """
     Then the trace is:
       """
-      path_open 3 0 "sub" 0 0x3fffffff 0x3fffffff 0 -> ok 2
-      fd_fdstat_get 2 -> ok filetype=3 flags=0 base=0x3fbffebf inheriting=0x3fffffff
+      path_open 3 0 "sub" 0 0x7bffe1b 0x3fffffff 0 -> ok 2
+      fd_fdstat_get 2 -> ok filetype=3 flags=0 base=0x7bffe19 inheriting=0x3fffffff
+      path_open 3 0 "sub" 0 0x40 0 0 -> ISDIR
+      path_open 3 0 "sub" 0 0x3fffffff 0 0 -> ISDIR
       path_open 3 0 "sub" 8 0x2 0 0 -> ISDIR
       """
 
@@ -204,20 +211,88 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       path_open 3 0 "report" 0 0x2 0x2 0
       fd_fdstat_get 2
       fd_write 2 "x"
-      fd_fdstat_set_rights 3 0x3fffffff 0x2
+      fd_fdstat_set_rights 3 0x7bffe19 0x2
       path_open 3 0 "report" 0 0x42 0 0
       path_open 3 0 "report" 0 0x2 0x42 0
-      path_open 3 0 "report" 0 0x2 0 1
       """
     Then the trace is:
       """
       path_open 3 0 "report" 0 0x2 0x2 0 -> ok 2
       fd_fdstat_get 2 -> ok filetype=4 flags=0 base=0x2 inheriting=0x2
       fd_write 2 "x" -> NOTCAPABLE
-      fd_fdstat_set_rights 3 0x3fffffff 0x2 -> ok
+      fd_fdstat_set_rights 3 0x7bffe19 0x2 -> ok
       path_open 3 0 "report" 0 0x42 0 0 -> NOTCAPABLE
       path_open 3 0 "report" 0 0x2 0x42 0 -> NOTCAPABLE
-      path_open 3 0 "report" 0 0x2 0 1 -> NOTSUP
+      """
+
+  @WASI_NS_004
+  Scenario: Truncating needs path_filestat_set_size on the directory, and creating path_create_file
+    When the trace interpreter runs:
+      """
+      fd_fdstat_set_rights 3 0x7b7fa19 0x3fffffff
+      path_open 3 0 "report" 8 0x40 0 0
+      path_open 3 0 "fresh" 1 0x40 0 0
+      path_open 3 0 "report" 1 0x2 0 0
+      path_open 3 0 "report" 0 0x2 0 0
+      fd_read 2 5
+      """
+    Then the trace is:
+      """
+      fd_fdstat_set_rights 3 0x7b7fa19 0x3fffffff -> ok
+      path_open 3 0 "report" 8 0x40 0 0 -> NOTCAPABLE
+      path_open 3 0 "fresh" 1 0x40 0 0 -> NOTCAPABLE
+      path_open 3 0 "report" 1 0x2 0 0 -> NOTCAPABLE
+      path_open 3 0 "report" 0 0x2 0 0 -> ok 2
+      fd_read 2 5 -> ok "daily"
+      """
+
+  @WASI_NS_013
+  Scenario: path_open keeps APPEND and NONBLOCK, and refuses a sync flag as NOTSUP
+    When the trace interpreter runs:
+      """
+      path_open 3 0 "report" 0 0x46 0 1
+      fd_fdstat_get 2
+      fd_write 2 "!"
+      path_open 3 0 "." 0 0x4000 0 4
+      fd_fdstat_get 5
+      path_open 3 0 "report" 0 0x2 0 2
+      path_open 3 0 "report" 0 0x2 0 8
+      path_open 3 0 "report" 0 0x2 0 16
+      """
+    Then the trace is:
+      """
+      path_open 3 0 "report" 0 0x46 0 1 -> ok 2
+      fd_fdstat_get 2 -> ok filetype=4 flags=1 base=0x46 inheriting=0x0
+      fd_write 2 "!" -> ok 1
+      path_open 3 0 "." 0 0x4000 0 4 -> ok 5
+      fd_fdstat_get 5 -> ok filetype=3 flags=4 base=0x4000 inheriting=0x0
+      path_open 3 0 "report" 0 0x2 0 2 -> NOTSUP
+      path_open 3 0 "report" 0 0x2 0 8 -> NOTSUP
+      path_open 3 0 "report" 0 0x2 0 16 -> NOTSUP
+      """
+    And the file "/data/report" holds "daily!"
+
+  @WASI_NS_002
+  Scenario: A trailing slash names a directory, so on anything else it is NOTDIR
+    When the trace interpreter runs:
+      """
+      path_open 3 0 "report/" 0 0x2 0 0
+      path_open 3 0 "report///" 0 0x2 0 0
+      path_filestat_get 3 0 "report/"
+      path_unlink_file 3 "report/"
+      path_open 3 0 "sub/" 0 0x4000 0 0
+      path_create_directory 3 "new/"
+      path_filestat_get 3 0 "new"
+      """
+    Then the trace is:
+      """
+      path_open 3 0 "report/" 0 0x2 0 0 -> NOTDIR
+      path_open 3 0 "report///" 0 0x2 0 0 -> NOTDIR
+      path_filestat_get 3 0 "report/" -> NOTDIR
+      path_unlink_file 3 "report/" -> NOTDIR
+      path_open 3 0 "sub/" 0 0x4000 0 0 -> ok 2
+      path_create_directory 3 "new/" -> ok
+      path_filestat_get 3 0 "new" -> ok dev=0 ino=* filetype=3 nlink=1 size=0 atim=* mtim=* ctim=*
       """
 
   @WASI_NS_003 @security
@@ -298,35 +373,35 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
   Scenario: Closing and renumbering move what the application holds with the descriptor
     When the trace interpreter runs:
       """
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0
       fd_renumber 2 8
       path_open 8 0 "f" 0 0x2002 0 0
       path_open 2 0 "f" 0 2 0 0
       fd_close 2
       fd_close 8
       path_open 8 0 "f" 0 2 0 0
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0
       fd_close 2
       path_open 3 0 "report" 0 0x2002 0 0
       path_open 2 0 "f" 0 2 0 0
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0
       fd_renumber 2 5
       path_open 5 0 "f" 0 2 0 0
       """
     Then the trace is:
       """
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0 -> ok 2
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0 -> ok 2
       fd_renumber 2 8 -> ok
       path_open 8 0 "f" 0 0x2002 0 0 -> ok 2
       path_open 2 0 "f" 0 2 0 0 -> NOTDIR
       fd_close 2 -> ok
       fd_close 8 -> ok
       path_open 8 0 "f" 0 2 0 0 -> BADF
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0 -> ok 2
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0 -> ok 2
       fd_close 2 -> ok
       path_open 3 0 "report" 0 0x2002 0 0 -> ok 2
       path_open 2 0 "f" 0 2 0 0 -> NOTDIR
-      path_open 3 0 "sub" 2 0x3fffffff 0x3fffffff 0 -> ok 5
+      path_open 3 0 "sub" 2 0x7bffe19 0x3fffffff 0 -> ok 5
       fd_renumber 2 5 -> ok
       path_open 5 0 "f" 0 2 0 0 -> NOTDIR
       """
@@ -395,6 +470,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       path_filestat_set_times 3 0 "missing" 0 0 4
       path_filestat_set_times 3 0 "missing" 0 0 0
       path_filestat_set_times 3 0 "report" 0 0 1
+      path_filestat_set_times 3 0 "report" 0 0 3
       """
     Then the trace is:
       """
@@ -407,6 +483,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       path_filestat_set_times 3 0 "missing" 0 0 4 -> NOENT
       path_filestat_set_times 3 0 "missing" 0 0 0 -> NOENT
       path_filestat_set_times 3 0 "report" 0 0 1 -> NOTSUP
+      path_filestat_set_times 3 0 "report" 0 0 3 -> INVAL
       """
 
   @WASI_NS_013

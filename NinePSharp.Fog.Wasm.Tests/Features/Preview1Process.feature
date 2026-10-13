@@ -112,6 +112,12 @@ Feature: A WASI Preview 1 core module runs as a Fog process
     Then the parent's wait message for it is empty
 
   @WASI_NS_017
+  Scenario: A module may import the same function more than once
+    Given "/bin/report" holds the application "imports-twice"
+    When a child with a pipe as descriptor 1 execs "/bin/report"
+    Then the pipe holds "hello"
+
+  @WASI_NS_017
   Scenario Outline: A memory may have any maximum a 32-bit memory can, or none
     Given "/bin/report" holds the application "<fixture>"
     When a child with a pipe as descriptor 1 execs "/bin/report"

@@ -2,13 +2,15 @@
 Feature: Preview 1's descriptor status, rights and file status
   fd_fdstat_get reports a descriptor's file type from its qid and device: a directory, a pipe (#|)
   as unknown, which is how reference runtimes report pipes, a console device (#c) as a character
-  device, or a regular file; and its rights. Each descriptor starts with every right: Plan 9 opens
-  a directory only for reading, so the open mode cannot carry what the application may do beneath
-  it, and the file server still
-  checks every call. fd_fdstat_set_rights only narrows; nothing restores a right, and a call needs
-  every right it names or it is NOTCAPABLE, before anything else is done. fd_renumber moves a
-  descriptor's rights with it. Fog keeps no append, sync or nonblocking flags, so asking for one is
-  NOTSUP. fd_filestat_get converts the file's stat without inventing POSIX identity: device 0, the
+  device, or a regular file; and its rights and flags. A directory starts with a directory's rights,
+  0x7bffe19, the set wazero gives one: every right but reading, writing, seeking, telling, advising,
+  allocating, setting its size, polling and the socket rights, which name nothing a directory
+  does. Any other descriptor starts with every right, and the file server still checks every call.
+  fd_fdstat_set_rights only narrows; nothing restores a right, and a call needs every right it
+  names or it is NOTCAPABLE, before anything else is done. fd_renumber moves a descriptor's rights
+  and flags with it. APPEND makes every write on the descriptor go to the file's end. NONBLOCK is
+  kept and changes nothing, since a file or a directory never blocks; on a pipe, which would, it
+  is NOTSUP. Setting a sync flag is INVAL, as under both controls. fd_filestat_get converts the file's stat without inventing POSIX identity: device 0, the
   qid path as inode, one link, and the modification time as the status-change time, in nanoseconds.
   The length and the modification time can be set, the time in Plan 9's whole seconds; the access
   time cannot. Advice is accepted and ignored, and space cannot be allocated. The kernel's clock
@@ -18,7 +20,7 @@ Feature: Preview 1's descriptor status, rights and file status
     Given a kernel that runs WASM applications
 
   @WASI_NS_004
-  Scenario: fd_fdstat_get reports the file type and every right
+  Scenario: fd_fdstat_get reports the file type and its rights: every right for a file, a directory's for a directory
     Given the file "/tmp/f" holds "0123456789"
     And the interpreter has "/tmp/f" open for reading as descriptor 3
     And the interpreter has "/tmp" open for reading as descriptor 4
@@ -31,7 +33,7 @@ Feature: Preview 1's descriptor status, rights and file status
     Then the trace is:
       """
       fd_fdstat_get 3 -> ok filetype=4 flags=0 base=0x3fffffff inheriting=0x3fffffff
-      fd_fdstat_get 4 -> ok filetype=3 flags=0 base=0x3fffffff inheriting=0x3fffffff
+      fd_fdstat_get 4 -> ok filetype=3 flags=0 base=0x7bffe19 inheriting=0x3fffffff
       fd_fdstat_get 9 -> BADF
       """
 
@@ -150,23 +152,46 @@ Feature: Preview 1's descriptor status, rights and file status
       """
 
   @WASI_NS_013
-  Scenario: Descriptor flags Fog does not keep are NOTSUP
-    Given the file "/tmp/f" holds "x"
-    And the interpreter has "/tmp/f" open for reading as descriptor 3
+  Scenario: APPEND sends every write to the end, NONBLOCK is kept, and a sync flag is INVAL
+    Given the file "/tmp/f" holds "0123456789"
+    And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
     When the trace interpreter runs:
       """
-      fd_fdstat_set_flags 3 0
       fd_fdstat_set_flags 3 1
+      fd_seek 3 2 set
+      fd_write 3 "ab"
+      fd_tell 3
+      fd_fdstat_get 3
       fd_fdstat_set_flags 3 4
+      fd_seek 3 2 set
+      fd_write 3 "cd"
+      fd_fdstat_get 3
+      fd_fdstat_set_flags 3 0
+      fd_fdstat_set_flags 3 2
+      fd_fdstat_set_flags 3 8
+      fd_fdstat_set_flags 3 16
+      fd_fdstat_set_flags 1 4
       fd_fdstat_set_flags 9 0
       """
     Then the trace is:
       """
+      fd_fdstat_set_flags 3 1 -> ok
+      fd_seek 3 2 set -> ok 2
+      fd_write 3 "ab" -> ok 2
+      fd_tell 3 -> ok 12
+      fd_fdstat_get 3 -> ok filetype=4 flags=1 base=0x3fffffff inheriting=0x3fffffff
+      fd_fdstat_set_flags 3 4 -> ok
+      fd_seek 3 2 set -> ok 2
+      fd_write 3 "cd" -> ok 2
+      fd_fdstat_get 3 -> ok filetype=4 flags=4 base=0x3fffffff inheriting=0x3fffffff
       fd_fdstat_set_flags 3 0 -> ok
-      fd_fdstat_set_flags 3 1 -> NOTSUP
-      fd_fdstat_set_flags 3 4 -> NOTSUP
+      fd_fdstat_set_flags 3 2 -> INVAL
+      fd_fdstat_set_flags 3 8 -> INVAL
+      fd_fdstat_set_flags 3 16 -> INVAL
+      fd_fdstat_set_flags 1 4 -> NOTSUP
       fd_fdstat_set_flags 9 0 -> BADF
       """
+    And the file "/tmp/f" holds "01cd456789ab"
 
   @WASI_NS_026
   Scenario: fd_filestat_get converts the file's stat without inventing POSIX identity
@@ -220,7 +245,7 @@ Feature: Preview 1's descriptor status, rights and file status
     And the file "/tmp/f" holds "0123"
 
   @WASI_NS_026
-  Scenario: fd_filestat_set_times sets only the modification time, in whole seconds
+  Scenario: fd_filestat_set_times sets only the modification time, in whole seconds, and a time with now is INVAL for either
     Given the file "/tmp/f" holds "0123456789"
     And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
     When the trace interpreter runs:
@@ -234,6 +259,7 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_filestat_set_times 3 1700000000000000000 0 1
       fd_filestat_set_times 3 0 0 2
       fd_filestat_set_times 3 0 1700000000000000000 12
+      fd_filestat_set_times 3 1700000000000000000 0 3
       fd_filestat_set_times 9 0 0 0
       """
     Then the trace is:
@@ -247,6 +273,7 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_filestat_set_times 3 1700000000000000000 0 1 -> NOTSUP
       fd_filestat_set_times 3 0 0 2 -> NOTSUP
       fd_filestat_set_times 3 0 1700000000000000000 12 -> INVAL
+      fd_filestat_set_times 3 1700000000000000000 0 3 -> INVAL
       fd_filestat_set_times 9 0 0 0 -> BADF
       """
 

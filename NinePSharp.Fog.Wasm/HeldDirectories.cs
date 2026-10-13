@@ -33,6 +33,8 @@ internal sealed class HeldDirectories(Process process)
         await process.CloseAsync(listing);
     }
 
+    public bool Holds(int fd) => held.ContainsKey(fd);
+
     public string? Preopen(int fd) => held.TryGetValue(fd, out Held? directory) && directory.Preopen ? directory.Name : null;
 
     // The true path a path beneath the directory descriptor fd names.
