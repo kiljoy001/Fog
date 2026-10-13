@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace NinePSharp.Fog.Kernel;
 
 internal static class Errors
@@ -17,11 +19,41 @@ internal static class Errors
     public const string NoFd = "no free file descriptors";
     public const string NoCreate = "mounted directory forbids creation";
     public const string Mount = "inconsistent mount";
+    public const string EmptyName = "empty file name";
+    public const string TooLong = "name too long";
+    public const string BadChar = "bad character in file name";
 
     // lib9p's, for ramfs.
     public const string CreateNonDirectory = "create in non-directory";
 
     private const int ErrMax = 128;
+
+    // up->genbuf, which validname's message is printed into.
+    private const int GenBuf = 128;
+
+    // needsrcquote's characters besides space and below.
+    private const string RcSpecial = "`^#*[]=|\\?${}()'<>&;";
+
+    // chan.c:validname0: a name of 64 KiB of UTF-8 or more is too long, and one holding a control
+    // character, DEL or, where none is allowed, a slash has a bad character, as isfrog says. A C
+    // string ends at its NUL, so a NUL in a name is a bad character too, since isfrog says so.
+    public static string? NameProblem(string name, bool slashOk)
+    {
+        if (Encoding.UTF8.GetByteCount(name) >= 1 << 16)
+        {
+            return TooLong;
+        }
+
+        foreach (char c in name)
+        {
+            if (c < ' ' || c == '\x7f' || (c == '/' && !slashOk))
+            {
+                return $"{BadChar}: {Quote(name, GenBuf - 1 - BadChar.Length - 2)}";
+            }
+        }
+
+        return null;
+    }
 
     // chan.c:namelenerror, showing the path up to the given number of elements.
     public static string Name(string path, int elements, string error)
@@ -56,6 +88,53 @@ internal static class Errors
 
         string message = $"{error}: '{shown.Replace("'", "''", StringComparison.Ordinal)}'";
         return message.Length < ErrMax ? message : message[..(ErrMax - 1)];
+    }
+
+    // fmtquote.c's %q, as much of the name as fits in room bytes, ending at a NUL, and quoted in rc's
+    // way if anything of it that fits needs quoting and the quotes fit too.
+    private static string Quote(string name, int room)
+    {
+        var shown = new StringBuilder();
+        int bytes = 0;
+        bool quoted = false;
+        foreach (Rune c in name.EnumerateRunes())
+        {
+            int width = c.Utf8SequenceLength;
+            if (c.Value == 0 || bytes + width > room)
+            {
+                break;
+            }
+
+            if (c.Value <= ' ' || (c.IsAscii && RcSpecial.Contains((char)c.Value, StringComparison.Ordinal)))
+            {
+                if (!quoted)
+                {
+                    if (1 + bytes + width + 1 > room)
+                    {
+                        break;
+                    }
+
+                    bytes += 2;
+                    quoted = true;
+                }
+
+                if (c.Value == '\'')
+                {
+                    if (1 + bytes + width > room)
+                    {
+                        break;
+                    }
+
+                    bytes++;
+                    shown.Append('\'');
+                }
+            }
+
+            bytes += width;
+            shown.Append(c.ToString());
+        }
+
+        return quoted ? $"'{shown}'" : shown.ToString();
     }
 
     private static int End(string path, int elements)

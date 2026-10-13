@@ -67,6 +67,7 @@ public sealed class Process
 
     public async ValueTask<int> OpenAsync(string path, int mode)
     {
+        Namec(path);
         try
         {
             return Named(await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode)), path);
@@ -96,6 +97,7 @@ public sealed class Process
 
     public async ValueTask<int> CreateAsync(string path, int mode, uint permissions)
     {
+        Namec(path);
         try
         {
             return Named(await calls.CreateAsync(path, new Plan9CreateRequest(permissions, mode)), path);
@@ -203,6 +205,7 @@ public sealed class Process
     /// <summary>wstat: changes a file's directory entry, leaving every field set as in <see cref="NullDir"/>.</summary>
     public async ValueTask WStatAsync(string path, Stat stat)
     {
+        ValidStat(stat);
         await ResolveAsync(path);
         try
         {
@@ -217,6 +220,7 @@ public sealed class Process
     /// <summary>fwstat: as wstat, for the file a descriptor names.</summary>
     public async ValueTask FWStatAsync(int fd, Stat stat)
     {
+        ValidStat(stat);
         try
         {
             await calls.FWStatAsync(fd, KernelFileStats.Encode(stat));
@@ -289,8 +293,15 @@ public sealed class Process
         }
     }
 
+    // bindmount: the first name is resolved before the second is looked at.
     public async ValueTask BindAsync(string name, string old, MountFlags flags)
     {
+        Namec(name);
+        if (NamecProblem(old) is { } problem)
+        {
+            throw await ResolvesAsync(name) ? new SyscallException(problem) : await NotFoundAsync(name);
+        }
+
         try
         {
             await new NamespaceSyscalls(devices).BindAsync(process, name, old, flags);
@@ -563,6 +574,27 @@ public sealed class Process
         return Encoding.UTF8.GetString(nul < 0 ? bytes : bytes[..nul]);
     }
 
+    // namec's checks of a name before it is evaluated.
+    private static string? NamecProblem(string path) => path.Length == 0 ? Errors.EmptyName : Errors.NameProblem(path, slashOk: true);
+
+    private static void Namec(string path)
+    {
+        if (NamecProblem(path) is { } problem)
+        {
+            throw new SyscallException(problem);
+        }
+    }
+
+    // validstat: a new name, unless it is "/", may not hold a slash or a bad character; one too long
+    // for its 64-byte buffer is left to the file server.
+    private static void ValidStat(Stat stat)
+    {
+        if (Encoding.UTF8.GetByteCount(stat.Name) + 1 <= 64 && stat.Name != "/" && Errors.NameProblem(stat.Name, slashOk: false) is { } problem)
+        {
+            throw new SyscallException(problem);
+        }
+    }
+
     private static string[] Elements(string path)
         => path.Split('/', StringSplitOptions.RemoveEmptyEntries).Where(name => name != ".").ToArray();
 
@@ -703,6 +735,7 @@ public sealed class Process
 
     private async Task<NamespaceChannel> ResolveAsync(string path)
     {
+        Namec(path);
         string[] names = Elements(path);
         NamespaceWalkResult walked = await plane.WalkAsync(Start(path), names, CancellationToken.None);
         return walked.Complete(names.Length) ? walked.Channel : throw NameError(path, walked);

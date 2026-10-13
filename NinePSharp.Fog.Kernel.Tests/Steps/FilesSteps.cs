@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel.Tests.Support;
 using NinePSharp.Messages;
@@ -161,6 +163,55 @@ public sealed class FilesSteps(KernelDriver driver)
     [Then(@"^the process can still open ""(.*)""$")]
     public async Task ThenCanOpen(string path) => Assert.Equal(4999, await driver.Init.OpenAsync(path, NinePConstants.OREAD));
 
+    [When(@"^the process (opens|creates|stats|removes|changes to|wstats|execs) the name ""(.*)""$")]
+    public Task WhenNames(string call, string name) => CallAsync(async () =>
+    {
+        string path = Expand(name);
+        switch (call)
+        {
+            case "opens":
+                await driver.Init.OpenAsync(path, NinePConstants.OREAD);
+                break;
+            case "creates":
+                await driver.Init.CreateAsync(path, NinePConstants.OWRITE, 0b110_110_110);
+                break;
+            case "stats":
+                await driver.Init.StatAsync(path);
+                break;
+            case "removes":
+                await driver.Init.RemoveAsync(path);
+                break;
+            case "changes to":
+                await driver.Init.ChdirAsync(path);
+                break;
+            case "wstats":
+                await driver.Init.WStatAsync(path, Process.NullDir);
+                break;
+            default:
+                await driver.Init.ExecAsync(path, ["x"]);
+                break;
+        }
+    });
+
+    [When(@"^the process renames ""(.*)"" to the name ""(.*)""$")]
+    public Task WhenRenames(string path, string name) => CallAsync(() => driver.Init.WStatAsync(path, Renaming(name)).AsTask());
+
+    [When(@"^the process renames descriptor 0 to the name ""(.*)""$")]
+    public Task WhenRenamesDescriptor(string name) => CallAsync(() => driver.Init.FWStatAsync(0, Renaming(name)).AsTask());
+
+    [When(@"^the process binds the name ""(.*)"" onto the name ""(.*)""$")]
+    public Task WhenBindsNames(string name, string old) => CallAsync(() => driver.Init.BindAsync(Expand(name), Expand(old), MountFlags.Replace).AsTask());
+
+    [Then(@"^the call fails with the message ""(.*)""$")]
+    public void ThenFailsWithMessage(string message) => Assert.Equal(Expand(message), failure);
+
+    [Then(@"^listing ""(.*)"" gives the name ""(.*)""$")]
+    public async Task ThenListingName(string path, string name)
+    {
+        int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
+        Assert.Equal([Expand(name)], (await driver.Init.DirReadAsync(fd)).Select(e => e.Name));
+    }
+
     [Then(@"^the call fails with ""(.*)""$")]
     public void ThenFails(string message) => Assert.Equal(message, failure);
 
@@ -189,6 +240,25 @@ public sealed class FilesSteps(KernelDriver driver)
 
     [Then(@"^the parent reads ""(.*)"" from ""(.*)""$")]
     public async Task ThenParentReads(string text, string path) => Assert.Equal(text, await ReadAsync(driver.Init, path));
+
+    // A name as a scenario writes it: <N c> for N of the character c, and \t, \n, \0 and \xHH.
+    private static string Expand(string text)
+    {
+        string repeated = Regex.Replace(text, "<([0-9]+) (.)>", match => new string(match.Groups[2].Value[0], int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)));
+        return Regex.Replace(repeated, @"\\(t|n|0|x[0-9a-f]{2})", match => match.Groups[1].Value switch
+        {
+            "t" => "\t",
+            "n" => "\n",
+            "0" => "\0",
+            string hex => ((char)Convert.ToInt32(hex[1..], 16)).ToString(),
+        });
+    }
+
+    private static Stat Renaming(string name)
+    {
+        Stat none = Process.NullDir;
+        return new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, none.Mtime, none.Length, Expand(name), none.Uid, none.Gid, none.Muid);
+    }
 
     private static async Task ChangeAsync(Process child, string change)
     {

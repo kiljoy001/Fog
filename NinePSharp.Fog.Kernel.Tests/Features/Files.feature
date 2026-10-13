@@ -8,7 +8,13 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
   was opened or created by, cleaned as cleanname does, which later changes to the namespace do not
   update; a pipe's ends are named as devpipe names them. A ram file opens only for the access its
   permissions give the user, as lib9p's sopen and hasperm decide: the other bits, then the owner's,
-  then the group's, each user leading a group of its own name; truncating needs write.
+  then the group's, each user leading a group of its own name; truncating needs write. Every call that
+  names a file checks the name first, as namec does: an empty name is refused, then one of 64 KiB of
+  UTF-8 or more, then one holding a control character or DEL, named with the name quoted as %q quotes
+  it, in rc's way, within the 128 bytes of the message. A path ends at its NUL in 9front; a name here
+  may hold one, and NUL is a bad character, as isfrog has it. wstat and fwstat check a new name before
+  anything else, refusing a slash in it too, unless it is "/" or 64 bytes or longer, which is left to
+  the file server as validstat leaves it. bind resolves its first name before checking its second.
 
   Background:
     Given a booted kernel
@@ -297,3 +303,84 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | /dev/null | c    |
       | /fd       | d    |
       | /env      | e    |
+
+  @FOG_KERNEL_036
+  Scenario Outline: Every call that names a file checks the name first, as namec does
+    When the process <call> the name "<name>"
+    Then the call fails with the message "<message>"
+
+    Examples:
+      | call       | name             | message                                    |
+      | opens      |                  | empty file name                            |
+      | creates    |                  | empty file name                            |
+      | stats      |                  | empty file name                            |
+      | removes    |                  | empty file name                            |
+      | changes to |                  | empty file name                            |
+      | wstats     |                  | empty file name                            |
+      | execs      |                  | empty file name                            |
+      | opens      | /tmp/a\tb        | bad character in file name: '/tmp/a\tb'    |
+      | creates    | /tmp/a\x01b      | bad character in file name: '/tmp/a\x01b'  |
+      | stats      | /tmp/a\x7fb      | bad character in file name: /tmp/a\x7fb    |
+      | removes    | /tmp/f\0         | bad character in file name: /tmp/f         |
+      | changes to | /tmp/a\x0ab      | bad character in file name: '/tmp/a\x0ab'  |
+      | wstats     | /tmp/a\x1fb      | bad character in file name: '/tmp/a\x1fb'  |
+      | execs      | /tmp/a\tb        | bad character in file name: '/tmp/a\tb'    |
+      | opens      | /tmp/<65531 a>   | name too long                              |
+      | creates    | /tmp/<32766 é>   | name too long                              |
+      | stats      | /<32767 é>a      | name too long                              |
+      | execs      | /tmp/<65531 a>   | name too long                              |
+      | opens      | /tmp/<65531 a>\t | name too long                              |
+
+  @FOG_KERNEL_036
+  Scenario Outline: A name just short of 64 KiB of UTF-8 is a name
+    When the process creates the name "<name>"
+    Then the open succeeds
+
+    Examples:
+      | name           |
+      | /tmp/<65530 a> |
+      | /tmp/<32765 é> |
+
+  @FOG_KERNEL_036
+  Scenario Outline: The message quotes the name as %q does, within the message's 128 bytes
+    When the process opens the name "<name>"
+    Then the call fails with the message "<message>"
+
+    Examples:
+      | name                    | message                                                  |
+      | /tmp/it's\x01           | bad character in file name: '/tmp/it''s\x01'             |
+      | /tmp/$\x7f              | bad character in file name: '/tmp/$\x7f'                 |
+      | /tmp/<80 a>\x01<40 a>   | bad character in file name: '/tmp/<80 a>\x01<11 a>'      |
+      | /tmp/<92 a>\x01         | bad character in file name: /tmp/<92 a>                  |
+      | /tmp/<200 a>\x01        | bad character in file name: /tmp/<94 a>                  |
+
+  @FOG_KERNEL_036
+  Scenario Outline: wstat and fwstat check a new name before the file, refusing a slash in it too
+    Given the process has "/tmp/f" open as descriptor 0
+    When the process <call> to the name "<name>"
+    Then the call fails with the message "<message>"
+
+    Examples:
+      | call                         | name         | message                                 |
+      | renames "/tmp/missing"       | a/b          | bad character in file name: a/b         |
+      | renames "/tmp/f"             | a\tb         | bad character in file name: 'a\tb'      |
+      | renames ""                   | a/b          | bad character in file name: a/b         |
+      | renames descriptor 0         | a/b          | bad character in file name: a/b         |
+      | renames descriptor 0         | <61 a>/b     | bad character in file name: <61 a>/b    |
+
+  @FOG_KERNEL_036
+  Scenario: A new name of 64 bytes or more is left to the file server, which ramfs takes
+    When the process renames "/tmp/f" to the name "<62 a>/b"
+    Then listing "/tmp" gives the name "<62 a>/b"
+
+  @FOG_KERNEL_036
+  Scenario Outline: bind resolves its first name before it checks its second
+    When the process binds the name "<name>" onto the name "<old>"
+    Then the call fails with the message "<message>"
+
+    Examples:
+      | name         | old         | message                                  |
+      | /tmp/a\tb    | /tmp/f      | bad character in file name: '/tmp/a\tb'  |
+      | /tmp/f       | /tmp/a\tb   | bad character in file name: '/tmp/a\tb'  |
+      | /tmp/missing | /tmp/a\tb   | file does not exist: '/tmp/missing'      |
+      |              | /tmp/f      | empty file name                          |
