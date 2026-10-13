@@ -87,6 +87,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         "path_link" => new Func<int, int, int, int, int, int, int, int>((oldfd, lookup, from, fromLength, newfd, to, toLength) => (int)Errno.Notsup),
         "path_symlink" => new Func<int, int, int, int, int, int>((from, fromLength, fd, to, toLength) => (int)Errno.Notsup),
         "path_readlink" => new Func<int, int, int, int, int, int, int>((fd, path, length, buffer, bufferLength, used) => (int)Errno.Notsup),
+        "poll_oneoff" => new Func<int, int, int, int, int>((subscriptions, events, count, ready) => Call(() => Poll((uint)subscriptions, (uint)events, (uint)count, (uint)ready))),
         "proc_exit" => new Action<int>(code => throw new ProcExitException((uint)code)),
         _ => Preview1.Unsupported(Preview1.Unprovided[name]),
     };
@@ -108,6 +109,10 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         catch (NameTooLongException)
         {
             return (int)Errno.Nametoolong;
+        }
+        catch (PipeSeekException)
+        {
+            return (int)Errno.Spipe;
         }
         catch (NotCapableException)
         {
@@ -154,7 +159,18 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     // means the descriptor's own offset.
     private static long Offset(long offset) => offset >= 0 ? offset : throw new InvalidArgumentException();
 
-    private static byte Filetype(Stat stat) => (stat.Qid.Type & QidType.QTDIR) != 0 ? (byte)3 : (byte)4;
+    private static byte[] Failed(byte[] happened, Errno errno)
+    {
+        BinaryPrimitives.WriteUInt16LittleEndian(happened.AsSpan(8), (ushort)errno);
+        return happened;
+    }
+
+    // From the qid and the device: a directory, a pipe (#|), whose kind Preview 1 has no name for, a
+    // console device (#c), or a regular file.
+    private static byte Filetype(Stat stat) => (stat.Qid.Type & QidType.QTDIR) != 0 ? (byte)3
+        : stat.Type == '|' ? (byte)0
+        : stat.Type == 'c' ? (byte)2
+        : (byte)4;
 
     // A wstat that changes only the length, the modification time or the name, leaving the rest as
     // nulldir does; a size of 0 has the record sized for its name.
@@ -470,6 +486,83 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return Errno.Success;
     }
 
+    // Waits until a subscription is ready, looking every 10 ms, which is a clock's resolution here: a
+    // clock once its deadline has passed, counted down by the time waited from the call's start or, if
+    // absolute, from a time on that clock; fd_read on a pipe once bytes are queued or the other end
+    // has gone, and on anything else at once, with what is left past its offset; fd_write at once. A
+    // subscription that cannot be looked at is ready with its errno. Each ready one is an event.
+    private Errno Poll(uint subscriptions, uint events, uint count, uint ready)
+    {
+        if (count == 0)
+        {
+            throw new InvalidArgumentException();
+        }
+
+        const long Step = 10_000_000;
+        byte[][] wanted = [.. Enumerable.Range(0, (int)count).Select(i => memory.Read(subscriptions + (48 * (uint)i), 48))];
+        long[] started = [(long)Now(0), (long)Now(1)];
+        long waited = 0;
+        List<byte[]> fired;
+        while ((fired = [.. wanted.Select(subscription => Ready(subscription, started, waited)).OfType<byte[]>()]).Count == 0)
+        {
+            Task.Delay(TimeSpan.FromTicks(Step / 100), clock).GetAwaiter().GetResult();
+            waited += Step;
+        }
+
+        for (int i = 0; i < fired.Count; i++)
+        {
+            memory.Write(events + (32 * (uint)i), fired[i]);
+        }
+
+        memory.WriteUInt32(ready, (uint)fired.Count);
+        return Errno.Success;
+    }
+
+    // The event for a subscription that is ready, or null.
+    private byte[]? Ready(byte[] subscription, long[] started, long waited)
+    {
+        const int Absolute = 1;
+        var happened = new byte[32];
+        subscription.AsSpan(0, 8).CopyTo(happened);
+        happened[10] = subscription[8];
+        try
+        {
+            if (subscription[8] == 0)
+            {
+                int id = BinaryPrimitives.ReadInt32LittleEndian(subscription.AsSpan(16));
+                if (id is not (0 or 1))
+                {
+                    return Failed(happened, id is 2 or 3 ? Errno.Notsup : Errno.Inval);
+                }
+
+                long timeout = BinaryPrimitives.ReadInt64LittleEndian(subscription.AsSpan(24));
+                bool absolute = (BinaryPrimitives.ReadUInt16LittleEndian(subscription.AsSpan(40)) & Absolute) != 0;
+                return timeout - (absolute ? started[id] : 0) - waited <= 0 ? happened : null;
+            }
+
+            int fd = Require(BinaryPrimitives.ReadInt32LittleEndian(subscription.AsSpan(16)), Rights.PollFdReadwrite);
+            Stat stat = Stat(fd);
+            if (subscription[8] == 2)
+            {
+                return happened;
+            }
+
+            (long Queued, bool HungUp)? pipe = Wait(process.PipeReadinessAsync(fd));
+            long left = pipe?.Queued ?? (stat.Type != 'c' && !HeldDirectories.IsDirectory(stat) ? (long)stat.Length - Wait(process.SeekAsync(fd, 0, 1)) : 0);
+            BinaryPrimitives.WriteInt64LittleEndian(happened.AsSpan(16), Math.Max(0, left));
+            happened[24] = pipe is { HungUp: true } ? (byte)1 : (byte)0;
+            return pipe is not { Queued: 0, HungUp: false } ? happened : null;
+        }
+        catch (NotCapableException)
+        {
+            return Failed(happened, Errno.Notcapable);
+        }
+        catch (SyscallException error)
+        {
+            return Failed(happened, Map(error.Message));
+        }
+    }
+
     // No descriptor is a socket.
     private Errno NotSocket(int fd)
     {
@@ -571,6 +664,12 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         memory.Check(position, 8);
+        if (Stat(fd).Type == '|')
+        {
+            // A pipe has no offset to move.
+            throw new PipeSeekException();
+        }
+
         memory.WriteUInt64(position, (ulong)Wait(process.SeekAsync(fd, offset, whence)));
         return Errno.Success;
     }

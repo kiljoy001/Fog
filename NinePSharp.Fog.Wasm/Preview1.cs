@@ -14,7 +14,6 @@ internal static class Preview1
     {
         ["fd_datasync"] = 1,
         ["fd_sync"] = 1,
-        ["poll_oneoff"] = 4,
         ["proc_raise"] = 1,
     };
 

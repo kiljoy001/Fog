@@ -19,5 +19,6 @@ internal enum Errno
     Nosys = 52,
     Notsock = 57,
     Notsup = 58,
+    Spipe = 70,
     Notcapable = 76,
 }

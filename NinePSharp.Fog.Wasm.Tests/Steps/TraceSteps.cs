@@ -20,6 +20,7 @@ public sealed class TraceSteps(WasmDriver driver)
     private Func<Process, Task>? change;
     private string trace = string.Empty;
     private string status = string.Empty;
+    private TimeSpan took;
 
     [Given(@"^the file ""(.*)"" holds ""(.*)""$")]
     public Task GivenFile(string path, string text) => WriteAsync(path, Encoding.UTF8.GetBytes(Unescape(text)));
@@ -44,7 +45,10 @@ public sealed class TraceSteps(WasmDriver driver)
         => await driver.Init.BindAsync(name, old, where == "before" ? MountFlags.Before : MountFlags.After);
 
     // The interpreter writes to descriptor 7 when it is ready and waits on descriptor 6; between, the
-    // parent, which shares its namespace, makes the change.
+    // parent, which shares its namespace, makes the change, then writes "go" and closes its end.
+    [Given("once the interpreter is ready, the parent writes to descriptor 6 and closes its end")]
+    public void GivenWrite() => change = process => Task.CompletedTask;
+
     [Given(@"^once the interpreter is ready, the parent binds ""(.*)"" over ""(.*)""$")]
     public void GivenBind(string name, string old) => change = process => process.BindAsync(name, old, MountFlags.Replace).AsTask();
 
@@ -69,6 +73,7 @@ public sealed class TraceSteps(WasmDriver driver)
     {
         await WriteAsync("/bin/trace", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "trace.wasm")));
         await WriteAsync("/tmp/script", Encoding.UTF8.GetBytes(script + "\n"));
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         var (first, second) = await driver.Init.PipeAsync();
         (int Fd, int Other) ready = change is null ? (-1, -1) : await driver.Init.PipeAsync();
         (int Fd, int Other) resume = change is null ? (-1, -1) : await driver.Init.PipeAsync();
@@ -109,6 +114,7 @@ public sealed class TraceSteps(WasmDriver driver)
             await driver.Init.ReadAsync(ready.Other, 16).AsTask().WaitAsync(WasmDriver.Bound);
             await change(driver.Init);
             await driver.Init.WriteAsync(resume.Other, "go"u8.ToArray());
+            await driver.Init.CloseAsync(resume.Other);
         }
 
         var output = new StringBuilder();
@@ -123,6 +129,7 @@ public sealed class TraceSteps(WasmDriver driver)
         Assert.Equal(child, ended.Pid);
         trace = output.ToString();
         status = ended.Message;
+        took = System.Diagnostics.Stopwatch.GetElapsedTime(started);
     }
 
     // Each line as written, where * stands for anything.
@@ -170,6 +177,9 @@ public sealed class TraceSteps(WasmDriver driver)
         Assert.Equal(Stat("path_filestat_get 3 0 \"report\""), Dirent("report"));
         Assert.NotEqual(Dirent("."), Dirent("report"));
     }
+
+    [Then(@"^the run took at least (\d+) ms$")]
+    public void ThenTook(int milliseconds) => Assert.True(took >= TimeSpan.FromMilliseconds(milliseconds), $"the run took {took}");
 
     [Then(@"^the file ""(.*)"" holds ""(.*)""$")]
     public async Task ThenFileHolds(string path, string text)

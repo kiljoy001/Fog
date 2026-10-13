@@ -2,7 +2,7 @@
 Feature: Preview 1 calls on the descriptors an application holds
   The descriptors are the process's own, with the same numbers. fd_read and fd_write read and write
   at the descriptor's offset and move it; fd_pread and fd_pwrite act at the offset given and leave
-  the descriptor's alone. A vector of buffers is filled or emptied in order, from one kernel call.
+  the descriptor's alone; a pipe has no offset, so seeking one is SPIPE. A vector of buffers is filled or emptied in order, from one kernel call.
   WASI offsets are unsigned, so one above the largest signed offset, which would reach Plan 9's -1,
   is INVAL. fd_seek moves the offset from the start, from where it is or from the end, never before
   the start; a directory seeks only back to its start, and fd_read on a directory is ISDIR, since
@@ -174,4 +174,17 @@ Feature: Preview 1 calls on the descriptors an application holds
       fd_close 3 -> ok
       fd_close 3 -> BADF
       fd_read 3 1 -> BADF
+      """
+
+  @WASI_NS_009
+  Scenario: A pipe has no offset, so seeking it is SPIPE
+    When the trace interpreter runs:
+      """
+      fd_seek 1 0 set
+      fd_tell 1
+      """
+    Then the trace is:
+      """
+      fd_seek 1 0 set -> SPIPE
+      fd_tell 1 -> SPIPE
       """

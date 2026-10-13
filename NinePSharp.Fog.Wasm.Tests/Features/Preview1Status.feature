@@ -1,8 +1,10 @@
 @fog_wasm_preview1_status
 Feature: Preview 1's descriptor status, rights and file status
-  fd_fdstat_get reports a descriptor's file type from its qid, a directory or a regular file, and
-  its rights. Each descriptor starts with every right: Plan 9 opens a directory only for reading,
-  so the open mode cannot carry what the application may do beneath it, and the file server still
+  fd_fdstat_get reports a descriptor's file type from its qid and device: a directory, a pipe (#|)
+  as unknown, which is how reference runtimes report pipes, a console device (#c) as a character
+  device, or a regular file; and its rights. Each descriptor starts with every right: Plan 9 opens
+  a directory only for reading, so the open mode cannot carry what the application may do beneath
+  it, and the file server still
   checks every call. fd_fdstat_set_rights only narrows; nothing restores a right, and a call needs
   every right it names or it is NOTCAPABLE, before anything else is done. fd_renumber moves a
   descriptor's rights with it. Fog keeps no append, sync or nonblocking flags, so asking for one is
@@ -31,6 +33,20 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_fdstat_get 3 -> ok filetype=4 flags=0 base=0x3fffffff inheriting=0x3fffffff
       fd_fdstat_get 4 -> ok filetype=3 flags=0 base=0x3fffffff inheriting=0x3fffffff
       fd_fdstat_get 9 -> BADF
+      """
+
+  @WASI_NS_026
+  Scenario: The file type comes from the qid and the device
+    Given the interpreter has "/dev/null" open for reading and writing as descriptor 3
+    When the trace interpreter runs:
+      """
+      fd_fdstat_get 1
+      fd_fdstat_get 3
+      """
+    Then the trace is:
+      """
+      fd_fdstat_get 1 -> ok filetype=0 flags=0 base=0x3fffffff inheriting=0x3fffffff
+      fd_fdstat_get 3 -> ok filetype=2 flags=0 base=0x3fffffff inheriting=0x3fffffff
       """
 
   @WASI_NS_004
