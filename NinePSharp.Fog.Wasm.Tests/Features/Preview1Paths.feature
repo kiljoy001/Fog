@@ -458,7 +458,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
     And the file "/data/weekly" holds "daily"
 
   @WASI_NS_026
-  Scenario: A path's file status is got and its modification time set
+  Scenario: A path's file status is got and its modification time set, the file server keeping its whole seconds
     When the trace interpreter runs:
       """
       path_filestat_get 3 0 "report"
@@ -485,6 +485,7 @@ Feature: Preview 1 paths resolve beneath the directories the application holds
       path_filestat_set_times 3 0 "report" 0 0 1 -> NOTSUP
       path_filestat_set_times 3 0 "report" 0 0 3 -> INVAL
       """
+    And the file "/data/report" was last modified at 1700000000
 
   @WASI_NS_013
   Scenario: Plan 9 has no links or symlinks
