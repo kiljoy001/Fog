@@ -37,6 +37,7 @@ publish_out/
 
 # Local package outputs
 *.nupkg
+!packages/WebAssembly.*.nupkg
 *.snupkg
 
 # Reqnroll-generated code-behind

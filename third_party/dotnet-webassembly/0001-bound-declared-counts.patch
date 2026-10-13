@@ -1,0 +1,1027 @@
+From 520395548a0e59eaf576a7ec024dce44a483fd77 Mon Sep 17 00:00:00 2001
+From: Scott J Guyton <kiljoy001@gmail.com>
+Date: Tue, 13 Oct 2026 00:52:41 -0700
+Subject: [PATCH] Bound every declared count and length by the bytes that
+ remain
+
+Each section and function body declares its length before its contents, so
+nothing is read past the end of the one being read, a section is checked to
+end where it said it would, and no count claims more entries than there are
+bytes left for them. Vectors are read into arrays sized by those checked
+counts. A data count is bounded by what is left of the module, and a function
+declares at most 50,000 locals, the limit the JavaScript API sets.
+
+A 141-byte module could previously make either reader allocate or loop by a
+count of hundreds of millions.
+---
+ WebAssembly.Tests/Runtime/BoundedReadTests.cs |  83 +++++++++++
+ WebAssembly/CompositeTypeReader.cs            |  16 +-
+ WebAssembly/Element.cs                        |  10 +-
+ WebAssembly/FunctionBody.cs                   |  17 +--
+ WebAssembly/Instructions/BranchTable.cs       |   9 +-
+ WebAssembly/Instructions/TryTable.cs          |   7 +-
+ WebAssembly/Local.cs                          |   4 +-
+ WebAssembly/Module.cs                         | 139 +++++-------------
+ WebAssembly/Reader.cs                         |  89 +++++++++++
+ WebAssembly/Runtime/Compile.cs                | 139 ++++++++----------
+ WebAssembly/WebAssemblyType.cs                |  22 +--
+ 11 files changed, 302 insertions(+), 233 deletions(-)
+ create mode 100644 WebAssembly.Tests/Runtime/BoundedReadTests.cs
+
+diff --git a/WebAssembly.Tests/Runtime/BoundedReadTests.cs b/WebAssembly.Tests/Runtime/BoundedReadTests.cs
+new file mode 100644
+index 00000000..e180775c
+--- /dev/null
++++ b/WebAssembly.Tests/Runtime/BoundedReadTests.cs
+@@ -0,0 +1,83 @@
++using Microsoft.VisualStudio.TestTools.UnitTesting;
++using System;
++using System.IO;
++
++namespace WebAssembly.Runtime;
++
++/// <summary>
++/// Tests that every count and length a module declares is checked against the bytes that remain before anything is
++/// allocated for it, so a small module can't make either reader allocate or loop by a count it merely claims.
++/// </summary>
++[TestClass]
++public class BoundedReadTests
++{
++    static readonly byte[] OneFunctionType = [0x01, 0x04, 0x01, 0x60, 0x00, 0x00];
++
++    static readonly byte[] OneFunction = [0x03, 0x02, 0x01, 0x00];
++
++    static void AssertRefused(string expected, params ReadOnlySpan<byte> sectionBytes)
++    {
++        byte[] module = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, .. sectionBytes];
++
++        var read = Assert.ThrowsExactly<ModuleLoadException>(() => Module.ReadFromBinary(new MemoryStream(module)));
++        Assert.Contains(expected, read.Message);
++
++        var compiled = Assert.ThrowsExactly<ModuleLoadException>(() => Compile.FromBinary<object>(new MemoryStream(module)));
++        Assert.Contains(expected, compiled.Message);
++    }
++
++    /// <summary>A section's entry count larger than the bytes left in the section is refused.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    [DataRow((byte)0x01, DisplayName = "Type")]
++    [DataRow((byte)0x02, DisplayName = "Import")]
++    [DataRow((byte)0x03, DisplayName = "Function")]
++    [DataRow((byte)0x04, DisplayName = "Table")]
++    [DataRow((byte)0x05, DisplayName = "Memory")]
++    [DataRow((byte)0x06, DisplayName = "Global")]
++    [DataRow((byte)0x07, DisplayName = "Export")]
++    [DataRow((byte)0x09, DisplayName = "Element")]
++    [DataRow((byte)0x0a, DisplayName = "Code")]
++    [DataRow((byte)0x0b, DisplayName = "Data")]
++    [DataRow((byte)0x0d, DisplayName = "Tag")]
++    public void SectionCountPastSection_Refused(byte section) =>
++        AssertRefused("exceeds the 0 bytes left", section, 0x04, 0xff, 0xff, 0xff, 0x7f);
++
++    /// <summary>A count inside an entry, here a function type's parameters, is bounded by its section too.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void NestedCountPastSection_Refused() =>
++        AssertRefused("exceeds the 1 bytes left", 0x01, 0x07, 0x01, 0x60, 0xff, 0xff, 0xff, 0x7f, 0x00);
++
++    /// <summary>A function body's local entry count is bounded by the body's own length.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void LocalEntryCountPastBody_Refused() =>
++        AssertRefused("exceeds the 1 bytes left", [.. OneFunctionType, .. OneFunction, 0x0a, 0x07, 0x01, 0x05, 0xff, 0xff, 0xff, 0x7f, 0x0b]);
++
++    /// <summary>A section that claims more bytes than the module holds is refused.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void SectionPastModule_Refused() => AssertRefused("exceeds the 1 bytes left", 0x01, 0x0a, 0x00);
++
++    /// <summary>A section whose entries end before its declared length is refused.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void SectionLongerThanEntries_Refused() => AssertRefused("section size mismatch", 0x01, 0x03, 0x00, 0x00, 0x00);
++
++    /// <summary>A name longer than the section that holds it is refused before it's read.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void NamePastSection_Refused() => AssertRefused("exceeds the 1 bytes left", 0x00, 0x04, 0xff, 0xff, 0x03, 0x00);
++
++    /// <summary>A data count can't exceed the bytes left in the module, where its segments would have to be.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void DataCountPastModule_Refused() => AssertRefused("exceeds the 0 bytes left", 0x0c, 0x05, 0xff, 0xff, 0xff, 0xff, 0x0f);
++
++    /// <summary>A function may declare at most 50,000 locals, the limit the WebAssembly JavaScript API sets.</summary>
++    [TestMethod]
++    [Timeout(10000)]
++    public void TooManyLocals_Refused() =>
++        AssertRefused("too many locals", [.. OneFunctionType, .. OneFunction, 0x0a, 0x0c, 0x01, 0x0a, 0x02, 0xa9, 0xc3, 0x01, 0x7f, 0xa8, 0xc3, 0x01, 0x7f, 0x0b]);
++}
+diff --git a/WebAssembly/CompositeTypeReader.cs b/WebAssembly/CompositeTypeReader.cs
+index 5156b33e..73cc2d29 100644
+--- a/WebAssembly/CompositeTypeReader.cs
++++ b/WebAssembly/CompositeTypeReader.cs
+@@ -1,6 +1,4 @@
+-using System.Collections.Generic;
+-
+-namespace WebAssembly;
++﻿namespace WebAssembly;
+ 
+ /// <summary>
+ /// Shared decoder for the WASM 3.0 type-section grammar (recursion groups, sub types, and composite types).
+@@ -40,20 +38,16 @@ internal static class CompositeTypeReader
+     public static WebAssemblyType ReadSubType(Reader reader, sbyte lead)
+     {
+         bool isFinal;
+-        List<uint>? superTypes = null;
++        uint[]? superTypes = null;
+         sbyte compositeForm;
+ 
+         if (lead is SubForm or SubFinalForm)
+         {
+             isFinal = lead == SubFinalForm;
+ 
+-            var superCount = checked((int)reader.ReadVarUInt32());
+-            if (superCount > 0)
+-            {
+-                superTypes = new List<uint>(superCount);
+-                for (var i = 0; i < superCount; i++)
+-                    superTypes.Add(reader.ReadVarUInt32());
+-            }
++            var supers = Module.ReadVector(reader, reader => reader.ReadVarUInt32());
++            if (supers.Length > 0)
++                superTypes = supers;
+ 
+             compositeForm = reader.ReadVarInt7();
+         }
+diff --git a/WebAssembly/Element.cs b/WebAssembly/Element.cs
+index 0137689a..ee90861e 100644
+--- a/WebAssembly/Element.cs
++++ b/WebAssembly/Element.cs
+@@ -206,18 +206,12 @@ public class Element
+ 
+     private void ReadFuncIndices(Reader reader)
+     {
+-        var count = checked((int)reader.ReadVarUInt32());
+-        var list = this.elements = new List<uint>(count);
+-        for (var i = 0; i < count; i++)
+-            list.Add(reader.ReadVarUInt32());
++        this.elements = Module.ReadVector(reader, reader => reader.ReadVarUInt32());
+     }
+ 
+     private void ReadInitExprs(Reader reader)
+     {
+-        var count = checked((int)reader.ReadVarUInt32());
+-        var list = this.initExprs = new List<IList<Instruction>>(count);
+-        for (var i = 0; i < count; i++)
+-            list.Add(Instruction.ParseInitializerExpression(reader).ToList());
++        this.initExprs = Module.ReadVector<IList<Instruction>>(reader, reader => [.. Instruction.ParseInitializerExpression(reader)]);
+     }
+ 
+     /// <summary>
+diff --git a/WebAssembly/FunctionBody.cs b/WebAssembly/FunctionBody.cs
+index 2bb2b1f6..fbf8f9c4 100644
+--- a/WebAssembly/FunctionBody.cs
++++ b/WebAssembly/FunctionBody.cs
+@@ -64,18 +64,17 @@ public class FunctionBody : IEquatable<FunctionBody>
+         this.locals = locals ?? throw new ArgumentNullException(nameof(locals));
+     }
+ 
+-    internal FunctionBody(Reader reader, long byteLength)
++    internal FunctionBody(Reader reader)
+     {
+-        var startingOffset = reader.Offset;
+-        var localCount = reader.ReadVarUInt32();
+-        var locals = this.Locals = new List<Local>(checked((int)localCount));
+-        for (var i = 0; i < localCount; i++)
+-            locals.Add(new Local(reader));
++        var outer = reader.Enter();
++        var total = 0u;
++        var locals = new Local[reader.ReadCount()];
++        for (var i = 0; i < locals.Length; i++)
++            locals[i] = new Local(reader, ref total);
+ 
++        this.locals = locals;
+         this.code = Instruction.Parse(reader).ToArray();
+-
+-        if (reader.Offset - startingOffset != byteLength)
+-            throw new ModuleLoadException($"Instruction sequence reader ended after reading {reader.Offset - startingOffset} characters, expected {byteLength}.", reader.Offset);
++        reader.Leave(outer);
+     }
+ 
+     /// <summary>
+diff --git a/WebAssembly/Instructions/BranchTable.cs b/WebAssembly/Instructions/BranchTable.cs
+index 120cc2e8..d351406a 100644
+--- a/WebAssembly/Instructions/BranchTable.cs
++++ b/WebAssembly/Instructions/BranchTable.cs
+@@ -1,4 +1,4 @@
+-using System;
++﻿using System;
+ using System.Collections.Generic;
+ using System.Linq;
+ using System.Reflection.Emit;
+@@ -65,12 +65,7 @@ public class BranchTable : Instruction, IEquatable<BranchTable>
+ 
+     internal BranchTable(Reader reader)
+     {
+-        var count = reader.ReadVarUInt32();
+-        var labels = new List<uint>();
+-        Labels = labels;
+-
+-        for (var i = 0; i < count; i++)
+-            labels.Add(reader.ReadVarUInt32());
++        this.labels = Module.ReadVector(reader, reader => reader.ReadVarUInt32());
+ 
+         this.DefaultLabel = reader.ReadVarUInt32();
+     }
+diff --git a/WebAssembly/Instructions/TryTable.cs b/WebAssembly/Instructions/TryTable.cs
+index d9da9f55..5765ba2f 100644
+--- a/WebAssembly/Instructions/TryTable.cs
++++ b/WebAssembly/Instructions/TryTable.cs
+@@ -1,4 +1,4 @@
+-using System;
++﻿using System;
+ using System.Collections.Generic;
+ using System.Linq;
+ using System.Reflection;
+@@ -51,10 +51,7 @@ public class TryTable : BlockTypeInstruction
+     internal TryTable(Reader reader)
+         : base(reader)
+     {
+-        var count = reader.ReadVarUInt32();
+-        var catches = this.catches = new List<CatchClause>(checked((int)count));
+-        for (var i = 0; i < count; i++)
+-            catches.Add(new CatchClause(reader));
++        this.catches = Module.ReadVector(reader, reader => new CatchClause(reader));
+     }
+ 
+     internal sealed override void WriteTo(Writer writer)
+diff --git a/WebAssembly/Local.cs b/WebAssembly/Local.cs
+index 8494b157..f8d37566 100644
+--- a/WebAssembly/Local.cs
++++ b/WebAssembly/Local.cs
+@@ -43,9 +43,9 @@ public class Local : IEquatable<Local>
+     {
+     }
+ 
+-    internal Local(Reader reader)
++    internal Local(Reader reader, ref uint total)
+     {
+-        this.Count = reader.ReadVarUInt32();
++        this.Count = reader.ReadLocalCount(ref total);
+         this.type = ReferenceType.ReadValueType(reader, out this.refType);
+     }
+ 
+diff --git a/WebAssembly/Module.cs b/WebAssembly/Module.cs
+index 111b4922..318e783e 100644
+--- a/WebAssembly/Module.cs
++++ b/WebAssembly/Module.cs
+@@ -248,66 +248,57 @@ public class Module
+             {
+                 if (id != 0 && ((Section)id).BinaryOrder < previousSection.BinaryOrder)
+                     throw new ModuleLoadException($"Sections out of order; section {(Section)id} encounterd after {previousSection}.", preSectionOffset);
+-                var payloadLength = reader.ReadVarUInt32();
++                var outer = reader.Enter();
+ 
+                 switch ((Section)id)
+                 {
+                     case Section.None: //Custom section
+                         {
+-                            var preNameOffset = reader.Offset;
+-                            var nameLength = reader.ReadVarUInt32();
+-
+                             module.CustomSections.Add(new CustomSection
+                             {
+-                                Name = reader.ReadString(nameLength),
+-                                Content = reader.ReadBytes(payloadLength - checked((uint)(reader.Offset - preNameOffset))),
++                                Name = reader.ReadString(reader.ReadLength()),
++                                Content = reader.ReadBytes(reader.Remaining),
+                                 PrecedingSection = previousSection
+                             });
+                         }
++                        reader.Leave(outer);
+                         continue; //Skip normal post-section logic since this isn't a real section.
+ 
+                     case Section.Type: //Composite type declarations (recursion groups of sub/composite types)
+                         {
+-                            var groupCount = reader.ReadVarUInt32();
+-                            var types = module.types = new List<WebAssemblyType>(checked((int)groupCount));
+-                            var groups = new List<RecursionGroup>(checked((int)groupCount));
++                            var groups = new RecursionGroup[reader.ReadCount()];
+                             var needsRecursionView = false;
+ 
+-                            for (var g = 0; g < groupCount; g++)
++                            for (var g = 0; g < groups.Length; g++)
+                             {
+                                 var lead = reader.ReadVarInt7();
+-                                var group = new RecursionGroup();
++                                WebAssemblyType[] groupTypes;
++                                var isExplicit = lead == CompositeTypeReader.RecursionGroupForm;
+ 
+-                                if (lead == CompositeTypeReader.RecursionGroupForm)
++                                if (isExplicit)
+                                 {
+                                     needsRecursionView = true;
+-                                    group.IsExplicit = true;
+-
+-                                    var subCount = checked((int)reader.ReadVarUInt32());
+-                                    for (var s = 0; s < subCount; s++)
+-                                    {
+-                                        var subLead = reader.ReadVarInt7();
+-                                        var type = CompositeTypeReader.ReadSubType(reader, subLead);
+-                                        types.Add(type);
+-                                        group.Types.Add(type);
+-                                    }
++
++                                    groupTypes = new WebAssemblyType[reader.ReadCount()];
++                                    for (var s = 0; s < groupTypes.Length; s++)
++                                        groupTypes[s] = CompositeTypeReader.ReadSubType(reader, reader.ReadVarInt7());
+                                 }
+                                 else
+                                 {
+-                                    var type = CompositeTypeReader.ReadSubType(reader, lead);
+-                                    types.Add(type);
+-                                    group.Types.Add(type);
++                                    groupTypes = [CompositeTypeReader.ReadSubType(reader, lead)];
+                                 }
+ 
+-                                foreach (var type in group.Types)
++                                foreach (var type in groupTypes)
+                                 {
+                                     if (type.Form != FunctionType.Function || !type.IsFinal || type.SuperTypes is { Count: > 0 })
+                                         needsRecursionView = true;
+                                 }
+ 
+-                                groups.Add(group);
++                                groups[g] = new RecursionGroup { Types = groupTypes, IsExplicit = isExplicit };
+                             }
+ 
++                            module.types = [.. groups.SelectMany(group => group.Types)];
++
+                             // Only surface the recursion-group view (which drives 3.0 emission) when the module uses a
+                             // feature the pre-3.0 flat encoding cannot reproduce byte-for-byte; otherwise leave it null
+                             // so pure function-type modules round-trip through the untouched pre-3.0 path.
+@@ -316,73 +307,31 @@ public class Module
+                         break;
+ 
+                     case Section.Import: //Import declarations
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var imports = module.imports = new List<Import>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                imports.Add(Import.ParseFrom(reader));
+-                        }
++                        module.imports = ReadVector(reader, Import.ParseFrom);
+                         break;
+ 
+                     case Section.Function: //Function declarations
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var functions = module.functions = new List<Function>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                functions.Add(new Function(reader.ReadVarUInt32()));
+-                        }
++                        module.functions = ReadVector(reader, reader => new Function(reader.ReadVarUInt32()));
+                         break;
+ 
+                     case Section.Table: //Indirect function table and other tables
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var tables = module.tables = new List<Table>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                tables.Add(new Table(reader));
+-                        }
++                        module.tables = ReadVector(reader, reader => new Table(reader));
+                         break;
+ 
+                     case Section.Memory: //Memory attributes
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var memories = module.memories = new List<Memory>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                memories.Add(new Memory(reader));
+-                        }
++                        module.memories = ReadVector(reader, reader => new Memory(reader));
+                         break;
+ 
+                     case Section.Tag: //Exception tag declarations
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var tags = module.tags = new List<Tag>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                tags.Add(new Tag(reader));
+-                        }
++                        module.tags = ReadVector(reader, reader => new Tag(reader));
+                         break;
+ 
+                     case Section.Global: //Global declarations
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var globals = module.globals = new List<Global>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                globals.Add(new Global(reader));
+-                        }
++                        module.globals = ReadVector(reader, reader => new Global(reader));
+                         break;
+ 
+                     case Section.Export: //Exports
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var exports = module.exports = new List<Export>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                exports.Add(new Export(reader));
+-                        }
++                        module.exports = ReadVector(reader, reader => new Export(reader));
+                         break;
+ 
+                     case Section.Start: //Start function declaration
+@@ -390,45 +339,26 @@ public class Module
+                         break;
+ 
+                     case Section.Element: //Elements section
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var elements = module.elements = new List<Element>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                elements.Add(new Element(reader));
+-                        }
++                        module.elements = ReadVector(reader, reader => new Element(reader));
+                         break;
+ 
+                     case Section.Code: //Function bodies (code)
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var codes = module.codes = new List<FunctionBody>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                codes.Add(new FunctionBody(reader, reader.ReadVarUInt32()));
+-                        }
++                        module.codes = ReadVector(reader, reader => new FunctionBody(reader));
+                         break;
+ 
+                     case Section.Data: //Data segments
+-                        {
+-                            var count = reader.ReadVarUInt32();
+-                            var data = module.data = new List<Data>(checked((int)count));
+-
+-                            for (var i = 0; i < count; i++)
+-                                data.Add(new Data(reader));
+-                        }
++                        module.data = ReadVector(reader, reader => new Data(reader));
+                         break;
+ 
+                     case Section.DataCount: //Optional section, indicates the expected length of the data segment vector
+-                        {
+-                            reader.ReadVarUInt32();
+-                        }
++                        reader.ReadDataCount();
+                         break;
+ 
+                     default:
+                         throw new ModuleLoadException($"Unrecognized section type {id}.", preSectionOffset);
+                 }
+ 
++                reader.Leave(outer);
+                 previousSection = (Section)id;
+             }
+ 
+@@ -448,6 +378,15 @@ public class Module
+         }
+     }
+ 
++    // A vector's count is checked against the bytes left before its array is allocated.
++    internal static T[] ReadVector<T>(Reader reader, Func<Reader, T> read)
++    {
++        var items = new T[reader.ReadCount()];
++        for (var i = 0; i < items.Length; i++)
++            items[i] = read(reader);
++        return items;
++    }
++
+     /// <summary>
+     /// Writes the contents of this module to a <see cref="Stream"/>.
+     /// </summary>
+diff --git a/WebAssembly/Reader.cs b/WebAssembly/Reader.cs
+index 0a5dc539..a692be90 100644
+--- a/WebAssembly/Reader.cs
++++ b/WebAssembly/Reader.cs
+@@ -6,14 +6,82 @@ namespace WebAssembly;
+ 
+ internal sealed class Reader(Stream input) : IDisposable
+ {
++    /// <summary>
++    /// The most locals a function may declare, the limit the WebAssembly JavaScript API sets.
++    /// </summary>
++    public const uint MaximumLocals = 50_000;
++
+     private BinaryReader? reader = new(input, Encoding.UTF8, true);
+ 
++    // Every section and function body declares its length before its contents, so nothing is read past the end of
++    // the one being read, and no count claims more entries than there are bytes left for them. A seekable stream's
++    // length bounds the module itself.
++    private readonly long end = input.CanSeek ? input.Length - input.Position : long.MaxValue;
++
++    private long limit = input.CanSeek ? input.Length - input.Position : long.MaxValue;
++
+     public long Offset { get; private set; }
+ 
++    /// <summary>
++    /// The bytes left in the section or function body being read.
++    /// </summary>
++    public uint Remaining => checked((uint)(this.limit - this.Offset));
++
+     public BinaryReader CheckedReader => this.reader ?? throw new ObjectDisposedException(nameof(Reader));
+ 
++    /// <summary>
++    /// Reads the length of a section or function body and limits reading to it, returning the limit to restore with
++    /// <see cref="Leave"/>.
++    /// </summary>
++    public long Enter()
++    {
++        var length = this.ReadLength();
++        var outer = this.limit;
++        this.limit = this.Offset + length;
++        return outer;
++    }
++
++    /// <summary>
++    /// Checks that the section or function body was read to its declared end and restores the enclosing limit.
++    /// </summary>
++    public void Leave(long outer)
++    {
++        if (this.Offset != this.limit)
++            throw new ModuleLoadException($"section size mismatch: {this.limit - this.Offset} bytes left unread.", this.Offset);
++        this.limit = outer;
++    }
++
++    /// <summary>
++    /// Reads the number of entries in a vector, each of which takes at least a byte of what's left.
++    /// </summary>
++    public uint ReadCount() => this.ReadBounded(this.limit, "Count");
++
++    /// <summary>
++    /// Reads a byte length, which can't exceed what's left.
++    /// </summary>
++    public uint ReadLength() => this.ReadBounded(this.limit, "Length");
++
++    /// <summary>
++    /// Reads a data count, which can't exceed what's left of the module, where the segments it counts must be.
++    /// </summary>
++    public uint ReadDataCount() => this.ReadBounded(this.end, "Data count");
++
++    /// <summary>
++    /// Reads a local entry count, adding it to the function's running total, which can't exceed <see cref="MaximumLocals"/>.
++    /// </summary>
++    public uint ReadLocalCount(ref uint total)
++    {
++        var offset = this.Offset;
++        var count = this.ReadVarUInt32();
++        if (count > MaximumLocals - total)
++            throw new ModuleLoadException($"too many locals: a function may declare at most {MaximumLocals}.", offset);
++        total += count;
++        return count;
++    }
++
+     public uint ReadUInt32()
+     {
++        this.Need(4);
+         var result = CheckedReader.ReadUInt32();
+         this.Offset += 4;
+         return result;
+@@ -140,6 +208,7 @@ internal sealed class Reader(Stream input) : IDisposable
+ 
+     public float ReadFloat32()
+     {
++        this.Need(4);
+         var result = CheckedReader.ReadSingle();
+         this.Offset += 4;
+         return result;
+@@ -147,6 +216,7 @@ internal sealed class Reader(Stream input) : IDisposable
+ 
+     public double ReadFloat64()
+     {
++        this.Need(8);
+         var result = CheckedReader.ReadDouble();
+         this.Offset += 8;
+         return result;
+@@ -160,6 +230,8 @@ internal sealed class Reader(Stream input) : IDisposable
+ 
+     public byte[] ReadBytes(uint length)
+     {
++        if (length > this.limit - this.Offset)
++            throw new ModuleLoadException($"Length of {length} exceeds the {this.limit - this.Offset} bytes left.", this.Offset);
+         var result = CheckedReader.ReadBytes(checked((int)length));
+         this.Offset += length;
+         return result;
+@@ -167,11 +239,28 @@ internal sealed class Reader(Stream input) : IDisposable
+ 
+     public byte ReadByte()
+     {
++        this.Need(1);
+         var result = CheckedReader.ReadByte();
+         this.Offset++;
+         return result;
+     }
+ 
++    private uint ReadBounded(long bound, string what)
++    {
++        var offset = this.Offset;
++        var value = this.ReadVarUInt32();
++        if (value > bound - this.Offset)
++            throw new ModuleLoadException($"{what} of {value} exceeds the {bound - this.Offset} bytes left.", offset);
++        return value;
++    }
++
++    // Reading past the end of a section or body is the same as reading past the end of the stream.
++    private void Need(int bytes)
++    {
++        if (bytes > this.limit - this.Offset)
++            throw new EndOfStreamException();
++    }
++
+     #region IDisposable Support
+     void Dispose(bool disposing)
+     {
+diff --git a/WebAssembly/Runtime/Compile.cs b/WebAssembly/Runtime/Compile.cs
+index 4eb5c152..0236aa9f 100644
+--- a/WebAssembly/Runtime/Compile.cs
++++ b/WebAssembly/Runtime/Compile.cs
+@@ -169,9 +169,9 @@ public static class Compile
+         };
+     }
+ 
+-    private readonly struct Local(Reader reader)
++    private readonly struct Local(Reader reader, ref uint total)
+     {
+-        public readonly uint Count = reader.ReadVarUInt32();
++        public readonly uint Count = reader.ReadLocalCount(ref total);
+         public readonly ValType Type = ReadType(reader);
+ 
+         // Locals can be typed references in WebAssembly 3.0, so read the full reference type (not just a varint7).
+@@ -650,16 +650,13 @@ public static class Compile
+         {
+             if (id != 0 && ((Section)id).BinaryOrder < previousSection.BinaryOrder)
+                 throw new ModuleLoadException($"Sections out of order; section {(Section)id} encountered after {previousSection}.", preSectionOffset);
+-            var payloadLength = reader.ReadVarUInt32();
++            var outer = reader.Enter();
+ 
+             switch ((Section)id)
+             {
+                 case Section.None:
+-                    {
+-                        var preNameOffset = reader.Offset;
+-                        reader.ReadString(reader.ReadVarUInt32()); //Name
+-                        reader.ReadBytes(payloadLength - checked((uint)(reader.Offset - preNameOffset))); //Content
+-                    }
++                    reader.ReadString(reader.ReadLength()); //Name
++                    reader.ReadBytes(reader.Remaining); //Content
+                     break;
+ 
+                 case Section.Type:
+@@ -667,50 +664,38 @@ public static class Compile
+                         // WASM 3.0: the type section is a vector of recursion groups, each expanding to one or more
+                         // sub/composite types.  The types are flattened into a single index-addressable array, and
+                         // each type's group boundary is recorded for rec-group reference-scoping validation.
+-                        var groupCount = reader.ReadVarUInt32();
+-                        var signatureList = new List<Signature>(checked((int)groupCount));
+-                        var referenceSources = new List<WebAssemblyType>(checked((int)groupCount));
+-                        var groupEndByTypeIndex = new List<int>(checked((int)groupCount));
+-                        var groupBounds = new List<(int Start, int Count)>(checked((int)groupCount));
+-
+-                        for (var g = 0; g < groupCount; g++)
++                        var groups = Module.ReadVector(reader, reader =>
+                         {
+                             var lead = reader.ReadVarInt7();
+-                            var groupTypes = new List<WebAssemblyType>();
+-
+-                            if (lead == CompositeTypeReader.RecursionGroupForm)
+-                            {
+-                                var subCount = checked((int)reader.ReadVarUInt32());
+-                                for (var s = 0; s < subCount; s++)
+-                                {
+-                                    var subLead = reader.ReadVarInt7();
+-                                    groupTypes.Add(CompositeTypeReader.ReadSubType(reader, subLead));
+-                                }
+-                            }
+-                            else
+-                            {
+-                                groupTypes.Add(CompositeTypeReader.ReadSubType(reader, lead));
+-                            }
+-
+-                            var groupStart = referenceSources.Count;
+-                            referenceSources.AddRange(groupTypes);
+-
+-                            var groupEnd = referenceSources.Count;
+-                            for (var i = 0; i < groupTypes.Count; i++)
+-                                groupEndByTypeIndex.Add(groupEnd);
+-                            groupBounds.Add((groupStart, groupTypes.Count));
++                            return lead == CompositeTypeReader.RecursionGroupForm
++                                ? Module.ReadVector(reader, reader => CompositeTypeReader.ReadSubType(reader, reader.ReadVarInt7()))
++                                : [CompositeTypeReader.ReadSubType(reader, lead)];
++                        });
++
++                        WebAssemblyType[] referenceSources = [.. groups.SelectMany(group => group)];
++                        var groupEndByTypeIndex = new int[referenceSources.Length];
++                        var groupBounds = new (int Start, int Count)[groups.Length];
++                        var groupStart = 0;
++                        for (var g = 0; g < groups.Length; g++)
++                        {
++                            var groupEnd = groupStart + groups[g].Length;
++                            for (var i = groupStart; i < groupEnd; i++)
++                                groupEndByTypeIndex[i] = groupEnd;
++                            groupBounds[g] = (groupStart, groups[g].Length);
++                            groupStart = groupEnd;
+                         }
+ 
+                         // The composite kind of every declared type index, so a concrete struct/array reference in a
+                         // signature (or field, local, global) resolves to a GC object slot rather than a Delegate.
+-                        var indexedKinds = new FunctionType[referenceSources.Count];
+-                        for (var i = 0; i < referenceSources.Count; i++)
++                        var indexedKinds = new FunctionType[referenceSources.Length];
++                        for (var i = 0; i < referenceSources.Length; i++)
+                             indexedKinds[i] = referenceSources[i].Form;
+ 
+-                        for (var i = 0; i < referenceSources.Count; i++)
+-                            signatureList.Add(new Signature(referenceSources[i], (uint)i, configuration, indexedKinds));
++                        var signatureList = new Signature[referenceSources.Length];
++                        for (var i = 0; i < referenceSources.Length; i++)
++                            signatureList[i] = new Signature(referenceSources[i], (uint)i, configuration, indexedKinds);
+ 
+-                        signatures = context.Types = [.. signatureList];
++                        signatures = context.Types = signatureList;
+                         var canonical = context.CanonicalTypes = CanonicalTypeMap.Build(referenceSources, groupBounds);
+ 
+                         // Emit one CLR class per canonical struct/array type (WebAssembly 3.0 GC), so instructions and
+@@ -721,7 +706,7 @@ public static class Compile
+                         // may reference only an earlier recursion group or its own group — a forward reference into a
+                         // later group is the spec's "unknown type" failure (this is what makes cross-singleton-group
+                         // forward references invalid).
+-                        for (var i = 0; i < referenceSources.Count; i++)
++                        for (var i = 0; i < referenceSources.Length; i++)
+                         {
+                             var groupEnd = groupEndByTypeIndex[i];
+                             var source = referenceSources[i];
+@@ -748,7 +733,7 @@ public static class Compile
+                         // the sub type's composite must actually be a valid subtype of its supertype's composite
+                         // (function params contravariant / results covariant; struct width+depth subtyping; array element
+                         // subtyping — immutable fields covariant, mutable fields invariant).
+-                        for (var i = 0; i < referenceSources.Count; i++)
++                        for (var i = 0; i < referenceSources.Length; i++)
+                         {
+                             var source = referenceSources[i];
+                             if (source.SuperTypes is not { Count: > 0 } supers)
+@@ -758,7 +743,7 @@ public static class Compile
+                             foreach (var superIndexRaw in supers)
+                             {
+                                 var superIndex = checked((int)superIndexRaw);
+-                                if ((uint)superIndex >= (uint)referenceSources.Count || superIndex >= groupEnd)
++                                if ((uint)superIndex >= (uint)referenceSources.Length || superIndex >= groupEnd)
+                                     throw new ModuleLoadException($"unknown type {superIndex}: a supertype must reference an earlier or same-group type.", reader.Offset);
+ 
+                                 var super = referenceSources[superIndex];
+@@ -789,7 +774,7 @@ public static class Compile
+                 case Section.Function:
+                     {
+                         var importedFunctionCount = internalFunctions?.Length ?? 0;
+-                        var functionIndexSize = checked((int)(importedFunctionCount + reader.ReadVarUInt32()));
++                        var functionIndexSize = checked((int)(importedFunctionCount + reader.ReadCount()));
+                         if (functionSignatures != null)
+                         {
+                             Array.Resize(ref functionSignatures, functionIndexSize);
+@@ -831,8 +816,7 @@ public static class Compile
+ 
+                 case Section.Table:
+                     {
+-                        var preCountOffset = reader.Offset;
+-                        var count = reader.ReadVarUInt32();
++                        var count = reader.ReadCount();
+ 
+                         for (var i = 0; i < count; i++)
+                         {
+@@ -866,7 +850,7 @@ public static class Compile
+                     {
+                         // WebAssembly 3.0 permits more than one memory; each entry is appended to the context's
+                         // memory list (after any imported memories) so instructions can select it by index.
+-                        var count = reader.ReadVarUInt32();
++                        var count = reader.ReadCount();
+                         for (var m = 0u; m < count; m++)
+                         {
+                             var setFlags = (ResizableLimits.Flags)reader.ReadVarUInt32();
+@@ -933,7 +917,7 @@ public static class Compile
+                     {
+                         // Exception tags (WASM 3.0). Each defined tag becomes an ExceptionTag field with fresh
+                         // per-instantiation identity (newobj in the constructor), appended after any imported tags.
+-                        var count = reader.ReadVarUInt32();
++                        var count = reader.ReadCount();
+                         var tagClrType = configuration.NeutralizeType(typeof(ExceptionTag));
+                         for (var t = 0u; t < count; t++)
+                         {
+@@ -993,7 +977,7 @@ public static class Compile
+                     {
+                         // Pre-allocate a backing field for every data segment so memory.init / data.drop can
+                         // reference passive segments during the Code section, which is compiled before the Data section.
+-                        declaredDataCount = reader.ReadVarUInt32();
++                        declaredDataCount = reader.ReadDataCount();
+                         for (var di = 0u; di < declaredDataCount; di++)
+                         {
+                             context.DataSegments[di] = exportsBuilder.DefineField(
+@@ -1012,6 +996,7 @@ public static class Compile
+                     throw new ModuleLoadException($"Unrecognized section type {(Section)id}.", preSectionOffset);
+             }
+ 
++            reader.Leave(outer);
+             preSectionOffset = reader.Offset;
+             previousSection = (Section)id;
+         }
+@@ -1187,10 +1172,12 @@ public static class Compile
+         FieldBuilder? functionTable
+     ) SectionImport(Reader reader, CompilationContext context, MethodBuilder? importedMemoryProvider, CompilerConfiguration configuration, Signature[]? signatures, TypeBuilder exportsBuilder, ILGenerator instanceConstructorIL, Type[] emptyTypes, FieldBuilder? memory, FieldBuilder? functionTable)
+     {
+-        var count = checked((int)reader.ReadVarUInt32());
+-        var functionImports = new List<MethodInfo>(count);
+-        var functionImportTypes = new List<Signature>(count);
+-        var globalImports = new List<GlobalInfo>(count);
++        var count = (int)reader.ReadCount();
++        var functionImports = new MethodInfo[count];
++        var functionImportTypes = new Signature[count];
++        var functionImportCount = 0;
++        var globalImports = new GlobalInfo[count];
++        var globalImportCount = 0;
+         var missingDelegates = new List<MissingDelegateType>();
+         var importFinderInvoke = configuration.NeutralizeType(typeof(Func<string, string, RuntimeImport>)).GetMethod("Invoke")!;
+ 
+@@ -1274,8 +1261,8 @@ public static class Compile
+ 
+                         instanceConstructorIL.Emit(OpCodes.Stfld, delFieldBuilder);
+ 
+-                        functionImports.Add(invoker);
+-                        functionImportTypes.Add(signature);
++                        functionImports[functionImportCount] = invoker;
++                        functionImportTypes[functionImportCount++] = signature;
+                     }
+                     break;
+                 case ExternalKind.Table:
+@@ -1485,7 +1472,7 @@ public static class Compile
+                             instanceConstructorIL.Emit(OpCodes.Stfld, delFieldBuilder);
+                         }
+ 
+-                        globalImports.Add(new GlobalInfo(contentValType, true, getterInvoker, setterInvoker));
++                        globalImports[globalImportCount++] = new GlobalInfo(contentValType, true, getterInvoker, setterInvoker);
+                     }
+                     break;
+                 case ExternalKind.Tag:
+@@ -1533,16 +1520,16 @@ public static class Compile
+         if (missingDelegates.Count != 0)
+             throw new MissingDelegateTypesException(missingDelegates);
+ 
+-        context.Methods = [.. functionImports];
+-        context.FunctionSignatures = [.. functionImportTypes];
+-        context.Globals = [.. globalImports];
++        context.Methods = functionImports[..functionImportCount];
++        context.FunctionSignatures = functionImportTypes[..functionImportCount];
++        context.Globals = globalImports[..globalImportCount];
+ 
+         return (
+             importedMemoryProvider,
+-            functionImports.Count,
++            functionImportCount,
+             context.Methods,
+             context.FunctionSignatures,
+-            globalImports.Count,
++            globalImportCount,
+             context.Globals,
+             memory,
+             functionTable
+@@ -1558,7 +1545,7 @@ public static class Compile
+         int importedGlobals,
+         CompilerConfiguration configuration)
+     {
+-        var count = reader.ReadVarUInt32();
++        var count = reader.ReadCount();
+         if (globals != null)
+         {
+             Array.Resize(ref globals, checked((int)(globals.Length + count)));
+@@ -1710,8 +1697,8 @@ public static class Compile
+         CompilerConfiguration configuration)
+     {
+         const MethodAttributes exportedPropertyAttributes = MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.Virtual | MethodAttributes.Final;
+-        var totalExports = reader.ReadVarUInt32();
+-        var xFunctions = new List<KeyValuePair<string, uint>>((int)Math.Min(int.MaxValue, totalExports));
++        var totalExports = reader.ReadCount();
++        var xFunctions = new List<KeyValuePair<string, uint>>((int)totalExports);
+         var exportNames = new HashSet<string>(StringComparer.Ordinal);
+ 
+         for (var i = 0; i < totalExports; i++)
+@@ -2108,7 +2095,7 @@ public static class Compile
+ 
+     static void SectionElement(Reader reader, CompilationContext context, ILGenerator instanceConstructorIL, TypeBuilder exportsBuilder)
+     {
+-        var count = reader.ReadVarUInt32();
++        var count = reader.ReadCount();
+ 
+         // An active segment's offset is a constant expression compiled into the instance constructor, so it
+         // can be a global.get of an imported global as well as an i32.const. The result is held in this local.
+@@ -2293,7 +2280,7 @@ public static class Compile
+     static void SectionCode(Reader reader, CompilationContext context, Signature[]? functionSignatures, MethodInfo[]? internalFunctions, int importedFunctions)
+     {
+         var preBodiesIndex = reader.Offset;
+-        var functionBodies = reader.ReadVarUInt32();
++        var functionBodies = reader.ReadCount();
+ 
+         // Defined (non-imported) functions; zero when there is no Function section at all.
+         var definedFunctions = (functionSignatures?.Length ?? importedFunctions) - importedFunctions;
+@@ -2307,12 +2294,11 @@ public static class Compile
+         for (var functionBodyIndex = 0; functionBodyIndex < functionBodies; functionBodyIndex++)
+         {
+             var signature = functionSignatures![importedFunctions + functionBodyIndex];
+-            var byteLength = reader.ReadVarUInt32();
+-            var startingOffset = reader.Offset;
+-
+-            var locals = new Local[reader.ReadVarUInt32()];
++            var outer = reader.Enter();
++            var total = 0u;
++            var locals = new Local[reader.ReadCount()];
+             for (var localIndex = 0; localIndex < locals.Length; localIndex++)
+-                locals[localIndex] = new Local(reader);
++                locals[localIndex] = new Local(reader, ref total);
+ 
+             var il = ((MethodBuilder)internalFunctions![importedFunctions + functionBodyIndex]).GetILGenerator();
+ 
+@@ -2349,14 +2335,13 @@ public static class Compile
+                 stub(context);
+             context.PendingFunctionStubs.Clear();
+ 
+-            if (reader.Offset - startingOffset != byteLength)
+-                throw new ModuleLoadException($"Instruction sequence reader ended after reading {reader.Offset - startingOffset} characters, expected {byteLength}.", reader.Offset);
++            reader.Leave(outer);
+         }
+     }
+ 
+     static void SectionData(Reader reader, CompilationContext context, ILGenerator instanceConstructorIL, TypeBuilder exportsBuilder, uint? declaredDataCount)
+     {
+-        var count = reader.ReadVarUInt32();
++        var count = reader.ReadCount();
+ 
+         // When a DataCount section is present, its value must match the actual number of data segments.
+         if (declaredDataCount != null && declaredDataCount != count)
+diff --git a/WebAssembly/WebAssemblyType.cs b/WebAssembly/WebAssemblyType.cs
+index f458b356..17da57b8 100644
+--- a/WebAssembly/WebAssemblyType.cs
++++ b/WebAssembly/WebAssemblyType.cs
+@@ -150,20 +150,18 @@ public class WebAssemblyType : IEquatable<WebAssemblyType>
+         {
+             case CompositeTypeReader.FunctionForm:
+                 {
+-                    var count = checked((int)reader.ReadVarUInt32());
+-                    var parameters = this.parameters = new List<WebAssemblyValueType>(count);
+-                    for (var i = 0; i < count; i++)
++                    var parameters = this.parameters = new WebAssemblyValueType[reader.ReadCount()];
++                    for (var i = 0; i < parameters.Count; i++)
+                     {
+-                        parameters.Add(ReferenceType.ReadValueType(reader, out var refType));
++                        parameters[i] = ReferenceType.ReadValueType(reader, out var refType);
+                         if (refType is { } r)
+                             (this.parameterRefTypes ??= [])[i] = r;
+                     }
+ 
+-                    count = checked((int)reader.ReadVarUInt32());
+-                    var returns = this.returns = new List<WebAssemblyValueType>(count);
+-                    for (var i = 0; i < count; i++)
++                    var returns = this.returns = new WebAssemblyValueType[reader.ReadCount()];
++                    for (var i = 0; i < returns.Count; i++)
+                     {
+-                        returns.Add(ReferenceType.ReadValueType(reader, out var refType));
++                        returns[i] = ReferenceType.ReadValueType(reader, out var refType);
+                         if (refType is { } r)
+                             (this.returnRefTypes ??= [])[i] = r;
+                     }
+@@ -172,16 +170,12 @@ public class WebAssemblyType : IEquatable<WebAssemblyType>
+ 
+             case CompositeTypeReader.StructForm:
+                 {
+-                    var count = checked((int)reader.ReadVarUInt32());
+-                    var fields = new List<StructField>(count);
+-                    for (var i = 0; i < count; i++)
+-                        fields.Add(ReadField(reader));
+-                    this.Fields = fields;
++                    this.Fields = Module.ReadVector(reader, ReadField);
+                 }
+                 break;
+ 
+             case CompositeTypeReader.ArrayForm:
+-                this.Fields = new List<StructField>(1) { ReadField(reader) };
++                this.Fields = [ReadField(reader)];
+                 break;
+ 
+             default:
+-- 
+2.43.0
+

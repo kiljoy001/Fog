@@ -5,7 +5,9 @@ Feature: A WASI Preview 1 core module runs as a Fog process
   no start section, an exported _start of no parameters and no results, and imports only of
   wasi_snapshot_preview1 functions with exactly the types the Preview 1 WITX at a2b96e81 gives them.
   A module that cannot be read, checked, compiled or set up is refused: exec fails with "exec header
-  invalid" and leaves the process running its own program. The module is set up, its data and
+  invalid" and leaves the process running its own program. Reading a module allocates only for what
+  its bytes hold: a count or length larger than the bytes left in its section, its function body or
+  the file is refused, as is a function of more than 50,000 locals. The module is set up, its data and
   elements placed, before exec commits. An admitted module runs on a thread of its own, and its imports act on its process: the
   argv exec was given, the process's environment, and its descriptors. How the application ends is
   its exit status: nothing when _start returns or proc_exit is given 0, "wasm-exit N" for any other
@@ -126,9 +128,16 @@ Feature: A WASI Preview 1 core module runs as a Fog process
     And the child still has descriptor 3 open and its own name
 
     Examples:
-      | bytes                               | what                       |
-      | 00 61 73 6d 02 00 00 00             | another version            |
-      | 00 61 73 6d 01 00 00 00 05 03 01 00 | a truncated memory section |
+      | bytes                                                                                                | what                                         |
+      | 00 61 73 6d 02 00 00 00                                                                              | another version                              |
+      | 00 61 73 6d 01 00 00 00 05 03 01 00                                                                  | a truncated memory section                   |
+      | 00 61 73 6d 01 00 00 00 01 0a 00                                                                     | a section longer than the file               |
+      | 00 61 73 6d 01 00 00 00 01 03 00 00 00                                                               | a section longer than its entries            |
+      | 00 61 73 6d 01 00 00 00 03 04 ff ff ff 7f                                                            | more functions than its section has bytes    |
+      | 00 61 73 6d 01 00 00 00 01 07 01 60 ff ff ff 7f 00                                                   | more parameters than its section has bytes   |
+      | 00 61 73 6d 01 00 00 00 0c 05 ff ff ff ff 0f                                                         | more data segments than the file has bytes   |
+      | 00 61 73 6d 01 00 00 00 01 04 01 60 00 00 03 02 01 00 0a 07 01 05 ff ff ff 7f 0b                     | more local entries than its body has bytes   |
+      | 00 61 73 6d 01 00 00 00 01 04 01 60 00 00 03 02 01 00 0a 0c 01 0a 02 a9 c3 01 7f a8 c3 01 7f 0b      | a function with more than 50,000 locals      |
 
   @WASI_NS_018
   Scenario Outline: How the application ends is its exit status
