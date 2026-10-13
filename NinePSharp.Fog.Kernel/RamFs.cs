@@ -8,6 +8,9 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     // ramfs's MAXFSIZE: as many 64 KiB blocks as its block table can index.
     private const ulong MaxFileSize = (0x7fffffffUL / 8) * BlockSize;
     private const int BlockSize = 64 * 1024;
+    private const int Read = 4;
+    private const int Write = 2;
+    private const int Execute = 1;
     private readonly object gate = new();
     private readonly string provider;
     private readonly string device;
@@ -80,9 +83,18 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     {
         lock (gate)
         {
+            // sopen: the access the mode asks for, write too for OTRUNC, as hasperm grants it.
+            int access = (mode & 3) switch { NinePConstants.OREAD => Read, NinePConstants.OWRITE => Write, NinePConstants.ORDWR => Read | Write, _ => Execute };
+            access |= (mode & NinePConstants.OTRUNC) != 0 ? Write : 0;
+            Node file = nodes[resource.Identity.Path];
+            if (!HasPermission(file, context.User, access))
+            {
+                throw new IOException(Errors.Permission);
+            }
+
             if ((mode & NinePConstants.OTRUNC) != 0)
             {
-                Truncate(nodes[resource.Identity.Path], 0);
+                Truncate(file, 0);
             }
 
             return ValueTask.FromResult(new ResourceOpenHandle(resource, HandleId(context), mode, 0));
@@ -245,11 +257,15 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     private static string HandleId(ResourceOperationContext context)
         => $"{context.OperationId.SessionId}/{context.OperationId.Sequence}";
 
-    // lib9p's hasperm for AWRITE: each user leads a group of its own name.
-    private static bool CanWrite(Node file, string user)
-        => (file.Permissions & 0b000_000_010) != 0
-            || (user == file.Owner && (file.Permissions & 0b010_000_000) != 0)
-            || (user == file.Group && (file.Permissions & 0b000_010_000) != 0);
+    // lib9p's hasperm: the other bits, then the owner's, then the group's, each user leading a group
+    // of its own name.
+    private static bool HasPermission(Node file, string user, int access)
+    {
+        uint granted = file.Permissions & 7;
+        granted |= user == file.Owner ? (file.Permissions / 0b1_000_000) & 7 : 0;
+        granted |= user == file.Group ? (file.Permissions / 0b1_000) & 7 : 0;
+        return (access & granted) == access;
+    }
 
     private static void CheckResize(Node file, ulong length, string user)
     {
@@ -258,7 +274,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
             throw new ResourceWStatRejectedException(Errors.BadOffset);
         }
 
-        if (!CanWrite(file, user) || file.IsDirectory)
+        if (!HasPermission(file, user, Write) || file.IsDirectory)
         {
             throw new ResourceWStatRejectedException(Errors.Permission);
         }
@@ -335,7 +351,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
             return;
         }
 
-        if (file.Parent is not { } parent || !CanWrite(nodes[parent], user))
+        if (file.Parent is not { } parent || !HasPermission(nodes[parent], user, Write))
         {
             throw new ResourceWStatRejectedException(Errors.Permission);
         }

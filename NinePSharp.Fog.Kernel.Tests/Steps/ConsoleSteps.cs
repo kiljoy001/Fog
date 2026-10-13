@@ -53,12 +53,16 @@ public sealed class ConsoleSteps(KernelDriver driver)
         }
     }
 
-    [When(@"^the process opens ""(.*)"" for writing$")]
-    public async Task WhenOpensForWriting(string path)
+    [Given(@"^""(.*)"" belongs to the host owner with the permissions (\d+)$")]
+    public async Task GivenOwned(string path, string permissions)
+        => await driver.Init.CloseAsync(await driver.Init.CreateAsync(path, NinePConstants.OWRITE, Convert.ToUInt32(permissions, 8)));
+
+    [When(@"^the process opens ""(.*)"" for (reading|writing)$")]
+    public async Task WhenOpens(string path, string access)
     {
         try
         {
-            await driver.Init.OpenAsync(path, NinePConstants.OWRITE);
+            await driver.Init.OpenAsync(path, access == "reading" ? NinePConstants.OREAD : NinePConstants.OWRITE);
             opened = true;
         }
         catch (SyscallException error)

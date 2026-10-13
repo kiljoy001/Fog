@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Namespaces;
@@ -35,6 +36,10 @@ public sealed class FogKernel
     internal string User { get; }
 
     internal IReadOnlyList<ExecLoader> Loaders { get; }
+
+    // fd2path: the rooted name each open file was opened or created by, kept with its handle, which
+    // dup, renumber and fork share.
+    internal ConditionalWeakTable<ResourceOpenHandle, string> Names { get; } = new();
 
     public static FogKernel InMemory(
         IReadOnlyDictionary<string, ProgramMain> programs,

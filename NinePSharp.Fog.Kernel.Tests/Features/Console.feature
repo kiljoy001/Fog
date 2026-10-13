@@ -42,6 +42,18 @@ Feature: /dev holds devcons's null, zero, pid, ppid and user, as 9front binds #c
     Then reading "/dev/user" gives "none"
     And a child it forks reads "none" from "/dev/user"
 
+  @FOG_KERNEL_014
+  Scenario Outline: A process that becomes none keeps only what a file gives others
+    Given "/tmp/kept" belongs to the host owner with the permissions <permissions>
+    When the process writes "none" to "/dev/user"
+    And the process opens "/tmp/kept" for reading
+    Then the open <outcome>
+
+    Examples:
+      | permissions | outcome                        |
+      | 0440        | fails with "permission denied" |
+      | 0444        | succeeds                       |
+
   @FOG_KERNEL_015
   Scenario: Only none may be written to /dev/user
     When the process writes "glenda" to "/dev/user"

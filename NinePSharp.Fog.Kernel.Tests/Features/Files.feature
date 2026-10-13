@@ -4,7 +4,11 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
   permissions. seek(2) moves a descriptor's offset from the start, from where it is or from the end,
   but not before the start; a directory can only go back to its start, from which it is read again.
   bind(2) makes a file or directory visible at another name in the process's namespace, replacing
-  what is there or joining a union before or after it.
+  what is there or joining a union before or after it. fd2path(2) gives the rooted name a descriptor
+  was opened or created by, cleaned as cleanname does, which later changes to the namespace do not
+  update; a pipe's ends are named as devpipe names them. A ram file opens only for the access its
+  permissions give the user, as lib9p's sopen and hasperm decide: the other bits, then the owner's,
+  then the group's, each user leading a group of its own name; truncating needs write.
 
   Background:
     Given a booted kernel
@@ -211,3 +215,73 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
   Scenario: Creating in a file fails, as ramfs refuses a create in a non-directory
     When the process creates "/tmp/f/x" holding "y"
     Then the call fails with "create in non-directory: '/tmp/f/x'"
+
+  @FOG_KERNEL_032
+  Scenario: fd2path gives the rooted name a descriptor was opened by, to every copy of it
+    Given "/tmp/d/f" holds "x" in a new directory
+    And the process has "/tmp/d/f" open as descriptor 0
+    When the process dups descriptor 0
+    Then fd2path of descriptor 0 is "/tmp/d/f"
+    And fd2path of descriptor 1 is "/tmp/d/f"
+
+  @FOG_KERNEL_032
+  Scenario Outline: A name is rooted at the current directory and cleaned
+    Given "/tmp/d/f" holds "x" in a new directory
+    When the process changes to "<directory>"
+    And the process opens "<path>"
+    Then fd2path of descriptor 0 is "<name>"
+
+    Examples:
+      | directory | path        | name     |
+      | /tmp      | d/../d/./f  | /tmp/d/f |
+      | /tmp/d    | ../../tmp/d | /tmp/d   |
+      | /tmp      | ../../..    | /        |
+      | /tmp      | /tmp//d/    | /tmp/d   |
+
+  @FOG_KERNEL_032
+  Scenario: A created file is named by the name it was created by
+    When the process creates "/tmp/new"
+    Then fd2path of descriptor 0 is "/tmp/new"
+
+  @FOG_KERNEL_032
+  Scenario: A pipe's ends are named as devpipe names them
+    When the process makes a pipe
+    Then fd2path of descriptor 0 is "#|/data"
+    And fd2path of descriptor 1 is "#|/data1"
+
+  @FOG_KERNEL_032
+  Scenario: fd2path of a descriptor that is not open fails
+    Then fd2path of descriptor 5 fails with "fd out of range or not open"
+
+  @FOG_KERNEL_018
+  Scenario Outline: A directory opens only for reading, as devopen allows
+    When the process opens "/tmp" for <mode>
+    Then the call fails with "permission denied"
+
+    Examples:
+      | mode                |
+      | writing             |
+      | reading and writing |
+
+  @FOG_KERNEL_033
+  Scenario Outline: A ram file opens only for the access its permissions give, as lib9p's hasperm decides
+    Given "/tmp/p" holds "x" with the permissions <permissions>
+    When the process opens "/tmp/p" for <access>
+    Then <outcome>
+
+    Examples:
+      | permissions | access              | outcome                                 |
+      | 0400        | reading             | the open succeeds                       |
+      | 0040        | reading             | the open succeeds                       |
+      | 0004        | reading             | the open succeeds                       |
+      | 0200        | writing             | the open succeeds                       |
+      | 0600        | reading and writing | the open succeeds                       |
+      | 0100        | executing           | the open succeeds                       |
+      | 0400        | writing             | the call fails with "permission denied" |
+      | 0200        | reading             | the call fails with "permission denied" |
+      | 0400        | reading and writing | the call fails with "permission denied" |
+      | 0400        | truncating          | the call fails with "permission denied" |
+      | 0600        | executing           | the call fails with "permission denied" |
+      | 0404        | reading             | the open succeeds                       |
+      | 0600        | writing, truncating | the open succeeds                       |
+      | 0400        | writing, truncating | the call fails with "permission denied" |

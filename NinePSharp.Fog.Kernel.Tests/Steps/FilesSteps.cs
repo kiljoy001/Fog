@@ -82,6 +82,42 @@ public sealed class FilesSteps(KernelDriver driver)
         }
     });
 
+    [When(@"^the process changes to ""(.*)""$")]
+    public async Task WhenChdir(string path) => await driver.Init.ChdirAsync(path);
+
+    [Then(@"^fd2path of descriptor (\d+) is ""(.*)""$")]
+    public async Task ThenFd2Path(int fd, string name) => Assert.Equal(name, await driver.Init.Fd2PathAsync(fd));
+
+    [Then(@"^fd2path of descriptor (\d+) fails with ""(.*)""$")]
+    public async Task ThenFd2PathFails(int fd, string error)
+        => Assert.Equal(error, (await Assert.ThrowsAsync<SyscallException>(async () => await driver.Init.Fd2PathAsync(fd))).Message);
+
+    [When(@"^the process opens ""(.*)"" for (reading|writing|reading and writing|truncating|writing, truncating|executing)$")]
+    public Task WhenOpensFor(string path, string access)
+    {
+        int mode = access switch
+        {
+            "reading" => NinePConstants.OREAD,
+            "writing" => NinePConstants.OWRITE,
+            "reading and writing" => NinePConstants.ORDWR,
+            "truncating" => NinePConstants.OREAD | NinePConstants.OTRUNC,
+            "writing, truncating" => NinePConstants.OWRITE | NinePConstants.OTRUNC,
+            _ => NinePConstants.OEXEC,
+        };
+        return CallAsync(async () => await driver.Init.OpenAsync(path, mode));
+    }
+
+    [Given(@"^""(.*)"" holds ""(.*)"" with the permissions (\d+)$")]
+    public async Task GivenPermissions(string path, string contents, string permissions)
+    {
+        int fd = await driver.Init.CreateAsync(path, NinePConstants.OWRITE, Convert.ToUInt32(permissions, 8));
+        await driver.Init.WriteAsync(fd, Encoding.UTF8.GetBytes(contents));
+        await driver.Init.CloseAsync(fd);
+    }
+
+    [Then("the open succeeds")]
+    public void ThenOpens() => Assert.Null(failure);
+
     [When("the process makes a pipe")]
     public Task WhenMakesPipe() => CallAsync(async () => await driver.Init.PipeAsync());
 

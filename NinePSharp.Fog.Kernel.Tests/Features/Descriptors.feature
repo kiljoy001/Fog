@@ -8,6 +8,7 @@ Feature: /fd names a process's open descriptors as 9front's devdup does
   Background:
     Given a booted kernel
     And "/tmp/f" holds "hello"
+    And "/tmp/f" may be read, written and executed by its owner
 
   @FOG_KERNEL_011
   Scenario: Opening /fd/N continues from where descriptor N is

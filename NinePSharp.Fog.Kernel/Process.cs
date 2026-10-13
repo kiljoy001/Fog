@@ -69,11 +69,16 @@ public sealed class Process
     {
         try
         {
-            return await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode));
+            return Named(await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode)), path);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
             throw await NotFoundAsync(path);
+        }
+        catch (NamespaceFidException)
+        {
+            // devopen: a directory opens only for reading.
+            throw new SyscallException(Errors.Permission);
         }
         catch (DupOpenException dup)
         {
@@ -93,7 +98,7 @@ public sealed class Process
     {
         try
         {
-            return await calls.CreateAsync(path, new Plan9CreateRequest(permissions, mode));
+            return Named(await calls.CreateAsync(path, new Plan9CreateRequest(permissions, mode)), path);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -447,6 +452,15 @@ public sealed class Process
         }
     }
 
+    /// <summary>fd2path: the rooted name the descriptor's file was opened or created by.</summary>
+    public async ValueTask<string> Fd2PathAsync(int fd)
+    {
+        DescriptorSlot slot = process.Descriptors.Snapshot().FirstOrDefault(slot => slot.Number == fd) ?? throw new SyscallException(Errors.BadFd);
+
+        // Every descriptor not opened or created by name is a pipe's end, which devpipe names.
+        return kernel.Names.TryGetValue(slot.Handle, out string? name) ? name : "#|/" + (await FStatAsync(fd)).Name;
+    }
+
     [DoesNotReturn]
     public void Exits(string? status) => throw new ExitException(status ?? string.Empty);
 
@@ -543,6 +557,28 @@ public sealed class Process
     private static string[] Elements(string path)
         => path.Split('/', StringSplitOptions.RemoveEmptyEntries).Where(name => name != ".").ToArray();
 
+    // cleanname: elements of . and empty ones dropped, and .. taking away the one before, if any.
+    private static string Clean(string name)
+    {
+        var kept = new List<string>();
+        foreach (string element in name.Split('/'))
+        {
+            if (element == "..")
+            {
+                if (kept.Count > 0)
+                {
+                    kept.RemoveAt(kept.Count - 1);
+                }
+            }
+            else if (element is not ("" or "."))
+            {
+                kept.Add(element);
+            }
+        }
+
+        return "/" + string.Join('/', kept);
+    }
+
     private ProgramMain? ManagedProgram(byte[] header)
     {
         int newline = Array.IndexOf(header, (byte)'\n');
@@ -600,6 +636,20 @@ public sealed class Process
     }
 
     // A managed program first, then whichever loader claims the header.
+    private int Named(int fd, string path)
+    {
+        string rooted = path.StartsWith('/') ? path : $"/{string.Join('/', process.CurrentDirectory.VisiblePath)}/{path}";
+        foreach (DescriptorSlot slot in process.Descriptors.Snapshot())
+        {
+            if (slot.Number == fd)
+            {
+                kernel.Names.AddOrUpdate(slot.Handle, Clean(rooted));
+            }
+        }
+
+        return fd;
+    }
+
     private async ValueTask<ProgramMain?> LoadAsync(string path, byte[] header)
     {
         if (ManagedProgram(header) is { } managed)
