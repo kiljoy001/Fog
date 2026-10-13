@@ -8,7 +8,9 @@ namespace NinePSharp.Fog.Wasm;
 
 // fog-wasi: runs a Preview 1 module from the host, taking the arguments Wasmtime takes for what
 // wasi-testsuite asks of a runtime. The module runs as a child of a kernel of its own, on a copy of
-// the host directory that is written back once it ends.
+// the host directory that is written back once it ends. Each step of the copy that opens a file runs
+// as a process of its own, whose descriptors close when it ends. The host's streams are written
+// unbuffered.
 public static class WasiRunner
 {
     public const int Misused = 2;
@@ -81,10 +83,10 @@ public static class WasiRunner
             await init.CloseAsync(end);
         }
 
-        Task outputs = Task.WhenAll(PumpAsync(init, fromOutput, stdout), PumpAsync(init, fromError, stderr));
         _ = FeedAsync(init, toInput, stdin);
-        Waitmsg waited = await init.WaitAsync();
-        await outputs;
+        Task<Waitmsg> waiting = init.WaitAsync();
+        await Task.WhenAll(PumpAsync(init, fromOutput, stdout), PumpAsync(init, fromError, stderr), waiting);
+        Waitmsg waited = await waiting;
         if (host is not null)
         {
             await CopyOutAsync(init, Copy, new DirectoryInfo(host));
@@ -108,7 +110,6 @@ public static class WasiRunner
     private static async Task<int> FailAsync(Stream stderr, string message, int code)
     {
         await stderr.WriteAsync(Encoding.UTF8.GetBytes(message));
-        await stderr.FlushAsync();
         return code;
     }
 
@@ -140,10 +141,7 @@ public static class WasiRunner
         for (ReadOnlyMemory<byte> block; !(block = await process.ReadAsync(from, 8192)).IsEmpty;)
         {
             await to.WriteAsync(block);
-            await to.FlushAsync();
         }
-
-        await process.CloseAsync(from);
     }
 
     // Once the module has gone, its stdin has no reader, and what is left of the host's is dropped.
@@ -152,7 +150,7 @@ public static class WasiRunner
         byte[] buffer = new byte[8192];
         try
         {
-            for (int read; (read = await from.ReadAsync(buffer)) > 0;)
+            for (int read; (read = await from.ReadAsync(buffer)) != 0;)
             {
                 await process.WriteAsync(to, buffer.AsMemory(0, read));
             }
@@ -164,14 +162,22 @@ public static class WasiRunner
         await process.CloseAsync(to);
     }
 
-    private static async Task WriteAsync(Process process, string path, byte[] contents, uint permissions)
+    private static async Task<T> AloneAsync<T>(Process parent, Func<Process, Task<T>> body)
     {
-        int fd = await process.CreateAsync(path, NinePConstants.OWRITE, permissions);
-        await process.WriteAsync(fd, contents);
-        await process.CloseAsync(fd);
+        T result = default!;
+        parent.Fork(RforkFlags.Cfdg, async process =>
+        {
+            result = await body(process);
+            process.Exits(null);
+        });
+        Waitmsg waited = await parent.WaitAsync();
+        return waited.Message.Length == 0 ? result : throw new IOException(waited.Message);
     }
 
-    private static async Task<byte[]> ReadAsync(Process process, string path)
+    private static Task<int> WriteAsync(Process parent, string path, byte[] contents, uint permissions)
+        => AloneAsync(parent, async process => await process.WriteAsync(await process.CreateAsync(path, NinePConstants.OWRITE, permissions), contents));
+
+    private static Task<byte[]> ReadAsync(Process parent, string path) => AloneAsync(parent, async process =>
     {
         int fd = await process.OpenAsync(path, NinePConstants.OREAD);
         var contents = new MemoryStream();
@@ -180,16 +186,15 @@ public static class WasiRunner
             contents.Write(block.Span);
         }
 
-        await process.CloseAsync(fd);
         return contents.ToArray();
-    }
+    });
 
     private static uint Permissions(FileSystemInfo entry) => (uint)entry.UnixFileMode & 0b111_111_111;
 
     // Symbolic links have no Fog counterpart, so they are left out of the copy and left alone on the host.
     private static async Task CopyInAsync(Process process, DirectoryInfo from, string to)
     {
-        await process.CloseAsync(await process.CreateAsync(to, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | Permissions(from)));
+        await AloneAsync(process, async alone => await alone.CreateAsync(to, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | Permissions(from)));
         foreach (FileSystemInfo entry in from.EnumerateFileSystemInfos().Where(entry => entry.LinkTarget is null))
         {
             string path = $"{to}/{entry.Name}";
@@ -206,11 +211,10 @@ public static class WasiRunner
 
     private static async Task CopyOutAsync(Process process, string from, DirectoryInfo to)
     {
-        int listing = await process.OpenAsync(from, NinePConstants.OREAD);
-        IReadOnlyList<Stat> entries = await process.DirReadAsync(listing);
-        await process.CloseAsync(listing);
+        IReadOnlyList<Stat> entries = await AloneAsync(process, async alone => await alone.DirReadAsync(await alone.OpenAsync(from, NinePConstants.OREAD)));
         var names = entries.Select(entry => entry.Name).ToHashSet(StringComparer.Ordinal);
-        foreach (FileSystemInfo stale in to.EnumerateFileSystemInfos().Where(entry => entry.LinkTarget is null && !names.Contains(entry.Name)))
+        Dictionary<string, FileSystemInfo> present = to.EnumerateFileSystemInfos().ToDictionary(entry => entry.Name, StringComparer.Ordinal);
+        foreach (FileSystemInfo stale in present.Values.Where(entry => entry.LinkTarget is null && !names.Contains(entry.Name)))
         {
             Delete(stale);
         }
@@ -219,8 +223,7 @@ public static class WasiRunner
         {
             string path = Path.Combine(to.FullName, entry.Name);
             bool directory = HeldDirectories.IsDirectory(entry);
-            FileSystemInfo? existing = Directory.Exists(path) ? new DirectoryInfo(path) : File.Exists(path) ? new FileInfo(path) : null;
-            if (existing is not null && (existing.LinkTarget is not null || existing is DirectoryInfo != directory))
+            if (present.TryGetValue(entry.Name, out FileSystemInfo? existing) && (existing.LinkTarget is not null || existing is DirectoryInfo != directory))
             {
                 Delete(existing);
             }

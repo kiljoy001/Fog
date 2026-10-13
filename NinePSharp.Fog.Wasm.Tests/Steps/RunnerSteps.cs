@@ -18,11 +18,26 @@ public sealed class RunnerSteps : IDisposable
     private string stdout = string.Empty;
     private string stderr = string.Empty;
 
+    private string Outside => Path.Combine(scratch.FullName, "outside");
+
     [Given("a host directory")]
     public void GivenHostDirectory() => host = scratch.CreateSubdirectory("host").FullName;
 
     [Given(@"^the host directory holds ""(.*)"" with ""(.*)""$")]
     public void GivenHostFile(string name, string contents) => File.WriteAllText(Path.Combine(host, name), contents);
+
+    [Given(@"^the host directory holds the directory ""(.*)""$")]
+    public void GivenHostDirectory(string name) => Directory.CreateDirectory(Path.Combine(host, name));
+
+    [Given(@"^the host directory holds a symbolic link ""(.*)"" to ""(.*)""$")]
+    public void GivenLink(string name, string target) => File.CreateSymbolicLink(Path.Combine(host, name), target);
+
+    [Given(@"^the host directory holds a symbolic link ""(.*)"" to a file outside it holding ""(.*)""$")]
+    public void GivenLinkOutside(string name, string contents)
+    {
+        File.WriteAllText(Outside, contents);
+        File.CreateSymbolicLink(Path.Combine(host, name), Outside);
+    }
 
     [Given(@"^the host directory holds the read-only file ""(.*)"" with ""(.*)""$")]
     public void GivenReadOnlyFile(string name, string contents)
@@ -31,6 +46,15 @@ public sealed class RunnerSteps : IDisposable
         File.WriteAllText(path, contents);
         File.SetLastWriteTimeUtc(path, Written);
         File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+    }
+
+    [When(@"^fog-wasi runs with the arguments ""(.*)""$")]
+    public async Task WhenRunBare(string arguments)
+    {
+        using var output = new MemoryStream();
+        using var error = new MemoryStream();
+        exitCode = await WasiRunner.RunAsync(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries), new MemoryStream(), output, error).WaitAsync(Bound);
+        stderr = Encoding.UTF8.GetString(error.ToArray());
     }
 
     [When(@"^fog-wasi runs the module ""([^""]*)""$")]
@@ -65,9 +89,14 @@ public sealed class RunnerSteps : IDisposable
     {
         var expected = table.Rows.Select(row => (row["name"], row["contents"]));
         var actual = new DirectoryInfo(host).EnumerateFileSystemInfos().OrderBy(entry => entry.Name, StringComparer.Ordinal).Select(entry =>
-            (entry.Name, entry is DirectoryInfo directory ? (directory.EnumerateFileSystemInfos().Any() ? "<nonempty directory>" : "<directory>") : File.ReadAllText(entry.FullName)));
+            (entry.Name, entry.LinkTarget is { } target ? $"<link {target}>"
+                : entry is DirectoryInfo directory ? (directory.EnumerateFileSystemInfos().Any() ? "<nonempty directory>" : "<directory>")
+                : File.ReadAllText(entry.FullName)));
         Assert.Equal(expected, actual);
     }
+
+    [Then(@"^the file outside the host directory holds ""(.*)""$")]
+    public void ThenOutside(string contents) => Assert.Equal(contents, File.ReadAllText(Outside));
 
     public void Dispose() => scratch.Delete(true);
 

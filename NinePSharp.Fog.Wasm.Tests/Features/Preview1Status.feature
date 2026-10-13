@@ -152,7 +152,7 @@ Feature: Preview 1's descriptor status, rights and file status
       """
 
   @WASI_NS_013
-  Scenario: APPEND sends every write to the end, NONBLOCK is kept, and a sync flag is INVAL
+  Scenario: APPEND sends every write at the descriptor's offset to the end, NONBLOCK is kept, and a sync flag is INVAL
     Given the file "/tmp/f" holds "0123456789"
     And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
     When the trace interpreter runs:
@@ -160,6 +160,9 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_fdstat_set_flags 3 1
       fd_seek 3 2 set
       fd_write 3 "ab"
+      fd_tell 3
+      fd_seek 3 0 set
+      fd_pwrite 3 0 "Z"
       fd_tell 3
       fd_fdstat_get 3
       fd_fdstat_set_flags 3 4
@@ -171,6 +174,7 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_fdstat_set_flags 3 8
       fd_fdstat_set_flags 3 16
       fd_fdstat_set_flags 1 4
+      fd_fdstat_set_flags 1 1
       fd_fdstat_set_flags 9 0
       """
     Then the trace is:
@@ -179,6 +183,9 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_seek 3 2 set -> ok 2
       fd_write 3 "ab" -> ok 2
       fd_tell 3 -> ok 12
+      fd_seek 3 0 set -> ok 0
+      fd_pwrite 3 0 "Z" -> ok 1
+      fd_tell 3 -> ok 0
       fd_fdstat_get 3 -> ok filetype=4 flags=1 base=0x3fffffff inheriting=0x3fffffff
       fd_fdstat_set_flags 3 4 -> ok
       fd_seek 3 2 set -> ok 2
@@ -189,9 +196,10 @@ Feature: Preview 1's descriptor status, rights and file status
       fd_fdstat_set_flags 3 8 -> INVAL
       fd_fdstat_set_flags 3 16 -> INVAL
       fd_fdstat_set_flags 1 4 -> NOTSUP
+      fd_fdstat_set_flags 1 1 -> ok
       fd_fdstat_set_flags 9 0 -> BADF
       """
-    And the file "/tmp/f" holds "01cd456789ab"
+    And the file "/tmp/f" holds "Z1cd456789ab"
 
   @WASI_NS_026
   Scenario: fd_filestat_get converts the file's stat without inventing POSIX identity

@@ -129,6 +129,12 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | no-maximum     | without a maximum, which cannot grow by 65536 pages from one |
 
   @WASI_NS_017
+  Scenario: A host call given more than 2 GiB - 1 bytes at once is FAULT, even inside memory
+    Given "/bin/report" holds the application "huge-random"
+    When a child with a pipe as descriptor 1 execs "/bin/report"
+    Then the parent's wait message for it is "report <pid>: wasm-exit 21"
+
+  @WASI_NS_017
   Scenario: A host call reaches guest memory above 2 GiB
     Given "/bin/report" holds the application "high-memory"
     When a child with a pipe as descriptor 1 execs "/bin/report"

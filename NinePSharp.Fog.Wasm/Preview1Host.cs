@@ -197,7 +197,6 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         Wait(process.RenumberAsync(fd, to));
         rights[to] = moved;
         flags[to] = flags.GetValueOrDefault(fd);
-        flags.Remove(fd);
         directories.Renumbered(fd, to);
         return Errno.Success;
     }
@@ -205,7 +204,6 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     private Errno Close(int fd)
     {
         Wait(process.CloseAsync(fd));
-        flags.Remove(fd);
         directories.Closed(fd);
         return Errno.Success;
     }
@@ -279,13 +277,12 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         rights[newfd] = (wanted, inheriting);
-        flags[newfd] = 0;
+        flags[newfd] = fdflags;
         if (isDirectory)
         {
             directories.Opened(newfd, path);
         }
 
-        Flag(newfd, fdflags);
         memory.WriteUInt32(opened, (uint)newfd);
         return Errno.Success;
     }
@@ -386,29 +383,19 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return Errno.Success;
     }
 
-    // APPEND and NONBLOCK are kept, and a sync flag is INVAL, as under both controls.
+    // APPEND and NONBLOCK are kept, and a sync flag is INVAL, as under both controls. NONBLOCK changes
+    // nothing on a file or directory, which never blocks; a pipe would, and Fog does not make one
+    // return AGAIN, so on a pipe it is NOTSUP.
     private Errno SetFlags(int fd, int wanted)
     {
-        Stat(fd);
+        Stat stat = Stat(fd);
         if ((wanted & ~(Append | Nonblock)) != 0)
         {
             throw new InvalidArgumentException();
         }
 
-        Flag(fd, wanted);
+        flags[fd] = (wanted & Nonblock) != 0 && stat.Type == '|' ? throw new NotSupportedByFogException() : wanted;
         return Errno.Success;
-    }
-
-    // NONBLOCK changes nothing on a file or directory, which never blocks; a pipe would, and Fog does
-    // not make one return AGAIN, so on a pipe it is NOTSUP.
-    private void Flag(int fd, int wanted)
-    {
-        if ((wanted & Nonblock) != 0 && Stat(fd).Type == '|')
-        {
-            throw new NotSupportedByFogException();
-        }
-
-        flags[fd] = wanted;
     }
 
     private Errno Narrow(int fd, Rights held, Rights inheriting)
@@ -585,7 +572,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
             }
 
             (long Queued, bool HungUp)? pipe = Wait(process.PipeReadinessAsync(fd));
-            long left = pipe?.Queued ?? (stat.Type != 'c' ? (long)stat.Length - Wait(process.SeekAsync(fd, 0, 1)) : 0);
+            long left = pipe?.Queued ?? (long)stat.Length - Wait(process.SeekAsync(fd, 0, 1));
             BinaryPrimitives.WriteInt64LittleEndian(happened.AsSpan(16), Math.Max(0, left));
             happened[24] = pipe is { HungUp: true } ? (byte)1 : (byte)0;
             return pipe is not { Queued: 0, HungUp: false } ? happened : null;

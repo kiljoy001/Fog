@@ -9,8 +9,9 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
   kernel's own names, /bin, /dev, /env, /fd and /tmp, show through beside the copy's. Once the
   module ends, the copy is written back over the host directory, so the host sees what the module
   did; what the module left as it was is not touched. The runner exits as the module did: with its exit code, 0 when _start returns, and 134,
-  Wasmtime's, after a trap, which it names on stderr. Anything else it is given is refused with its
-  usage and exit code 2.
+  Wasmtime's, after a trap, which it names on stderr, and 1 when the module could not run, also
+  named. Anything else it is given is refused with its usage and exit code 2. Symbolic links in the
+  host directory have no Fog counterpart: they are left out of the copy and left as they are.
 
   Background:
     Given a host directory
@@ -33,6 +34,12 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
     And its stderr is "wasm-trap: integer divide by zero\n"
 
   @WASI_DIFF_010
+  Scenario: A module Fog refuses exits 1, named on stderr
+    When fog-wasi runs the module "start-section"
+    Then fog-wasi exits with 1
+    And its stderr is "sys: exec header invalid\n"
+
+  @WASI_DIFF_010
   Scenario: The module's stdout is the runner's
     When fog-wasi runs the module "hello"
     Then its stdout is "hello"
@@ -48,12 +55,13 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
     Then its stdout is "region=north\nshift=night\n"
 
   @WASI_DIFF_010
-  Scenario: The host directory is the preopen "/", and stdin is the module's
+  Scenario: The host directory is the preopen "/", stdin is the module's, and it holds nothing else
     Given the host directory holds "report" with "daily"
     When fog-wasi runs the trace interpreter on the host directory with the script:
       """
       fd_prestat_get 3
       fd_prestat_dir_name 3 1
+      fd_fdstat_get 5
       path_open 3 0 "report" 0 2 0 0
       fd_read 4 5
       """
@@ -61,6 +69,7 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
       """
       fd_prestat_get 3 -> ok tag=0 len=1
       fd_prestat_dir_name 3 1 -> ok "/"
+      fd_fdstat_get 5 -> BADF
       path_open 3 0 "report" 0 2 0 0 -> ok 4
       fd_read 4 5 -> ok "daily"
       """
@@ -87,10 +96,56 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
     Given the host directory holds the read-only file "frozen" with "x"
     When fog-wasi runs the trace interpreter on the host directory with the script:
       """
+      path_open 3 0 "frozen" 0 0x40 0 0
       path_create_directory 3 "sub"
       """
-    Then fog-wasi exits with 0
+    Then its stdout is:
+      """
+      path_open 3 0 "frozen" 0 0x40 0 0 -> ACCES
+      path_create_directory 3 "sub" -> ok
+      """
     And the host file "frozen" was not written
+
+  @WASI_DIFF_010
+  Scenario: A file the module replaces with a directory, or a directory with a file, is replaced on the host
+    Given the host directory holds "report" with "daily"
+    And the host directory holds the directory "old"
+    When fog-wasi runs the trace interpreter on the host directory with the script:
+      """
+      path_unlink_file 3 "report"
+      path_create_directory 3 "report"
+      path_remove_directory 3 "old"
+      path_open 3 0 "old" 1 0x40 0 0
+      fd_write 4 "file"
+      """
+    Then the host directory holds only:
+      | name   | contents    |
+      | old    | file        |
+      | report | <directory> |
+
+  @WASI_DIFF_010
+  Scenario: A symbolic link in the host directory is left out of the copy and left as it is
+    Given the host directory holds "report" with "daily"
+    And the host directory holds a symbolic link "kept" to "report"
+    And the host directory holds a symbolic link "taken" to a file outside it holding "outside"
+    When fog-wasi runs the trace interpreter on the host directory with the script:
+      """
+      path_filestat_get 3 0 "kept"
+      path_open 3 0 "taken" 1 0x40 0 0
+      fd_write 4 "made"
+      """
+    Then its stdout is:
+      """
+      path_filestat_get 3 0 "kept" -> NOENT
+      path_open 3 0 "taken" 1 0x40 0 0 -> ok 4
+      fd_write 4 "made" -> ok 4
+      """
+    And the host directory holds only:
+      | name   | contents      |
+      | kept   | <link report> |
+      | report | daily         |
+      | taken  | made          |
+    And the file outside the host directory holds "outside"
 
   @WASI_DIFF_010
   Scenario Outline: An option fog-wasi does not take is refused with its usage
@@ -99,7 +154,23 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
     And its stderr is "usage: fog-wasi [--env NAME=VALUE]... [--dir HOST::/] module.wasm [arg]...\n"
 
     Examples:
-      | options             | what                         |
-      | --env region        | a variable without a value   |
-      | --dir /tmp::/data   | a directory not given as "/" |
-      | --wasm threads=y    | an option it does not take   |
+      | options                   | what                         |
+      | --env region              | a variable without a value   |
+      | --env =north              | a variable without a name    |
+      | --dir /tmp::/data         | a directory not given as "/" |
+      | --dir /tmp::/ --dir /tmp::/ | two directories            |
+      | --wasm threads=y          | an option it does not take   |
+      | --wasm threads::/         | an option it does not take, ending as a directory does |
+
+  @WASI_DIFF_010
+  Scenario Outline: Arguments without a module are refused with the usage
+    When fog-wasi runs with the arguments "<arguments>"
+    Then fog-wasi exits with 2
+    And its stderr is "usage: fog-wasi [--env NAME=VALUE]... [--dir HOST::/] module.wasm [arg]...\n"
+
+    Examples:
+      | arguments           | what                              |
+      |                     | nothing                           |
+      | --env               | an option without its value       |
+      | --env region=north  | an option and no module           |
+      | --env a=b --dir     | an option after a complete one    |
