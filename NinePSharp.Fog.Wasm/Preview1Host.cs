@@ -31,10 +31,9 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     private readonly Dictionary<int, (Rights Base, Rights Inheriting)> rights = [];
     private readonly Dictionary<int, int> flags = [];
 
-    // The modification times this process set, to the nanosecond, by file, each with the whole second
-    // the file server held once it was set. Fog's file servers keep no qid version, so a change made
-    // by another process within that second goes unseen; one made by this process forgets the time.
-    private readonly Dictionary<(ushort Type, uint Dev, ulong Path), (uint Mtime, ulong Set)> times = [];
+    // The modification times this process set, to the nanosecond, by file, each with the qid version
+    // the file had once it was set; any change to the file since, by any process, counts in its version.
+    private readonly Dictionary<(ushort Type, uint Dev, ulong Path), (uint Version, ulong Set)> times = [];
     private readonly HeldDirectories directories = new(process);
     private GuestMemory memory = null!;
     private IReadOnlyList<string> argv = [];
@@ -283,11 +282,6 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
             throw new SyscallException(Errors.NotDirectory);
         }
 
-        if (truncate)
-        {
-            Forget(newfd);
-        }
-
         rights[newfd] = (wanted, inheriting);
         flags[newfd] = fdflags;
         if (isDirectory)
@@ -428,7 +422,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     // the file is as that left it.
     private Errno FileStat(Stat stat, uint pointer)
     {
-        ulong mtime = times.TryGetValue(Identity(stat), out var set) && set.Mtime == stat.Mtime ? set.Set : stat.Mtime * Nanoseconds;
+        ulong mtime = times.TryGetValue(Identity(stat), out var set) && set.Version == stat.Qid.Version ? set.Set : stat.Mtime * Nanoseconds;
         var filestat = new byte[64];
         BinaryPrimitives.WriteUInt64LittleEndian(filestat.AsSpan(8), stat.Qid.Path);
         filestat[16] = Filetype(stat);
@@ -441,12 +435,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return Errno.Success;
     }
 
-    private Errno SetSize(int fd, long size)
-    {
-        Wait(process.FWStatAsync(fd, WStat(length: (ulong)size)));
-        Forget(fd);
-        return Errno.Success;
-    }
+    private Errno SetSize(int fd, long size) => Wait(process.FWStatAsync(fd, WStat(length: (ulong)size)));
 
     // Only the modification time can be set, to a time given or to now; the file server is given its
     // whole seconds. Asking to set the access time is NOTSUP, and both a time and now is INVAL.
@@ -476,15 +465,7 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return Errno.Success;
     }
 
-    private void Remember(Stat stat, ulong set) => times[Identity(stat)] = (stat.Mtime, set);
-
-    private void Forget(int fd)
-    {
-        if (times.Count != 0)
-        {
-            times.Remove(Identity(Stat(fd)));
-        }
-    }
+    private void Remember(Stat stat, ulong set) => times[Identity(stat)] = (stat.Qid.Version, set);
 
     private ulong? Mtime(long mtim, int which)
     {
@@ -694,7 +675,6 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         }
 
         memory.WriteUInt32(written, (uint)Wait(process.PWriteAsync(fd, data, offset)));
-        Forget(fd);
         return Errno.Success;
     }
 

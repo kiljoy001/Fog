@@ -14,8 +14,8 @@ Feature: Preview 1's descriptor status, rights and file status
   qid path as inode, one link, and the modification time as the status-change time, in nanoseconds.
   The length and the modification time can be set; the access time cannot. The file server keeps
   the modification time in Plan 9's whole seconds, and the process remembers the nanoseconds it set,
-  reporting them while the file's modification time is the second the set left and the process has
-  not written, resized or truncated the file since; after that, its time is the file server's. Advice is accepted and ignored, and space cannot be allocated. The kernel's clock
+  reporting them while the file's qid version is the one the set left; once any process changes the
+  file, its version moves on and its time is the file server's. Advice is accepted and ignored, and space cannot be allocated. The kernel's clock
   stands at 2026-10-01 12:00 UTC, 1790856000 seconds.
 
   Background:
@@ -305,7 +305,7 @@ Feature: Preview 1's descriptor status, rights and file status
     And the file "/tmp/f" was last modified at 1700000000
 
   @WASI_NS_026
-  Scenario Outline: Once the process changes the file, its time is the file server's, even within the second that was set
+  Scenario Outline: Once the file changes, its time is the file server's, even within the second that was set
     Given the file "/tmp/f" holds "0123456789"
     And the interpreter has "/tmp/f" open for reading and writing as descriptor 3
     And the interpreter has "/tmp" open for reading as descriptor 4
