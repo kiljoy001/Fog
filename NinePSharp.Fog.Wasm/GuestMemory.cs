@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using WebAssembly.Runtime;
 
 namespace NinePSharp.Fog.Wasm;
@@ -38,7 +40,7 @@ internal sealed class GuestMemory(UnmanagedMemory memory)
         Check(pointer, length);
         try
         {
-            return new Span<byte>((byte*)memory.Start + pointer, checked((int)length));
+            return MemoryMarshal.CreateSpan(ref Unsafe.Add(ref Unsafe.AsRef<byte>((void*)memory.Start), (nint)pointer), checked((int)length));
         }
         catch (OverflowException)
         {
