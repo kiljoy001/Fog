@@ -154,6 +154,8 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | path-longest     | report <pid>: wasm-exit 37  | a mebibyte path, which namec finds too long       |
       | path-too-long    | report <pid>: wasm-exit 37  | a mebibyte and a byte, NAMETOOLONG                |
       | path-length-huge | report <pid>: wasm-exit 21  | 2^31 - 1 bytes, outside memory, FAULT             |
+      | path-longest-invalid  | report <pid>: wasm-exit 25 | a mebibyte of 0xff, copied and not UTF-8, ILSEQ |
+      | path-too-long-invalid | report <pid>: wasm-exit 37 | a mebibyte and a byte of 0xff, never copied     |
 
   @WASI_NS_017
   Scenario: A host call reaches guest memory above 2 GiB

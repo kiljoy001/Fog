@@ -332,7 +332,7 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | opens      | /tmp/<65531 a>\t | name too long                              |
 
   @FOG_KERNEL_036
-  Scenario Outline: A name just short of 64 KiB of UTF-8 is a name
+  Scenario Outline: A name just short of 64 KiB of UTF-8, or with a space in it, is a name
     When the process creates the name "<name>"
     Then the open succeeds
 
@@ -340,6 +340,7 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | name           |
       | /tmp/<65530 a> |
       | /tmp/<32765 é> |
+      | /tmp/a b       |
 
   @FOG_KERNEL_036
   Scenario Outline: The message quotes the name as %q does, within the message's 128 bytes
@@ -353,6 +354,11 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | /tmp/<80 a>\x01<40 a>   | bad character in file name: '/tmp/<80 a>\x01<11 a>'      |
       | /tmp/<92 a>\x01         | bad character in file name: /tmp/<92 a>                  |
       | /tmp/<200 a>\x01        | bad character in file name: /tmp/<94 a>                  |
+      | /tmp/a b\x7f            | bad character in file name: '/tmp/a b\x7f'               |
+      | /tmp/<91 a>\x01         | bad character in file name: '/tmp/<91 a>\x01'            |
+      | /tmp/\x01<89 a>'        | bad character in file name: '/tmp/\x01<89 a>'''          |
+      | /tmp/\x01<90 a>'        | bad character in file name: '/tmp/\x01<90 a>'            |
+      | /tmp/'<200 a>\x01       | bad character in file name: '/tmp/''<90 a>'              |
 
   @FOG_KERNEL_036
   Scenario Outline: wstat and fwstat check a new name before the file, refusing a slash in it too
@@ -369,9 +375,14 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | renames descriptor 0         | <61 a>/b     | bad character in file name: <61 a>/b    |
 
   @FOG_KERNEL_036
-  Scenario: A new name of 64 bytes or more is left to the file server, which ramfs takes
-    When the process renames "/tmp/f" to the name "<62 a>/b"
-    Then listing "/tmp" gives the name "<62 a>/b"
+  Scenario Outline: A new name that is "/", or of 64 bytes or more, is left to the file server, which ramfs takes
+    When the process renames "/tmp/f" to the name "<name>"
+    Then listing "/tmp" gives the name "<name>"
+
+    Examples:
+      | name     |
+      | /        |
+      | <62 a>/b |
 
   @FOG_KERNEL_036
   Scenario Outline: bind resolves its first name before it checks its second
