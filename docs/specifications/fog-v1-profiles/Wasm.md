@@ -60,11 +60,17 @@ modules with the engine, links them as the component says, and lifts and lowers 
 across its imports and exports by the canonical ABI.
 
 Every core module, alone or inside a component, meets the same limits: binary wasm32
-with one defined memory, a finite memory maximum within the admitted limit, no core start
-section (imports cannot run during instantiation, before the bridge owns the memory), no
-imported, shared or multiple memories, no memory64 or threads, and only MVP numeric
-instructions until additional instruction sets have pinned compiler fixtures. Table growth,
-module size and compilation are bounded. A Preview 1 module exports its memory as
+with one defined memory, no core start section (imports cannot run during instantiation,
+before the bridge owns the memory), no imported, shared or multiple memories, no memory64
+or threads, and only MVP numeric instructions until additional instruction sets have
+pinned compiler fixtures. Table growth, module size and compilation are bounded.
+
+The memory may grow to the maximum the module declares. A module that declares none may
+grow to WebAssembly's own limit for a 32-bit memory, 65536 pages (4 GiB), which is what
+toolchains mean by leaving it out. The engine allocates memory as it grows, not up to its
+maximum, and holds addresses in 32 bits, so its last page, the 65536th, can never be
+allocated: growing to it fails as any failed growth does, returning -1. Host calls reach
+the whole memory, above 2 GiB as below it. A Preview 1 module exports its memory as
 `memory`; a component names the memory its canonical options use.
 
 A Preview 1 module links only exactly typed, named `wasi_snapshot_preview1` functions.

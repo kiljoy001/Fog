@@ -13,8 +13,9 @@ Feature: A WASI Preview 1 core module runs as a Fog process
   exception says which trap it was. A kernel call that ends the process ends it as it would any
   process. A function of the profile that Fog does not provide
   returns NOSYS. Guest memory is checked before any kernel call; an access outside it is FAULT. A
-  memory may grow to at most 16384 pages, and one call copies at most a mebibyte, so a guest cannot
-  make the host allocate without bound.
+  memory may grow to the maximum the module declares, or without one to WebAssembly's own limit for a
+  32-bit memory, 65536 pages, and a host call reaches all of it; one call copies at most a mebibyte,
+  so a guest cannot make the host allocate without bound.
 
   Background:
     Given a kernel that runs WASM applications
@@ -76,8 +77,6 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | shared-memory     | with a shared memory                                 |
       | imported-memory   | with an imported memory                              |
       | no-memory-export  | without a memory exported as "memory"                |
-      | unbounded-memory  | with no finite memory maximum                        |
-      | huge-memory       | with a memory that may grow past 16384 pages         |
       | memory64          | with a 64-bit memory                                 |
       | no-start          | without an exported _start                           |
       | start-with-result | with a _start that returns a value                   |
@@ -113,10 +112,21 @@ Feature: A WASI Preview 1 core module runs as a Fog process
     Then the parent's wait message for it is empty
 
   @WASI_NS_017
-  Scenario: A memory may grow to 16384 pages, a gibibyte
-    Given "/bin/report" holds the application "largest-memory"
+  Scenario Outline: A memory may have any maximum a 32-bit memory can, or none
+    Given "/bin/report" holds the application "<fixture>"
     When a child with a pipe as descriptor 1 execs "/bin/report"
     Then the parent's wait message for it is empty
+
+    Examples:
+      | fixture        | memory                                                       |
+      | largest-memory | with a maximum of 65536 pages, 4 GiB                         |
+      | no-maximum     | without a maximum, which cannot grow by 65536 pages from one |
+
+  @WASI_NS_017
+  Scenario: A host call reaches guest memory above 2 GiB
+    Given "/bin/report" holds the application "high-memory"
+    When a child with a pipe as descriptor 1 execs "/bin/report"
+    Then the pipe holds "high"
 
   @WASI_NS_017
   Scenario Outline: Exec refuses a file that only starts like a core module

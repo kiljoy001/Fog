@@ -49,7 +49,6 @@ Feature: Exec admits WASI 0.2 components and calls them through the canonical AB
       | using a fixed-length list                                                  |
       | holding a core module with a start section                                 |
       | holding a core module with a shared memory                                 |
-      | holding a core module with no finite memory maximum                        |
       | holding a core module that imports "wasi_snapshot_preview1"                |
 
   @WASM_CM_003

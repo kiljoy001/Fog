@@ -46,7 +46,6 @@ Feature: A WASM application runs as a Fog process and uses its namespace through
       | with a start section                             |
       | with a shared memory                             |
       | without a memory exported as "memory"            |
-      | with no finite memory maximum                    |
       | importing a function outside the profile         |
       | importing a profile function with the wrong type |
 

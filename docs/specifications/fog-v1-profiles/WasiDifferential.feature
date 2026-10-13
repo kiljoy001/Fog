@@ -157,7 +157,7 @@ Feature: Fog's WASI is compared against reference runtimes as a control
 
   @WASI_DIFF_013
   Scenario: Fog refuses more than the controls, and only as its profile says
-    Given modules and components that the controls run but Fog's profile refuses: a core start section, no finite memory maximum, an import of wasi:http
+    Given modules and components that the controls run but Fog's profile refuses: a core start section, an import of wasi:http
     When each is execed under Fog and run under the controls
     Then Fog refuses each with "exec header invalid"
     And each refusal is a ledger entry naming WASI_NS_017 or WASM_CM_002

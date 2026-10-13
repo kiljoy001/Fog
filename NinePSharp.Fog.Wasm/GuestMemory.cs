@@ -3,10 +3,9 @@ using WebAssembly.Runtime;
 
 namespace NinePSharp.Fog.Wasm;
 
-// The guest's linear memory, seen from a host call. A range is a slice of the memory as it is now, so
-// the runtime refuses any part of it outside, a pointer or length past 2^31 included, since as an int
-// it is negative. Every access takes the memory's current base, since growing it may move it, and no
-// slice outlives the access that took it.
+// The guest's linear memory, seen from a host call. A range must lie wholly inside the memory as it is
+// now, which may be 4 GiB, so it is checked in 64 bits before it is taken. Every access takes the
+// memory's current base, since growing it may move it, and no slice outlives the access that took it.
 internal sealed class GuestMemory(UnmanagedMemory memory)
 {
     public delegate void SpanAction(Span<byte> range);
@@ -29,13 +28,11 @@ internal sealed class GuestMemory(UnmanagedMemory memory)
 
     private unsafe Span<byte> Range(uint pointer, uint length)
     {
-        try
-        {
-            return new Span<byte>((void*)memory.Start, (int)memory.Size).Slice((int)pointer, (int)length);
-        }
-        catch (ArgumentOutOfRangeException)
+        if ((ulong)pointer + length > memory.Size || length > int.MaxValue)
         {
             throw new GuestFaultException();
         }
+
+        return new Span<byte>((byte*)memory.Start + pointer, (int)length);
     }
 }

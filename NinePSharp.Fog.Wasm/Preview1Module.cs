@@ -9,7 +9,7 @@ namespace NinePSharp.Fog.Wasm;
 
 // A core module admitted to run under WASI Preview 1. Admission checks what the engine would allow:
 // a start section, which would run before the host holds the memory, and the one memory the module
-// defines, which must be 32-bit with a finite maximum of at most MaxPages and not shared;
+// defines, which must be 32-bit and not shared, with whatever maximum it declares or none;
 // dotnet-webassembly ignores the shared flag, so it is read from the binary. The rest holds because
 // the module is set up when exec loads it: imports are bound only as Preview 1's functions with
 // their WITX types, so any other import fails to bind; the exports must hold a memory named "memory"
@@ -17,7 +17,6 @@ namespace NinePSharp.Fog.Wasm;
 // and never run is left to the collector, which frees its memory.
 internal sealed class Preview1Module
 {
-    public const ulong MaxPages = 16384;
     private const byte MemorySection = 5;
     private const uint Shared = 2;
     private readonly Preview1Host host;
@@ -61,7 +60,7 @@ internal sealed class Preview1Module
     }
 
     private static bool Admissible(Module module)
-        => module.Start is null && module.Memories is [{ ResizableLimits: { Is64Bit: false, Maximum64: <= MaxPages } }];
+        => module.Start is null && module.Memories is [{ ResizableLimits.Is64Bit: false }];
 
     private static Preview1Module Instantiate(Module module, byte[] image, Process process, TimeProvider clock)
     {
