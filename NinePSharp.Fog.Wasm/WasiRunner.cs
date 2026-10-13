@@ -162,16 +162,14 @@ public static class WasiRunner
         await process.CloseAsync(to);
     }
 
+    // The step's process is waited for before its work is looked at, so it has ended, and how its work
+    // went, result or exception, is the step's.
     private static async Task<T> AloneAsync<T>(Process parent, Func<Process, Task<T>> body)
     {
-        T result = default!;
-        parent.Fork(RforkFlags.Cfdg, async process =>
-        {
-            result = await body(process);
-            process.Exits(null);
-        });
-        Waitmsg waited = await parent.WaitAsync();
-        return waited.Message.Length == 0 ? result : throw new IOException(waited.Message);
+        Task<T>? work = null;
+        parent.Fork(RforkFlags.Cfdg, process => work = body(process));
+        await parent.WaitAsync();
+        return await work!;
     }
 
     private static Task<int> WriteAsync(Process parent, string path, byte[] contents, uint permissions)

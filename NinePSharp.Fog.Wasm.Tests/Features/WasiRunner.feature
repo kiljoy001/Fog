@@ -110,41 +110,61 @@ Feature: fog-wasi runs a Preview 1 module from the host as a Fog process
   Scenario: A file the module replaces with a directory, or a directory with a file, is replaced on the host
     Given the host directory holds "report" with "daily"
     And the host directory holds the directory "old"
+    And the host directory holds "old/f" with "f"
     When fog-wasi runs the trace interpreter on the host directory with the script:
       """
       path_unlink_file 3 "report"
       path_create_directory 3 "report"
+      path_unlink_file 3 "old/f"
       path_remove_directory 3 "old"
       path_open 3 0 "old" 1 0x40 0 0
       fd_write 4 "file"
       """
-    Then the host directory holds only:
+    Then its stdout is:
+      """
+      path_unlink_file 3 "report" -> ok
+      path_create_directory 3 "report" -> ok
+      path_unlink_file 3 "old/f" -> ok
+      path_remove_directory 3 "old" -> ok
+      path_open 3 0 "old" 1 0x40 0 0 -> ok 4
+      fd_write 4 "file" -> ok 4
+      """
+    And the host directory holds only:
       | name   | contents    |
       | old    | file        |
       | report | <directory> |
 
   @WASI_DIFF_010
-  Scenario: A symbolic link in the host directory is left out of the copy and left as it is
+  Scenario: A symbolic link in the host directory is left out of the copy and left as it is, unless the module makes what has its name
     Given the host directory holds "report" with "daily"
+    And the host directory holds the directory "sub"
+    And the host directory holds "sub/f" with "f"
     And the host directory holds a symbolic link "kept" to "report"
     And the host directory holds a symbolic link "taken" to a file outside it holding "outside"
+    And the host directory holds a symbolic link "shortcut" to "sub"
     When fog-wasi runs the trace interpreter on the host directory with the script:
       """
       path_filestat_get 3 0 "kept"
       path_open 3 0 "taken" 1 0x40 0 0
       fd_write 4 "made"
+      path_open 3 0 "shortcut" 1 0x40 0 0
+      fd_write 5 "made too"
       """
     Then its stdout is:
       """
       path_filestat_get 3 0 "kept" -> NOENT
       path_open 3 0 "taken" 1 0x40 0 0 -> ok 4
       fd_write 4 "made" -> ok 4
+      path_open 3 0 "shortcut" 1 0x40 0 0 -> ok 5
+      fd_write 5 "made too" -> ok 8
       """
     And the host directory holds only:
-      | name   | contents      |
-      | kept   | <link report> |
-      | report | daily         |
-      | taken  | made          |
+      | name     | contents             |
+      | kept     | <link report>        |
+      | report   | daily                |
+      | shortcut | made too             |
+      | sub      | <nonempty directory> |
+      | taken    | made                 |
     And the file outside the host directory holds "outside"
 
   @WASI_DIFF_010
