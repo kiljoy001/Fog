@@ -7,8 +7,12 @@ Feature: pread, pwrite, fstat and wstat act on files as 9front's do
   keeps a file in 64 KiB blocks up to 2^28-1 of them. It renames a file within its directory,
   truncates or extends it, and changes its mode and modification time; it checks a change of group
   but does not make it. It refuses a name already taken, a length on a directory, a length past its
-  largest file, and renaming its root. The kernel's env, cons and dup devices refuse every change,
-  and a pipe's data files take only a buffer length no larger than a pipe's queue.
+  largest file, and renaming its root. Its qid version counts changes as ramfs and lib9p count them
+  together: a write counts twice, once in ramfs and once in lib9p's reply to it, and a write of
+  nothing once, in the reply alone; a wstat it accepts and an open that truncates count once each,
+  and like a write they set both times. Reading, making a file, and anything refused count nothing.
+  The kernel's env, cons and dup devices refuse every change, and a pipe's data files take only a
+  buffer length no larger than a pipe's queue.
 
   Background:
     Given a booted kernel
@@ -71,6 +75,35 @@ Feature: pread, pwrite, fstat and wstat act on files as 9front's do
       | pwrites ""     | 0      | 1000  | 1000  |
       | preads 3 bytes | 0      | 2000  | 1000  |
       | pwrites "J"    | 0      | 2000  | 2000  |
+
+  @FOG_KERNEL_035
+  Scenario Outline: ramfs counts each change to a file in its qid version
+    Given the process has "/tmp/f" open as descriptor 0
+    And the clock reads 2000
+    When <change>
+    Then stating "/tmp/f" gives the version <version>, the access time <atime> and the modification time <mtime>
+
+    Examples:
+      | change                                                         | version | atime | mtime |
+      | it preads 3 bytes at offset 0                                  | 2       | 2000  | 1000  |
+      | it pwrites "J" at offset 0                                     | 4       | 2000  | 2000  |
+      | it pwrites "" at offset 0                                      | 3       | 1000  | 1000  |
+      | the process wstats "/tmp/f" with nothing                       | 3       | 2000  | 2000  |
+      | the process wstats "/tmp/f" with the modification time 1234    | 3       | 2000  | 1234  |
+      | the process wstats "/tmp/f" with the length 1152921504606846976 | 2      | 1000  | 1000  |
+      | the process opens "/tmp/f" truncating it                       | 3       | 2000  | 2000  |
+
+  @FOG_KERNEL_035
+  Scenario: A descriptor opened before a change stats the file's version after it
+    Given the process has "/tmp/f" open as descriptor 0
+    When it pwrites "J" at offset 0
+    And the process fstats descriptor 0
+    Then the entry has the version 4
+
+  @FOG_KERNEL_035
+  Scenario: Making and writing a file leaves its directory's version alone
+    When the process stats "/tmp"
+    Then the entry has the version 0
 
   @FOG_KERNEL_027
   Scenario: fstat reads the open file's entry under the name it was opened by

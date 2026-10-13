@@ -95,6 +95,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
             if ((mode & NinePConstants.OTRUNC) != 0)
             {
                 Truncate(file, 0);
+                Access(file, Write);
             }
 
             return ValueTask.FromResult(new ResourceOpenHandle(resource, HandleId(context), mode, 0));
@@ -131,7 +132,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
                 done += n;
             }
 
-            node.AccessTime = Now;
+            Access(node, Read);
             return ValueTask.FromResult<ReadOnlyMemory<byte>>(reply);
         }
     }
@@ -140,7 +141,9 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     {
         lock (gate)
         {
+            // lib9p's rwrite counts every write it answers, even one of nothing that ramfs leaves.
             Node node = nodes[openHandle.Resource.Identity.Path];
+            node.Version++;
             if (data.IsEmpty)
             {
                 return ValueTask.FromResult(0u);
@@ -167,7 +170,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
             }
 
             node.Length = Math.Max(node.Length, top);
-            node.AccessTime = node.ModificationTime = Now;
+            Access(node, Write);
             return ValueTask.FromResult((uint)data.Length);
         }
     }
@@ -177,7 +180,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
         lock (gate)
         {
             Node node = nodes[resource.Identity.Path];
-            return ValueTask.FromResult(new ResourceStat(resource, node.Name, node.Permissions, node.AccessTime, node.ModificationTime, node.Length, node.Owner, node.Group, node.Owner));
+            return ValueTask.FromResult(new ResourceStat(Handle(resource.Identity.Path, node), node.Name, node.Permissions, node.AccessTime, node.ModificationTime, node.Length, node.Owner, node.Group, node.Owner));
         }
     }
 
@@ -336,10 +339,21 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
             Truncate(file, stat.Length);
         }
 
-        file.AccessTime = file.ModificationTime = Now;
+        Access(file, Write);
         if (stat.ModificationTime != uint.MaxValue)
         {
             file.ModificationTime = stat.ModificationTime;
+        }
+    }
+
+    // accessfile: reading sets the access time; writing sets both and counts in the qid version.
+    private void Access(Node file, int access)
+    {
+        file.AccessTime = Now;
+        if (access == Write)
+        {
+            file.ModificationTime = file.AccessTime;
+            file.Version++;
         }
     }
 
@@ -384,7 +398,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     }
 
     private ResourceHandle Handle(ulong path, Node node)
-        => new(new ResourceIdentity(provider, device, path), (node.Permissions & (uint)NinePConstants.FileMode9P.DMDIR) != 0 ? QidType.QTDIR : QidType.QTFILE);
+        => new(new ResourceIdentity(provider, device, path), (node.Permissions & (uint)NinePConstants.FileMode9P.DMDIR) != 0 ? QidType.QTDIR : QidType.QTFILE, node.Version);
 
     private sealed class Node(string name, ulong? parent, uint permissions, string owner, string group, uint time)
     {
@@ -402,6 +416,8 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
 
         public uint ModificationTime { get; set; } = time;
 
+        public uint Version { get; set; }
+
         public bool IsDirectory => (Permissions & (uint)NinePConstants.FileMode9P.DMDIR) != 0;
 
         public ulong Length { get; set; }
@@ -417,6 +433,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
             Blocks = Blocks?.ToDictionary(entry => entry.Key, entry => entry.Value.ToArray()),
             Children = Children.ToList(),
             ModificationTime = ModificationTime,
+            Version = Version,
         };
     }
 }

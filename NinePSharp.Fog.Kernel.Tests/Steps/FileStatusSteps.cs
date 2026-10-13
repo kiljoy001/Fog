@@ -55,6 +55,9 @@ public sealed class FileStatusSteps(KernelDriver driver)
     [When(@"^the process fwstats descriptor (\d+) with (.*)$")]
     public Task WhenFwstat(int fd, string change) => CallAsync(() => driver.Init.FWStatAsync(fd, Change(change)).AsTask());
 
+    [When(@"^the process opens ""(.*)"" truncating it$")]
+    public async Task WhenTruncate(string path) => await driver.Init.CloseAsync(await driver.Init.OpenAsync(path, NinePConstants.OWRITE | NinePConstants.OTRUNC));
+
     [When("the process makes a pipe")]
     public async Task WhenPipe()
     {
@@ -123,6 +126,16 @@ public sealed class FileStatusSteps(KernelDriver driver)
         Stat stat = await driver.Init.StatAsync(path);
         Assert.Equal((atime, mtime), (stat.Atime, stat.Mtime));
     }
+
+    [Then(@"^stating ""(.*)"" gives the version (\d+), the access time (\d+) and the modification time (\d+)$")]
+    public async Task ThenVersion(string path, uint version, uint atime, uint mtime)
+    {
+        Stat stat = await driver.Init.StatAsync(path);
+        Assert.Equal((version, atime, mtime), (stat.Qid.Version, stat.Atime, stat.Mtime));
+    }
+
+    [Then(@"^the entry has the version (\d+)$")]
+    public void ThenEntryVersion(uint version) => Assert.Equal(version, entry!.Value.Qid.Version);
 
     [Then(@"^stating ""(.*)"" gives the modification time (\d+)$")]
     public async Task ThenModified(string path, uint time) => Assert.Equal(time, (await driver.Init.StatAsync(path)).Mtime);
