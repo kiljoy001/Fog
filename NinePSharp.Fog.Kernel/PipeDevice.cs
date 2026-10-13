@@ -25,7 +25,8 @@ internal sealed class PipeDevice(string owner) : IResourceDataOperations, IResou
 
     public (ResourceHandle First, ResourceHandle Second) Create()
     {
-        string device = Interlocked.Increment(ref next).ToString(CultureInfo.InvariantCulture);
+        // Each pipe is a device of its own, #| and its number.
+        string device = "#|" + Interlocked.Increment(ref next).ToString(CultureInfo.InvariantCulture);
         lock (gate)
         {
             pipes.Add(device, new Pipe());

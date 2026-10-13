@@ -143,6 +143,9 @@ public sealed class FilesSteps(KernelDriver driver)
     public Task WhenRforks(string flags)
         => CallAsync(() => driver.Init.RforkAsync(flags.Split(" and ").Select(flag => Enum.Parse<RforkFlags>(flag[2..], ignoreCase: true)).Aggregate((a, b) => a | b)).AsTask());
 
+    [Then(@"^the entry is from device (.) number (\d+)$")]
+    public void ThenDevice(char type, uint number) => Assert.Equal((type, number), ((char)entry!.Value.Type, entry.Value.Dev));
+
     [Then(@"^the entry is named ""(.*)"", is (\d+) bytes long and has the permissions (d?)(\d+)$")]
     public void ThenEntry(string name, ulong length, string directory, string permissions)
     {

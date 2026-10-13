@@ -1,5 +1,6 @@
 using System.Text;
 using NinePSharp.Fog.Kernel.Tests.Support;
+using NinePSharp.Messages;
 using Reqnroll;
 using Xunit;
 
@@ -11,6 +12,7 @@ public sealed class PipeSteps(KernelDriver driver)
 {
     private static readonly TimeSpan Bound = KernelDriver.Bound;
     private readonly CancellationTokenSource cancel = new();
+    private (int First, int Second) second;
     private Task<ReadOnlyMemory<byte>>? read;
     private Task<int>? write;
     private Waitmsg? waited;
@@ -70,6 +72,25 @@ public sealed class PipeSteps(KernelDriver driver)
     [Then(@"^reading the second end fails with ""(.*)""$")]
     public async Task ThenReadingFails(string message)
         => Assert.Equal(message, (await Assert.ThrowsAsync<SyscallException>(() => ReadAsync(driver.Pipe[1], 8192))).Message);
+
+    [When("it makes a second pipe")]
+    public async Task WhenSecondPipe() => second = await driver.Init.PipeAsync();
+
+    [Then(@"^each pipe's ends stat as device \|, named ""(.*)"" and ""(.*)"", with one number for the pipe$")]
+    public async Task ThenPipeDevices(string first, string other)
+    {
+        foreach ((int a, int b) in new[] { (driver.Pipe[0], driver.Pipe[1]), second })
+        {
+            Stat[] ends = [await driver.Init.FStatAsync(a), await driver.Init.FStatAsync(b)];
+            Assert.All(ends, end => Assert.Equal('|', (char)end.Type));
+            Assert.Equal(ends[0].Dev, ends[1].Dev);
+            Assert.Equal([first, other], ends.Select(end => end.Name));
+        }
+    }
+
+    [Then("the second pipe's number is one more than the first's")]
+    public async Task ThenNumbered()
+        => Assert.Equal((await driver.Init.FStatAsync(driver.Pipe[0])).Dev + 1, (await driver.Init.FStatAsync(second.First)).Dev);
 
     [Then(@"^the pipe's descriptors are (\d+) and (\d+)$")]
     public void ThenDescriptors(int first, int second) => Assert.Equal([first, second], driver.Pipe);

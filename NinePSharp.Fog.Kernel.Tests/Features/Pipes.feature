@@ -6,7 +6,8 @@ Feature: Pipes carry bytes between processes as 9front's devpipe does
   than 256 KiB is queued ahead of the end of its write. Closing the last descriptor for one end lets
   the other end read what is queued and then end of file, three times, after which reads fail; a
   write toward a closed end fails, and the writer gets the note "sys: write on closed pipe", which
-  kills a process that does not catch notes.
+  kills a process that does not catch notes. Each pipe is a device of its own: its ends stat as
+  device type | with the pipe's number as dev, as devdir gives them.
 
   Background:
     Given a booted kernel
@@ -121,3 +122,10 @@ Feature: Pipes carry bytes between processes as 9front's devpipe does
     When it closes the second end
     And it forks a child that writes "x" to the first end
     Then the child's wait message is "*init* <pid>: sys: write on closed pipe"
+
+  @FOG_KERNEL_034
+  Scenario: Each pipe is a device of its own under #|
+    Given a process with a pipe
+    When it makes a second pipe
+    Then each pipe's ends stat as device |, named "data" and "data1", with one number for the pipe
+    And the second pipe's number is one more than the first's

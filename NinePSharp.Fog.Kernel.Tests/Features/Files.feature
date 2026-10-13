@@ -285,3 +285,15 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | 0404        | reading             | the open succeeds                       |
       | 0600        | writing, truncating | the open succeeds                       |
       | 0400        | writing, truncating | the call fails with "permission denied" |
+
+  @FOG_KERNEL_034
+  Scenario Outline: A file stats as the device that serves it, as devdir gives it
+    When the process stats "<path>"
+    Then the entry is from device <type> number 0
+
+    Examples:
+      | path      | type |
+      | /tmp      | R    |
+      | /dev/null | c    |
+      | /fd       | d    |
+      | /env      | e    |

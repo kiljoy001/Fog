@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using NinePSharp.Messages;
 using NinePSharp.Namespaces;
@@ -19,10 +20,14 @@ internal sealed class KernelFileStats(ProcessDevices devices) : IFileStatOperati
     public ValueTask<uint> WStatAsync(ResourceOpenHandle handle, ReadOnlyMemory<byte> stat, ResourceOperationContext context, CancellationToken cancellationToken)
         => devices.WStatOpenAsync(handle, Decode(stat), context, cancellationToken);
 
+    // devdir: the type is the device's letter and dev its number, from a device named # and the
+    // letter, then the number if it has one.
     internal static Stat ToStat(ResourceStat stat)
     {
         int size = 49 + new[] { stat.Name, stat.User, stat.Group, stat.LastModifier }.Sum(Encoding.UTF8.GetByteCount);
-        return new Stat((ushort)size, 0, 0, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
+        string device = stat.Resource.Identity.Device;
+        uint dev = device.Length > 2 ? uint.Parse(device[2..], CultureInfo.InvariantCulture) : 0;
+        return new Stat((ushort)size, device[1], dev, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
     }
 
     internal static byte[] Encode(Stat stat)
