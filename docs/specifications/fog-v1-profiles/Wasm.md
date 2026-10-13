@@ -19,7 +19,7 @@ authority is written once.
 | WASI Preview 2 | [WASI 0.2.12](https://github.com/WebAssembly/WASI/tree/v0.2.12/proposals) (tag `v0.2.12`, `281ba75`, released 2026-06-02): the WIT of `wasi:io`, `wasi:clocks`, `wasi:random`, `wasi:filesystem`, `wasi:sockets` and `wasi:cli`, and [path-resolution.md](https://github.com/WebAssembly/WASI/blob/v0.2.12/proposals/filesystem/path-resolution.md) |
 | Component model | [design/mvp](https://github.com/WebAssembly/component-model/tree/6c48079/design/mvp) at `6c48079`: Explainer.md, Binary.md, CanonicalABI.md and WIT.md, without any emoji-gated feature |
 | Conformance | [wasi-testsuite](https://github.com/WebAssembly/wasi-testsuite) at `5ea11d8`, which tests Preview 1 and Preview 3 but not Preview 2 |
-| Engine | [dotnet-webassembly](https://github.com/RyanLamansky/dotnet-webassembly) at `70c46c0ee78abbdca92490a1881fe509605c5c3d` (tag `v2.1.0`), with the patches in `third_party/dotnet-webassembly`, built by `scripts/build-wasm-engine.sh` as package `WebAssembly` `2.1.0-fog.1` |
+| Engine | [dotnet-webassembly](https://github.com/RyanLamansky/dotnet-webassembly) at `70c46c0ee78abbdca92490a1881fe509605c5c3d` |
 
 The component model text at `6c48079` already describes Preview 3's async features. Everything
 added since WASI 0.2 is marked there with an emoji ("gated"); Fog's Preview 2 profile is the
@@ -64,16 +64,7 @@ with one defined memory, a finite memory maximum within the admitted limit, no c
 section (imports cannot run during instantiation, before the bridge owns the memory), no
 imported, shared or multiple memories, no memory64 or threads, and only MVP numeric
 instructions until additional instruction sets have pinned compiler fixtures. Table growth,
-module size and compilation are bounded.
-
-Reading a module allocates only for what its bytes hold. Every section and function body
-declares its length before its contents, so the engine reads nothing past the end of the
-one it is reading, refuses one that ends anywhere but where it said, and refuses any count
-or length larger than the bytes left in its section, its body or, for a data count, the
-module. A function declares at most 50,000 locals, the WebAssembly JavaScript API's limit.
-The released engine allocated by each declared count before reading any entry, so a
-141-byte module could make it allocate for hundreds of millions of entries; Fog's patch
-adds these checks and sizes each vector's array by its checked count. A Preview 1 module exports its memory as
+module size and compilation are bounded. A Preview 1 module exports its memory as
 `memory`; a component names the memory its canonical options use.
 
 A Preview 1 module links only exactly typed, named `wasi_snapshot_preview1` functions.
