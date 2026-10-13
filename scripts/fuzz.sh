@@ -53,7 +53,8 @@ dotnet publish "$PROJECT/NinePSharp.Fog.Fuzzer.csproj" -c Release -o "$OUT"
 
 for assembly in "${INSTRUMENT[@]}"; do
   echo "instrumenting $assembly"
-  sharpfuzz "$OUT/$assembly"
+  # SharpFuzz.CommandLine 2.2.0 targets .NET 9; let it run on the newer runtime the gate has.
+  DOTNET_ROLL_FORWARD=Major sharpfuzz "$OUT/$assembly"
 done
 
 RUN_ID="${TARGET}-$(date +%Y%m%d%H%M%S)-$$"

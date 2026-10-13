@@ -1,0 +1,35 @@
+{
+  "comment": "The reference runtimes and tools WASI is compared and fuzzed against, installed under the gate's home by scripts/install-wasi-controls.sh. Hashes are of the release archives as first downloaded.",
+  "wasmtime": {
+    "version": "49.0.2",
+    "url": "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-x86_64-linux.tar.xz",
+    "sha256": "a4d6e9e3a5a60f527cf7793d674c48930c80c2e8977995b8a275cad3254b9322"
+  },
+  "wazero": {
+    "version": "1.12.0",
+    "url": "https://github.com/tetratelabs/wazero/releases/download/v1.12.0/wazero_1.12.0_linux_amd64.tar.gz",
+    "sha256": "88019896950340e8839b94af0510b248c3400d8d8f4a9b335dcaad93ac0484ff"
+  },
+  "wasi-testsuite": {
+    "repository": "https://github.com/WebAssembly/wasi-testsuite.git",
+    "source": "5ea11d8fe958beb60fb871d6852ae020e45c0433",
+    "prebuilt": "e0aa527f",
+    "comment": "prod/testsuite-base's binaries built from the source commit"
+  },
+  "uv": {
+    "version": "0.9.5",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.9.5/uv-x86_64-unknown-linux-gnu.tar.gz",
+    "sha256": "2cf10babba653310606f8b49876cfb679928669e7ddaa1fb41fb00ce73e64f66",
+    "python": "3.12",
+    "comment": "wasi-testsuite's runner needs Python 3.11 or later"
+  },
+  "aflplusplus": {
+    "repository": "https://github.com/AFLplusplus/AFLplusplus.git",
+    "tag": "v4.33c",
+    "commit": "11a5e37"
+  },
+  "sharpfuzz": {
+    "tool": "SharpFuzz.CommandLine",
+    "version": "2.2.0"
+  }
+}
