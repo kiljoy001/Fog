@@ -61,6 +61,7 @@ quality() {
   coverage_test NinePSharp.Fog.Rc.Tests/NinePSharp.Fog.Rc.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
   coverage_test NinePSharp.Fog.Thread.Tests/NinePSharp.Fog.Thread.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
   coverage_test NinePSharp.Fog.Wasm.Tests/NinePSharp.Fog.Wasm.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
+  coverage_test NinePSharp.Fog.Gefs.Tests/NinePSharp.Fog.Gefs.Tests.csproj json "$ROOT/.artifacts/coverage/merged.json"
   coverage_test NinePSharp.Fog.Kernel.Tests/NinePSharp.Fog.Kernel.Tests.csproj cobertura "$ROOT/.artifacts/coverage/dotnet.xml"
 
   step "gate self-tests"
@@ -98,12 +99,16 @@ scope() {
     fog-kernel) mutate NinePSharp.Fog.Kernel.Tests stryker-config-fog-kernel.json stryker-fog-kernel ;;
     fog-thread) mutate NinePSharp.Fog.Thread.Tests stryker-config-fog-thread.json stryker-fog-thread ;;
     fog-wasm) mutate NinePSharp.Fog.Wasm.Tests stryker-config-fog-wasm.json stryker-fog-wasm ;;
+    fog-gefs) mutate NinePSharp.Fog.Gefs.Tests stryker-config-fog-gefs.json stryker-fog-gefs ;;
     *) echo "unknown mutation scope: $1" >&2; exit 2 ;;
   esac
 }
 
 # Coyote explores interleavings only in assemblies rewritten to hand it their tasks, locks and awaits:
 # the code under test and the test assembly, whose awaits would otherwise run outside its control.
+# Rewriting Fog's assemblies to check data races also gives it their collection and memory accesses to
+# switch at; the test assembly is rewritten without it, as its memory accesses rewritten that way do
+# not run.
 # A scenario skips when its assemblies were not rewritten, so here a skip fails the gate.
 coyote() {
   step "Coyote interleavings"
@@ -113,11 +118,18 @@ coyote() {
   cat > "$output/rewrite.coyote.json" <<JSON
 {
   "AssembliesPath": ".",
-  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll", "NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll"]
+  "Assemblies": ["NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll"],
+  "IsDataRaceCheckingEnabled": true
+}
+JSON
+  cat > "$output/rewrite-tests.coyote.json" <<JSON
+{
+  "AssembliesPath": ".",
+  "Assemblies": ["NinePSharp.Fog.Coyote.Tests.dll"]
 }
 JSON
   dotnet tool restore
-  (cd "$output" && dotnet tool run coyote rewrite rewrite.coyote.json)
+  (cd "$output" && dotnet tool run coyote rewrite rewrite.coyote.json && dotnet tool run coyote rewrite rewrite-tests.coyote.json)
   dotnet test "$output/NinePSharp.Fog.Coyote.Tests.dll" --logger "trx;LogFileName=coyote.trx" --results-directory "$output/results"
   python3 - "$output/results/coyote.trx" <<'PY'
 import sys
@@ -154,7 +166,7 @@ case "$MODE" in
   full)
     quality
     step "mutation testing"
-    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-kernel fog-thread fog-wasm; do
+    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-kernel fog-thread fog-wasm fog-gefs; do
       scope "$each"
     done
     coyote

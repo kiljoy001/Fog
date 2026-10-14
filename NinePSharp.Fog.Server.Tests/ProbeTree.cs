@@ -32,7 +32,12 @@ internal sealed class ProbeTree : FogFileTree
 
     public override void CloseSession(string session)
     {
-        ClosedSessions.Add(session);
+        // The dispatcher closes sessions from many tasks at once.
+        lock (ClosedSessions)
+        {
+            ClosedSessions.Add(session);
+        }
+
         if (CloseFailure is not null)
         {
             throw CloseFailure;
