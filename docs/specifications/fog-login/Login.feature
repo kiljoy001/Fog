@@ -121,3 +121,50 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     Given "/bin" on Fog holds the application "app"
     When the shell runs "fog -h fog -u glenda -c 'echo $home; ls /bin/app'"
     Then it prints "/usr/glenda\n/bin/app"
+
+  @FOG_LOGIN_007
+  Scenario: An application installed in a session is still there after the host restarts
+    Given the shell has run "fog -h fog -u glenda -c 'cp app.wasm /bin/app'"
+    When the host is stopped and started again on the same gefs store
+    And the shell runs "fog -h fog -u glenda -c 'ls /bin/app'"
+    Then it prints "/bin/app"
+
+  @FOG_LOGIN_008
+  Scenario: The listener authenticates through the host owner's factotum
+    Given the host owner's factotum is at "/srv/factotum"
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'cat /dev/user'"
+    Then it prints "glenda"
+    And the host owner's factotum logged the dp9ik authentication of "glenda"
+
+  @FOG_LOGIN_008
+  Scenario: A capability is used once
+    Given the host owner's factotum has made a capability for "glenda"
+    When a process writes it to "/dev/capuse" twice
+    Then the first write makes the process "glenda"
+    And the second write fails
+
+  @FOG_LOGIN_008
+  Scenario: Only the host owner makes capabilities
+    When a process of "glenda" writes to "/dev/caphash"
+    Then the write fails
+
+  @FOG_LOGIN_009
+  Scenario: A session's factotum takes the user's keys from secstore
+    Given glenda's secstore holds the file "factotum" with "key proto=pass server=example user=glenda !password=x"
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda" interactively
+    And it gives glenda's secstore password
+    And it types "cat /mnt/factotum/ctl"
+    Then it prints "key proto=pass server=example user=glenda !password?"
+
+  @FOG_LOGIN_009
+  Scenario: 9front's secstore client fetches a file from Fog's secstored
+    Given glenda's secstore on Fog holds the file "notes" with "kept"
+    When 9front runs "auth/secstore -s tcp!fog!5356 -u glenda -G notes"
+    And it gives glenda's secstore password
+    Then it prints "kept"
+
+  @FOG_LOGIN_009
+  Scenario: drawterm's secstore file is loaded into the session's factotum
+    Given glenda's secstore holds the file "factotum" with "key proto=pass server=example user=glenda !password=x"
+    When drawterm runs "-h fog -a fog -s fog -u glenda" and is given both passwords
+    Then the session's "/mnt/factotum/ctl" lists "key proto=pass server=example user=glenda !password?"
