@@ -21,6 +21,9 @@ Three clients reach the same listener:
 | --- | --- |
 | The rcpu client and the script it sends | `rc/bin/rcpu`, `rc/bin/rconnect` |
 | The listener's script | `rc/bin/service/tcp17019` |
+| The network device and its users | `sys/src/9/ip/devip.c`, `sys/man/3/ip`, `sys/src/libc/9sys/dial.c`, `announce.c` |
+| Listening and naming | `sys/src/cmd/aux/listen.c`, `sys/man/8/listen`, `sys/src/cmd/ndb/cs.c`, `rc/bin/cpurc` |
+| `/net` over host sockets | drawterm `kern/devip.c`, `kern/devip-posix.c`, `kern/devip-win32.c` |
 | Authentication and TLS | `sys/src/cmd/tlssrv.c`, `sys/src/cmd/tlsclient.c`, `sys/src/libsec/port/tlshand.c` |
 | The authentication agent | `sys/src/cmd/auth/factotum`, `sys/src/libauth` (`auth_proxy`, `auth_chuid`), `sys/man/4/factotum` |
 | The secure store | `sys/src/cmd/auth/secstore` (`secstored.c`, `secstore.c`, `pak.c`), `sys/man/1/secstore`, `sys/man/8/secstore` |
@@ -65,15 +68,16 @@ the drives, named as drawterm names them (`C:`).
 
 ## The listener
 
-Fog's host boots the kernel on gefs, starts the host owner's factotum, and listens on tcp port
-17019. Fog has no `/net`, so the host stands in for `aux/listen` and nothing more: for each call
-it starts a process as the host owner whose descriptors 0 and 1 are the call and 2 is the host's
-log, running `tcp17019` as 9front has it. That runs `tlssrv -a /bin/rc -c server`, ported from
-9front, which does the rest as it does there:
+Fog's host boots the kernel on gefs and runs the boot as 9front's `bootrc` and `cpurc` do: the
+host owner's factotum, `#I` bound on `/net`, `ndb/cs`, `auth/secstored`, and
+`aux/listen -q -d /rc/bin/service tcp`. From then on the listener is 9front's. `aux/listen`
+announces `tcp!*!17019` for `tcp17019`, becomes `none`, and for each call starts the script
+with the call as its descriptors 0 and 1. The script runs `tlssrv -a /bin/rc -c server`, which
+does the rest as it does on 9front:
 
 1. `auth_proxy` with `proto=p9any role=server` through the host owner's factotum at
-   `/mnt/factotum/rpc`. Factotum offers dp9ik with the host owner's key; the call is refused if
-   this fails.
+   `/mnt/factotum/rpc`, which serves the server role for any process, `none` included.
+   Factotum offers dp9ik with the host owner's key; the call is refused if this fails.
 2. `auth_chuid`: the capability factotum made for the user is written to `/dev/capuse`, the
    process becomes the user, mounts `/srv/factotum` on `/mnt` and builds the user's namespace.
 3. TLS-PSK as the server, keyed by the session secret.
@@ -98,8 +102,9 @@ program. As on a 9front CPU server:
 - Factotum makes a capability for the user it authenticates by writing to `/dev/caphash`, as
   `devcap` takes it, and `auth_chuid` spends it at `/dev/capuse`. Only the host owner may write
   `caphash`, and a capability is used once.
-- `secstored` runs on the host as the domain's secure store, on tcp port 5356, with its files on
-  gefs under `/adm/secstore`. A user's secstore password is set with `auth/secuser`.
+- `auth/secstored` runs as the host owner as the domain's secure store. It announces
+  `tcp!*!5356` itself, as 9front's does, and keeps its files on gefs under `/adm/secstore`. A
+  user's secstore password is set with `auth/secuser`.
 - In a session, the user's own factotum is started by `lib/profile`, as `newuser` writes it for
   `service=cpu`: drawterm, which has already fetched the user's `factotum` file from secstore,
   gives it at `/mnt/term/dev/secstore` and the profile loads it into `auth/factotum -n`;
@@ -108,6 +113,37 @@ program. As on a 9front CPU server:
 
 Factotum's protocols are ported as they are needed: `p9any`, `dp9ik` (from `p9sk1.c`) and `pass`
 first. `p9sk1` is left out, since Fog's auth server speaks only dp9ik.
+
+## The network device
+
+Fog's `/net` is ip(3)'s file interface over the host's sockets, as drawterm's is: drawterm
+serves `/net/tcp` from `kern/devip.c` and calls `kern/devip-posix.c` or `kern/devip-win32.c`
+for the sockets, and Fog calls `System.Net.Sockets`, the same on Linux, macOS and Windows.
+There is no IP stack under it; the host's system routes and keeps the addresses.
+
+`#I` serves `/net/tcp` first, then `/net/udp`:
+
+| File | What it does | Under it |
+| --- | --- | --- |
+| `clone` | Opening it reserves a conversation and opens its `ctl`; reading that gives the conversation's number | a new conversation |
+| `n/ctl`, `connect addr!port` | Calls out | `Socket.ConnectAsync` |
+| `n/ctl`, `announce [addr!]port` | Takes calls at the address | `Socket.Bind` and `Listen` |
+| `n/ctl`, `hangup` | Ends the conversation | `Shutdown` and `Close` |
+| `n/listen` | Opening it waits for a call and opens the new conversation's `ctl` | `AcceptAsync` |
+| `n/data` | The conversation's bytes | `ReceiveAsync`, `SendAsync` |
+| `n/local`, `n/remote` | `addr!port` of each end | `LocalEndPoint`, `RemoteEndPoint` |
+| `n/status` | The conversation's state | the socket's state |
+
+A conversation's files belong to the process that opened `clone`, with devip's modes. A note
+interrupts a process waiting in `listen`, `connect` or a read of `data` by cancelling the socket
+call, which then fails "interrupted"; the mount driver needs the same for a Tflush. The
+concurrency is devip's: a lock per conversation, and the conversation's queues, as the rest of
+the kernel ports 9front's.
+
+`ndb/cs` is ported from 9front and mounted on `/net/cs`, reading `/lib/ndb/local` from gefs, so
+`dial` and `announce` from libc, `aux/listen` and the commands that call them work unchanged.
+It finds the addresses of a DNS name with .NET's `Dns.GetHostAddressesAsync` in place of
+`ndb/dns`.
 
 ## What the kernel needs
 
@@ -126,6 +162,7 @@ The scripts need what the kernel does not have yet:
   process may post to its own note group even as `none`.
 - **rc's traps.** `sighup`, `sigint`, `sigkill` and the rest, `interrupted`, and `wait` returning
   when a note interrupts it, as `plan9.c` does.
+- **`/net`.** `#I`, as above, with `ndb/cs` and `aux/listen`.
 - **Capabilities and `/srv`.** `#¤` with `caphash` and `capuse`, and `#s`, where a process posts a
   descriptor for others to mount.
 - **gefs as the root.** The host boots the kernel on a gefs store, as `bootrc` mounts
@@ -135,7 +172,8 @@ The scripts need what the kernel does not have yet:
   when it does not. Managed programs are written into its `/bin` at each boot, as they are now
   into memory, and an application copied into `/bin` stays there after the host restarts.
 - **Commands.** `mount`, `rm`, `test` and `read`, ported from 9front, with `bind`, `cat` and `echo`
-  as they are; `tlssrv`, `auth/factotum`, `auth/secstore`, `auth/secuser` and `auth/secstored`.
+  as they are; `tlssrv`, `aux/listen`, `ndb/cs`, `auth/factotum`, `auth/secstore`, `auth/secuser`
+  and `auth/secstored`.
 
 ## The client
 
@@ -164,11 +202,12 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 
 ## Divergences
 
-- The host, not `/net` and `aux/listen`, accepts calls on 17019 and 5356 and starts their
-  processes.
+- `/net` is the host's sockets, as under drawterm: there is no IP stack, no `ipifc`, `arp` or
+  `ether`, and no IL. `ndb/cs` asks the host's resolver for DNS names instead of `ndb/dns`.
+- Fog's host is shared, so `announce` takes only the ports the host's configuration lists (17019
+  and 5356 to begin with), whoever asks; any other fails. 9front lets any process announce
+  any port.
 - Factotum's `-S` reads the host owner's key from the host's sealed key store, not NVRAM.
-- Fog has no `/net`, so `auth/secstore` inside Fog reaches `secstored` through a conversation the
-  host opens for it, not by dialling `tcp!$auth!5356`.
 - The root is one host's gefs store until it is replicated, as the architecture describes.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
@@ -180,17 +219,19 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 2. The mount driver.
 3. Notes, `/proc` and rc's traps.
 4. `mount`, `rm`, `test` and `read`.
-5. `#¤` and `#s`, and factotum with `p9any`, `dp9ik` and `pass`.
-6. `tlssrv` and the host's 17019 listener, accepting stock `rcpu` from the 9front oracle.
-7. `secstored`, `secstore` and `secuser`, checked against 9front's in both directions.
-8. dp9ik's client role in dp9ik.net.
-9. `fog`.
-10. A first session that makes sense: the user's `$home` exists, `lib/profile` is `newuser`'s,
+5. `#I` with tcp, then `ndb/cs` and `aux/listen`, checked against 9front's `dial` and
+   `aux/listen` on the oracle.
+6. `#¤` and `#s`, and factotum with `p9any`, `dp9ik` and `pass`.
+7. `tlssrv` and `tcp17019` under `aux/listen`, accepting stock `rcpu` from the 9front oracle.
+8. `secstored`, `secstore` and `secuser`, checked against 9front's in both directions.
+9. dp9ik's client role in dp9ik.net.
+10. `fog`.
+11. A first session that makes sense: the user's `$home` exists, `lib/profile` is `newuser`'s,
     with the user's factotum loaded from secstore, and `ls /bin` shows the installed
     applications.
 
 Each slice follows the usual gate: features, then failing tests, then code, with mutation, and
-Coyote for the mount driver's concurrency, for notes and for factotum's processes.
+Coyote for the concurrency of the mount driver, `#I`, notes and factotum's processes.
 
 ## Evidence
 

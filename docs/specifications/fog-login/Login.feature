@@ -1,6 +1,6 @@
 @fog_login @design
 Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
-  Fog's host listens on tcp port 17019 as a 9front CPU server does. A call authenticates with
+  Fog listens on tcp port 17019 with aux/listen, as a 9front CPU server does. A call authenticates with
   p9any and dp9ik, is encrypted with TLS-PSK keyed by the session secret, and then runs the
   script the client sends, as the authenticated user, with rc. The client's files are served back
   over the same conversation and mounted at /mnt/term. Stock rcpu and drawterm are clients, and so
@@ -168,3 +168,39 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     Given glenda's secstore holds the file "factotum" with "key proto=pass server=example user=glenda !password=x"
     When drawterm runs "-h fog -a fog -s fog -u glenda" and is given both passwords
     Then the session's "/mnt/factotum/ctl" lists "key proto=pass server=example user=glenda !password?"
+
+  @FOG_LOGIN_010
+  Scenario: A process on Fog dials out through /net
+    Given the 9front oracle serves tcp port 7 with "/rc/bin/service/!tcp7"
+    When a process on Fog dials "tcp!oracle!7", writes "hello" and reads
+    Then it reads "hello"
+
+  @FOG_LOGIN_010
+  Scenario: Opening clone reserves a conversation and gives its number
+    When glenda's session runs "cat /net/tcp/clone"
+    Then it prints a number n
+    And "/net/tcp/n" holds "ctl", "data", "listen", "local", "remote" and "status"
+
+  @FOG_LOGIN_010
+  Scenario: aux/listen on Fog takes a call from 9front
+    Given Fog runs "aux/listen -q -d /rc/bin/service tcp" with the service "tcp17019"
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'cat /dev/user'"
+    Then it prints "glenda"
+    And the call's process on Fog started as "none"
+
+  @FOG_LOGIN_010
+  Scenario: Only the ports the host lists can be announced
+    Given the host's configuration lists the ports 17019 and 5356
+    When a process on Fog writes "announce *!8080" to a tcp conversation's ctl
+    Then the write fails
+
+  @FOG_LOGIN_010
+  Scenario: A note interrupts a process waiting for a call
+    Given a process on Fog has opened a tcp conversation's listen and is waiting for a call
+    When the process is sent the note "interrupt"
+    Then the open fails "interrupted"
+
+  @FOG_LOGIN_010
+  Scenario: cs translates an address for dial
+    When glenda's session runs "ndb/csquery /net/cs tcp!127.0.0.1!17019"
+    Then it prints "/net/tcp/clone 127.0.0.1!17019"
