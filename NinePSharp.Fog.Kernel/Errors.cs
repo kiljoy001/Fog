@@ -22,6 +22,7 @@ internal static class Errors
     public const string EmptyName = "empty file name";
     public const string TooLong = "name too long";
     public const string BadChar = "bad character in file name";
+    public const string BlankName = "blank file name";
 
     // lib9p's, for ramfs.
     public const string CreateNonDirectory = "create in non-directory";
@@ -53,6 +54,20 @@ internal static class Errors
         }
 
         return null;
+    }
+
+    // Fog's own, which 9front does not refuse: a name, or an element of a path, of only white space.
+    public static bool Blank(string name)
+    {
+        foreach (string element in name.Split('/'))
+        {
+            if (element.Length > 0 && string.IsNullOrWhiteSpace(element))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // chan.c:namelenerror, showing the path up to the given number of elements.

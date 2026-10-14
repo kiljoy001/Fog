@@ -244,14 +244,14 @@ public sealed class FilesSteps(KernelDriver driver)
     // A name as a scenario writes it: <N c> for N of the character c, and \t, \n, \0 and \xHH.
     private static string Expand(string text)
     {
-        string repeated = Regex.Replace(text, "<([0-9]+) (.)>", match => new string(match.Groups[2].Value[0], int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)));
-        return Regex.Replace(repeated, @"\\(t|n|0|x[0-9a-f]{2})", match => match.Groups[1].Value switch
+        string escaped = Regex.Replace(text, @"\\(t|n|0|x[0-9a-f]{2}|u[0-9a-f]{4})", match => match.Groups[1].Value switch
         {
             "t" => "\t",
             "n" => "\n",
             "0" => "\0",
             string hex => ((char)Convert.ToInt32(hex[1..], 16)).ToString(),
         });
+        return Regex.Replace(escaped, "<([0-9]+) (.)>", match => new string(match.Groups[2].Value[0], int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)));
     }
 
     private static Stat Renaming(string name)

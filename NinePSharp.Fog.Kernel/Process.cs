@@ -575,7 +575,8 @@ public sealed class Process
     }
 
     // namec's checks of a name before it is evaluated.
-    private static string? NamecProblem(string path) => path.Length == 0 ? Errors.EmptyName : Errors.NameProblem(path, slashOk: true);
+    private static string? NamecProblem(string path)
+        => path.Length == 0 ? Errors.EmptyName : Errors.NameProblem(path, slashOk: true) ?? (Errors.Blank(path) ? Errors.BlankName : null);
 
     private static void Namec(string path)
     {
@@ -586,12 +587,17 @@ public sealed class Process
     }
 
     // validstat: a new name, unless it is "/", may not hold a slash or a bad character; one too long
-    // for its 64-byte buffer is left to the file server.
+    // for its 64-byte buffer is left to the file server. Fog refuses one of only white space, whatever its length.
     private static void ValidStat(Stat stat)
     {
         if (Encoding.UTF8.GetByteCount(stat.Name) + 1 <= 64 && stat.Name != "/" && Errors.NameProblem(stat.Name, slashOk: false) is { } problem)
         {
             throw new SyscallException(problem);
+        }
+
+        if (stat.Name.Length > 0 && string.IsNullOrWhiteSpace(stat.Name))
+        {
+            throw new SyscallException(Errors.BlankName);
         }
     }
 

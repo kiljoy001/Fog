@@ -15,6 +15,8 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
   may hold one, and NUL is a bad character, as isfrog has it. wstat and fwstat check a new name before
   anything else, refusing a slash in it too, unless it is "/" or 64 bytes or longer, which is left to
   the file server as validstat leaves it. bind resolves its first name before checking its second.
+  Fog also refuses a name made only of white space, which 9front takes: an element of a path, or a
+  new name of any length, that is all spaces is a blank file name, checked after namec's own checks.
 
   Background:
     Given a booted kernel
@@ -341,6 +343,51 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | /tmp/<65530 a> |
       | /tmp/<32765 é> |
       | /tmp/a b       |
+
+  @FOG_KERNEL_037
+  Scenario Outline: An element of a path made only of white space is refused, after namec's checks
+    When the process <call> the name "<name>"
+    Then the call fails with the message "<message>"
+
+    Examples:
+      | call       | name                 | message                                    |
+      | opens      | \x20                 | blank file name                            |
+      | creates    | /tmp/\x20            | blank file name                            |
+      | creates    | /tmp/\x20\x20/f      | blank file name                            |
+      | stats      | \x20/tmp             | blank file name                            |
+      | removes    | /tmp/\u3000          | blank file name                            |
+      | changes to | /tmp/\u00a0\u2003    | blank file name                            |
+      | wstats     | /\x20                | blank file name                            |
+      | execs      | /tmp/\x20            | blank file name                            |
+      | opens      | /tmp/\x20\x01        | bad character in file name: '/tmp/ \x01'   |
+      | opens      | /tmp/\x20/<65530 a>  | name too long                              |
+      | creates    | /tmp/<65531 \x20>    | name too long                              |
+
+  @FOG_KERNEL_037
+  Scenario Outline: A name with something besides white space in it is a name
+    When the process creates the name "<name>"
+    Then the open succeeds
+
+    Examples:
+      | name           |
+      | /tmp/\x20a     |
+      | /tmp/a\x20     |
+      | /tmp/\u3000.b  |
+      | //tmp//g       |
+
+  @FOG_KERNEL_037
+  Scenario Outline: wstat and fwstat refuse a new name made only of white space, of any length
+    Given the process has "/tmp/f" open as descriptor 0
+    When the process <call> to the name "<name>"
+    Then the call fails with the message "<message>"
+
+    Examples:
+      | call                   | name         | message         |
+      | renames "/tmp/f"       | \x20         | blank file name |
+      | renames "/tmp/missing" | \u3000       | blank file name |
+      | renames descriptor 0   | \x20\x20     | blank file name |
+      | renames "/tmp/f"       | <64 \x20>    | blank file name |
+      | renames descriptor 0   | <70 \x20>    | blank file name |
 
   @FOG_KERNEL_036
   Scenario Outline: The message quotes the name as %q does, within the message's 128 bytes

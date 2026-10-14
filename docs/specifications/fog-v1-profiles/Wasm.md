@@ -257,6 +257,7 @@ Errors are the kernel's error strings, mapped once for both previews:
 | fd out of range or not open | BADF | bad-descriptor |
 | name too long | NAMETOOLONG | name-too-long |
 | bad character in file name | INVAL | invalid |
+| blank file name (Fog's, for a name of only white space) | INVAL | invalid |
 | mounted directory forbids creation | ROFS | read-only |
 | i/o timeout, or any other | IO | io |
 
