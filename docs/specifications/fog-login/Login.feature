@@ -189,10 +189,10 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     And the call's process on Fog started as "none"
 
   @FOG_LOGIN_010
-  Scenario: Only the ports the host lists can be announced
-    Given the host's configuration lists the ports 17019 and 5356
+  Scenario: An announce the host refuses fails with the host's error
+    Given a program on the host already takes calls on tcp port 8080
     When a process on Fog writes "announce *!8080" to a tcp conversation's ctl
-    Then the write fails
+    Then the write fails with the host's error
 
   @FOG_LOGIN_010
   Scenario: A note interrupts a process waiting for a call

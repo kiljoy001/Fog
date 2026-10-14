@@ -119,7 +119,9 @@ first. `p9sk1` is left out, since Fog's auth server speaks only dp9ik.
 Fog's `/net` is ip(3)'s file interface over the host's sockets, as drawterm's is: drawterm
 serves `/net/tcp` from `kern/devip.c` and calls `kern/devip-posix.c` or `kern/devip-win32.c`
 for the sockets, and Fog calls `System.Net.Sockets`, the same on Linux, macOS and Windows.
-There is no IP stack under it; the host's system routes and keeps the addresses.
+Fog is an application on its host, so like drawterm it has no IP stack of its own: the host's
+system routes, keeps the addresses and decides which ports a process may take. An `announce` or
+`connect` the host refuses fails with the host's error.
 
 `#I` serves `/net/tcp` first, then `/net/udp`:
 
@@ -202,11 +204,7 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 
 ## Divergences
 
-- `/net` is the host's sockets, as under drawterm: there is no IP stack, no `ipifc`, `arp` or
-  `ether`, and no IL. `ndb/cs` asks the host's resolver for DNS names instead of `ndb/dns`.
-- Fog's host is shared, so `announce` takes only the ports the host's configuration lists (17019
-  and 5356 to begin with), whoever asks; any other fails. 9front lets any process announce
-  any port.
+- `ndb/cs` asks the host's resolver for DNS names instead of `ndb/dns`.
 - Factotum's `-S` reads the host owner's key from the host's sealed key store, not NVRAM.
 - The root is one host's gefs store until it is replicated, as the architecture describes.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
