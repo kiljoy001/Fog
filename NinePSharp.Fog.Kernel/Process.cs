@@ -70,7 +70,7 @@ public sealed class Process
         Namec(path);
         try
         {
-            return Named(await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode)), path);
+            return await NamedAsync(await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode)), path);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -100,7 +100,7 @@ public sealed class Process
         Namec(path);
         try
         {
-            return Named(await calls.CreateAsync(path, new Plan9CreateRequest(permissions, mode)), path);
+            return await NamedAsync(await calls.CreateAsync(path, new Plan9CreateRequest(permissions, mode)), path);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -149,7 +149,7 @@ public sealed class Process
     /// <summary>pread: reads at an offset without moving the descriptor's; -1 reads at and advances it, as read does.</summary>
     public async ValueTask<ReadOnlyMemory<byte>> PReadAsync(int fd, int count, long offset, CancellationToken cancellationToken = default)
     {
-        CheckMode(fd, NinePConstants.OREAD);
+        await CheckModeAsync(fd, NinePConstants.OREAD);
         try
         {
             return await calls.PReadAsync(fd, offset, (uint)count, cancellationToken);
@@ -167,7 +167,7 @@ public sealed class Process
     /// <summary>pwrite: writes at an offset without moving the descriptor's; -1 writes at and advances it, as write does.</summary>
     public async ValueTask<int> PWriteAsync(int fd, ReadOnlyMemory<byte> data, long offset, CancellationToken cancellationToken = default)
     {
-        CheckMode(fd, NinePConstants.OWRITE);
+        await CheckModeAsync(fd, NinePConstants.OWRITE);
         try
         {
             return (int)await calls.PWriteAsync(fd, offset, data, cancellationToken);
@@ -466,10 +466,10 @@ public sealed class Process
     /// <summary>fd2path: the rooted name the descriptor's file was opened or created by.</summary>
     public async ValueTask<string> Fd2PathAsync(int fd)
     {
-        DescriptorSlot slot = process.Descriptors.Snapshot().FirstOrDefault(slot => slot.Number == fd) ?? throw new SyscallException(Errors.BadFd);
+        ResourceOpenHandle handle = await HandleAsync(fd) ?? throw new SyscallException(Errors.BadFd);
 
         // Every descriptor not opened or created by name is a pipe's end, which devpipe names.
-        return kernel.Names.TryGetValue(slot.Handle, out string? name) ? name : "#|/" + (await FStatAsync(fd)).Name;
+        return kernel.Names.TryGetValue(handle, out string? name) ? name : "#|/" + (await FStatAsync(fd)).Name;
     }
 
     [DoesNotReturn]
@@ -537,11 +537,10 @@ public sealed class Process
     // Notes and rendezvous do not exist yet, so their groups need nothing.
     // What a pipe end has queued and whether it has hung up, for a program that waits on readiness;
     // null for a descriptor that is not a pipe's end.
-    internal ValueTask<(long Queued, bool HungUp)?> PipeReadinessAsync(int fd)
+    internal async ValueTask<(long Queued, bool HungUp)?> PipeReadinessAsync(int fd)
     {
-        DescriptorSlot slot = process.Descriptors.Snapshot().FirstOrDefault(slot => slot.Number == fd) ?? throw new SyscallException(Errors.BadFd);
-        ResourceHandle end = slot.Handle.Resource;
-        return ValueTask.FromResult<(long, bool)?>(end.Identity.Provider == PipeDevice.Provider ? kernel.Pipes.Readiness(end) : null);
+        ResourceHandle end = (await HandleAsync(fd) ?? throw new SyscallException(Errors.BadFd)).Resource;
+        return end.Identity.Provider == PipeDevice.Provider ? kernel.Pipes.Readiness(end) : null;
     }
 
     private static void Validate(RforkFlags flags)
@@ -636,16 +635,16 @@ public sealed class Process
 
     private async ValueTask<int> OpenDescriptorAsync(int fd, int mode)
     {
-        CheckMode(fd, mode);
+        await CheckModeAsync(fd, mode);
         return await DupAsync(fd, -1);
     }
 
     // fdtochan's check of the mode against the descriptor's: any mode for one opened for reading and
     // writing, otherwise its own, with OEXEC counting as OREAD. One not open is left to the call.
-    private void CheckMode(int fd, int mode)
+    private async ValueTask CheckModeAsync(int fd, int mode)
     {
-        DescriptorSlot? slot = process.Descriptors.Snapshot().FirstOrDefault(slot => slot.Number == fd);
-        int opened = slot is null ? NinePConstants.ORDWR : DupDevice.OpenMode(slot.Handle.Mode);
+        ResourceOpenHandle? handle = await HandleAsync(fd);
+        int opened = handle is null ? NinePConstants.ORDWR : DupDevice.OpenMode(handle.Mode);
         if (opened != NinePConstants.ORDWR && DupDevice.OpenMode(mode) != opened)
         {
             throw new SyscallException(Errors.BadUseFd);
@@ -683,18 +682,34 @@ public sealed class Process
     }
 
     // A managed program first, then whichever loader claims the header.
-    private int Named(int fd, string path)
+    private async ValueTask<int> NamedAsync(int fd, string path)
     {
         string rooted = path.StartsWith('/') ? path : $"/{string.Join('/', process.CurrentDirectory.VisiblePath)}/{path}";
-        foreach (DescriptorSlot slot in process.Descriptors.Snapshot())
+        if (await HandleAsync(fd) is { } handle)
         {
-            if (slot.Number == fd)
-            {
-                kernel.Names.AddOrUpdate(slot.Handle, Clean(rooted));
-            }
+            kernel.Names.AddOrUpdate(handle, Clean(rooted));
         }
 
         return fd;
+    }
+
+    // The handle open as fd, looked up without copying the table; null when fd is not open.
+    private async ValueTask<ResourceOpenHandle?> HandleAsync(int fd)
+    {
+        DescriptorLease lease;
+        try
+        {
+            lease = process.Descriptors.Acquire(fd);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+
+        await using (lease)
+        {
+            return lease.Handle;
+        }
     }
 
     private async ValueTask<ProgramMain?> LoadAsync(string path, byte[] header)
