@@ -169,6 +169,12 @@
   },
   {
     "file": "RcParser.cs",
+    "mutator": "Negate expression",
+    "line": "if (n > RcTables.Flag)",
+    "reason": "every parse is a syntax error that reads no token, so interactive rc parses again at the same newline forever"
+  },
+  {
+    "file": "RcParser.cs",
     "mutator": "Equality mutation",
     "line": "state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];",
     "reason": "the automaton cycles between states"
