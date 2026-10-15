@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; nothing here is built yet.
+Status: design; slice 1, the host booting the kernel on gefs, is built.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -207,6 +207,11 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - `ndb/cs` asks the host's resolver for DNS names instead of `ndb/dns`.
 - Factotum's `-S` reads the host owner's key from the host's sealed key store, not NVRAM.
 - The root is one host's gefs store until it is replicated, as the architecture describes.
+- Fog has no `$cputype`: in place of `bind /$cputype/bin /bin`, the store's `/bin` is bound on
+  `/bin` with creation, so a program copied there is kept. `#/` has no `boot` directory.
+- Until the mount driver is built, the store is served in the host's own process; its files stat
+  as the mount driver's, device `M`.
+- Until the store's `/adm/users` is read, each user is the only member of its own group.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.
