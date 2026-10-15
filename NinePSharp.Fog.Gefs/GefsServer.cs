@@ -6,6 +6,9 @@ public sealed class GefsServer : IDisposable
 {
     private static readonly TimeSpan SyncPeriod = TimeSpan.FromSeconds(5);
 
+    // devmnt's mount numbers, one for each tree served, across every store in the process.
+    private static int mounts;
+
     private readonly Device device;
     private readonly Store store;
     private readonly Func<string, string, bool> inGroup;
@@ -32,10 +35,26 @@ public sealed class GefsServer : IDisposable
         return new GefsServer(file, Store.Ream(file, arenas, owner, clock), inGroup, clock);
     }
 
+    // A file that is not a store is let go of as the open fails.
     public static GefsServer Open(string path, Func<string, string, bool> inGroup, TimeProvider clock)
     {
         FileDevice file = FileDevice.Open(path);
-        return new GefsServer(file, Store.Open(file), inGroup, clock);
+        try
+        {
+            return new GefsServer(file, Store.Open(file), inGroup, clock);
+        }
+        catch
+        {
+            file.Dispose();
+            throw;
+        }
+    }
+
+    // ream.c: an arena for each 4 TiB of the device, and no fewer than 8 or more than 32.
+    public static int Arenas(long blocks)
+    {
+        const long Span = 4L << 40;
+        return (int)Math.Clamp(((blocks * Format.BlockSize) + Span - 1) / Span, 8, 32);
     }
 
     // fsattach: a leading % dropped, and no name meaning main. Dump is reserved, so never a label.
@@ -52,7 +71,7 @@ public sealed class GefsServer : IDisposable
                     throw new GefsException("attach -- bad specifier");
                 }
 
-                fs = new GefsFs(store, label, $"gefs/{label}", inGroup, clock);
+                fs = new GefsFs(store, label, $"#M{Interlocked.Increment(ref mounts)}", inGroup, clock);
                 served[label] = fs;
             }
 

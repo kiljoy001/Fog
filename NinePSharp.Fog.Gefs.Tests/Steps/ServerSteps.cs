@@ -16,6 +16,7 @@ public sealed class ServerSteps(StoreContext context)
     private string? path;
     private Process? init;
     private ulong sequence;
+    private GefsException? refused;
 
     private GefsFs Files => context.Files!;
 
@@ -43,6 +44,40 @@ public sealed class ServerSteps(StoreContext context)
         context.Server!.Dispose();
         path = Path.Combine(Path.GetTempPath(), $"gefs-{Guid.NewGuid():N}");
         context.Server = GefsServer.Create(path, blocks, arenas, owner, StoreContext.InGroup, context.Clock);
+    }
+
+    [Then(@"^a store of (\d+) bytes is reamed with (\d+) arenas$")]
+    public void ThenArenas(long bytes, int arenas) => Assert.Equal(arenas, GefsServer.Arenas(bytes / Format.BlockSize));
+
+    [Given(@"^a file of (\d+) blocks of zeros$")]
+    public void GivenZeros(int blocks)
+    {
+        path = Path.Combine(Path.GetTempPath(), $"gefs-{Guid.NewGuid():N}");
+        File.WriteAllBytes(path, new byte[blocks * Format.BlockSize]);
+    }
+
+    [When("the file is opened as a store")]
+    public void WhenOpenedAsStore()
+    {
+        try
+        {
+            context.Server = GefsServer.Open(path!, StoreContext.InGroup, context.Clock);
+        }
+        catch (GefsException error)
+        {
+            refused = error;
+        }
+    }
+
+    [Then("the open fails")]
+    public void ThenOpenFails() => Assert.NotNull(refused);
+
+    // The process's descriptors, as Linux lists them, name the files they hold open.
+    [Then("nothing holds the file open")]
+    public void ThenNotHeld()
+    {
+        Assert.DoesNotContain(path, Directory.GetFiles("/proc/self/fd").Select(fd => new FileInfo(fd).LinkTarget));
+        File.Delete(path!);
     }
 
     [When("the file is opened again")]

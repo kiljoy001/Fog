@@ -153,3 +153,22 @@ Feature: A store serves its trees by attach name, commits every five seconds and
     And adm attaches to "main"
     And a kernel boots on it for adm
     Then the kernel's first process reads "hello" from "/tmp/notes"
+
+  @FOG_GEFS_706
+  Scenario Outline: A store reamed at a size has as many arenas as ream gives it
+    Then a store of <bytes> bytes is reamed with <arenas> arenas
+
+    Examples:
+      | bytes           | arenas |
+      | 1073741824      | 8      |
+      | 35184372088832  | 8      |
+      | 39582418599936  | 9      |
+      | 140737488355328 | 32     |
+      | 562949953421312 | 32     |
+
+  @FOG_GEFS_707
+  Scenario: A file that is not a store is refused and let go
+    Given a file of 4 blocks of zeros
+    When the file is opened as a store
+    Then the open fails
+    And nothing holds the file open
