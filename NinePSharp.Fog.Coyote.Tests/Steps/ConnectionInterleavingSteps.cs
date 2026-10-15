@@ -27,8 +27,8 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
 
     public void Dispose() => fixture?.Dispose();
 
-    [Given(@"^a node connection with ""(.*)"" open for writing, whose drain limit is (\d+) milliseconds$")]
-    public void GivenConnection(string name, int milliseconds)
+    [Given(@"^a node connection with ""(.*)"" open for writing, whose session's drain limit is (\d+) minutes$")]
+    public void GivenConnection(string name, int minutes)
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(FogNinePDispatcher).Assembly) ||
             !RewritingEngine.IsAssemblyRewritten(typeof(NinePConnectionProcessor).Assembly))
@@ -37,7 +37,7 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
         }
 
         fixture = new ControlFixture();
-        drain = TimeSpan.FromMilliseconds(milliseconds);
+        drain = TimeSpan.FromMinutes(minutes);
     }
 
     [Given(@"^the node's writes to ""(.*)"" finish when they are released$")]
@@ -96,8 +96,9 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
         connection.Send(new Twrite(100, 2, 0, new byte[] { 1 }));
         Task released = Task.Run(connection.Release);
         connection.HangUp();
+        Reply write = await connection.ReceiveAsync();
         await released;
-        return new();
+        return new() { ["write"] = [write] };
     };
 
     [When("the client writes with tag 100 and the connection's lifetime ends while another task releases the write")]
@@ -134,9 +135,15 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
     [Then("in every explored schedule the client attaches again after Rversion")]
     public void ThenAttached() => Explore((_, replies) => Expect(replies["attach"][0], MessageTypes.Rattach, "the attach"));
 
-    [Then("in every explored schedule no outcome is logged as unknown")]
-    public void ThenNothingUnknown() => Explore((connection, _) =>
-        Specification.Assert(connection.Unknowns() == 0, "an outcome was logged as unknown"));
+    [Then(@"^in every explored schedule the connection answers the write with Rwrite or Rerror ""interrupted""$")]
+    public void ThenWrittenOrInterrupted() => Explore((_, replies) =>
+        Specification.Assert(
+            replies["write"][0].Type == MessageTypes.Rwrite || replies["write"][0].Error == "interrupted",
+            $"the write was answered {replies["write"][0].Describe()}"));
+
+    [Then("in every explored schedule the session abandons no request")]
+    public void ThenNoneAbandoned() => Explore((connection, _) =>
+        Specification.Assert(connection.Abandoned().Length == 0, "logged: " + string.Join("; ", connection.Abandoned())));
 
     private static void Expect(Reply reply, MessageTypes type, string what)
         => Specification.Assert(reply.Type == type, $"{what} was answered {reply.Describe()}");
@@ -228,7 +235,12 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
 
         internal void HangUp() => toServer.End();
 
-        internal void EndLifetime() => lifetime.Cancel();
+        // Coyote does not control a token's callbacks, so the wire is woken to find its token cancelled.
+        internal void EndLifetime()
+        {
+            lifetime.Cancel();
+            toServer.Wake();
+        }
 
         // The client hangs up, and the connection must then end, its lifetime's end included.
         internal async Task EndAsync()
@@ -246,7 +258,7 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
             await stream.DisposeAsync();
         }
 
-        internal int Unknowns() => Logger.At(LogLevel.Warning).Count(message => message.Contains("outcome is unknown", StringComparison.Ordinal));
+        internal string[] Abandoned() => Logger.At(LogLevel.Warning).Where(message => message.Contains("was abandoned", StringComparison.Ordinal)).ToArray();
 
         private async Task ExpectAsync(MessageTypes type)
         {
@@ -263,12 +275,12 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
     {
         private readonly object gate = new();
         private readonly Queue<byte> bytes = new();
-        private TaskCompletionSource arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource<bool> arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private bool ended;
 
         internal void Write(ReadOnlySpan<byte> data)
         {
-            TaskCompletionSource signal;
+            TaskCompletionSource<bool> signal;
             lock (gate)
             {
                 foreach (byte b in data)
@@ -279,26 +291,37 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
                 (signal, arrived) = (arrived, new(TaskCreationOptions.RunContinuationsAsynchronously));
             }
 
-            signal.TrySetResult();
+            signal.TrySetResult(true);
         }
 
         internal void End()
         {
-            TaskCompletionSource signal;
             lock (gate)
             {
                 ended = true;
-                signal = arrived;
             }
 
-            signal.TrySetResult();
+            Wake();
         }
 
-        internal async ValueTask<int> ReadAsync(Memory<byte> into, CancellationToken cancellation)
+        // Wakes a reader without bytes, as a socket's read returns when its token is cancelled.
+        internal void Wake()
+        {
+            TaskCompletionSource<bool> signal;
+            lock (gate)
+            {
+                (signal, arrived) = (arrived, new(TaskCreationOptions.RunContinuationsAsynchronously));
+            }
+
+            signal.TrySetResult(true);
+        }
+
+        internal async Task<int> ReadAsync(Memory<byte> into, CancellationToken cancellation)
         {
             while (true)
             {
-                Task waiting;
+                cancellation.ThrowIfCancellationRequested();
+                TaskCompletionSource<bool> waiting;
                 lock (gate)
                 {
                     if (bytes.Count > 0)
@@ -317,16 +340,10 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
                         return 0;
                     }
 
-                    waiting = arrived.Task;
+                    waiting = arrived;
                 }
 
-                var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                using (cancellation.Register(() => cancelled.TrySetResult()))
-                {
-                    await Task.WhenAny(waiting, cancelled.Task);
-                }
-
-                cancellation.ThrowIfCancellationRequested();
+                await waiting.Task;
             }
         }
 
@@ -362,10 +379,10 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
         }
 
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-            => reading.ReadAsync(buffer, cancellationToken);
+            => new(reading.ReadAsync(buffer, cancellationToken));
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-            => reading.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+            => reading.ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
 
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
