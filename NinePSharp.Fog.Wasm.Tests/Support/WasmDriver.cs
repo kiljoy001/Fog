@@ -11,4 +11,7 @@ public sealed class WasmDriver
 
     // The kernel's and the applications' time: 2026-10-01 12:00 UTC.
     public FixedClock Clock { get; } = new(DateTimeOffset.FromUnixTimeSeconds(1790856000));
+
+    // The store the kernel boots on, which an installation fills before the kernel boots.
+    internal RamFs Store { get; set; } = null!;
 }

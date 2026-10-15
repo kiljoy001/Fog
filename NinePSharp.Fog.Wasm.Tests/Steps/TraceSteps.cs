@@ -202,6 +202,9 @@ public sealed class TraceSteps(WasmDriver driver)
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
 
     // The directory and any missing above it.
+    // / takes no new files, so a directory missing from it is made in the store, where an
+    // installation keeps it and / shows it. A mount point of the root device, such as /n, takes
+    // nothing either until something is mounted there, so a directory of the store's is bound on it.
     private async Task MakeDirectoriesAsync(string path)
     {
         for (int slash = path.IndexOf('/', 1); ; slash = path.IndexOf('/', slash + 1))
@@ -213,7 +216,21 @@ public sealed class TraceSteps(WasmDriver driver)
             }
             catch (SyscallException)
             {
-                await driver.Init.CloseAsync(await driver.Init.CreateAsync(directory, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+                string parent = directory[..directory.LastIndexOf('/')];
+                if (parent.Length == 0)
+                {
+                    await driver.Store.CreateAsync(driver.Store.Root, directory[1..], true, CancellationToken.None);
+                }
+                else
+                {
+                    if ((char)(await driver.Init.StatAsync(parent)).Type == '/')
+                    {
+                        await driver.Store.CreateAsync(driver.Store.Root, parent[1..], true, CancellationToken.None);
+                        await driver.Init.BindAsync("/root" + parent, parent, MountFlags.Replace | MountFlags.Create);
+                    }
+
+                    await driver.Init.CloseAsync(await driver.Init.CreateAsync(directory, NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+                }
             }
 
             if (slash < 0)

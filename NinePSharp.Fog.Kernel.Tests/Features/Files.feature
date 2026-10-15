@@ -217,7 +217,7 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
     Examples:
       | path | name | permissions |
       | /tmp | tmp  | d0777       |
-      | /    | /    | d0777       |
+      | /    | /    | d0555       |
 
   @FOG_KERNEL_025
   Scenario: Creating in a file fails, as ramfs refuses a create in a non-directory

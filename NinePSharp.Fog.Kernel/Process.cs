@@ -32,7 +32,7 @@ public sealed class Process
         Cons = new ConsDevice(this, kernel.User);
         Text = text;
         User = user;
-        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes);
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash);
         (plane, calls) = Bind();
     }
 
@@ -214,6 +214,11 @@ public sealed class Process
         catch (IOException error)
         {
             throw new SyscallException(error.Message);
+        }
+        catch (NamespaceFidException)
+        {
+            // wstat: a mount point is not renamed, and is named in full, as chanpath gives it.
+            throw new SyscallException(Errors.Name(path, Math.Max(Elements(path).Length, 1), Errors.IsMountPoint));
         }
     }
 

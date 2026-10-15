@@ -183,7 +183,6 @@ Feature: pread, pwrite, fstat and wstat act on files as 9front's do
       | /tmp/f | the name "g"                    | file already exists      |
       | /tmp   | the length 4                    | permission denied        |
       | /tmp/f | the length 1152921504606846976  | bad file offset or count |
-      | /      | the name "root"                 | permission denied        |
 
   @FOG_KERNEL_028
   Scenario: ramfs checks a change of group but leaves the group as it was

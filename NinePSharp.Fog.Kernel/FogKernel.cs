@@ -7,24 +7,26 @@ namespace NinePSharp.Fog.Kernel;
 
 public sealed class FogKernel
 {
+    private static readonly string[] StoreDirectories = ["adm", "bin", "lib", "rc", "tmp", "usr"];
     private readonly IReadOnlyDictionary<string, ProgramMain> programs;
-    private readonly ResourceHandle root;
+    private readonly ResourceHandle store;
     private readonly string session = Guid.NewGuid().ToString();
     private long sequence;
 
     public FogKernel(
         IReadOnlyDictionary<string, ProgramMain> programs,
         IResourceDataOperations files,
-        ResourceHandle root,
+        ResourceHandle store,
         string user = "none",
         params IReadOnlyList<ExecLoader> loaders)
     {
         this.programs = programs;
-        this.root = root;
+        this.store = store;
         Files = files;
         User = user;
         Loaders = loaders;
         Pipes = new PipeDevice(user);
+        Slash = new RootDevice(user);
     }
 
     internal VProcessTable Table { get; } = new();
@@ -32,6 +34,8 @@ public sealed class FogKernel
     internal IResourceDataOperations Files { get; }
 
     internal PipeDevice Pipes { get; }
+
+    internal RootDevice Slash { get; }
 
     internal string User { get; }
 
@@ -51,15 +55,17 @@ public sealed class FogKernel
         return new FogKernel(programs, files, files.Root, user, loaders);
     }
 
-    // The root may hold what an earlier boot left: its directories are kept, and each program's file
-    // is written again.
+    // The store may hold what an earlier boot left: its directories are kept, and each program's file
+    // is written again. The namespace is then built as bootrc and /lib/namespace build it, with the
+    // store's /bin bound with creation in place of /$cputype/bin.
     public async Task<Process> BootAsync()
     {
+        foreach (string name in StoreDirectories)
+        {
+            await DirectoryAsync(name);
+        }
+
         ResourceHandle bin = await DirectoryAsync("bin");
-        await DirectoryAsync("tmp");
-        ResourceHandle env = await DirectoryAsync("env");
-        ResourceHandle fd = await DirectoryAsync("fd");
-        ResourceHandle dev = await DirectoryAsync("dev");
         foreach (string name in programs.Keys)
         {
             ResourceOpenHandle program = await Files.WalkAsync(bin, name, CancellationToken.None) is { } installed
@@ -69,11 +75,16 @@ public sealed class FogKernel
             await Files.ClunkAsync(program, Context(0, User), CancellationToken.None);
         }
 
-        VProcess first = Table.CreateInitial(new NamespaceNavigator(new MountTable(), Files).Attach(root));
+        VProcess first = Table.CreateInitial(new NamespaceNavigator(new MountTable(), Files).Attach(RootDevice.Root));
+        MountTable mounts = first.ProcessGroup.MountTable;
+        mounts.Mount(store, RootDevice.MountPoint("root"));
+        mounts.Mount(store, RootDevice.Root, MountFlags.After);
         RamFs environment = NewEnvironment();
-        first.ProcessGroup.MountTable.Mount(environment.Root, env, MountFlags.Replace | MountFlags.Create);
-        first.ProcessGroup.MountTable.Mount(DupDevice.Root, fd);
-        first.ProcessGroup.MountTable.Mount(ConsDevice.Root, dev, MountFlags.After);
+        mounts.Mount(ConsDevice.Root, RootDevice.MountPoint("dev"));
+        mounts.Mount(DupDevice.Root, RootDevice.MountPoint("fd"));
+        mounts.Mount(environment.Root, RootDevice.MountPoint("env"), MountFlags.Replace | MountFlags.Create);
+        mounts.Mount(await DirectoryAsync("rc"), RootDevice.MountPoint("rc"));
+        mounts.Mount(bin, RootDevice.MountPoint("bin"), MountFlags.Replace | MountFlags.Create);
         return new Process(this, first, null, environment, "*init*", User);
     }
 
@@ -85,5 +96,5 @@ public sealed class FogKernel
         => new(new ResourceOperationId(session, (ulong)Interlocked.Increment(ref sequence)), pid, user);
 
     private async Task<ResourceHandle> DirectoryAsync(string name)
-        => await Files.WalkAsync(root, name, CancellationToken.None) ?? await Files.CreateAsync(root, name, true, CancellationToken.None);
+        => await Files.WalkAsync(store, name, CancellationToken.None) ?? await Files.CreateAsync(store, name, true, CancellationToken.None);
 }

@@ -38,9 +38,8 @@ public sealed class RcExecutionSteps
     {
         var programs = new Dictionary<string, ProgramMain>(Commands.Commands.All) { ["rc"] = RcProgram.MainAsync };
         init = await FogKernel.InMemory(programs, "glenda").BootAsync();
-        await init.CloseAsync(await init.CreateAsync("/rc", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
-        await init.CloseAsync(await init.CreateAsync("/rc/lib", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
-        await WriteAsync("/rc/lib/rcmain", RcProgram.Rcmain);
+        await init.CloseAsync(await init.CreateAsync("/root/rc/lib", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+        await WriteAsync("/root/rc/lib/rcmain", RcProgram.Rcmain);
     }
 
     [Given("rc starts with all but two of its 5000 descriptors in use")]
