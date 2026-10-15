@@ -105,7 +105,8 @@ scope() {
 }
 
 # Coyote explores interleavings only in assemblies rewritten to hand it their tasks, locks and awaits:
-# the code under test and the test assembly, whose awaits would otherwise run outside its control.
+# the code under test, NinePSharp's connection processor that the listeners hand each connection to, and
+# the test assembly, whose awaits would otherwise run outside its control.
 # Rewriting Fog's assemblies to check data races also gives it their collection and memory accesses to
 # switch at; the test assembly is rewritten without it, as its memory accesses rewritten that way do
 # not run.
@@ -118,7 +119,7 @@ coyote() {
   cat > "$output/rewrite.coyote.json" <<JSON
 {
   "AssembliesPath": ".",
-  "Assemblies": ["NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll"],
+  "Assemblies": ["NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll", "NinePSharp.Server.dll"],
   "IsDataRaceCheckingEnabled": true
 }
 JSON
