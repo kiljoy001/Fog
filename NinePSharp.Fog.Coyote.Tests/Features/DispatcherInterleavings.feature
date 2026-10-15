@@ -96,3 +96,36 @@ Feature: Draining holds in every interleaving Coyote explores
     Then in every explored schedule the write is answered with Rwrite or Rerror "interrupted"
     And in every explored schedule the second session's write is answered with Rwrite or Rerror "interrupted"
     And no explored schedule logs an outcome as unknown
+
+  @FOG_COYOTE_013
+  Scenario: A version reset racing the session close is answered, and the close ends
+    Given a write to "file" that finishes when it is released or cancelled
+    When the node sends Tversion while the session closes and another task releases the write
+    Then in every explored schedule the write is answered with Rwrite or Rerror "interrupted"
+    And in every explored schedule Tversion is answered with Rversion or Rerror "not-ready"
+    And no explored schedule logs an outcome as unknown
+
+  @FOG_COYOTE_014
+  Scenario: An old version reset cannot replace a newer session with the same name
+    Given a write to "file" that finishes when it is released or cancelled
+    When the node sends Tversion, the session closes and the node versions a new session of the same name, while another task releases the write
+    Then in every explored schedule the write is answered with Rwrite or Rerror "interrupted"
+    And in every explored schedule Tversion is answered with Rversion or Rerror "not-ready"
+    And in every explored schedule the new session's Tversion is answered with Rversion
+    And in every explored schedule the new session attaches
+
+  @FOG_COYOTE_015
+  Scenario: A request sent while a version reset drains is answered, never left waiting
+    Given a write to "file" that finishes when it is released or cancelled
+    When the node sends Tversion and a stat of its attach fid at once while another task releases the write
+    Then in every explored schedule Tversion is answered with Rversion
+    And in every explored schedule the stat is answered with Rstat before the reset or Rerror after it
+
+  @FOG_COYOTE_016
+  Scenario: An abandoned write that finishes while its tag is in use again changes nothing
+    Given the dispatcher's drain limit is 50 milliseconds
+    And a write to "file" that finishes when it is released
+    When the node flushes the write, then reuses its tag while another task releases the write
+    Then in every explored schedule the write is answered with Rerror "unknown" or Rwrite
+    And in every explored schedule the flush is answered with Rflush
+    And in every explored schedule the write's tag can be used again the moment the flush is answered

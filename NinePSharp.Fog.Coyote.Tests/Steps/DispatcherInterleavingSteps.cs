@@ -206,6 +206,76 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
         return new() { ["write"] = await write, ["second"] = await second };
     };
 
+    [When("the node sends Tversion while the session closes and another task releases the write")]
+    public void WhenVersionRacesClose() => race = async iteration =>
+    {
+        Task<object> write = iteration.Write();
+        Task released = Task.Run(iteration.Release);
+        Task<object> version = Task.Run(() => iteration.Send(Version()));
+        Task closed = Task.Run(() => iteration.Dispatcher.CloseSessionAsync(Session));
+        await Task.WhenAll(new Task[] { version, closed, released });
+        return new() { ["write"] = await write, ["version"] = await version };
+    };
+
+    [When("the node sends Tversion, the session closes and the node versions a new session of the same name, while another task releases the write")]
+    public void WhenNewSessionRacesOldVersion() => race = async iteration =>
+    {
+        Task<object> write = iteration.Write();
+        Task released = Task.Run(iteration.Release);
+        Task<object> version = Task.Run(() => iteration.Send(Version()));
+        await Task.Run(() => iteration.Dispatcher.CloseSessionAsync(Session));
+        object renewed = await iteration.Send(Version());
+        object attach = await iteration.Send(NinePMessage.NewMsgTattach(new Tattach(1, 1, NinePConstants.NoFid, "worker", "runtime")));
+        await released;
+        return new() { ["write"] = await write, ["version"] = await version, ["renewed"] = renewed, ["attach"] = attach };
+    };
+
+    [When("the node sends Tversion and a stat of its attach fid at once while another task releases the write")]
+    public void WhenStatRacesVersion() => race = async iteration =>
+    {
+        Task<object> write = iteration.Write();
+        Task released = Task.Run(iteration.Release);
+        Task<object> version = Task.Run(() => iteration.Send(Version()));
+        Task<object> stat = Task.Run(() => iteration.Send(NinePMessage.NewMsgTstat(new Tstat(5, 1))));
+        await Task.WhenAll(new Task[] { version, stat, released });
+        return new() { ["write"] = await write, ["version"] = await version, ["stat"] = await stat };
+    };
+
+    [When("the node flushes the write, then reuses its tag while another task releases the write")]
+    public void WhenReuseRacesLateWrite() => race = async iteration =>
+    {
+        Task<object> write = iteration.Write();
+        object flush = await iteration.Send(NinePMessage.NewMsgTflush(new Tflush(101, 100)));
+        Task released = Task.Run(iteration.Release);
+        object reuse = await iteration.Send(NinePMessage.NewMsgTstat(new Tstat(100, 1)));
+        await released;
+        return new() { ["write"] = await write, ["flush"] = flush, ["reuse"] = reuse };
+    };
+
+    [Then(@"^in every explored schedule Tversion is answered with Rversion or Rerror ""not-ready""$")]
+    public void ThenVersionedOrClosed() => Explore((_, replies) =>
+        Specification.Assert(
+            replies["version"] is Rversion || replies["version"] is Rerror { Ename: "not-ready" },
+            $"Tversion was answered {Describe(replies["version"])}"));
+
+    [Then("in every explored schedule the new session's Tversion is answered with Rversion")]
+    public void ThenRenewed() => Explore((_, replies) =>
+        Specification.Assert(replies["renewed"] is Rversion, $"the new session's Tversion was answered {Describe(replies["renewed"])}"));
+
+    [Then("in every explored schedule the new session attaches")]
+    public void ThenAttached() => Explore((_, replies) =>
+        Specification.Assert(replies["attach"] is Rattach, $"the new session's attach was answered {Describe(replies["attach"])}"));
+
+    [Then("in every explored schedule the stat is answered with Rstat before the reset or Rerror after it")]
+    public void ThenStatAnswered() => Explore((_, replies) =>
+        Specification.Assert(replies["stat"] is Rstat or Rerror, $"the stat was answered {Describe(replies["stat"])}"));
+
+    [Then(@"^in every explored schedule the write is answered with Rerror ""unknown"" or Rwrite$")]
+    public void ThenAbandonedOrWritten() => Explore((_, replies) =>
+        Specification.Assert(
+            replies["write"] is Rwrite || replies["write"] is Rerror { Ename: "unknown" },
+            $"the write was answered {Describe(replies["write"])}"));
+
     [Then("in every explored schedule the second write is answered with Rwrite")]
     public void ThenSecondWritten() => Explore((_, replies) =>
         Specification.Assert(replies["second"] is Rwrite, $"the second write was answered {Describe(replies["second"])}"));
@@ -286,6 +356,8 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
     [Then("in every explored schedule the write's outcome is logged as unknown exactly once")]
     public void ThenUnknownOnce() => Explore((iteration, _) =>
         Specification.Assert(iteration.Unknowns() == 1, $"the outcome was logged as unknown {iteration.Unknowns()} times"));
+
+    private static NinePMessage Version() => NinePMessage.NewMsgTversion(new Tversion(NinePConstants.NoTag, 8192, "9P2000"));
 
     private static string Describe(object reply) =>
         reply is Rerror error ? $"Rerror \"{error.Ename}\"" : reply == FogNinePDispatcher.NoReply ? "nothing" : reply.GetType().Name;
