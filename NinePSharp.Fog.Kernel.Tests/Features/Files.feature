@@ -192,6 +192,12 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
     When the process binds "/tmp/f" onto "/dev"
     Then the call fails with "inconsistent mount"
 
+  @FOG_KERNEL_019
+  Scenario: A union of files is an inconsistent mount
+    Given "/tmp/g" holds "other"
+    When the process binds "/tmp/f" onto "/tmp/g" with -a
+    Then the call fails with "inconsistent mount"
+
   @FOG_KERNEL_022
   Scenario: A file opened ORCLOSE is removed when it is closed, as ramfs removes it
     Given the process has "/tmp/f" open ORCLOSE as descriptor 0

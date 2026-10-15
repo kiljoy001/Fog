@@ -315,8 +315,10 @@ public sealed class Process
         {
             throw await NotFoundAsync(await ResolvesAsync(name) ? old : name);
         }
-        catch (NamespaceException error) when (error.Error == NamespaceError.MountTypeMismatch)
+        catch (NamespaceException error) when (error.Error is NamespaceError.MountTypeMismatch or NamespaceError.UnionRequiresDirectory or NamespaceError.CreateBindNotPermitted)
         {
+            // cmount: Emount, also for a union of files, and for a bind with creation of a union or of a
+            // mount that takes none.
             throw new SyscallException(Errors.Mount);
         }
     }

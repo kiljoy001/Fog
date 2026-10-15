@@ -33,6 +33,11 @@ Feature: The kernel boots its root as 9front's bootrc and /lib/namespace build i
     When the process renames "/" to "root"
     Then the call fails with "is a mount point: '/'"
 
+  @FOG_KERNEL_039
+  Scenario: The store's mount takes no creation, so binding it with creation is an inconsistent mount
+    When the process binds "/root" onto "/root" with creation
+    Then the call fails with "inconsistent mount"
+
   @FOG_KERNEL_040
   Scenario: A program copied into /bin is written to the store's /bin
     When the process creates "/bin/app" holding "an application"

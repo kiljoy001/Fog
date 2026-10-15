@@ -2,6 +2,7 @@ using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel.Tests.Support;
 using NinePSharp.Messages;
+using NinePSharp.Namespaces;
 using Reqnroll;
 using Xunit;
 
@@ -34,6 +35,19 @@ public sealed class BootSteps(KernelDriver driver)
         try
         {
             await CreateAsync(path, contents);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
+    }
+
+    [When(@"^the process binds ""(.*)"" onto ""(.*)"" with creation$")]
+    public async Task WhenBindsCreating(string name, string old)
+    {
+        try
+        {
+            await driver.Init.BindAsync(name, old, MountFlags.Replace | MountFlags.Create);
         }
         catch (SyscallException error)
         {
