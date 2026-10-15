@@ -1,3 +1,4 @@
+using NinePSharp.Fog.Kernel.Tests.Support;
 using NinePSharp.Namespaces;
 using Xunit;
 
@@ -43,7 +44,7 @@ public sealed class PipeDeviceTests
         ResourceOpenHandle a = await device.OpenAsync(first, 2, Context, default);
         ResourceOpenHandle b = await device.OpenAsync(second, 2, Context, default);
         Assert.Equal((0L, false), device.Readiness(second));
-        await device.WriteAsync(a, 0, "abc"u8.ToArray(), Context, default);
+        await device.WriteAsync(a, 0, "abc"u8.ToArray(), Context, default).AsTask().WaitAsync(KernelDriver.Bound);
         Assert.Equal((3L, false), device.Readiness(second));
         Assert.Equal((0L, false), device.Readiness(first));
         await device.ClunkAsync(a, Context, default);

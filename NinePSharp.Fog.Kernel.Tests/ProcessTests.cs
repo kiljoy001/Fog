@@ -1,3 +1,4 @@
+using NinePSharp.Fog.Kernel.Tests.Support;
 using Xunit;
 
 namespace NinePSharp.Fog.Kernel.Tests;
@@ -41,7 +42,7 @@ public sealed class ProcessTests
     {
         Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
         var (first, second) = await init.PipeAsync();
-        await init.WriteAsync(first, "go"u8.ToArray());
+        await init.WriteAsync(first, "go"u8.ToArray()).AsTask().WaitAsync(KernelDriver.Bound);
         Assert.Equal((2L, false), await init.PipeReadinessAsync(second));
         await init.CloseAsync(first);
         Assert.Equal((2L, true), await init.PipeReadinessAsync(second));
