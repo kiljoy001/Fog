@@ -26,7 +26,7 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
                 return existing;
             }
 
-            var connection = new MountConnection(device, transport, context);
+            var connection = new MountConnection(device, transport.Handle, transport, context);
             try
             {
                 await connection.VersionAsync();

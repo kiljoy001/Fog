@@ -18,7 +18,8 @@ internal sealed class MountConnection
 
     private readonly object gate = new();
     private readonly IResourceDataOperations device;
-    private readonly DescriptorLease transport;
+    private readonly ResourceOpenHandle transport;
+    private readonly IAsyncDisposable lease;
     private readonly Func<ResourceOperationContext> context;
     private readonly SemaphoreSlim writing = new(1, 1);
     private readonly List<Rpc> queue = [];
@@ -30,10 +31,12 @@ internal sealed class MountConnection
     private ushort nextTag;
     private uint nextFid;
 
-    public MountConnection(IResourceDataOperations device, DescriptorLease transport, Func<ResourceOperationContext> context)
+    // The connection holds the transport's lease, and lets it go when the server hangs up.
+    public MountConnection(IResourceDataOperations device, ResourceOpenHandle transport, IAsyncDisposable lease, Func<ResourceOperationContext> context)
     {
         this.device = device;
         this.transport = transport;
+        this.lease = lease;
         this.context = context;
     }
 
@@ -107,6 +110,47 @@ internal sealed class MountConnection
         }
     }
 
+    // The task's end or the token's cancellation, whichever comes first; the task itself goes on. Both
+    // set one signal, as Rendezvous does: a Coyote-rewritten caller controls neither WaitAsync nor a
+    // Task.WhenAny of a signal's task. Unregistered rather than disposed, which would wait for a
+    // cancellation already running.
+    private static async Task UntilAsync(Task task, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.CanBeCanceled)
+        {
+            var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CancellationTokenRegistration registration = cancellationToken.Register(() => ended.TrySetResult(false));
+            try
+            {
+                _ = SignalAsync(task, ended);
+                if (!await ended.Task)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+            }
+            finally
+            {
+                registration.Unregister();
+            }
+        }
+
+        await task;
+    }
+
+    private static async Task SignalAsync(Task task, TaskCompletionSource<bool> ended)
+    {
+        try
+        {
+            await task;
+        }
+        catch
+        {
+            // Whoever waits on the task has its failure.
+        }
+
+        ended.TrySetResult(true);
+    }
+
     private static byte[] Encode(ISerializable message)
     {
         byte[] bytes = new byte[message.Size];
@@ -173,11 +217,28 @@ internal sealed class MountConnection
                     break;
                 }
 
-                r.Wake = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                r.Wake = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 wake = r.Wake.Task;
             }
 
-            await wake.WaitAsync(cancellationToken);
+            try
+            {
+                await UntilAsync(wake, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // No longer asleep: a reader's handoff it had been given passes to the next caller.
+                lock (gate)
+                {
+                    r.Wake = null;
+                    if (rip is null)
+                    {
+                        Wakeup();
+                    }
+                }
+
+                throw;
+            }
         }
 
         try
@@ -193,7 +254,8 @@ internal sealed class MountConnection
                 byte[] reply;
                 try
                 {
-                    reply = await frame.WaitAsync(cancellationToken);
+                    await UntilAsync(frame, cancellationToken);
+                    reply = await frame;
                 }
                 catch (IOException)
                 {
@@ -230,17 +292,29 @@ internal sealed class MountConnection
             queue.Remove(answered);
             answered.Reply = reply;
             answered.Done = true;
-            answered.Wake?.TrySetResult();
+            answered.Wake?.TrySetResult(true);
         }
     }
 
-    // mntgate: the reader stands down and wakes the first caller still waiting.
+    // mntgate: the reader stands down and wakes the first caller still asleep.
     private void Gate()
     {
         lock (gate)
         {
             rip = null;
-            queue.Find(q => !q.Done && q.Wake is not null)?.Wake!.TrySetResult();
+            Wakeup();
+        }
+    }
+
+    // wakeup says whether anyone slept: a caller already woken, or no longer waiting, is passed over.
+    private void Wakeup()
+    {
+        foreach (Rpc q in queue)
+        {
+            if (!q.Done && q.Wake is { } wake && wake.TrySetResult(true))
+            {
+                return;
+            }
         }
     }
 
@@ -276,13 +350,13 @@ internal sealed class MountConnection
             {
                 q.Error = error;
                 q.Done = true;
-                q.Wake?.TrySetResult();
+                q.Wake?.TrySetResult(true);
             }
 
             queue.Clear();
         }
 
-        _ = transport.DisposeAsync().AsTask();
+        _ = lease.DisposeAsync().AsTask();
     }
 
     private void Remove(Rpc r)
@@ -317,12 +391,13 @@ internal sealed class MountConnection
         }
     }
 
+    // The transport's calls are awaited as Tasks, so a Coyote-rewritten caller controls each wait.
     private async Task WriteAsync(byte[] message)
     {
         await writing.WaitAsync();
         try
         {
-            await device.WriteAsync(transport.Handle, 0, message, context(), CancellationToken.None);
+            await device.WriteAsync(transport, 0, message, context(), CancellationToken.None).AsTask();
         }
         finally
         {
@@ -351,7 +426,7 @@ internal sealed class MountConnection
     {
         while (input.Length < count)
         {
-            ReadOnlyMemory<byte> more = await device.ReadAsync(transport.Handle, 0, (uint)Math.Max(MessageSize, MaxRpc), CancellationToken.None);
+            ReadOnlyMemory<byte> more = await device.ReadAsync(transport, 0, (uint)Math.Max(MessageSize, MaxRpc), CancellationToken.None).AsTask();
             if (more.IsEmpty)
             {
                 throw new IOException(RpcError);
@@ -371,6 +446,6 @@ internal sealed class MountConnection
 
         public string? Error { get; set; }
 
-        public TaskCompletionSource? Wake { get; set; }
+        public TaskCompletionSource<bool>? Wake { get; set; }
     }
 }
