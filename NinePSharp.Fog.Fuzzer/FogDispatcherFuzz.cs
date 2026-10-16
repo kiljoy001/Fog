@@ -266,9 +266,10 @@ public static class FogDispatcherFuzz
         return (commits, TotalEffects(effects));
     }
 
+    // Every request here is answered at once, so one left unanswered for a second is a finding.
     private static object Send(FogNinePDispatcher dispatcher, NinePMessage message, X509Certificate2 certificate)
     {
-        object response = dispatcher.DispatchAsync(Session, message, NinePDialect.NineP2000, certificate).GetAwaiter().GetResult();
+        object response = dispatcher.DispatchAsync(Session, message, NinePDialect.NineP2000, certificate).WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
         Check(response is ISerializable, "dispatcher returned a non-message");
         return response;
     }

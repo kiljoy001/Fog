@@ -46,7 +46,7 @@ public static class FogFileFuzz
             Policy,
             new(1, 8, 2, 4096, 16384, TimeSpan.FromHours(1), TimeSpan.FromHours(1)));
         ushort tag = 0;
-        object Send(NinePMessage message) => dispatcher.DispatchAsync("fuzz", message, NinePDialect.NineP2000, Certificate).GetAwaiter().GetResult();
+        object Send(NinePMessage message) => dispatcher.DispatchAsync("fuzz", message, NinePDialect.NineP2000, Certificate).WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
         object Walk(uint fid, params string[] path) => Send(NinePMessage.NewMsgTwalk(new Twalk(tag++, 1, fid, path)));
         object Open(uint fid, byte mode) => Send(NinePMessage.NewMsgTopen(new Topen(tag++, fid, mode)));
         object Clunk(uint fid) => Send(NinePMessage.NewMsgTclunk(new Tclunk(tag++, fid)));
