@@ -218,6 +218,10 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - A mount connection stays open until its server hangs up; unmounting does not close it.
 - A walk the server refuses reports that the file does not exist, rather than the server's words.
 - `mount` with an authentication descriptor waits for factotum (slice 6).
+- A note reaches a process as one of its kernel calls returns, or interrupts one it is blocked in;
+  a program that makes no calls does not see a note until it makes one, since a managed program
+  cannot be stopped between instructions as 9front's clock interrupt stops one.
+- `#p` serves `args`, `note`, `noteid` and `notepg` for each process, and lists no `trace`.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.

@@ -7,7 +7,7 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-public sealed class Process
+public sealed partial class Process
 {
     private const int HeaderSize = 256;
     private const int MaxInterpreterArguments = 32;
@@ -22,7 +22,7 @@ public sealed class Process
     private Plan9FileSyscalls calls;
     private int children;
 
-    internal Process(FogKernel kernel, VProcess process, Process? parent, RamFs environment, string text, string user)
+    internal Process(FogKernel kernel, VProcess process, Process? parent, RamFs environment, string text, string user, long noteId)
     {
         this.kernel = kernel;
         this.process = process;
@@ -32,8 +32,12 @@ public sealed class Process
         Cons = new ConsDevice(this, kernel.User);
         Text = text;
         User = user;
-        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts);
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs);
         (plane, calls) = Bind();
+
+        // pidalloc: a process given no note group has one numbered by its own pid.
+        NoteId = noteId == 0 ? process.Id : noteId;
+        kernel.Enter(this);
     }
 
     /// <summary>nulldir: a directory entry every field of which wstat leaves unchanged.</summary>
@@ -67,6 +71,7 @@ public sealed class Process
 
     public async ValueTask<int> OpenAsync(string path, int mode)
     {
+        using Return returning = new(this);
         Namec(path);
         try
         {
@@ -97,6 +102,7 @@ public sealed class Process
 
     public async ValueTask<int> CreateAsync(string path, int mode, uint permissions)
     {
+        using Return returning = new(this);
         Namec(path);
         try
         {
@@ -127,6 +133,7 @@ public sealed class Process
     // newfd2: both ends get descriptors, or neither does.
     public async ValueTask<(int First, int Second)> PipeAsync()
     {
+        using Return returning = new(this);
         var (first, second) = kernel.Pipes.Create();
         int fd = await OpenPipeAsync(first);
         try
@@ -149,10 +156,16 @@ public sealed class Process
     /// <summary>pread: reads at an offset without moving the descriptor's; -1 reads at and advances it, as read does.</summary>
     public async ValueTask<ReadOnlyMemory<byte>> PReadAsync(int fd, int count, long offset, CancellationToken cancellationToken = default)
     {
+        using Return returning = new(this);
         await CheckModeAsync(fd, NinePConstants.OREAD);
+        using CancellationTokenSource interruptible = Interruptible(cancellationToken);
         try
         {
-            return await calls.PReadAsync(fd, offset, (uint)count, cancellationToken);
+            return await calls.PReadAsync(fd, offset, (uint)count, interruptible.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SyscallException(Errors.Interrupted);
         }
         catch (ArgumentException)
         {
@@ -167,19 +180,26 @@ public sealed class Process
     /// <summary>pwrite: writes at an offset without moving the descriptor's; -1 writes at and advances it, as write does.</summary>
     public async ValueTask<int> PWriteAsync(int fd, ReadOnlyMemory<byte> data, long offset, CancellationToken cancellationToken = default)
     {
+        using Return returning = new(this);
         await CheckModeAsync(fd, NinePConstants.OWRITE);
+        using CancellationTokenSource interruptible = Interruptible(cancellationToken);
         try
         {
-            return (int)await calls.PWriteAsync(fd, offset, data, cancellationToken);
+            return (int)await calls.PWriteAsync(fd, offset, data, interruptible.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SyscallException(Errors.Interrupted);
         }
         catch (ArgumentException)
         {
             throw new SyscallException(Errors.BadFd);
         }
-        catch (PipeClosedException)
+        catch (PipeClosedException error)
         {
-            // The note's default action, until processes can catch notes.
-            throw new ExitException("sys: write on closed pipe");
+            // pipewrite: the writer is sent a note, and the write fails if it carries on.
+            PostNote("sys: write on closed pipe");
+            throw new SyscallException(error.Message);
         }
         catch (Exception error) when (error is IOException or NamespaceFidException)
         {
@@ -190,6 +210,7 @@ public sealed class Process
     /// <summary>fstat: the directory entry of an open file, under the name it was opened by.</summary>
     public async ValueTask<Stat> FStatAsync(int fd)
     {
+        using Return returning = new(this);
         try
         {
             ReadOnlyMemory<byte> record = await calls.FStatAsync(fd, ushort.MaxValue);
@@ -205,6 +226,7 @@ public sealed class Process
     /// <summary>wstat: changes a file's directory entry, leaving every field set as in <see cref="NullDir"/>.</summary>
     public async ValueTask WStatAsync(string path, Stat stat)
     {
+        using Return returning = new(this);
         ValidStat(stat);
         await ResolveAsync(path);
         try
@@ -225,6 +247,7 @@ public sealed class Process
     /// <summary>fwstat: as wstat, for the file a descriptor names.</summary>
     public async ValueTask FWStatAsync(int fd, Stat stat)
     {
+        using Return returning = new(this);
         ValidStat(stat);
         try
         {
@@ -242,6 +265,7 @@ public sealed class Process
 
     public async ValueTask CloseAsync(int fd)
     {
+        using Return returning = new(this);
         try
         {
             await process.Descriptors.CloseAsync(fd);
@@ -254,6 +278,7 @@ public sealed class Process
 
     public async ValueTask ChdirAsync(string path)
     {
+        using Return returning = new(this);
         NamespaceChannel directory = await ResolveAsync(path);
         if (!directory.Current.IsDirectory)
         {
@@ -265,6 +290,7 @@ public sealed class Process
 
     public async ValueTask RemoveAsync(string path)
     {
+        using Return returning = new(this);
         NamespaceChannel file = await ResolveAsync(path);
         try
         {
@@ -278,6 +304,7 @@ public sealed class Process
 
     public async ValueTask<Stat> StatAsync(string path)
     {
+        using Return returning = new(this);
         NamespaceChannel channel = await ResolveAsync(path);
         try
         {
@@ -291,6 +318,7 @@ public sealed class Process
 
     public async ValueTask<long> SeekAsync(int fd, long offset, int whence)
     {
+        using Return returning = new(this);
         try
         {
             return await calls.SeekAsync(fd, offset, (Plan9SeekWhence)whence);
@@ -311,6 +339,7 @@ public sealed class Process
     // authentication descriptor is not implemented yet.
     public async ValueTask MountAsync(int fd, int afd, string old, MountFlags flags, string aname)
     {
+        using Return returning = new(this);
         if (afd >= 0)
         {
             throw new NotSupportedException("mount with an authentication descriptor is not implemented");
@@ -366,6 +395,7 @@ public sealed class Process
     // bindmount: the first name is resolved before the second is looked at.
     public async ValueTask BindAsync(string name, string old, MountFlags flags)
     {
+        using Return returning = new(this);
         Namec(name);
         if (NamecProblem(old) is { } problem)
         {
@@ -390,6 +420,7 @@ public sealed class Process
 
     public async ValueTask RforkAsync(RforkFlags flags)
     {
+        using Return returning = new(this);
         if ((flags & (RforkFlags.Mem | RforkFlags.Nowait)) != 0)
         {
             throw new SyscallException(Errors.BadArg);
@@ -402,10 +433,15 @@ public sealed class Process
         kernel.Table.RforkNamespace(Pid, NamespaceMode(flags));
         (plane, calls) = Bind();
         Environment = EnvironmentFor(flags);
+        if ((flags & RforkFlags.Noteg) != 0)
+        {
+            kernel.NewNoteGroup(this);
+        }
     }
 
     public async ValueTask<int> DupAsync(int fd, int target)
     {
+        using Return returning = new(this);
         try
         {
             return await process.Descriptors.DuplicateAsync(fd, target);
@@ -419,6 +455,7 @@ public sealed class Process
     /// <summary>WASI's fd_renumber: moves a descriptor to another number, closing what that number named.</summary>
     public async ValueTask RenumberAsync(int fd, int target)
     {
+        using Return returning = new(this);
         try
         {
             await process.Descriptors.RenumberAsync(fd, target);
@@ -445,9 +482,11 @@ public sealed class Process
 
     public long Fork(RforkFlags flags, Func<Process, Task> body)
     {
+        using Return returning = new(this);
         Validate(flags);
         VProcess forked = kernel.Table.Fork(Pid, NamespaceMode(flags), descriptorMode: DescriptorMode(flags));
-        var child = new Process(kernel, forked, this, EnvironmentFor(flags), Text, User);
+        var child = new Process(kernel, forked, this, EnvironmentFor(flags), Text, User, (flags & RforkFlags.Noteg) != 0 ? 0 : NoteId);
+        child.Notify(notify);
         Interlocked.Increment(ref children);
 
         _ = Task.Run(() => child.RunAsync(body));
@@ -505,6 +544,8 @@ public sealed class Process
 
         await process.Descriptors.CloseOnExecAsync();
         Text = elem;
+        SaveArgs(arguments);
+        Notify(null);
         await program(this, arguments);
         Exits("main");
     }
@@ -538,6 +579,7 @@ public sealed class Process
     /// <summary>fd2path: the rooted name the descriptor's file was opened or created by.</summary>
     public async ValueTask<string> Fd2PathAsync(int fd)
     {
+        using Return returning = new(this);
         ResourceOpenHandle handle = await HandleAsync(fd) ?? throw new SyscallException(Errors.BadFd);
 
         // Every descriptor not opened or created by name is a pipe's end, which devpipe names.
@@ -549,12 +591,23 @@ public sealed class Process
 
     public async Task<Waitmsg> WaitAsync(CancellationToken cancellationToken = default)
     {
+        using Return returning = new(this);
         if (Volatile.Read(ref children) == 0)
         {
             throw new SyscallException(Errors.NoChild);
         }
 
-        Waitmsg message = await waits.Reader.ReadAsync(cancellationToken);
+        using CancellationTokenSource interruptible = Interruptible(cancellationToken);
+        Waitmsg message;
+        try
+        {
+            message = await waits.Reader.ReadAsync(interruptible.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SyscallException(Errors.Interrupted);
+        }
+
         Interlocked.Decrement(ref children);
         return message;
     }
@@ -606,7 +659,7 @@ public sealed class Process
         return tokens;
     }
 
-    // Notes and rendezvous do not exist yet, so their groups need nothing.
+    // Rendezvous does not exist yet, so its group needs nothing.
     // What a pipe end has queued and whether it has hung up, for a program that waits on readiness;
     // null for a descriptor that is not a pipe's end.
     internal async ValueTask<(long Queued, bool HungUp)?> PipeReadinessAsync(int fd)
@@ -861,6 +914,7 @@ public sealed class Process
             status = "sys: " + error.Message;
         }
 
+        Exit();
         await kernel.Table.TerminateAsync(Pid);
         parent!.Deliver(new Waitmsg(Pid, status.Length == 0 ? string.Empty : $"{Text} {Pid}: {status}"));
     }

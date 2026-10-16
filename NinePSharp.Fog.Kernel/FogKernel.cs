@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text;
 using NinePSharp.Constants;
@@ -11,6 +12,7 @@ public sealed class FogKernel
     private readonly IReadOnlyDictionary<string, ProgramMain> programs;
     private readonly ResourceHandle store;
     private readonly string session = Guid.NewGuid().ToString();
+    private readonly object noting = new();
     private long sequence;
 
     public FogKernel(
@@ -27,6 +29,7 @@ public sealed class FogKernel
         Loaders = loaders;
         Pipes = new PipeDevice(user);
         Slash = new RootDevice(user);
+        Procs = new ProcDevice(this);
     }
 
     internal VProcessTable Table { get; } = new();
@@ -38,6 +41,11 @@ public sealed class FogKernel
     internal RootDevice Slash { get; }
 
     internal MountDevice Mounts { get; } = new();
+
+    internal ProcDevice Procs { get; }
+
+    // proctab: each process from its creation until it exits.
+    internal ConcurrentDictionary<long, Process> Processes { get; } = new();
 
     // How many fids a mount holds for files it has only walked to.
     internal int MountFids { get; set; } = 256;
@@ -90,7 +98,66 @@ public sealed class FogKernel
         mounts.Mount(environment.Root, RootDevice.MountPoint("env"), MountFlags.Replace | MountFlags.Create);
         mounts.Mount(await DirectoryAsync("rc"), RootDevice.MountPoint("rc"));
         mounts.Mount(bin, RootDevice.MountPoint("bin"), MountFlags.Replace | MountFlags.Create);
-        return new Process(this, first, null, environment, "*init*", User);
+        mounts.Mount(ProcDevice.Root, RootDevice.MountPoint("proc"));
+        return new Process(this, first, null, environment, "*init*", User, 0);
+    }
+
+    internal void Enter(Process process) => Processes[process.Pid] = process;
+
+    internal void Leave(Process process) => Processes.TryRemove(process.Pid, out _);
+
+    // postnotepg: the note to every process of the group but the one posting it.
+    internal void PostNoteGroup(long noteId, string note, Process? poster)
+    {
+        foreach (Process process in Processes.Values)
+        {
+            if (process != poster && process.NoteId == noteId)
+            {
+                process.PostNote(note);
+            }
+        }
+    }
+
+    // setnoteid with no number: the process keeps its group if nothing else holds the group's
+    // number, as a pid, a parent's pid or another process's group; otherwise it takes a new number
+    // from the pids'.
+    internal void NewNoteGroup(Process process)
+    {
+        lock (noting)
+        {
+            long id = process.NoteId;
+            int references = Processes.Values.Sum(other => (other.Pid == id ? 1 : 0) + (other.NoteId == id ? 1 : 0) + (other.ParentPid == id ? 1 : 0));
+            if (references != 1)
+            {
+                process.NoteId = Table.ReserveId();
+            }
+        }
+    }
+
+    // changenoteid: a process's own pid, or the group of another process of the same user's.
+    internal void ChangeNoteId(Process? caller, Process process, long noteId)
+    {
+        lock (noting)
+        {
+            if (noteId <= 0)
+            {
+                throw new IOException(Errors.BadArg);
+            }
+
+            if (noteId == process.NoteId || noteId == process.Pid)
+            {
+                process.NoteId = noteId;
+                return;
+            }
+
+            if (Processes.Values.FirstOrDefault(other => other.NoteId == noteId && other.User == process.User) is not { } member)
+            {
+                throw new IOException(Errors.Permission);
+            }
+
+            ProcDevice.NoNone(caller, member, User);
+            process.NoteId = noteId;
+        }
     }
 
     internal RamFs NewEnvironment() => new("env", "#e", User, changeable: false);

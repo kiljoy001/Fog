@@ -21,6 +21,11 @@ internal static class Errors
     public const string Mount = "inconsistent mount";
     public const string IsMountPoint = "is a mount point";
     public const string NoAttach = "mount/attach disallowed";
+    public const string Interrupted = "interrupted";
+    public const string NoteNotPosted = "note not posted";
+    public const string TooBig = "read or write too large";
+    public const string TooSmall = "read or write too small";
+    public const string ProcessExited = "process exited";
     public const string EmptyName = "empty file name";
     public const string TooLong = "name too long";
     public const string BadChar = "bad character in file name";
@@ -109,7 +114,7 @@ internal static class Errors
 
     // fmtquote.c's %q, as much of the name as fits in room bytes, ending at a NUL, and quoted in rc's
     // way if anything of it that fits needs quoting and the quotes fit too.
-    private static string Quote(string name, int room)
+    internal static string Quote(string name, int room)
     {
         var shown = new StringBuilder();
         int bytes = 0;
