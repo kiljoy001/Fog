@@ -1,6 +1,7 @@
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
+using NinePSharp.Messages;
 using Reqnroll;
 using Xunit;
 
@@ -13,6 +14,7 @@ public sealed class BootSteps : IDisposable
     private readonly string directory = Path.Combine(Path.GetTempPath(), $"fog-host-{Guid.NewGuid():N}");
     private FogHost? host;
     private Exception? failure;
+    private IReadOnlyDictionary<string, ProgramMain> programs = new Dictionary<string, ProgramMain>();
 
     private string StoreFile => Path.Combine(directory, "fog.gefs");
 
@@ -27,13 +29,20 @@ public sealed class BootSteps : IDisposable
     {
         try
         {
-            host = await FogHost.BootAsync(new FogHostSettings(StoreFile, Owner) { StoreBlocks = 4096 });
+            failure = null;
+            host = await FogHost.BootAsync(new FogHostSettings(StoreFile, Owner) { StoreBlocks = 4096, Programs = programs });
         }
         catch (Exception error)
         {
             failure = error;
         }
     }
+
+    [Given(@"^the host is to install a program named ""(.*)""$")]
+    public void GivenProgram(string name) => programs = new Dictionary<string, ProgramMain> { [name] = (_, _) => Task.CompletedTask };
+
+    [When("the host is to install no programs")]
+    public void WhenNoPrograms() => programs = new Dictionary<string, ProgramMain>();
 
     [When("the host restarts")]
     public async Task WhenRestarts()
@@ -46,6 +55,7 @@ public sealed class BootSteps : IDisposable
     [Given(@"^the store file holds ""(.*)""$")]
     public Task GivenStoreFileHolds(string contents) => File.WriteAllTextAsync(StoreFile, contents);
 
+    [Given(@"^the process has created ""(.*)"" holding ""(.*)""$")]
     [When(@"^the process creates ""(.*)"" holding ""(.*)""$")]
     public async Task WhenCreates(string path, string contents)
     {
@@ -53,6 +63,26 @@ public sealed class BootSteps : IDisposable
         await Init.WriteAsync(fd, Encoding.UTF8.GetBytes(contents));
         await Init.CloseAsync(fd);
     }
+
+    [When(@"^the process changes the group of ""(.*)"" to ""(.*)""$")]
+    public async Task WhenChangesGroup(string path, string group)
+    {
+        Stat none = Process.NullDir;
+        try
+        {
+            await Init.WStatAsync(path, new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, none.Mtime, none.Length, string.Empty, string.Empty, group, string.Empty));
+        }
+        catch (SyscallException error)
+        {
+            failure = error;
+        }
+    }
+
+    [Then(@"^the change fails with ""(.*)""$")]
+    public void ThenChangeFails(string message) => Assert.Equal(message, failure?.Message);
+
+    [Then(@"^""(.*)"" has the group ""(.*)""$")]
+    public async Task ThenGroup(string path, string group) => Assert.Equal(group, (await Init.StatAsync(path)).Gid);
 
     [Then("the store file exists")]
     public void ThenExists() => Assert.True(File.Exists(StoreFile));

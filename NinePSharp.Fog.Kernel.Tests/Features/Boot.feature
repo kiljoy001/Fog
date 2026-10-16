@@ -23,6 +23,20 @@ Feature: The kernel boots its root as 9front's bootrc and /lib/namespace build i
     When the process creates "/tmp/notes" holding "kept"
     Then reading "/root/tmp/notes" gives "kept"
 
+  @FOG_KERNEL_038
+  Scenario: A stat of the root or of a mount point is named by the path's last element
+    Then "/" is named "/"
+    And "/mnt" is named "mnt"
+
+  @FOG_KERNEL_038
+  Scenario: A mount point of the root device holds nothing of its own
+    Then the names in "/mnt" are ""
+
+  @FOG_KERNEL_038
+  Scenario: The root device opens for reading only
+    When the process opens "/mnt" for writing
+    Then the call fails with "permission denied"
+
   @FOG_KERNEL_039
   Scenario: The root takes no new files
     When the process creates "/notes" holding "lost"

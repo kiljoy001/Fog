@@ -38,7 +38,7 @@ internal sealed class RootDevice(string owner) : IResourceDataOperations
     {
         if ((mode & 3) != NinePConstants.OREAD)
         {
-            throw new IOException(Errors.IsDirectory);
+            throw new IOException(Errors.Permission);
         }
 
         string handle = $"{context.OperationId.SessionId}/{context.OperationId.Sequence}";

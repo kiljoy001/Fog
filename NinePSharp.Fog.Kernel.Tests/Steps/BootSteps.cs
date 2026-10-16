@@ -42,6 +42,19 @@ public sealed class BootSteps(KernelDriver driver)
         }
     }
 
+    [When(@"^the process opens ""(.*)"" for writing$")]
+    public async Task WhenOpensWriting(string path)
+    {
+        try
+        {
+            await driver.Init.OpenAsync(path, NinePConstants.OWRITE);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
+    }
+
     [When(@"^the process binds ""(.*)"" onto ""(.*)"" with creation$")]
     public async Task WhenBindsCreating(string name, string old)
     {
@@ -76,6 +89,9 @@ public sealed class BootSteps(KernelDriver driver)
         IEnumerable<string> listed = (await driver.Init.DirReadAsync(fd)).Select(entry => entry.Name!).Distinct().Order(StringComparer.Ordinal);
         Assert.Equal(names, string.Join(' ', listed));
     }
+
+    [Then(@"^""(.*)"" is named ""(.*)""$")]
+    public async Task ThenNamed(string path, string name) => Assert.Equal(name, (await driver.Init.StatAsync(path)).Name);
 
     [Then(@"^reading ""(.*)"" gives ""(.*)""$")]
     public async Task ThenReading(string path, string contents) => Assert.Equal(contents, await ReadAsync(path));

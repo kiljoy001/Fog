@@ -39,3 +39,21 @@ Feature: The host boots the kernel on a gefs store kept in a file
     When the host boots
     Then the boot fails with "device size is not a whole number of blocks"
     And the store file holds "not a store"
+
+  @FOG_HOST_003
+  Scenario: A boot that fails after the store is opened lets the store file go
+    Given the host is to install a program named "a/b"
+    When the host boots
+    Then the boot fails with "create/wstat -- bad character in file name"
+    When the host is to install no programs
+    And the host boots
+    Then the names in "/root" are "adm bin lib rc tmp usr"
+
+  @FOG_HOST_004
+  Scenario: Until the store's users are read, each user is in only the group of its own name
+    Given the host has booted
+    And the process has created "/tmp/notes" holding "kept"
+    When the process changes the group of "/tmp/notes" to "sys"
+    Then the change fails with "wstat -- not in group"
+    When the process changes the group of "/tmp/notes" to "glenda"
+    Then "/tmp/notes" has the group "glenda"
