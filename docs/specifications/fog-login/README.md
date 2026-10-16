@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; slices 1 and 2, the host booting the kernel on gefs and the mount driver, are built.
+Status: design; slices 1 to 3, the host booting the kernel on gefs, the mount driver, and notes with /proc and rc's traps, are built.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
