@@ -1,10 +1,12 @@
 @fog_kernel_console
-Feature: /dev holds devcons's null, zero, pid, ppid and user, as 9front binds #c there
+Feature: /dev holds devcons's bintime, null, zero, pid, ppid and user, as 9front binds #c there
   The files belong to the host owner and give everyone the same permissions, which devpermcheck
   applies when they are opened. null reads nothing and takes every write; zero reads as many zero
   bytes as asked; pid and ppid read the reading process's number and its parent's, right-aligned in
   eleven places and followed by a space; user reads the process's user, and only "none" may be
-  written to it, which makes the process and the children it forks later none.
+  written to it, which makes the process and the children it forks later none. bintime reads, at
+  any offset, as many of four big-endian 8-byte numbers as fit: the nanoseconds since the epoch,
+  the clock's ticks, their frequency, and the nanoseconds since the kernel booted.
 
   Background:
     Given a kernel booted for the host owner "glenda"
@@ -12,7 +14,7 @@ Feature: /dev holds devcons's null, zero, pid, ppid and user, as 9front binds #c
   @FOG_KERNEL_013
   Scenario: /dev lists the console files in devcons's order
     When the process lists "/dev"
-    Then it sees "null pid ppid user zero"
+    Then it sees "bintime null pid ppid user zero"
 
   @FOG_KERNEL_013
   Scenario: /dev/null reads nothing and takes every write
@@ -76,3 +78,27 @@ Feature: /dev holds devcons's null, zero, pid, ppid and user, as 9front binds #c
   Scenario: A name devcons does not have is not in /dev
     When the process opens "/dev/nonesuch" for writing
     Then the open fails with "file does not exist: '/dev/nonesuch'"
+
+  @FOG_KERNEL_059
+  Scenario: /dev/bintime reads the time since the epoch, the clock's ticks and frequency, and the time since boot
+    Given the clock reads 1000 seconds since the epoch
+    Then reading 32 bytes of "/dev/bintime" gives 1000000000000 nanoseconds, then ticks, their frequency and the nanoseconds since boot
+
+  @FOG_KERNEL_059
+  Scenario Outline: /dev/bintime reads as many whole numbers as fit, at any offset
+    Given the clock reads 1000 seconds since the epoch
+    Then reading <count> bytes of "/dev/bintime" at offset <offset> gives <numbers> numbers
+
+    Examples:
+      | count | offset | numbers |
+      | 7     | 0      | 0       |
+      | 8     | 0      | 1       |
+      | 23    | 0      | 2       |
+      | 40    | 0      | 4       |
+      | 8     | 100    | 1       |
+
+  @FOG_KERNEL_059
+  Scenario: /dev/bintime belongs to the host owner, who alone may open it for writing, and its time is not set
+    Then "/dev/bintime" belongs to the host owner with the mode 664
+    When the process writes "n12345678" to "/dev/bintime"
+    Then the write fails with "permission denied"

@@ -11,5 +11,8 @@ public static class Commands
         ["cat"] = Cat.MainAsync,
         ["echo"] = Echo.MainAsync,
         ["mkdir"] = Mkdir.MainAsync,
+        ["read"] = Read.MainAsync,
+        ["rm"] = Rm.MainAsync,
+        ["test"] = Test.MainAsync,
     };
 }

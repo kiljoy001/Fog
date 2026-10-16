@@ -25,7 +25,7 @@ public sealed class FogHost : IDisposable
         try
         {
             GefsFs main = store.Attach(string.Empty);
-            var kernel = new FogKernel(settings.Programs, main, main.Root, settings.Owner, settings.Loaders);
+            var kernel = new FogKernel(settings.Programs, main, main.Root, settings.Owner, settings.Loaders) { Clock = settings.Clock };
             return new FogHost(store, await kernel.BootAsync());
         }
         catch

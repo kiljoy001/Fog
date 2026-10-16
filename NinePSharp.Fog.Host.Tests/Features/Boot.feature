@@ -57,3 +57,9 @@ Feature: The host boots the kernel on a gefs store kept in a file
     Then the change fails with "wstat -- not in group"
     When the process changes the group of "/tmp/notes" to "glenda"
     Then "/tmp/notes" has the group "glenda"
+
+  @FOG_HOST_005
+  Scenario: The kernel tells the time by the host's clock
+    Given the host's clock reads 1000 seconds since the epoch
+    When the host boots
+    Then the first 8 bytes of "/dev/bintime" are 1000000000000 nanoseconds

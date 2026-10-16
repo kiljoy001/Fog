@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
@@ -15,6 +16,7 @@ public sealed class BootSteps : IDisposable
     private FogHost? host;
     private Exception? failure;
     private IReadOnlyDictionary<string, ProgramMain> programs = new Dictionary<string, ProgramMain>();
+    private TimeProvider clock = TimeProvider.System;
 
     private string StoreFile => Path.Combine(directory, "fog.gefs");
 
@@ -30,7 +32,7 @@ public sealed class BootSteps : IDisposable
         try
         {
             failure = null;
-            host = await FogHost.BootAsync(new FogHostSettings(StoreFile, Owner) { StoreBlocks = 4096, Programs = programs });
+            host = await FogHost.BootAsync(new FogHostSettings(StoreFile, Owner) { StoreBlocks = 4096, Programs = programs, Clock = clock });
         }
         catch (Exception error)
         {
@@ -40,6 +42,16 @@ public sealed class BootSteps : IDisposable
 
     [Given(@"^the host is to install a program named ""(.*)""$")]
     public void GivenProgram(string name) => programs = new Dictionary<string, ProgramMain> { [name] = (_, _) => Task.CompletedTask };
+
+    [Given(@"^the host's clock reads (\d+) seconds since the epoch$")]
+    public void GivenClock(long seconds) => clock = new FixedClock(DateTimeOffset.FromUnixTimeSeconds(seconds));
+
+    [Then(@"^the first 8 bytes of ""(.*)"" are (\d+) nanoseconds$")]
+    public async Task ThenBintime(string path, long nanoseconds)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
+        Assert.Equal(nanoseconds, BinaryPrimitives.ReadInt64BigEndian((await Init.ReadAsync(fd, 8)).Span));
+    }
 
     [When("the host is to install no programs")]
     public void WhenNoPrograms() => programs = new Dictionary<string, ProgramMain>();
@@ -121,5 +133,10 @@ public sealed class BootSteps : IDisposable
     {
         host?.Dispose();
         Directory.Delete(directory, recursive: true);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

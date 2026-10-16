@@ -28,6 +28,6 @@ public sealed class ConsDeviceTests
             stats.Add($"{stat.Name} {Convert.ToString(stat.Mode, 8)} {stat.User}");
         }
 
-        Assert.Equal(["null 666 glenda", "pid 444 glenda", "ppid 444 glenda", "user 666 glenda", "zero 444 glenda"], stats);
+        Assert.Equal(["bintime 664 glenda", "null 666 glenda", "pid 444 glenda", "ppid 444 glenda", "user 666 glenda", "zero 444 glenda"], stats);
     }
 }

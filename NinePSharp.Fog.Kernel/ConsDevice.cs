@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using NinePSharp.Constants;
@@ -5,13 +6,15 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-// devcons's null, pid, ppid, user and zero, in consdir's order; each reads as the calling process sees it.
-internal sealed class ConsDevice(Process caller, string owner) : IResourceDataOperations
+// devcons's bintime, null, pid, ppid, user and zero, in consdir's order; each reads as the calling
+// process sees it. bintime's time is the host's, and is not set through it.
+internal sealed class ConsDevice(Process caller, string owner, TimeProvider clock, long booted) : IResourceDataOperations
 {
     public const string Provider = "cons";
     private const int NumSize = 12;
     private static readonly (string Name, uint Permissions)[] Files =
     [
+        ("bintime", 0b110_110_100),
         ("null", 0b110_110_110),
         ("pid", 0b100_100_100),
         ("ppid", 0b100_100_100),
@@ -40,11 +43,12 @@ internal sealed class ConsDevice(Process caller, string owner) : IResourceDataOp
         return ValueTask.FromResult(new ResourceStat(resource, name, permissions, 0, 0, 0, owner, owner, owner));
     }
 
-    // devpermcheck; the files give owner, group and others the same bits, so the owner's serve for all.
+    // devpermcheck: the files are the host owner's, so the owner's bits serve it and the others' anyone else.
     public ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
         uint access = Access[mode & 3];
-        if (!resource.IsDirectory && (Files[resource.Identity.Path - 1].Permissions & access) != access)
+        int shift = caller.User == owner ? 0 : 6;
+        if (!resource.IsDirectory && ((Files[resource.Identity.Path - 1].Permissions << shift) & access) != access)
         {
             throw new IOException(Errors.Permission);
         }
@@ -57,6 +61,7 @@ internal sealed class ConsDevice(Process caller, string owner) : IResourceDataOp
     {
         ReadOnlyMemory<byte> data = Files[openHandle.Resource.Identity.Path - 1].Name switch
         {
+            "bintime" => Bintime(count),
             "null" => ReadOnlyMemory<byte>.Empty,
             "pid" => Slice(Number(caller.Pid), offset, count),
             "ppid" => Slice(Number(caller.ParentPid), offset, count),
@@ -69,9 +74,14 @@ internal sealed class ConsDevice(Process caller, string owner) : IResourceDataOp
     public ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
     {
         // userwrite: a process may only give up its user, becoming none.
-        if (Files[openHandle.Resource.Identity.Path - 1].Name == "user")
+        string name = Files[openHandle.Resource.Identity.Path - 1].Name;
+        if (name == "user")
         {
             caller.User = data.Span.SequenceEqual("none"u8) ? "none" : throw new IOException(Errors.Permission);
+        }
+        else if (name == "bintime")
+        {
+            throw new IOException(Errors.Permission);
         }
 
         return ValueTask.FromResult((uint)data.Length);
@@ -98,5 +108,26 @@ internal sealed class ConsDevice(Process caller, string owner) : IResourceDataOp
     {
         int start = (int)Math.Min(offset, (ulong)data.Length);
         return data.AsMemory(start, (int)Math.Min(count, (uint)(data.Length - start)));
+    }
+
+    // readbintime: as many of the epoch's nanoseconds, the ticks, their frequency and the nanoseconds
+    // since boot as fit, whatever the offset.
+    private byte[] Bintime(uint count)
+    {
+        long ticks = clock.GetTimestamp();
+        long[] numbers =
+        [
+            (clock.GetUtcNow() - DateTimeOffset.UnixEpoch).Ticks * 100,
+            ticks,
+            clock.TimestampFrequency,
+            (long)clock.GetElapsedTime(booted, ticks).TotalNanoseconds,
+        ];
+        byte[] data = new byte[Math.Min(count / 8, numbers.Length) * 8];
+        for (int i = 0; i < data.Length / 8; i++)
+        {
+            BinaryPrimitives.WriteInt64BigEndian(data.AsSpan(i * 8), numbers[i]);
+        }
+
+        return data;
     }
 }

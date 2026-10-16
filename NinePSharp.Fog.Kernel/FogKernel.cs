@@ -13,6 +13,7 @@ public sealed class FogKernel
     private readonly ResourceHandle store;
     private readonly string session = Guid.NewGuid().ToString();
     private readonly object noting = new();
+    private readonly TimeProvider clock = TimeProvider.System;
     private long sequence;
 
     public FogKernel(
@@ -31,6 +32,19 @@ public sealed class FogKernel
         Slash = new RootDevice(user);
         Procs = new ProcDevice(this);
     }
+
+    // The host's clock, which #c's bintime reads, and when the kernel was made by it.
+    public TimeProvider Clock
+    {
+        get => clock;
+        init
+        {
+            clock = value;
+            Booted = value.GetTimestamp();
+        }
+    }
+
+    internal long Booted { get; private set; } = TimeProvider.System.GetTimestamp();
 
     internal VProcessTable Table { get; } = new();
 
@@ -65,7 +79,7 @@ public sealed class FogKernel
         params IReadOnlyList<ExecLoader> loaders)
     {
         var files = new RamFs("ram", "#R", user, clock: clock);
-        return new FogKernel(programs, files, files.Root, user, loaders);
+        return new FogKernel(programs, files, files.Root, user, loaders) { Clock = clock ?? TimeProvider.System };
     }
 
     // The store may hold what an earlier boot left: its directories are kept, and each program's file

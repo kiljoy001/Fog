@@ -4476,8 +4476,6 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints, ending with a prompt
       """
-      /rc/lib/rcmain:28: /bin/test: file does not exist: '/bin/test'
-      /rc/lib/rcmain:29: /bin/test: file does not exist: '/bin/test'
       % hi
       % 
       """
@@ -5163,3 +5161,264 @@ Feature: rc runs scripts as 9front rc does
       % 
       """
 
+  @FOG_RC_RUN_217
+  Scenario: rm removes each file named, and reports one it cannot remove and goes on
+    When rc runs the script
+      """
+      echo >/tmp/rm1; echo >/tmp/rm2
+      rm /tmp/rm1 /dev/null /dev/nonesuch /tmp/rm2 >[2=1]
+      ~ $status *'file does not exist'* && echo the status is the last error
+      rm /tmp/rm1 >[2]/dev/null || echo rm1 is gone
+      rm /tmp/rm2 >[2]/dev/null || echo rm2 is gone
+      """
+    Then it prints
+      """
+      rm: /dev/null: permission denied
+      rm: /dev/nonesuch: file does not exist: '/dev/nonesuch'
+      the status is the last error
+      rm1 is gone
+      rm2 is gone
+      """
+
+  @FOG_RC_RUN_217
+  Scenario: rm -f says nothing of a file it cannot remove, and succeeds
+    When rc runs the script
+      """
+      rm -f /dev/null >[2=1]
+      ~ $status '' && echo quiet
+      """
+    Then it prints
+      """
+      quiet
+      """
+
+  @FOG_RC_RUN_218
+  Scenario: rm -r removes a directory and everything in it
+    When rc runs the script
+      """
+      mkdir -p /tmp/rmt/a/b
+      echo >/tmp/rmt/a/f; echo >/tmp/rmt/g
+      rm /tmp/rmt >[2]/dev/null || echo not without -r
+      rm -r /tmp/rmt && rm /tmp/rmt >[2]/dev/null || echo all gone
+      """
+    Then it prints
+      """
+      not without -r
+      all gone
+      """
+
+  @FOG_RC_RUN_218
+  Scenario: rm with an unknown flag prints its usage
+    When rc runs the script
+      """
+      rm -x /tmp/a >[2=1]
+      ~ $status *usage && echo usage
+      """
+    Then it prints
+      """
+      usage: rm [-fr] file ...
+      usage
+      """
+
+  @FOG_RC_RUN_219
+  Scenario: read copies one line of its input, and with -n that many, and with -m all of them
+    When rc runs the script
+      """
+      {echo one; echo two; echo three} | read
+      {echo one; echo two; echo three} | read -n 2
+      {echo one; echo two; echo three} | read -m
+      """
+    Then it prints
+      """
+      one
+      one
+      two
+      one
+      two
+      three
+      """
+
+  @FOG_RC_RUN_219
+  Scenario: read -c copies that many bytes, and -r that many runes
+    When rc runs the script
+      """
+      echo hello | read -c 3; echo
+      echo héllo | read -r 2; echo
+      """
+    Then it prints
+      """
+      hel
+      hé
+      """
+
+  @FOG_RC_RUN_220
+  Scenario: read at the end of its input fails with eof, and reads the files it is given in turn
+    When rc runs the script
+      """
+      read </dev/null
+      ~ $status *eof && echo eof
+      echo a >/tmp/rd1; echo b >/tmp/rd2
+      read /tmp/rd1 /tmp/rd2
+      """
+    Then it prints
+      """
+      eof
+      a
+      b
+      """
+
+  @FOG_RC_RUN_220
+  Scenario: read reports a file it cannot open, and prints its usage for an unknown flag
+    When rc runs the script
+      """
+      read /dev/nonesuch >[2=1]
+      ~ $status *open && echo open
+      read -x >[2=1]
+      ~ $status *usage && echo usage
+      """
+    Then it prints
+      """
+      read: can't open /dev/nonesuch: file does not exist: '/dev/nonesuch'
+      open
+      usage: read [ -m | -n nlines | -c nbytes | -r nrunes ] [ file ... ]
+      usage
+      """
+
+  @FOG_RC_RUN_221
+  Scenario: test asks of a file whether it is there, a plain file or a directory, not empty, and what it may be opened for
+    When rc runs the script
+      """
+      echo x >/tmp/tf; echo -n >/tmp/te; mkdir -p /tmp/td
+      test -f /tmp/tf && echo f
+      test -f /tmp/td || echo td is no plain file
+      test -d /tmp/td && echo d
+      test -e /tmp/tnone || echo tnone is not there
+      test -s /tmp/tf && echo s
+      test -s /tmp/te || echo te is empty
+      test -r /tmp/tf -a -w /tmp/tf && echo rw
+      test -x /tmp/tf || echo tf is not executable
+      test -A /tmp/tf -o -L /tmp/tf -o -T /tmp/tf || echo tf is neither append-only, exclusive nor temporary
+      test -c -o -b -o -u -o -g || echo -c, -b, -u and -g take no operand and are never true
+      """
+    Then it prints
+      """
+      f
+      td is no plain file
+      d
+      tnone is not there
+      s
+      te is empty
+      rw
+      tf is not executable
+      tf is neither append-only, exclusive nor temporary
+      -c, -b, -u and -g take no operand and are never true
+      """
+
+  @FOG_RC_RUN_221
+  Scenario: test compares strings, and numbers in any base strtol reads
+    When rc runs the script
+      """
+      test -n abc && echo n
+      test -z '' && echo z
+      test abc && echo abc is not empty
+      test '' || echo the empty string is
+      test abc '=' abc && echo equal
+      test abc '!=' abd && echo unequal
+      test 3 -lt 10 -a 10 -gt 3 && echo lt gt
+      test 3 -le 3 -a 3 -ge 3 && echo le ge
+      test 3 -ne 4 && echo ne
+      test 010 -eq 8 && echo octal
+      test 0x10 -eq 16 && echo hex
+      test x -eq 1 >[2=1] || echo x is no number, so -eq is left over
+      """
+    Then it prints
+      """
+      n
+      z
+      abc is not empty
+      the empty string is
+      equal
+      unequal
+      lt gt
+      le ge
+      ne
+      octal
+      hex
+      test: unexpected operator/operand: -eq
+      x is no number, so -eq is left over
+      """
+
+  @FOG_RC_RUN_222
+  Scenario: test negates and groups
+    When rc runs the script
+      """
+      test ! -e /tmp/tnone && echo not
+      test ! ! -n x && echo not not
+      test -e /tmp/tnone -o -n x && echo or
+      test -n x -a -e /tmp/tnone || echo and
+      test '(' -n x -o -e /tmp/tnone ')' -a -z '' && echo grouped
+      """
+    Then it prints
+      """
+      not
+      not not
+      or
+      and
+      grouped
+      """
+
+  @FOG_RC_RUN_222
+  Scenario: test run as [ wants a closing ]
+    Given the executable "/tmp/[" holds "#!/bin/test", which 9front would need chmod for
+    When rc runs the script
+      """
+      '/tmp/[' ']' && echo closed
+      '/tmp/[' >[2=1]
+      """
+    Then it prints
+      """
+      closed
+      test: ] missing
+      """
+
+  @FOG_RC_RUN_222
+  Scenario: test with no expression fails with usage, and one it cannot parse is bad syntax
+    When rc runs the script
+      """
+      test; ~ $status *usage && echo usage
+      test -n x y >[2=1]; ~ $status *'bad syntax' && echo bad syntax
+      test -f >[2=1]
+      test '(' -n x >[2=1]
+      test -t x >[2=1]
+      """
+    Then it prints
+      """
+      usage
+      test: unexpected operator/operand: y
+      bad syntax
+      test: argument expected
+      test: argument expected
+      test: not a valid file descriptor number 
+      """
+
+  @FOG_RC_RUN_223
+  Scenario: test asks whether a descriptor is the console, and compares modification times
+    When rc runs the script
+      """
+      echo x >/tmp/tt
+      test -t 1 || echo not the console
+      test /tmp/tt -older 1h || echo not an hour old
+      test /tmp/tt -older 4000000000 && echo older than 2096
+      test /tmp/tt -ot /tmp/tt || echo not older than itself
+      test /tmp/tt -nt /tmp/tt || echo not newer than itself
+      test /tmp/tt -older 1x >[2=1]
+      """
+    Then it prints
+      """
+      not the console
+      not an hour old
+      older than 2096
+      not older than itself
+      not newer than itself
+      test: bad time syntax, 1x
+      """

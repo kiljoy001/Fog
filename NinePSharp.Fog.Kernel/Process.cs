@@ -29,7 +29,7 @@ public sealed partial class Process
         this.parent = parent;
         Environment = environment;
         Dup = new DupDevice(process, kernel.User);
-        Cons = new ConsDevice(this, kernel.User);
+        Cons = new ConsDevice(this, kernel.User, kernel.Clock, kernel.Booted);
         Text = text;
         User = user;
         devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs);

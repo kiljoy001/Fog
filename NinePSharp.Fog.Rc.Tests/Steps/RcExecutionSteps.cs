@@ -56,6 +56,13 @@ public sealed class RcExecutionSteps
     [Given(@"^""(.*)"" holds ""(.*)""$")]
     public Task GivenHolds(string path, string text) => WriteAsync(path, text);
 
+    [Given(@"^the executable ""(.*)"" holds ""(.*)"", which 9front would need chmod for$")]
+    public Task GivenExecutable(string path, string text)
+    {
+        fogOnly = true;
+        return WriteAsync(path, text + "\n");
+    }
+
     [Given("rc starts with all of its 5000 descriptors in use")]
     public void GivenAllDescriptorsInUse() => (lastBusy, fogOnly) = (4999, true);
 

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using NinePSharp.Constants;
@@ -8,7 +9,7 @@ using Xunit;
 namespace NinePSharp.Fog.Kernel.Tests.Steps;
 
 [Binding]
-[Scope(Feature = "/dev holds devcons's null, zero, pid, ppid and user, as 9front binds #c there")]
+[Scope(Feature = "/dev holds devcons's bintime, null, zero, pid, ppid and user, as 9front binds #c there")]
 public sealed class ConsoleSteps(KernelDriver driver)
 {
     private readonly List<string> childRead = new();
@@ -19,7 +20,31 @@ public sealed class ConsoleSteps(KernelDriver driver)
 
     [Given(@"^a kernel booted for the host owner ""(.*)""$")]
     public async Task GivenKernel(string user)
-        => driver.Init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), user).BootAsync();
+        => driver.Init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), user, driver.Clock).BootAsync();
+
+    [Given(@"^the clock reads (\d+) seconds since the epoch$")]
+    public void GivenClock(long seconds) => driver.Clock.Now = DateTimeOffset.FromUnixTimeSeconds(seconds);
+
+    [Then(@"^reading 32 bytes of ""(.*)"" gives (\d+) nanoseconds, then ticks, their frequency and the nanoseconds since boot$")]
+    public async Task ThenBintime(string path, long nanoseconds)
+    {
+        byte[] bytes = await PReadAsync(path, 32, 0);
+        long[] numbers = [.. Enumerable.Range(0, 4).Select(i => BinaryPrimitives.ReadInt64BigEndian(bytes.AsSpan(i * 8)))];
+        Assert.Equal((nanoseconds, driver.Clock.TimestampFrequency), (numbers[0], numbers[2]));
+        Assert.InRange(numbers[1], 1, driver.Clock.GetTimestamp());
+        Assert.InRange(numbers[3], 0, (long)TimeSpan.FromMinutes(1).TotalNanoseconds);
+    }
+
+    [Then(@"^reading (\d+) bytes of ""(.*)"" at offset (\d+) gives (\d+) numbers$")]
+    public async Task ThenBintimeNumbers(int count, string path, long offset, int numbers)
+    {
+        byte[] bytes = await PReadAsync(path, count, offset);
+        Assert.Equal(numbers * 8, bytes.Length);
+        if (numbers > 0)
+        {
+            Assert.Equal(1_000_000_000_000, BinaryPrimitives.ReadInt64BigEndian(bytes));
+        }
+    }
 
     [When(@"^the process lists ""(.*)""$")]
     public async Task WhenLists(string path)
@@ -56,6 +81,13 @@ public sealed class ConsoleSteps(KernelDriver driver)
     [Given(@"^""(.*)"" belongs to the host owner with the permissions (\d+)$")]
     public async Task GivenOwned(string path, string permissions)
         => await driver.Init.CloseAsync(await driver.Init.CreateAsync(path, NinePConstants.OWRITE, Convert.ToUInt32(permissions, 8)));
+
+    [Then(@"^""(.*)"" belongs to the host owner with the mode (\d+)$")]
+    public async Task ThenOwned(string path, string mode)
+    {
+        var stat = await driver.Init.StatAsync(path);
+        Assert.Equal((driver.Init.User, Convert.ToUInt32(mode, 8)), (stat.Uid, stat.Mode));
+    }
 
     [When(@"^the process opens ""(.*)"" for (reading|writing)$")]
     public async Task WhenOpens(string path, string access)
@@ -135,5 +167,18 @@ public sealed class ConsoleSteps(KernelDriver driver)
         string text = Encoding.UTF8.GetString((await process.ReadAsync(fd, count)).Span);
         await process.CloseAsync(fd);
         return text;
+    }
+
+    private async Task<byte[]> PReadAsync(string path, int count, long offset)
+    {
+        int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
+        try
+        {
+            return (await driver.Init.PReadAsync(fd, count, offset)).ToArray();
+        }
+        finally
+        {
+            await driver.Init.CloseAsync(fd);
+        }
     }
 }
