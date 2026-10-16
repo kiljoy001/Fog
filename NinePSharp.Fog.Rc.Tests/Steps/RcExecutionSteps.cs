@@ -3,7 +3,9 @@ using System.Text.RegularExpressions;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Commands;
 using NinePSharp.Fog.Kernel;
+using NinePSharp.Fog.Kernel.Tests.Support;
 using NinePSharp.Fog.Rc.Tests.Support;
+using NinePSharp.Namespaces;
 using Reqnroll;
 using Xunit;
 
@@ -71,6 +73,29 @@ public sealed class RcExecutionSteps
     [When("rc -i reads the script")]
     public Task WhenReadsInteractively(string text) => RunAsync(text, Script, ["-i"]);
 
+    // 9front's console cannot be made to hold a read, so this runs on Fog alone.
+    [When(@"^rc -i reads ""(.*)"" from a file server, and is interrupted as it waits to read$")]
+    public async Task WhenInterruptedReading(string text)
+    {
+        fogOnly = true;
+        await using var server = new FileServerHarness { HoldReads = true };
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("input", Encoding.UTF8.GetBytes(text + "\n")));
+        var (client, served) = await init!.PipeAsync();
+        server.Serve(init, served);
+        await init.MountAsync(client, -1, "/n", MountFlags.Replace, string.Empty);
+        await RunAsync(string.Empty, "/n/input", ["-i"], async pid =>
+        {
+            await server.ReadHeld(1).WaitAsync(Bound);
+            int fd = await init.OpenAsync($"/proc/{pid}/note", NinePConstants.OWRITE);
+            await init.WriteAsync(fd, "interrupt"u8.ToArray());
+            await init.CloseAsync(fd);
+
+            // The read the note interrupted is flushed before rc reads again.
+            await server.ReadHeld(2).WaitAsync(Bound);
+            server.Release();
+        });
+    }
+
     [Then("it prints")]
     public Task ThenPrints(string expected) => CompareAsync(expected + "\n");
 
@@ -110,14 +135,16 @@ public sealed class RcExecutionSteps
             $"expected:\n{expected}\nFog printed:\n{fog}\n9front printed:\n{nineFront ?? "(not run)"}");
     }
 
-    private async Task RunAsync(string text, string input, string[] arguments)
+    // What happens while rc runs, given its pid.
+    private async Task RunAsync(string text, string input, string[] arguments, Func<long, Task>? meanwhile = null)
     {
         script = text;
         oracle = $"@{{rfork En; cd /; /bin/rc {string.Join(' ', arguments)} <{input} >[2=1]}}";
         await WriteAsync(Script, text + "\n");
         var (read, write) = await init!.PipeAsync();
-        init.Fork(RforkFlags.Fdg, async child =>
+        long pid = init.Fork(RforkFlags.Fdg, async child =>
         {
+            await child.DupAsync(write, 1);
             await child.DupAsync(write, 2);
             await child.CloseAsync(read);
             Assert.Equal(0, await child.OpenAsync(input, NinePConstants.OREAD));
@@ -129,6 +156,7 @@ public sealed class RcExecutionSteps
             await child.ExecAsync("/bin/rc", [name, .. arguments]);
         });
         await init.CloseAsync(write);
+        Task acting = meanwhile?.Invoke(pid) ?? Task.CompletedTask;
 
         // A zero-length write reads as empty, so the output ends where the hung-up pipe refuses reads.
         using var run = new CancellationTokenSource(RunBound);
@@ -139,6 +167,7 @@ public sealed class RcExecutionSteps
             Assert.True(bytes.Count <= MaxOutput, "rc printed more than any scenario expects");
         }
 
+        await acting.WaitAsync(Bound);
         await init.WaitAsync().WaitAsync(Bound);
 
         output = Encoding.UTF8.GetString(bytes.ToArray());

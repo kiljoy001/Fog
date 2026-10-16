@@ -19,6 +19,8 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     private readonly ConcurrentDictionary<uint, string> opened = new();
     private readonly CancellationTokenSource hangup = new();
     private readonly TaskCompletionSource<bool> release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly List<TaskCompletionSource<bool>> readsHeld = [];
+    private int heldReads;
     private Task serving = Task.CompletedTask;
     private Stream? stream;
 
@@ -69,6 +71,15 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     }
 
     public void Release() => release.TrySetResult(true);
+
+    // Done once the nth read, counting from 1, has come to be held.
+    public Task ReadHeld(int n)
+    {
+        lock (readsHeld)
+        {
+            return Held(n).Task;
+        }
+    }
 
     // Closing its end hangs the connection up; the server then stops reading.
     public async Task HangUpAsync(Process process, int fd)
@@ -129,9 +140,17 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
             case NinePMessage.MsgTread read:
                 ReadTags.Add(read.Item.Tag);
                 LargestData = Math.Max(LargestData, (int)read.Item.Count);
-                if (HoldReads && await HoldAsync(read.Item) is { } interrupted)
+                if (HoldReads)
                 {
-                    return interrupted;
+                    lock (readsHeld)
+                    {
+                        Held(++heldReads).TrySetResult(true);
+                    }
+
+                    if (await HoldAsync(read.Item) is { } interrupted)
+                    {
+                        return interrupted;
+                    }
                 }
 
                 break;
@@ -158,6 +177,16 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
         {
             await stream.DisposeAsync();
         }
+    }
+
+    private TaskCompletionSource<bool> Held(int n)
+    {
+        while (readsHeld.Count < n)
+        {
+            readsHeld.Add(new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+        }
+
+        return readsHeld[n - 1];
     }
 
     private async Task<object?> HoldAsync(Tread read)

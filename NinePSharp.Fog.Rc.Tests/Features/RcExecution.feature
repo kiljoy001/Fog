@@ -5016,3 +5016,13 @@ Feature: rc runs scripts as 9front rc does
       """
       ended cleanly
       """
+
+  @FOG_RC_RUN_216
+  Scenario: An interrupt while an interactive rc waits to read prints a newline and prompts again
+    When rc -i reads "echo after" from a file server, and is interrupted as it waits to read
+    Then it prints, ending with a prompt
+      """
+      % 
+      % after
+      % 
+      """

@@ -14,6 +14,7 @@
     <PackageReference Include="Reqnroll.xUnit" Version="2.1.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="NinePSharp.Server" Version="$(NinePSharpVersion)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,8 @@
 
   <ItemGroup>
     <Compile Include="..\NinePSharp.Fog.Namespaces.Tests\Support\NineFrontTerminal.cs" Link="Support\NineFrontTerminal.cs" />
+    <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\FileServerHarness.cs" Link="Support\FileServerHarness.cs" />
+    <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\DescriptorStream.cs" Link="Support\DescriptorStream.cs" />
   </ItemGroup>
 
 </Project>
