@@ -27,13 +27,14 @@ internal sealed class MountConnection
     private byte[] input = [];
     private Rpc? rip;
     private Task<byte[]>? reading;
-    private string? broken;
+    private bool broken;
     private ushort nextTag;
     private uint nextFid;
 
     // The connection holds the transport's lease, and lets it go when the server hangs up.
-    public MountConnection(IResourceDataOperations device, ResourceOpenHandle transport, IAsyncDisposable lease, Func<ResourceOperationContext> context)
+    public MountConnection(IResourceDataOperations device, ResourceOpenHandle transport, IAsyncDisposable lease, Func<ResourceOperationContext> context, uint firstFid = 0)
     {
+        nextFid = firstFid;
         this.device = device;
         this.transport = transport;
         this.lease = lease;
@@ -71,7 +72,8 @@ internal sealed class MountConnection
             throw new IOException("server tries to increase msize in fversion");
         }
 
-        if (version.MSize is < 256 or > 1024 * 1024)
+        // devmnt also refuses one over a megabyte, which MaxRpc's bound has refused already.
+        if (version.MSize < 256)
         {
             throw new IOException("nonsense value of msize in fversion");
         }
@@ -113,28 +115,24 @@ internal sealed class MountConnection
     // The task's end or the token's cancellation, whichever comes first; the task itself goes on. Both
     // set one signal, as Rendezvous does: a Coyote-rewritten caller controls neither WaitAsync nor a
     // Task.WhenAny of a signal's task. Unregistered rather than disposed, which would wait for a
-    // cancellation already running.
+    // cancellation already running. A task's failure is its waiter's to see when it awaits it.
     private static async Task UntilAsync(Task task, CancellationToken cancellationToken)
     {
-        if (cancellationToken.CanBeCanceled)
+        var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationTokenRegistration registration = cancellationToken.Register(() => ended.TrySetResult(false));
+        try
         {
-            var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            CancellationTokenRegistration registration = cancellationToken.Register(() => ended.TrySetResult(false));
-            try
+            _ = SignalAsync(task, ended);
+            if (!await ended.Task)
             {
-                _ = SignalAsync(task, ended);
-                if (!await ended.Task)
-                {
-                    throw new OperationCanceledException(cancellationToken);
-                }
-            }
-            finally
-            {
-                registration.Unregister();
+                throw new OperationCanceledException(cancellationToken);
             }
         }
-
-        await task;
+        finally
+        {
+            // Stryker disable once Statement : unregistering only spares the token a callback that can no longer change the signal it would set
+            registration.Unregister();
+        }
     }
 
     private static async Task SignalAsync(Task task, TaskCompletionSource<bool> ended)
@@ -165,9 +163,9 @@ internal sealed class MountConnection
     {
         lock (gate)
         {
-            if (broken is not null)
+            if (broken)
             {
-                throw new IOException(broken);
+                throw new IOException(RpcError);
             }
 
             queue.Add(r);
@@ -259,7 +257,7 @@ internal sealed class MountConnection
                 }
                 catch (IOException)
                 {
-                    Break(RpcError);
+                    Break();
                     throw new IOException(RpcError);
                 }
 
@@ -340,15 +338,15 @@ internal sealed class MountConnection
 
     // A connection whose reads fail is broken: every request still waiting fails with mount rpc
     // error, and so does every later one.
-    private void Break(string error)
+    private void Break()
     {
         lock (gate)
         {
-            broken ??= error;
+            broken = true;
             reading = null;
             foreach (Rpc q in queue)
             {
-                q.Error = error;
+                q.Error = RpcError;
                 q.Done = true;
                 q.Wake?.TrySetResult(true);
             }

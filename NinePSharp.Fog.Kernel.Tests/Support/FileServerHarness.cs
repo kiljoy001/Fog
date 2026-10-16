@@ -41,6 +41,23 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     public bool HoldReads { get; set; }
 
+    // What the server answers of an open's iounit, how much of a read it gives and of a write it
+    // takes, and why it refuses Tversion; null leaves the server's own answer.
+    public uint? IoUnit { get; set; }
+
+    public int? ReadLimit { get; set; }
+
+    public int? WriteLimit { get; set; }
+
+    public string? VersionRefusal { get; set; }
+
+    public int WStats { get; private set; }
+
+    public ConcurrentQueue<byte> OpenModes { get; } = [];
+
+    // The number of names each Twalk carried, in order.
+    public ConcurrentQueue<int> Walks { get; } = [];
+
     // An open of this file is refused with this error.
     public (string File, string Error)? Refusal { get; set; }
 
@@ -76,8 +93,19 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     {
         switch (message)
         {
-            case NinePMessage.MsgTversion:
+            case NinePMessage.MsgTversion version:
                 Versions++;
+                if (VersionRefusal is { } why)
+                {
+                    return new Rerror(version.Item.Tag, why);
+                }
+
+                break;
+            case NinePMessage.MsgTwstat:
+                WStats++;
+                break;
+            case NinePMessage.MsgTwalk walked:
+                Walks.Enqueue(walked.Item.Wname.Length);
                 break;
             case NinePMessage.MsgTflush flush:
                 Flushed.Add(flush.Item.OldTag);
@@ -90,8 +118,14 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
             case NinePMessage.MsgTwrite write:
                 LargestData = Math.Max(LargestData, (int)write.Item.Count);
                 break;
-            case NinePMessage.MsgTopen open when Refusal is { } refusal && opened.TryGetValue(open.Item.Fid, out string? name) && name == refusal.File:
-                return new Rerror(open.Item.Tag, refusal.Error);
+            case NinePMessage.MsgTopen open:
+                OpenModes.Enqueue(open.Item.Mode);
+                if (Refusal is { } refusal && opened.TryGetValue(open.Item.Fid, out string? name) && name == refusal.File)
+                {
+                    return new Rerror(open.Item.Tag, refusal.Error);
+                }
+
+                break;
             case NinePMessage.MsgTread read:
                 ReadTags.Add(read.Item.Tag);
                 LargestData = Math.Max(LargestData, (int)read.Item.Count);
@@ -105,7 +139,14 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
         object reply = await server.DispatchAsync(sessionId, message, dialect, certificate);
         Track(message, reply);
-        return reply;
+        return reply switch
+        {
+            Ropen open when IoUnit is { } unit => new Ropen(open.Tag, open.Qid, unit),
+            Rcreate created when IoUnit is { } unit => new Rcreate(created.Tag, created.Qid, unit),
+            Rread read when ReadLimit is { } limit && read.Count > limit => new Rread(read.Tag, read.Data[..limit]),
+            Rwrite wrote when WriteLimit is { } limit && wrote.Count > limit => new Rwrite(wrote.Tag, (uint)limit),
+            _ => reply,
+        };
     }
 
     public Task CloseSessionAsync(string sessionId) => server.CloseSessionAsync(sessionId);

@@ -59,13 +59,9 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
     public async ValueTask<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
         => await Tree(directory).ReadDirectoryAsync(directory, cancellationToken);
 
-    public async ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
-    {
-        uint permissions = directoryEntry ? (uint)Constants.NinePConstants.FileMode9P.DMDIR | 0b111_111_111 : 0b110_110_110;
-        ResourceOpenHandle created = await Tree(directory).CreateAsync(directory, name, permissions, Constants.NinePConstants.OREAD, cancellationToken);
-        await Tree(directory).ClunkAsync(created);
-        return created.Resource;
-    }
+    // The kernel creates in a mount by opening what it creates, as mntcreate does.
+    public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
+        => throw new NotSupportedException("a mount creates only by opening what it creates");
 
     public async ValueTask<ResourceOpenHandle> CreateAndOpenAsync(ResourceHandle directory, string name, uint permissions, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
         => await Tree(directory).CreateAsync(directory, name, permissions, mode, cancellationToken);

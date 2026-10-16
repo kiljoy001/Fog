@@ -21,6 +21,9 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     private Task<ReadOnlyMemory<byte>>? read;
     private string[] childReads = [];
     private byte[] written = [];
+    private int fidsBefore;
+    private int walksBefore;
+    private string deepest = string.Empty;
 
     private Process Init => driver.Init;
 
@@ -126,10 +129,10 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     [When("the read is cancelled")]
     public void WhenCancelled() => cancel.Cancel();
 
-    [When(@"^the process stats ""/n/f1"" to ""/n/f(\d+)""$")]
-    public async Task WhenStatsFiles(int count)
+    [When(@"^the process stats ""/n/f(\d+)"" to ""/n/f(\d+)""$")]
+    public async Task WhenStatsFiles(int first, int count)
     {
-        for (int i = 1; i <= count; i++)
+        for (int i = first; i <= count; i++)
         {
             await Init.StatAsync($"/n/f{i}").AsTask().WaitAsync(Bound);
         }
@@ -143,6 +146,123 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     {
         await server.Root.RemoveAsync(name, CancellationToken.None);
         server.Root.AddChild(new NinePDir(name));
+    }
+
+    [Given(@"^the server gives opens an iounit of (\d+)$")]
+    public void GivenIoUnit(uint iounit) => server.IoUnit = iounit;
+
+    [Given(@"^the server answers at most (\d+) bytes of a read and takes at most (\d+) of a write$")]
+    public void GivenLimits(int read, int write) => (server.ReadLimit, server.WriteLimit) = (read, write);
+
+    [Given(@"^the server refuses Tversion with ""(.*)""$")]
+    public void GivenVersionRefusal(string why) => server.VersionRefusal = why;
+
+    [Given(@"^the server's tree holds 20 directories, one in another, and the files ""f1"" to ""f4""$")]
+    public void GivenDeep()
+    {
+        INinePNode directory = server.Root;
+        var names = new List<string>();
+        for (int i = 1; i <= 20; i++)
+        {
+            var next = new NinePDir($"d{i}");
+            ((NinePDir)directory).AddChild(next);
+            directory = next;
+            names.Add($"d{i}");
+        }
+
+        deepest = "/n/" + string.Join('/', names);
+        GivenFiles(4);
+    }
+
+    [When("the server's fids are counted")]
+    public void WhenFidsCounted() => fidsBefore = server.LiveFids;
+
+    [When("the server's Twalks are counted")]
+    public void WhenWalksCounted() => walksBefore = server.Walks.Count;
+
+    [When(@"^the process lists ""(.*)""$")]
+    public async Task WhenLists(string path)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.OREAD).AsTask().WaitAsync(Bound);
+        await Init.DirReadAsync(fd);
+        await Init.CloseAsync(fd);
+    }
+
+    [When(@"^the process tries to create ""(.*)""$")]
+    public async Task WhenTriesCreate(string path)
+    {
+        try
+        {
+            await Init.CreateAsync(path, NinePConstants.OWRITE, 0b110_110_100).AsTask().WaitAsync(Bound);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
+    }
+
+    [When(@"^the process removes ""(.*)""$")]
+    public Task WhenRemoves(string path) => Init.RemoveAsync(path).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process opens ""(.*)"" with ORCLOSE and closes it$")]
+    public async Task WhenOrclose(string path)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.OREAD | NinePConstants.ORCLOSE).AsTask().WaitAsync(Bound);
+        await Init.CloseAsync(fd).AsTask().WaitAsync(Bound);
+    }
+
+    [When(@"^the process changes the mode of ""(.*)"" to (\d+)$")]
+    public Task WhenChmods(string path, string mode) => Init.WStatAsync(path, Moded(mode)).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process opens ""(.*)"" and changes its mode through the descriptor to (\d+)$")]
+    public async Task WhenChmodsOpen(string path, string mode)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.OREAD).AsTask().WaitAsync(Bound);
+        await Init.FWStatAsync(fd, Moded(mode)).AsTask().WaitAsync(Bound);
+        await Init.CloseAsync(fd);
+    }
+
+    [Given(@"^the server's tree holds the directories ""(.*)"", ""(.*)"" and ""(.*)""$")]
+    public void GivenDirectories(string a, string b, string c)
+    {
+        foreach (string name in new[] { a, b, c })
+        {
+            server.Root.AddChild(new NinePDir(name));
+        }
+    }
+
+    [When(@"^the process stats ""([^""]*)""$")]
+    public Task WhenStats(string path) => Init.StatAsync(path).AsTask().WaitAsync(Bound);
+
+    [When("the process changes to the deepest directory")]
+    public Task WhenChangesDeep() => Init.ChdirAsync(deepest).AsTask().WaitAsync(Bound);
+
+    [When(@"^the server's ""(.*)"" loses ""(.*)""$")]
+    public async Task WhenLoses(string path, string child)
+    {
+        INinePNode node = server.Root;
+        foreach (string name in path.Split('/'))
+        {
+            node = (await node.WalkAsync(name, CancellationToken.None))!;
+        }
+
+        await ((NinePDir)node).RemoveAsync(child, CancellationToken.None);
+    }
+
+    [When(@"^the process duplicates descriptor (\d+) as descriptor (\d+)$")]
+    public Task WhenDuplicates(int fd, int target) => Init.DupAsync(fd, target).AsTask();
+
+    [When(@"^the process tries to mount descriptor (\d+) on ""(.*)""$")]
+    public async Task WhenTriesMount(int fd, string old)
+    {
+        try
+        {
+            await Init.MountAsync(fd, -1, old, MountFlags.Replace, string.Empty).AsTask().WaitAsync(Bound);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
     }
 
     [When("the server hangs up")]
@@ -208,6 +328,49 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     [Then(@"^each child read ""(.*)""$")]
     public void ThenEachRead(string contents) => Assert.All(childReads, text => Assert.Equal(contents, text));
 
+    [Then(@"^the largest message on the connection carried (\d+) bytes of data$")]
+    public void ThenLargestExactly(int bytes) => Assert.Equal(bytes, server.LargestData);
+
+    [Then(@"^writing ""(.*)"" to a new ""(.*)"" writes (\d+) bytes$")]
+    public async Task ThenShortWrite(string text, string path, int count)
+    {
+        int fd = await Init.CreateAsync(path, NinePConstants.OWRITE, 0b110_110_100).AsTask().WaitAsync(Bound);
+        Assert.Equal(count, await Init.WriteAsync(fd, Encoding.UTF8.GetBytes(text)).AsTask().WaitAsync(Bound));
+        await Init.CloseAsync(fd);
+    }
+
+    [Then("the server holds the fids it had")]
+    public void ThenFidsAsBefore() => Assert.Equal(fidsBefore, server.LiveFids);
+
+    [Then(@"^the server holds exactly (\d+) fids$")]
+    public void ThenFidsExactly(int fids) => Assert.Equal(fids, server.LiveFids);
+
+    [Then(@"^the server's tree has no ""(.*)""$")]
+    public async Task ThenNoFile(string name) => Assert.Null(await server.Root.WalkAsync(name, CancellationToken.None));
+
+    [Then(@"^the connection carried (\d+) Twstats$")]
+    public void ThenWStats(int count) => Assert.Equal(count, server.WStats);
+
+    [Then(@"^the server's Twalks since carried (\d+) names and then (\d+)$")]
+    public void ThenWalkedInPieces(int first, int second)
+    {
+        int[] since = [.. server.Walks.Skip(walksBefore)];
+        Assert.Contains((first, second), since.Zip(since.Skip(1)));
+    }
+
+    [Then(@"^stating ""(.*)"" again walks no names$")]
+    public async Task ThenNoWalk(string path)
+    {
+        await Init.StatAsync(path).AsTask().WaitAsync(Bound);
+        Assert.Equal(walksBefore, server.Walks.Count);
+    }
+
+    [Then(@"^descriptor (\d+) can be closed$")]
+    public Task ThenClosable(int fd) => Init.CloseAsync(fd).AsTask().WaitAsync(Bound);
+
+    [Then("the server was asked to open a file with ORCLOSE")]
+    public void ThenOrclose() => Assert.Contains(server.OpenModes, mode => (mode & NinePConstants.ORCLOSE) != 0);
+
     [Then("the connection carried one Tversion")]
     public void ThenOneVersion() => Assert.Equal(1, server.Versions);
 
@@ -248,6 +411,12 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
         server.Release();
         cancel.Dispose();
         await server.DisposeAsync();
+    }
+
+    private static Stat Moded(string mode)
+    {
+        Stat none = Process.NullDir;
+        return new Stat(0, none.Type, none.Dev, none.Qid, Convert.ToUInt32(mode, 8), none.Atime, none.Mtime, none.Length, string.Empty, string.Empty, string.Empty, string.Empty);
     }
 
     private static async Task<string> ReadFileAsync(Process process, string path)

@@ -81,7 +81,7 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     And the mount driver holds at most 4 fids for walked files
     When the process mounts descriptor 3 on "/n"
     And the process stats "/n/f1" to "/n/f10"
-    Then the server holds at most 5 fids
+    Then the server holds exactly 5 fids
     And stating "/n/f1" again gives the file "f1"
 
   @FOG_KERNEL_049
@@ -116,3 +116,122 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     And the process starts reading "/n/notes"
     And the server hangs up
     Then the read fails with "mount rpc error"
+
+  @FOG_KERNEL_046
+  Scenario: A read and a write go in pieces of the iounit the server gives
+    Given the server gives opens an iounit of 2
+    When the process mounts descriptor 3 on "/n" with creation
+    And the process creates "/n/docs/new" holding "made"
+    Then reading "/n/notes" gives "hello"
+    And the server's "docs/new" holds "made"
+    And no message on the connection carried more than 2 bytes of data
+
+  @FOG_KERNEL_046
+  Scenario Outline: An iounit of none, or of more than a message carries, is what a message carries
+    Given the server gives opens an iounit of <iounit>
+    When the process mounts descriptor 3 on "/n" with creation
+    And the process writes 40000 bytes to "/n/docs/big"
+    Then reading "/n/docs/big" gives the same 40000 bytes
+    And the largest message on the connection carried 32768 bytes of data
+
+    Examples:
+      | iounit     |
+      | 0          |
+      | 4294967295 |
+
+  @FOG_KERNEL_046
+  Scenario: A read the server answers short ends there, and a write it takes short says so
+    Given the server answers at most 2 bytes of a read and takes at most 3 of a write
+    When the process mounts descriptor 3 on "/n" with creation
+    Then reading "/n/notes" gives "he"
+    And writing "hello" to a new "/n/docs/x" writes 3 bytes
+
+  @FOG_KERNEL_048
+  Scenario: A listing, a refused open and a failed create leave the server only the fids the mount keeps
+    Given the server refuses to open "notes" with "no way"
+    When the process mounts descriptor 3 on "/n" with creation
+    And the process lists "/n"
+    And the server's fids are counted
+    And the process lists "/n"
+    And the process opens "/n/notes" for reading
+    And the process tries to create "/n/notes/x"
+    Then the server holds the fids it had
+
+  @FOG_KERNEL_048
+  Scenario: Removing a mounted file removes it from the server, and its name walks no more
+    When the process mounts descriptor 3 on "/n"
+    And the server's fids are counted
+    And the process stats "/n/notes"
+    And the process removes "/n/notes"
+    Then the server's tree has no "notes"
+    And stating "/n/notes" fails with "file does not exist"
+    And the server holds the fids it had
+
+  @FOG_KERNEL_048
+  Scenario: An open with ORCLOSE asks the server to remove the file when its fid is clunked
+    When the process mounts descriptor 3 on "/n"
+    And the process opens "/n/notes" with ORCLOSE and closes it
+    Then the server was asked to open a file with ORCLOSE
+
+  @FOG_KERNEL_044
+  Scenario: Changing a mounted file's mode, by its name or by a descriptor, is the server's wstat
+    When the process mounts descriptor 3 on "/n"
+    And the process changes the mode of "/n/notes" to 600
+    And the process opens "/n/notes" and changes its mode through the descriptor to 640
+    Then the connection carried 2 Twstats
+
+  @FOG_KERNEL_049
+  Scenario: A directory far down is walked to again from the root in pieces of 16 names
+    Given the server's tree holds 20 directories, one in another, and the files "f1" to "f4"
+    And the mount driver holds at most 1 fids for walked files
+    When the process mounts descriptor 3 on "/n"
+    And the process changes to the deepest directory
+    And the process stats "/n/f1" to "/n/f4"
+    And the server's Twalks are counted
+    Then stating "." again gives the file "d20"
+    And the server's Twalks since carried 16 names and then 4
+
+  @FOG_KERNEL_049
+  Scenario Outline: A walk from the root that falls short leaves no fid on the server
+    Given the server's tree holds 20 directories, one in another, and the files "f1" to "f4"
+    And the mount driver holds at most 1 fids for walked files
+    When the process mounts descriptor 3 on "/n"
+    And the process changes to the deepest directory
+    And the process stats "/n/f1" to "/n/f4"
+    And the server's fids are counted
+    And the server's "<directory>" loses "<child>"
+    Then stating "." fails with "file does not exist"
+    And the server holds the fids it had
+
+    Examples:
+      | directory                                     | child |
+      | d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19 | d20   |
+      | d1/d2/d3/d4                                   | d5    |
+
+  @FOG_KERNEL_049
+  Scenario: The driver lets go of the fid used least lately
+    Given the server's tree holds the directories "a", "b" and "c"
+    And the mount driver holds at most 2 fids for walked files
+    When the process mounts descriptor 3 on "/n"
+    And the process changes to "/n/a"
+    And the process stats "/n/b"
+    And the process stats "."
+    And the process stats "/n/c"
+    And the server's Twalks are counted
+    Then stating "." again walks no names
+
+  @FOG_KERNEL_050
+  Scenario: Two mounts of one connection share it, versioned once
+    When the process duplicates descriptor 3 as descriptor 4
+    And the process mounts descriptor 3 on "/n"
+    And the process mounts descriptor 4 on "/tmp"
+    Then reading "/n/notes" gives "hello"
+    And reading "/tmp/notes" gives "hello"
+    And the connection carried one Tversion
+
+  @FOG_KERNEL_050
+  Scenario: A server that refuses the version refuses the mount, and the descriptor can still be closed
+    Given the server refuses Tversion with "no versions here"
+    When the process tries to mount descriptor 3 on "/n"
+    Then the call fails with "no versions here"
+    And descriptor 3 can be closed
