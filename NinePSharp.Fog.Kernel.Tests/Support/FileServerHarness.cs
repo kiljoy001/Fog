@@ -81,9 +81,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
                 break;
             case NinePMessage.MsgTflush flush:
                 Flushed.Add(flush.Item.OldTag);
-                if (held.TryRemove(flush.Item.OldTag, out CancellationTokenSource? cancel))
+                if (held.TryGetValue(flush.Item.OldTag, out CancellationTokenSource? holding))
                 {
-                    await cancel.CancelAsync();
+                    await holding.CancelAsync();
                 }
 
                 break;

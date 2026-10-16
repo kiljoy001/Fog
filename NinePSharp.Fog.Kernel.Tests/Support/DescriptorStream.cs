@@ -38,7 +38,7 @@ public sealed class DescriptorStream(Process process, int fd) : Stream
     {
         try
         {
-            await process.WriteAsync(fd, buffer.ToArray());
+            await process.WriteAsync(fd, buffer.ToArray(), cancellationToken);
         }
         catch (SyscallException error)
         {
