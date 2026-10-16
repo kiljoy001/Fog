@@ -79,3 +79,9 @@ Feature: The kernel boots its root as 9front's bootrc and /lib/namespace build i
     Given the store's "/bin/cat" holds "an old cat"
     When a kernel with the program "cat" boots on the store
     Then reading "/root/bin/cat" gives the managed program "cat"
+
+  @FOG_KERNEL_042
+  Scenario: A managed program whose name has directories is written under them in the store's /bin
+    When a kernel with the program "aux/listen1" boots on the store
+    Then reading "/root/bin/aux/listen1" gives the managed program "aux/listen1"
+    And "/bin/aux" is a directory of device "R"

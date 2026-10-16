@@ -98,9 +98,17 @@ public sealed class FogKernel
         ResourceHandle bin = await DirectoryAsync("bin");
         foreach (string name in programs.Keys)
         {
-            ResourceOpenHandle program = await Files.WalkAsync(bin, name, CancellationToken.None) is { } installed
+            // A name such as aux/listen1 is written in the directories it names, made where missing.
+            ResourceHandle directory = bin;
+            string[] elements = name.Split('/');
+            foreach (string element in elements[..^1])
+            {
+                directory = await Files.WalkAsync(directory, element, CancellationToken.None) ?? await Files.CreateAsync(directory, element, true, CancellationToken.None);
+            }
+
+            ResourceOpenHandle program = await Files.WalkAsync(directory, elements[^1], CancellationToken.None) is { } installed
                 ? await Files.OpenAsync(installed, NinePConstants.OWRITE | NinePConstants.OTRUNC, Context(0, User), CancellationToken.None)
-                : await Files.CreateAndOpenAsync(bin, name, 0b111_111_101, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
+                : await Files.CreateAndOpenAsync(directory, elements[^1], 0b111_111_101, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
             await Files.WriteAsync(program, 0, Encoding.UTF8.GetBytes($"\0fog {name}\n"), Context(0, User), CancellationToken.None);
             await Files.ClunkAsync(program, Context(0, User), CancellationToken.None);
         }
