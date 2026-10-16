@@ -20,6 +20,7 @@ internal static class Errors
     public const string NoCreate = "mounted directory forbids creation";
     public const string Mount = "inconsistent mount";
     public const string IsMountPoint = "is a mount point";
+    public const string NoAttach = "mount/attach disallowed";
     public const string EmptyName = "empty file name";
     public const string TooLong = "name too long";
     public const string BadChar = "bad character in file name";

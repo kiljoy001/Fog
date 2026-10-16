@@ -37,6 +37,11 @@ public sealed class FogKernel
 
     internal RootDevice Slash { get; }
 
+    internal MountDevice Mounts { get; } = new();
+
+    // How many fids a mount holds for files it has only walked to.
+    internal int MountFids { get; set; } = 256;
+
     internal string User { get; }
 
     internal IReadOnlyList<ExecLoader> Loaders { get; }

@@ -32,7 +32,7 @@ public sealed class Process
         Cons = new ConsDevice(this, kernel.User);
         Text = text;
         User = user;
-        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash);
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts);
         (plane, calls) = Bind();
     }
 
@@ -278,7 +278,15 @@ public sealed class Process
 
     public async ValueTask<Stat> StatAsync(string path)
     {
-        return KernelFileStats.ToStat(await plane.StatAsync(await ResolveAsync(path), CancellationToken.None));
+        NamespaceChannel channel = await ResolveAsync(path);
+        try
+        {
+            return KernelFileStats.ToStat(await plane.StatAsync(channel, CancellationToken.None));
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
+        }
     }
 
     public async ValueTask<long> SeekAsync(int fd, long offset, int whence)
@@ -295,6 +303,63 @@ public sealed class Process
         {
             // sysseek: a directory only back to its start, and nothing before a file's.
             throw new SyscallException(error.Message == "negative offset" ? Errors.NegativeOffset : Errors.IsDirectory);
+        }
+    }
+
+    // bindmount for mount: the descriptor's connection is versioned the first time, attached as the
+    // caller, and what it attached bound on old; then the descriptor is closed. Mounting with an
+    // authentication descriptor is not implemented yet.
+    public async ValueTask MountAsync(int fd, int afd, string old, MountFlags flags, string aname)
+    {
+        if (afd >= 0)
+        {
+            throw new NotSupportedException("mount with an authentication descriptor is not implemented");
+        }
+
+        if (process.ProcessGroup.MountTable.MountsDisabled)
+        {
+            throw new SyscallException(Errors.NoAttach);
+        }
+
+        DescriptorLease transport;
+        try
+        {
+            transport = process.Descriptors.Acquire(fd);
+        }
+        catch (ArgumentException)
+        {
+            throw new SyscallException(Errors.BadFd);
+        }
+
+        if ((transport.Handle.Mode & 3) != NinePConstants.ORDWR)
+        {
+            await transport.DisposeAsync();
+            throw new SyscallException(Errors.BadUseFd);
+        }
+
+        MountTree tree;
+        try
+        {
+            MountConnection connection = await kernel.Mounts.ConnectAsync(transport, devices.Device(transport.Handle.Resource), () => kernel.Context(Pid, User));
+            tree = await kernel.Mounts.AttachAsync(connection, User, aname, kernel.MountFids);
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
+        }
+
+        var source = new NamespaceMountSource(NamespaceChannel.Restore([new ChannelFrame("/", tree.Root)]), NinePConstants.ORDWR, aname, closeAsync: () => CloseAsync(fd));
+        try
+        {
+            await new NamespaceSyscalls(devices).MountAsync(process, source, old, flags);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
+        {
+            throw await NotFoundAsync(old);
+        }
+        catch (NamespaceException error) when (error.Error is NamespaceError.MountTypeMismatch or NamespaceError.MountTargetMustBeDirectory)
+        {
+            throw new SyscallException(Errors.Mount);
         }
     }
 

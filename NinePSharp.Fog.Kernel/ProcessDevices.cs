@@ -2,7 +2,7 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes, RootDevice slash)
+internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes, RootDevice slash, MountDevice mounts)
     : IResourceDataOperations, IResourceOpenStatOperations, IResourceWStatOperations
 {
     public ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
@@ -47,17 +47,18 @@ internal sealed class ProcessDevices(Process caller, IResourceDataOperations fil
     public ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
         => Updates(handle.Resource).WStatOpenAsync(handle, stat, context, cancellationToken);
 
-    // devwstat: a device that does not change entries refuses with Eperm.
-    private IResourceWStatOperations Updates(ResourceHandle resource)
-        => Device(resource) as IResourceWStatOperations ?? throw new ResourceWStatRejectedException(Errors.Permission);
-
-    private IResourceDataOperations Device(ResourceHandle handle) => handle.Identity.Provider switch
+    internal IResourceDataOperations Device(ResourceHandle handle) => handle.Identity.Provider switch
     {
         PipeDevice.Provider => pipes,
         RootDevice.Provider => slash,
+        MountDevice.Provider => mounts,
         DupDevice.Provider => caller.Dup,
         ConsDevice.Provider => caller.Cons,
         _ when handle.Identity.Provider == caller.Environment.Provider => caller.Environment,
         _ => files,
     };
+
+    // devwstat: a device that does not change entries refuses with Eperm.
+    private IResourceWStatOperations Updates(ResourceHandle resource)
+        => Device(resource) as IResourceWStatOperations ?? throw new ResourceWStatRejectedException(Errors.Permission);
 }
