@@ -121,7 +121,7 @@ coyote() {
   cat > "$output/rewrite.coyote.json" <<JSON
 {
   "AssembliesPath": ".",
-  "Assemblies": ["NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll", "NinePSharp.Server.dll"],
+  "Assemblies": ["NinePSharp.Fog.Server.dll", "NinePSharp.Fog.dll", "NinePSharp.Fog.Thread.dll", "NinePSharp.Fog.Gefs.dll", "NinePSharp.Fog.Kernel.dll", "NinePSharp.Server.dll"],
   "IsDataRaceCheckingEnabled": true
 }
 JSON
