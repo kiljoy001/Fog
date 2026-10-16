@@ -209,8 +209,8 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - The root is one host's gefs store until it is replicated, as the architecture describes.
 - Fog has no `$cputype`: in place of `bind /$cputype/bin /bin`, the store's `/bin` is bound on
   `/bin` with creation, so a program copied there is kept. `#/` has no `boot` directory.
-- Until the mount driver is built, the store is served in the host's own process; its files stat
-  as the mount driver's, device `M`.
+- The store is served in the host's own process rather than by gefs speaking 9P on
+  `/srv/boot`; its files stat as the mount driver's, device `M`.
 - Until the store's `/adm/users` is read, each user is the only member of its own group.
 - The mount driver names files by qid, as the rest of Fog's namespace does, so it holds a fid for
   an open file but only a bounded cache of fids for files it has walked to, walking to one again by
