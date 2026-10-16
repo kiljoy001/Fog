@@ -627,7 +627,7 @@ internal sealed partial class RcShell
         }
         else
         {
-            while (await WaitforAsync(runq.Pid) < 0)
+            while (await WaitforAsync(runq.Pid))
             {
             }
 

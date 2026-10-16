@@ -1,4 +1,5 @@
 using System.Text;
+using Plan9.Utf;
 
 namespace NinePSharp.Fog.Kernel;
 
@@ -93,19 +94,17 @@ public sealed partial class Process
         }
     }
 
-    // exec's copy of the arguments for proc(3): at most 128 bytes, the last ending at a whole rune.
+    // exec's copy of the arguments for proc(3): at most 128 bytes, and when that cuts the last
+    // argument, a NUL at the last place fullrune finds a whole rune, as sysexec puts it.
     private void SaveArgs(IReadOnlyList<string> argv)
     {
         byte[] all = Encoding.UTF8.GetBytes(string.Concat(argv.Select(arg => arg + '\0')));
-        if (all.Length > ArgsMax)
+        all = all[..Math.Min(all.Length, ArgsMax)];
+        if (all[^1] != 0)
         {
-            int end = ArgsMax - 1;
-            while (end > 0 && (all[end] & 0xC0) == 0x80)
-            {
-                end--;
-            }
-
-            all = [.. all[..end], 0];
+            int end = Enumerable.Range(1, ArgsMax - 1).Where(i => Utf.FullRune(all.AsSpan(i, ArgsMax - i))).Max();
+            all[end] = 0;
+            all = all[..(end + 1)];
         }
 
         lock (debug)

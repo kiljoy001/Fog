@@ -19,8 +19,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     private readonly ConcurrentDictionary<uint, string> opened = new();
     private readonly CancellationTokenSource hangup = new();
     private readonly TaskCompletionSource<bool> release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly List<TaskCompletionSource<bool>> readsHeld = [];
-    private int heldReads;
+    private readonly List<TaskCompletionSource<bool>> requestsHeld = [];
+    private readonly TaskCompletionSource<bool> holdFlushed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int heldRequests;
     private Task serving = Task.CompletedTask;
     private Stream? stream;
 
@@ -42,6 +43,11 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     public int LiveFids => fids.Count;
 
     public bool HoldReads { get; set; }
+
+    public bool HoldWrites { get; set; }
+
+    // Done once a flush has ended a request held.
+    public Task HoldFlushed => holdFlushed.Task;
 
     // What the server answers of an open's iounit, how much of a read it gives and of a write it
     // takes, and why it refuses Tversion; null leaves the server's own answer.
@@ -72,10 +78,10 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     public void Release() => release.TrySetResult(true);
 
-    // Done once the nth read, counting from 1, has come to be held.
-    public Task ReadHeld(int n)
+    // Done once the nth read or write, counting from 1, has come to be held.
+    public Task RequestHeld(int n)
     {
-        lock (readsHeld)
+        lock (requestsHeld)
         {
             return Held(n).Task;
         }
@@ -128,6 +134,11 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
                 break;
             case NinePMessage.MsgTwrite write:
                 LargestData = Math.Max(LargestData, (int)write.Item.Count);
+                if (HoldWrites && await HoldAsync(write.Item.Tag) is { } refused)
+                {
+                    return refused;
+                }
+
                 break;
             case NinePMessage.MsgTopen open:
                 OpenModes.Enqueue(open.Item.Mode);
@@ -140,17 +151,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
             case NinePMessage.MsgTread read:
                 ReadTags.Add(read.Item.Tag);
                 LargestData = Math.Max(LargestData, (int)read.Item.Count);
-                if (HoldReads)
+                if (HoldReads && await HoldAsync(read.Item.Tag) is { } interrupted)
                 {
-                    lock (readsHeld)
-                    {
-                        Held(++heldReads).TrySetResult(true);
-                    }
-
-                    if (await HoldAsync(read.Item) is { } interrupted)
-                    {
-                        return interrupted;
-                    }
+                    return interrupted;
                 }
 
                 break;
@@ -181,18 +184,23 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     private TaskCompletionSource<bool> Held(int n)
     {
-        while (readsHeld.Count < n)
+        while (requestsHeld.Count < n)
         {
-            readsHeld.Add(new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+            requestsHeld.Add(new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
         }
 
-        return readsHeld[n - 1];
+        return requestsHeld[n - 1];
     }
 
-    private async Task<object?> HoldAsync(Tread read)
+    private async Task<object?> HoldAsync(ushort tag)
     {
         using var cancel = new CancellationTokenSource();
-        held[read.Tag] = cancel;
+        held[tag] = cancel;
+        lock (requestsHeld)
+        {
+            Held(++heldRequests).TrySetResult(true);
+        }
+
         try
         {
             await release.Task.WaitAsync(cancel.Token);
@@ -200,11 +208,12 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
         }
         catch (OperationCanceledException)
         {
-            return new Rerror(read.Tag, "interrupted");
+            holdFlushed.TrySetResult(true);
+            return new Rerror(tag, "interrupted");
         }
         finally
         {
-            held.TryRemove(read.Tag, out _);
+            held.TryRemove(tag, out _);
         }
     }
 

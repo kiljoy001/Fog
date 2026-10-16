@@ -132,14 +132,20 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
 
   @FOG_KERNEL_056
   Scenario Outline: A note id that names no group of the same user's, or no group, is refused
+    A note id is read as atoi reads it, and taken as an unsigned number, so a negative one names
+    a group no process has.
+
     Given a child held before its next call
     When the process writes "<id>" to the child's noteid
     Then the write fails with "<error>"
 
     Examples:
-      | id     | error                  |
-      | 0      | bad arg in system call |
-      | 999999 | permission denied      |
+      | id          | error                  |
+      | 0           | bad arg in system call |
+      | none        | bad arg in system call |
+      | 999999      | permission denied      |
+      | -1          | permission denied      |
+      | 99999999999 | permission denied      |
 
   @FOG_KERNEL_057
   Scenario: args reads the arguments a process was run with, each quoted as rc quotes it

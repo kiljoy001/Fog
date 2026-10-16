@@ -124,12 +124,12 @@ internal sealed partial class RcShell
     }
 
     // Waitfor: wait for pid, or for every child when pid is -1, keeping the statuses of a
-    // pipeline's other commands for Xpipewait; -1 when a note interrupted the wait.
-    private async ValueTask<int> WaitforAsync(long pid)
+    // pipeline's other commands for Xpipewait; true, as 9front's -1, when a note interrupted the wait.
+    private async ValueTask<bool> WaitforAsync(long pid)
     {
         if (pid >= 0 && !waitpids.Contains(pid))
         {
-            return 0;
+            return false;
         }
 
         for (Waitmsg? w; (w = await WaitAsync()) is not null;)
@@ -139,7 +139,7 @@ internal sealed partial class RcShell
             if (w.Pid == pid)
             {
                 Setstatus(RcText.Rc(w.Message));
-                return 0;
+                return false;
             }
 
             for (RcThread? p = runq!.Ret; p is not null; p = p.Ret)
@@ -152,7 +152,7 @@ internal sealed partial class RcShell
             }
         }
 
-        return errstr == "interrupted" ? -1 : 0;
+        return errstr == "interrupted";
     }
 
     // Vinit: the variables of /env, each file's value its words ended by NULs.

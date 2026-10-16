@@ -148,7 +148,7 @@ internal sealed partial class RcShell
             return ValueTask.CompletedTask;
         });
 
-        while (await WaitforAsync(pid) < 0)
+        while (await WaitforAsync(pid))
         {
         }
 

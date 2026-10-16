@@ -4968,6 +4968,135 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_213
+  Scenario: A note a builtin's own output posts waits for the builtin to end before its trap runs
+    When rc runs the script
+      """
+      fn sighup { echo caught hangup }
+      hangup=1
+      whatis hangup >/proc/$pid/note
+      echo after
+      """
+    Then it prints
+      """
+      caught hangup
+      after
+      """
+
+  @FOG_RC_RUN_213
+  Scenario Outline: Each note rc traps runs the function named for it
+    When rc runs the script
+      """
+      fn <function> { echo caught <function> }
+      echo -n '<note>' >/proc/$pid/note
+      echo after
+      """
+    Then it prints
+      """
+      caught <function>
+      after
+      """
+
+    Examples:
+      | note            | function |
+      | quit            | sigquit  |
+      | alarm           | sigalrm  |
+      | kill            | sigkill  |
+      | sys: fp: divide | sigfpe   |
+      | term            | sigterm  |
+
+  @FOG_RC_RUN_213
+  Scenario: A trap's function is given the shell's arguments
+    When rc runs the script
+      """
+      fn sighup { echo caught with $* }
+      *=(a b)
+      echo -n hangup >/proc/$pid/note
+      """
+    Then it prints
+      """
+      caught with a b
+      """
+
+  @FOG_RC_RUN_213
+  Scenario: An exit note runs sigexit, which rc runs again as it exits
+    When rc runs the script
+      """
+      fn sigexit { echo caught sigexit }
+      echo -n exit >/proc/$pid/note
+      echo after
+      """
+    Then it prints
+      """
+      caught sigexit
+      after
+      caught sigexit
+      """
+
+  @FOG_RC_RUN_213
+  Scenario: A second interrupt while one waits for its trap is dropped
+    When rc runs the script
+      """
+      fn sigint { echo caught interrupt }
+      rc -c 'for(n in 1 2) echo -n interrupt >/proc/'$pid'/note'
+      echo after
+      """
+    Then it prints
+      """
+      caught interrupt
+      after
+      """
+
+  @FOG_RC_RUN_213
+  Scenario: A second hangup while one waits for its trap runs the trap again
+    When rc runs the script
+      """
+      fn sighup { echo caught hangup }
+      rc -c 'for(n in 1 2) echo -n hangup >/proc/'$pid'/note'
+      echo after
+      """
+    Then it prints
+      """
+      caught hangup
+      caught hangup
+      after
+      """
+
+  @FOG_RC_RUN_213
+  Scenario: A forked rc posted a note it traps exits rather than running the trap
+    When rc runs the script
+      """
+      fn sighup { echo caught by $who }
+      who=parent
+      @{ who=child; me=`{cat /dev/ppid}; echo -n hangup >/proc/$me/note; echo after in child }
+      echo after in parent
+      """
+    Then it prints
+      """
+      after in parent
+      """
+
+  @FOG_RC_RUN_213
+  Scenario Outline: A note that interrupts rc's wait for a child leaves rc waiting until the child is done
+    When rc runs the script
+      """
+      fn sighup { waited=$status; echo caught hangup }
+      <command>
+      ~ $waited *3 && echo waited
+      """
+    Then it prints
+      """
+      child done
+      caught hangup
+      waited
+      """
+
+    Examples:
+      | command                                                                            |
+      | rc -c 'echo -n hangup >/proc/'$pid'/note; echo child done; exit 3'                  |
+      | @{ echo -n hangup >/proc/$pid/note; echo child done; exit 3 }                      |
+      | echo \| @{ cat >/dev/null; echo -n hangup >/proc/$pid/note; echo child done; exit 3 } |
+
+  @FOG_RC_RUN_213
   Scenario: An interrupt runs sigint
     When rc runs the script
       """
@@ -5018,6 +5147,13 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_216
+  Scenario: A hangup that interrupts the write of an interactive rc's prompt runs its trap at once
+    The trap cannot wait for the command to be read, as reading one clears the traps waiting.
+
+    When rc -i reads "echo after" from a file server, and a hangup interrupts the write of its first prompt to the server
+    Then it prints nothing
+
+  @FOG_RC_RUN_216
   Scenario: An interrupt while an interactive rc waits to read prints a newline and prompts again
     When rc -i reads "echo after" from a file server, and is interrupted as it waits to read
     Then it prints, ending with a prompt
@@ -5026,3 +5162,4 @@ Feature: rc runs scripts as 9front rc does
       % after
       % 
       """
+

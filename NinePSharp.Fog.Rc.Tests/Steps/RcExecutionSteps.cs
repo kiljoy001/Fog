@@ -85,16 +85,43 @@ public sealed class RcExecutionSteps
         await init.MountAsync(client, -1, "/n", MountFlags.Replace, string.Empty);
         await RunAsync(string.Empty, "/n/input", ["-i"], async pid =>
         {
-            await server.ReadHeld(1).WaitAsync(Bound);
+            await server.RequestHeld(1).WaitAsync(Bound);
             int fd = await init.OpenAsync($"/proc/{pid}/note", NinePConstants.OWRITE);
             await init.WriteAsync(fd, "interrupt"u8.ToArray());
             await init.CloseAsync(fd);
 
             // The read the note interrupted is flushed before rc reads again.
-            await server.ReadHeld(2).WaitAsync(Bound);
+            await server.RequestHeld(2).WaitAsync(Bound);
             server.Release();
         });
     }
+
+    // 9front's console cannot be made to hold a write, so this runs on Fog alone.
+    [When(@"^rc -i reads ""(.*)"" from a file server, and a hangup interrupts the write of its first prompt to the server$")]
+    public async Task WhenInterruptedPrompting(string text)
+    {
+        fogOnly = true;
+        await using var server = new FileServerHarness { HoldWrites = true };
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("input", Encoding.UTF8.GetBytes(text + "\n")));
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("prompt", []));
+        var (client, served) = await init!.PipeAsync();
+        server.Serve(init, served);
+        await init.MountAsync(client, -1, "/n", MountFlags.Replace, string.Empty);
+        async Task HangUpAsync(long pid)
+        {
+            await server.RequestHeld(1).WaitAsync(Bound);
+            int fd = await init.OpenAsync($"/proc/{pid}/note", NinePConstants.OWRITE);
+            await init.WriteAsync(fd, "hangup"u8.ToArray());
+            await init.CloseAsync(fd);
+            await server.HoldFlushed.WaitAsync(Bound);
+            server.Release();
+        }
+
+        await RunAsync(string.Empty, "/n/input", ["-i"], HangUpAsync, "/n/prompt");
+    }
+
+    [Then("it prints nothing")]
+    public Task ThenPrintsNothing() => CompareAsync(string.Empty);
 
     [Then("it prints")]
     public Task ThenPrints(string expected) => CompareAsync(expected + "\n");
@@ -136,7 +163,7 @@ public sealed class RcExecutionSteps
     }
 
     // What happens while rc runs, given its pid.
-    private async Task RunAsync(string text, string input, string[] arguments, Func<long, Task>? meanwhile = null)
+    private async Task RunAsync(string text, string input, string[] arguments, Func<long, Task>? meanwhile = null, string? error = null)
     {
         script = text;
         oracle = $"@{{rfork En; cd /; /bin/rc {string.Join(' ', arguments)} <{input} >[2=1]}}";
@@ -145,7 +172,7 @@ public sealed class RcExecutionSteps
         long pid = init.Fork(RforkFlags.Fdg, async child =>
         {
             await child.DupAsync(write, 1);
-            await child.DupAsync(write, 2);
+            await child.DupAsync(error is null ? write : await child.OpenAsync(error, NinePConstants.OWRITE), 2);
             await child.CloseAsync(read);
             Assert.Equal(0, await child.OpenAsync(input, NinePConstants.OREAD));
             for (int fd = 3; fd <= lastBusy; fd++)

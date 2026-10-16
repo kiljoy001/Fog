@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="NinePSharp.Namespaces" Version="$(NinePSharpVersion)" />
+    <PackageReference Include="Plan9.Utf" Version="0.1.0" />
   </ItemGroup>
 
 </Project>

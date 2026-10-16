@@ -90,9 +90,10 @@ internal sealed partial class RcShell
         }
     }
 
+    // flushio: a write that failed runs the traps a note left waiting, if any.
     private async ValueTask FlushioAsync(RcIo f)
     {
-        if (!await f.FlushAsync(process) && ntrap != 0)
+        if (!await f.FlushAsync(process))
         {
             await DotrapAsync();
         }

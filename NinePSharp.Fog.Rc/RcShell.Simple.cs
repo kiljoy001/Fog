@@ -197,7 +197,7 @@ internal sealed partial class RcShell
             Poplist();
 
             // Interrupts do not get rc out.
-            while (await WaitforAsync(pid) < 0)
+            while (await WaitforAsync(pid))
             {
             }
         }

@@ -10,7 +10,8 @@ namespace NinePSharp.Fog.Kernel;
 internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 {
     public const string Provider = "proc";
-    private const int Shift = 3;
+    private const ulong Slots = 8;
+    private const long Overflow = (long)int.MaxValue + 1;
     private const uint Directory = (uint)NinePConstants.FileMode9P.DMDIR | 0b101_101_101;
     private const uint ProcMode = 0b110_100_000;
     private static readonly int[] Access = [0b100_000_000, 0b010_000_000, 0b110_000_000, 0b001_000_000];
@@ -42,7 +43,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
         {
             if (long.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out long pid) && Format(pid) == name && kernel.Processes.ContainsKey(pid))
             {
-                found = Handle((ulong)pid << Shift, QidType.QTDIR);
+                found = Handle((ulong)pid * Slots, QidType.QTDIR);
             }
         }
         else if (Of(directory) == File.Directory && Array.FindIndex(Files, file => file.Name == name) is int index and >= 0)
@@ -56,7 +57,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     public ValueTask<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
     {
         IReadOnlyList<ResourceDirectoryEntry> entries = directory.Identity.Path == 0
-            ? kernel.Processes.Keys.Order().Select(pid => new ResourceDirectoryEntry(Format(pid), Handle((ulong)pid << Shift, QidType.QTDIR))).ToArray()
+            ? kernel.Processes.Keys.Order().Select(pid => new ResourceDirectoryEntry(Format(pid), Handle((ulong)pid * Slots, QidType.QTDIR))).ToArray()
             : Files.Select((file, index) => new ResourceDirectoryEntry(file.Name, Handle(directory.Identity.Path | (uint)(index + 1), QidType.QTFILE))).ToArray();
         return ValueTask.FromResult(entries);
     }
@@ -187,7 +188,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 
                 break;
             case File.NoteId:
-                kernel.ChangeNoteId(kernel.Processes.GetValueOrDefault(context.ProcessId), process, Atoi(text));
+                kernel.ChangeNoteId(kernel.Processes.GetValueOrDefault(context.ProcessId), process, (uint)Atoi(text));
                 break;
             default:
                 throw new IOException(Errors.Permission);
@@ -219,7 +220,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 
     private static ResourceHandle Handle(ulong path, QidType type) => new(new ResourceIdentity(Provider, "#p", path), type);
 
-    private static File Of(ResourceHandle resource) => (File)(resource.Identity.Path & ((1 << Shift) - 1));
+    private static File Of(ResourceHandle resource) => (File)(resource.Identity.Path % Slots);
 
     private static string Format(long pid) => pid.ToString(CultureInfo.InvariantCulture);
 
@@ -227,7 +228,10 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     private static string Number(long value) => value.ToString(CultureInfo.InvariantCulture).PadLeft(11) + " ";
 
     private static ReadOnlyMemory<byte> Slice(byte[] bytes, ulong offset, uint count)
-        => offset >= (ulong)bytes.Length ? ReadOnlyMemory<byte>.Empty : bytes.AsMemory((int)offset, (int)Math.Min(count, (ulong)bytes.Length - offset));
+    {
+        ReadOnlyMemory<byte> rest = bytes.AsMemory((int)Math.Min(offset, (ulong)bytes.Length));
+        return rest[..(int)Math.Min(count, (uint)rest.Length)];
+    }
 
     // What was written, as the kernel's buffer holds it: up to the first NUL.
     private static string Text(ReadOnlySpan<byte> data)
@@ -236,23 +240,29 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
         return Encoding.UTF8.GetString(nul < 0 ? data : data[..nul]);
     }
 
-    // atoi: optional white space and sign, then decimal digits, and 0 for none.
-    private static long Atoi(string text)
+    // atoi, as strtol reads it: white space, a sign, then decimal digits, held to a long's range
+    // as Plan 9's long is 32 bits; 0 for none.
+    private static int Atoi(string text)
     {
-        ReadOnlySpan<char> s = text.AsSpan().TrimStart(" \t\n");
-        bool negative = s.Length > 0 && s[0] == '-';
-        if (s.Length > 0 && s[0] is '-' or '+')
+        ReadOnlySpan<char> s = text.AsSpan().TrimStart(" \t\n\f\r\v");
+        bool negative = s.StartsWith("-");
+        if (negative || s.StartsWith("+"))
         {
             s = s[1..];
         }
 
         long value = 0;
-        for (int i = 0; i < s.Length && char.IsAsciiDigit(s[i]); i++)
+        foreach (char c in s)
         {
-            value = (value * 10) + (s[i] - '0');
+            if (!char.IsAsciiDigit(c))
+            {
+                break;
+            }
+
+            value = Math.Min((value * 10) + (c - '0'), Overflow);
         }
 
-        return negative ? -value : value;
+        return (int)Math.Clamp(negative ? -value : value, int.MinValue, int.MaxValue);
     }
 
     private void NoNone(Process? caller, Process process) => NoNone(caller, process, kernel.User);
@@ -265,7 +275,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     }
 
     private Process Owner(ResourceHandle resource)
-        => kernel.Processes.GetValueOrDefault((long)(resource.Identity.Path >> Shift)) is { Exited: false } process
+        => kernel.Processes.GetValueOrDefault((long)(resource.Identity.Path / Slots)) is { Exited: false } process
             ? process
             : throw new IOException(Errors.ProcessExited);
 }
