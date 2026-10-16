@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; slice 1, the host booting the kernel on gefs, is built.
+Status: design; slices 1 and 2, the host booting the kernel on gefs and the mount driver, are built.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -212,6 +212,12 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - Until the mount driver is built, the store is served in the host's own process; its files stat
   as the mount driver's, device `M`.
 - Until the store's `/adm/users` is read, each user is the only member of its own group.
+- The mount driver names files by qid, as the rest of Fog's namespace does, so it holds a fid for
+  an open file but only a bounded cache of fids for files it has walked to, walking to one again by
+  its names from the attached root when needed.
+- A mount connection stays open until its server hangs up; unmounting does not close it.
+- A walk the server refuses reports that the file does not exist, rather than the server's words.
+- `mount` with an authentication descriptor waits for factotum (slice 6).
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.
