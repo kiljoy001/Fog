@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; slices 1 to 3, the host booting the kernel on gefs, the mount driver, and notes with /proc and rc's traps, are built.
+Status: design; slices 1 to 4, the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, and mount, rm, test and read, are built.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -222,6 +222,11 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   a program that makes no calls does not see a note until it makes one, since a managed program
   cannot be stopped between instructions as 9front's clock interrupt stops one.
 - `#p` serves `args`, `note`, `noteid` and `notepg` for each process, and lists no `trace`.
+- `mount` without `-n` mounts unauthenticated until factotum (slice 6), as 9front's does to a
+  server that needs no authentication; `-k` is taken and not used.
+- `mount -N` becomes none through `/dev/user`, as Fog names no device by `#`.
+- `#c/bintime` reads the host's clock, and its time cannot be set through it.
+- Fog has no `/dev/cons` yet, so `test -t` finds no descriptor is the console.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.

@@ -40,6 +40,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     public ConcurrentBag<ushort> ReadTags { get; } = [];
 
+    // Each attach's user and tree.
+    public ConcurrentQueue<(string User, string Name)> Attaches { get; } = [];
+
     public int LiveFids => fids.Count;
 
     public bool HoldReads { get; set; }
@@ -123,6 +126,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
                 break;
             case NinePMessage.MsgTwalk walked:
                 Walks.Enqueue(walked.Item.Wname.Length);
+                break;
+            case NinePMessage.MsgTattach attach:
+                Attaches.Enqueue((attach.Item.Uname, attach.Item.Aname));
                 break;
             case NinePMessage.MsgTflush flush:
                 Flushed.Add(flush.Item.OldTag);

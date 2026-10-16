@@ -35,6 +35,10 @@ public sealed class RcExecutionSteps
     // rc's argv[0]; a login shell's starts with -.
     private string name = "/bin/rc";
 
+    // A file server's end of a pipe whose other end rc starts with as descriptor 3.
+    private FileServerHarness? server;
+    private int served = -1;
+
     [Given(@"^a kernel whose /bin holds rc, echo and cat$")]
     public async Task GivenAKernel()
     {
@@ -62,6 +66,29 @@ public sealed class RcExecutionSteps
         fogOnly = true;
         return WriteAsync(path, text + "\n");
     }
+
+    // 9front's rc cannot be handed this file server, so these run on Fog alone.
+    [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3$")]
+    public async Task GivenFileServer(string file, string text)
+    {
+        fogOnly = true;
+        server = new FileServerHarness();
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile(file, Encoding.UTF8.GetBytes(text + "\n")));
+
+        // Its pipe is 3 and 4, past the descriptors rc's output takes as the other scenarios do.
+        int[] low = [await init!.OpenAsync("/dev/null", NinePConstants.OREAD), await init.OpenAsync("/dev/null", NinePConstants.OREAD), await init.OpenAsync("/dev/null", NinePConstants.OREAD)];
+        var (client, end) = await init.PipeAsync();
+        foreach (int fd in low)
+        {
+            await init.CloseAsync(fd);
+        }
+
+        server.Serve(init, end);
+        served = client;
+    }
+
+    [Then(@"^the file server was attached as ""(.*)"" to ""(.*)""$")]
+    public void ThenAttached(string user, string tree) => Assert.Contains((user, tree), server!.Attaches);
 
     [Given("rc starts with all of its 5000 descriptors in use")]
     public void GivenAllDescriptorsInUse() => (lastBusy, fogOnly) = (4999, true);
@@ -181,6 +208,11 @@ public sealed class RcExecutionSteps
             await child.DupAsync(write, 1);
             await child.DupAsync(error is null ? write : await child.OpenAsync(error, NinePConstants.OWRITE), 2);
             await child.CloseAsync(read);
+            if (served >= 0)
+            {
+                await child.DupAsync(served, 3);
+            }
+
             Assert.Equal(0, await child.OpenAsync(input, NinePConstants.OREAD));
             for (int fd = 3; fd <= lastBusy; fd++)
             {

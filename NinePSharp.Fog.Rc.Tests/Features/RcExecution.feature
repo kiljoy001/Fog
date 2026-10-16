@@ -5422,3 +5422,105 @@ Feature: rc runs scripts as 9front rc does
       not newer than itself
       test: bad time syntax, 1x
       """
+
+  @FOG_RC_RUN_224
+  Scenario: mount prints its usage for flags it cannot take, and reports a file it cannot open unless -q
+    When rc runs the script
+      """
+      mount >[2=1]; ~ $status *usage && echo usage
+      mount -ab /x /y >[2=1]; ~ $status *usage && echo usage again
+      mount -k >[2=1]; ~ $status *usage && echo usage once more
+      mount /dev/nonesuch /n/x >[2=1]; ~ $status *open && echo open
+      mount -q /dev/nonesuch /n/x; ~ $status '' && echo quiet
+      """
+    Then it prints
+      """
+      usage: mount [-a|-b] [-cCnNq] [-k keypattern] /srv/service dir [spec]
+      usage
+      usage: mount [-a|-b] [-cCnNq] [-k keypattern] /srv/service dir [spec]
+      usage again
+      usage: mount [-a|-b] [-cCnNq] [-k keypattern] /srv/service dir [spec]
+      usage once more
+      mount: can't open /dev/nonesuch: file does not exist: '/dev/nonesuch'
+      open
+      quiet
+      """
+
+  @FOG_RC_RUN_225
+  Scenario: mount attaches to the file server on a descriptor as the user, with or without -n
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      cat /tmp/fs/notes
+      """
+    Then it prints
+      """
+      hello
+      """
+    And the file server was attached as "glenda" to ""
+
+  @FOG_RC_RUN_225
+  Scenario: mount -N attaches as none, to the tree its spec names
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount -N /fd/3 /tmp/fs work
+      cat /tmp/fs/notes
+      cat /dev/user; echo
+      """
+    Then it prints
+      """
+      hello
+      glenda
+      """
+    And the file server was attached as "none" to "work"
+
+  @FOG_RC_RUN_226
+  Scenario: mount -c lets files be made in the mount, which takes none without it
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount -nc /fd/3 /tmp/fs
+      echo made >/tmp/fs/new && cat /tmp/fs/new
+      mount -n /fd/3 /tmp/fs
+      echo lost >/tmp/fs/other >[2=1]
+      """
+    Then it prints
+      """
+      made
+      /tmp/s:5: > can't create: /tmp/fs/other: mounted directory forbids creation: '/tmp/fs/other'
+      """
+
+  @FOG_RC_RUN_226
+  Scenario: mount -a and -b put the file server after or before what is mounted there
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/u; echo local >/tmp/u/notes
+      mount -na /fd/3 /tmp/u; cat /tmp/u/notes
+      mount -nb /fd/3 /tmp/u; cat /tmp/u/notes
+      """
+    Then it prints
+      """
+      local
+      hello
+      """
+
+  @FOG_RC_RUN_226
+  Scenario: mount reports a mount that fails, unless -q
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mount -n /fd/3 /tmp/nonesuch >[2=1]; ~ $status *mount && echo failed
+      mount -nq /fd/3 /tmp/nonesuch; ~ $status '' && echo quiet
+      """
+    Then it prints
+      """
+      mount: mount /tmp/nonesuch: file does not exist: '/tmp/nonesuch'
+      failed
+      quiet
+      """
