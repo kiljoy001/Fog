@@ -2,7 +2,8 @@
 Feature: rc runs scripts as 9front rc does
   rc runs on Fog's kernel as a program, bootstrapped by 9front's /rc/lib/rcmain, with echo and cat
   in /bin. A script runs with no input and its output and errors on one pipe, and prints what 9front
-  rc prints for it.
+  rc prints for it. rc traps the notes plan9.c's notifyf does: one it traps runs the function named
+  for it once the instruction it came in has run, and one it does not ends it.
 
   Background:
     Given a kernel whose /bin holds rc, echo and cat
@@ -4950,4 +4951,68 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       after
+      """
+
+  @FOG_RC_RUN_213
+  Scenario: A note runs the function of its trap once the command it interrupted is done, and rc goes on
+    When rc runs the script
+      """
+      fn sighup { echo caught hangup }
+      echo -n hangup >/proc/$pid/note
+      echo after
+      """
+    Then it prints
+      """
+      caught hangup
+      after
+      """
+
+  @FOG_RC_RUN_213
+  Scenario: An interrupt runs sigint
+    When rc runs the script
+      """
+      fn sigint { echo caught interrupt }
+      echo -n interrupt >/proc/$pid/note
+      echo after
+      """
+    Then it prints
+      """
+      caught interrupt
+      after
+      """
+
+  @FOG_RC_RUN_214
+  Scenario: A note rc traps but has no function for ends it as it would exit
+    When rc runs the script
+      """
+      rc -c 'echo -n hangup >/proc/$pid/note; echo not reached'
+      ~ $status '' && echo ended cleanly
+      """
+    Then it prints
+      """
+      ended cleanly
+      """
+
+  @FOG_RC_RUN_214
+  Scenario: A note rc does not trap ends it with the note as its status
+    When rc runs the script
+      """
+      rc -c 'echo -n bogus >/proc/$pid/note; echo not reached'
+      ~ $status *': bogus' && echo ended by bogus
+      """
+    Then it prints
+      """
+      ended by bogus
+      """
+
+  @FOG_RC_RUN_215
+  Scenario: A non-interactive rc with no sigint runs down to its end on an interrupt
+    When rc runs the script
+      """
+      rc -c 'echo -n interrupt >/proc/$pid/note; echo not reached'
+      ~ $status '' && echo ended cleanly
+      """
+    Then it prints
+      """
+      ended cleanly
       """

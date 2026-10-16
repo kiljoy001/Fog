@@ -321,7 +321,7 @@ internal sealed partial class RcShell
             Psubst(io, body);
         }
 
-        await io.FlushAsync(process);
+        await FlushioAsync(io);
         await io.CloseAsync(process);
 
         // The file was just made, so opening it again does not fail.
@@ -627,7 +627,10 @@ internal sealed partial class RcShell
         }
         else
         {
-            await WaitforAsync(runq.Pid);
+            while (await WaitforAsync(runq.Pid) < 0)
+            {
+            }
+
             Setstatus(Concstatus(Takestatus()!, old));
         }
     }

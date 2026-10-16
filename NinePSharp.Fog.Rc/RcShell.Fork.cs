@@ -19,6 +19,7 @@ internal sealed partial class RcShell
         long pid = process.Fork(RforkFlags.Fdg | RforkFlags.Rend, async forked =>
         {
             copy.process = forked;
+            copy.Trapinit();
             await child(copy);
             await copy.RunAsync();
         });
@@ -147,7 +148,10 @@ internal sealed partial class RcShell
             return ValueTask.CompletedTask;
         });
 
-        await WaitforAsync(pid);
+        while (await WaitforAsync(pid) < 0)
+        {
+        }
+
         runq!.Pc = runq.Code[runq.Pc].I;
     }
 

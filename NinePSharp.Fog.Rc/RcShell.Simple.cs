@@ -195,7 +195,11 @@ internal sealed partial class RcShell
         {
             long pid = await ExecforkexecAsync();
             Poplist();
-            await WaitforAsync(pid);
+
+            // Interrupts do not get rc out.
+            while (await WaitforAsync(pid) < 0)
+            {
+            }
         }
     }
 
@@ -583,7 +587,7 @@ internal sealed partial class RcShell
                 Setstatus("not found");
             }
 
-            await @out.FlushAsync(process);
+            await FlushioAsync(@out);
         }
 
         Poplist();

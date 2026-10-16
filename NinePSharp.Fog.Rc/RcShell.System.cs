@@ -124,12 +124,12 @@ internal sealed partial class RcShell
     }
 
     // Waitfor: wait for pid, or for every child when pid is -1, keeping the statuses of a
-    // pipeline's other commands for Xpipewait.
-    private async ValueTask WaitforAsync(long pid)
+    // pipeline's other commands for Xpipewait; -1 when a note interrupted the wait.
+    private async ValueTask<int> WaitforAsync(long pid)
     {
         if (pid >= 0 && !waitpids.Contains(pid))
         {
-            return;
+            return 0;
         }
 
         for (Waitmsg? w; (w = await WaitAsync()) is not null;)
@@ -139,7 +139,7 @@ internal sealed partial class RcShell
             if (w.Pid == pid)
             {
                 Setstatus(RcText.Rc(w.Message));
-                return;
+                return 0;
             }
 
             for (RcThread? p = runq!.Ret; p is not null; p = p.Ret)
@@ -151,6 +151,8 @@ internal sealed partial class RcShell
                 }
             }
         }
+
+        return errstr == "interrupted" ? -1 : 0;
     }
 
     // Vinit: the variables of /env, each file's value its words ended by NULs.
@@ -240,7 +242,7 @@ internal sealed partial class RcShell
 
         RcIo f = RcIo.OpenFd(fd.Value);
         write(f);
-        await f.FlushAsync(process);
+        await FlushioAsync(f);
         await f.CloseAsync(process);
     }
 
@@ -263,7 +265,7 @@ internal sealed partial class RcShell
             await AddenvAsync(v);
         }
 
-        await err.FlushAsync(process);
+        await FlushioAsync(err);
     }
 
     // Opendir and Readdir: a directory's names, or only its directories'.
@@ -371,13 +373,14 @@ internal sealed partial class RcShell
             err.Pchr('\n');
         }
 
-        await err.FlushAsync(process);
+        await FlushioAsync(err);
         RcLexer lex = p.Lex!.Lexer;
         if (p.IFlag)
         {
             promptstr = Vlook("prompt").Val?.Text ?? "% ";
         }
 
+        Noerror();
         lex.ErrorCount = 0;
         RcCode? code = null;
         RcParser.Outcome outcome = await p.Lex.Parser.ParseAsync(async tree =>
@@ -387,8 +390,14 @@ internal sealed partial class RcShell
         });
         if (outcome == RcParser.Outcome.Stop)
         {
-            if (p.IFlag && !lex.Eof)
+            if (p.IFlag && (!lex.Eof || Eintr()))
             {
+                if (Eintr())
+                {
+                    err.Pchr('\n');
+                    lex.Eof = false;
+                }
+
                 --p.Pc;
             }
 
@@ -407,6 +416,8 @@ internal sealed partial class RcShell
             --p.Pc;
         }
 
+        // No double interrupt during blocked writes.
+        ntrap = 0;
         Start(code!, 2, p.Local, p.Redir);
     }
 
@@ -419,7 +430,7 @@ internal sealed partial class RcShell
         }
 
         err.Pstr(promptstr!);
-        await err.FlushAsync(process);
+        await FlushioAsync(err);
 
         runq.Lex!.Lexer.DoPrompt = false;
         RcWord? prompt = Vlook("prompt").Val;
@@ -439,7 +450,7 @@ internal sealed partial class RcShell
         }
 
         f.Pchr('\n');
-        await f.FlushAsync(process);
+        await FlushioAsync(f);
     }
 
     // getflags, for rc's flags: the arguments left start at argv[1]. -1 when a flag is bad.

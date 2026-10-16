@@ -115,11 +115,12 @@ internal sealed class RcIo
     // closeiostr
     public string CloseStr() => RcText.String([.. output]);
 
-    // flushio, for an io on a descriptor; a write error is ignored, as rc only looks for traps there.
-    public async ValueTask FlushAsync(Process process)
+    // flushio, for an io on a descriptor: false if a write failed, when rc looks for traps.
+    public async ValueTask<bool> FlushAsync(Process process)
     {
         byte[] data = [.. output];
         output.Clear();
+        bool written = true;
         for (int at = 0; at < data.Length; at += NBuf)
         {
             try
@@ -128,8 +129,11 @@ internal sealed class RcIo
             }
             catch (SyscallException)
             {
+                written = false;
             }
         }
+
+        return written;
     }
 
     // closeio
@@ -184,8 +188,8 @@ internal sealed class RcIo
         return RcText.String([.. s]);
     }
 
-    // emptyiobuf: an io on no descriptor is at end of file. rc reads only what it opened for reading,
-    // so its reads do not fail.
+    // emptyiobuf: an io on no descriptor is at end of file, and so is one whose read fails, as a
+    // note's interrupting it does.
     private async ValueTask<bool> FillAsync(Process process)
     {
         if (Fd is not { } fd)
@@ -193,7 +197,14 @@ internal sealed class RcIo
             return false;
         }
 
-        input = (await process.ReadAsync(fd, NBuf)).ToArray();
+        try
+        {
+            input = (await process.ReadAsync(fd, NBuf)).ToArray();
+        }
+        catch (SyscallException)
+        {
+            input = [];
+        }
 
         next = 0;
         end = input.Length;

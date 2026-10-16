@@ -78,6 +78,7 @@ internal sealed partial class RcShell
         }
 
         string rcmain = flag['m']?[0] ?? Rcmain;
+        Trapinit();
         await VinitAsync();
         mypid = process.Pid;
         Setvar("pid", new RcWord(mypid.ToString(CultureInfo.InvariantCulture), null));
@@ -111,6 +112,10 @@ internal sealed partial class RcShell
             }
 
             await ExecuteAsync(t.Code[t.Pc++]);
+            if (ntrap != 0)
+            {
+                await DotrapAsync();
+            }
         }
     }
 
@@ -190,6 +195,9 @@ internal sealed partial class RcShell
             mypid = mypid,
             ifnot = ifnot,
             trapped = trapped,
+            ntrap = ntrap,
+            trap = (int[])trap.Clone(),
+            interrupted = interrupted,
             promptstr = promptstr,
             errstr = errstr,
             heres = heres,
