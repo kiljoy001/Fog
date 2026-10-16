@@ -490,9 +490,15 @@ public sealed partial class Process
         using Return returning = new(this);
         Validate(flags);
         VProcess forked = kernel.Table.Fork(Pid, NamespaceMode(flags), descriptorMode: DescriptorMode(flags));
-        var child = new Process(kernel, forked, this, EnvironmentFor(flags), Text, User, (flags & RforkFlags.Noteg) != 0 ? 0 : NoteId);
+
+        // RFNOWAIT: the child has no parent to tell of its end.
+        bool waited = (flags & RforkFlags.Nowait) == 0;
+        var child = new Process(kernel, forked, waited ? this : null, EnvironmentFor(flags), Text, User, (flags & RforkFlags.Noteg) != 0 ? 0 : NoteId);
         child.Notify(notify);
-        Interlocked.Increment(ref children);
+        if (waited)
+        {
+            Interlocked.Increment(ref children);
+        }
 
         _ = Task.Run(() => child.RunAsync(body));
         return child.Pid;
@@ -591,6 +597,27 @@ public sealed partial class Process
         return kernel.Names.TryGetValue(handle, out string? name) ? name : "#|/" + (await FStatAsync(fd)).Name;
     }
 
+    /// <summary>sleep(2): at least the time asked for by the kernel's clock, or none; a note ends it, failing it "interrupted".</summary>
+    public async ValueTask SleepAsync(long milliseconds)
+    {
+        using Return returning = new(this);
+        if (milliseconds <= 0)
+        {
+            await Task.Yield();
+            return;
+        }
+
+        using Interruption interruptible = Interruptible(CancellationToken.None);
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, interruptible.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new SyscallException(Errors.Interrupted);
+        }
+    }
+
     [DoesNotReturn]
     public void Exits(string? status) => throw new ExitException(status ?? string.Empty);
 
@@ -681,8 +708,9 @@ public sealed partial class Process
             throw new SyscallException(Errors.BadArg);
         }
 
+        // RFMEM is taken as given: a managed child shares what its body closes over.
         const RforkFlags implemented = RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Cfdg | RforkFlags.Nameg | RforkFlags.Cnameg
-            | RforkFlags.Envg | RforkFlags.Cenvg | RforkFlags.Noteg | RforkFlags.Rend;
+            | RforkFlags.Envg | RforkFlags.Cenvg | RforkFlags.Noteg | RforkFlags.Rend | RforkFlags.Mem | RforkFlags.Nowait;
         if ((flags & ~implemented) != 0)
         {
             throw new NotSupportedException($"rfork flags {flags} are not implemented");
@@ -921,7 +949,7 @@ public sealed partial class Process
 
         Exit();
         await kernel.Table.TerminateAsync(Pid);
-        parent!.Deliver(new Waitmsg(Pid, status.Length == 0 ? string.Empty : $"{Text} {Pid}: {status}"));
+        parent?.Deliver(new Waitmsg(Pid, status.Length == 0 ? string.Empty : $"{Text} {Pid}: {status}"));
     }
 
     private void Deliver(Waitmsg message) => waits.Writer.TryWrite(message);

@@ -333,3 +333,27 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
     And a process runs "/bin/false"
     Then its parent's wait message for it is "false <pid>: false"
     And reading "/tmp/f" gives "kept"
+
+  @FOG_KERNEL_067
+  Scenario: A child forked with RFNOWAIT is no child of its parent's to wait for
+    When a process forks a child with RFNOWAIT that exits with "gone"
+    Then waiting fails with "no living children"
+
+  @FOG_KERNEL_067
+  Scenario: A child forked with RFNOWAIT leaves no wait message among its parent's children's
+    When a process forks a child with RFNOWAIT that exits with "gone"
+    And a process forks a child that exits with "oops"
+    Then its parent's wait message for it is "*init* <pid>: oops"
+
+  @FOG_KERNEL_068
+  Scenario: sleep returns once the time asked for has passed, and at once for none
+    When a process sleeps 50 milliseconds
+    Then at least 50 milliseconds have passed
+    When a process sleeps 0 milliseconds
+    Then the sleep has returned
+
+  @FOG_KERNEL_068
+  Scenario: A note interrupts a sleep
+    When a child that continues after every note sleeps 60000 milliseconds
+    And the process posts "alarm" to the child
+    Then the child's sleep fails with "interrupted"

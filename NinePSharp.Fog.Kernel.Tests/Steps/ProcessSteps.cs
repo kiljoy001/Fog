@@ -21,6 +21,8 @@ public sealed class ProcessSteps
     private string? failure;
     private string? childRead;
     private IReadOnlyList<string>? childListed;
+    private TimeSpan slept;
+    private Task<string>? sleeping;
 
     [Given(@"^a kernel whose /bin holds the managed programs ""true"", ""false"", ""args"", ""return"" and ""crash""$")]
     public void GivenAKernel() => programs = Programs();
@@ -103,6 +105,66 @@ public sealed class ProcessSteps
         });
         waited = await init.WaitAsync().WaitAsync(Bound);
     }
+
+    [When(@"^a process forks a child with RFNOWAIT that exits with ""(.*)""$")]
+    public void WhenForksNoWait(string status)
+        => init!.Fork(RforkFlags.Fdg | RforkFlags.Nowait, process =>
+        {
+            process.Exits(status);
+            return Task.CompletedTask;
+        });
+
+    [Then(@"^waiting fails with ""(.*)""$")]
+    public async Task ThenWaitFails(string message)
+        => Assert.Equal(message, (await Assert.ThrowsAsync<SyscallException>(() => init!.WaitAsync())).Message);
+
+    [When(@"^a process sleeps (\d+) milliseconds$")]
+    public async Task WhenSleeps(int milliseconds)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        await init!.SleepAsync(milliseconds).AsTask().WaitAsync(Bound);
+        slept = watch.Elapsed;
+    }
+
+    [Then(@"^at least (\d+) milliseconds have passed$")]
+    public void ThenSlept(int milliseconds) => Assert.True(slept >= TimeSpan.FromMilliseconds(milliseconds), $"slept {slept}");
+
+    [Then("the sleep has returned")]
+    public void ThenReturned() => Assert.True(slept < Bound);
+
+    [When(@"^a child that continues after every note sleeps (\d+) milliseconds$")]
+    public async Task WhenChildSleeps(int milliseconds)
+    {
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var outcome = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        child = init!.Fork(RforkFlags.Fdg, async process =>
+        {
+            process.Notify(_ => true);
+            started.SetResult(true);
+            try
+            {
+                await process.SleepAsync(milliseconds);
+                outcome.SetResult("slept");
+            }
+            catch (SyscallException error)
+            {
+                outcome.SetResult(error.Message);
+            }
+        });
+        await started.Task.WaitAsync(Bound);
+        sleeping = outcome.Task;
+    }
+
+    [When(@"^the process posts ""(.*)"" to the child$")]
+    public async Task WhenPosts(string note)
+    {
+        int fd = await init!.OpenAsync($"/proc/{child}/note", NinePConstants.OWRITE);
+        await init.WriteAsync(fd, Encoding.UTF8.GetBytes(note));
+        await init.CloseAsync(fd);
+    }
+
+    [Then(@"^the child's sleep fails with ""(.*)""$")]
+    public async Task ThenSleepInterrupted(string message) => Assert.Equal(message, await sleeping!.WaitAsync(Bound));
 
     [When("a process forks a child that returns")]
     public async Task WhenForksReturning()
