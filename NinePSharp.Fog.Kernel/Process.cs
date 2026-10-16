@@ -32,7 +32,7 @@ public sealed partial class Process
         Cons = new ConsDevice(this, kernel.User, kernel.Clock, kernel.Booted);
         Text = text;
         User = user;
-        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs);
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs, kernel.Ip);
         (plane, calls) = Bind();
 
         // pidalloc: a process given no note group has one numbered by its own pid.
@@ -73,9 +73,14 @@ public sealed partial class Process
     {
         using Return returning = new(this);
         Namec(path);
+        using Interruption interruptible = Interruptible(CancellationToken.None);
         try
         {
-            return await NamedAsync(await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode)), path);
+            return await NamedAsync(await calls.OpenAsync(path, new Plan9OpenRequest((byte)mode), interruptible.Token), path);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new SyscallException(Errors.Interrupted);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {

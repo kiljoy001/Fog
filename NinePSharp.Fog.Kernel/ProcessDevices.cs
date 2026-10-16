@@ -2,7 +2,7 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes, RootDevice slash, MountDevice mounts, ProcDevice procs)
+internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes, RootDevice slash, MountDevice mounts, ProcDevice procs, IpDevice ip)
     : IResourceDataOperations, IResourceOpenStatOperations, IResourceWStatOperations
 {
     public async ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
@@ -53,6 +53,7 @@ internal sealed class ProcessDevices(Process caller, IResourceDataOperations fil
         RootDevice.Provider => slash,
         MountDevice.Provider => mounts,
         ProcDevice.Provider => procs,
+        IpDevice.Provider => ip,
         DupDevice.Provider => caller.Dup,
         ConsDevice.Provider => caller.Cons,
         _ when handle.Identity.Provider == caller.Environment.Provider => caller.Environment,
