@@ -47,7 +47,7 @@ internal sealed class PipeDevice(string owner) : IResourceDataOperations, IResou
     }
 
     public ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
-        => Queue(openHandle.Resource, 0).ReadAsync((int)count, cancellationToken);
+        => new(Queue(openHandle.Resource, 0).ReadAsync((int)count, cancellationToken));
 
     public async ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
         => (uint)await Queue(openHandle.Resource, 1).WriteAsync(data, cancellationToken);

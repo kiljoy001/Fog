@@ -8,7 +8,7 @@ internal sealed class PipeQueue
     private const int Atomic = 64 * 1024;
     private readonly object gate = new();
     private readonly LinkedList<byte[]> blocks = new();
-    private TaskCompletionSource changed = NewSignal();
+    private TaskCompletionSource<bool> changed = NewSignal();
     private long read;
     private long written;
     private bool closed;
@@ -39,7 +39,7 @@ internal sealed class PipeQueue
         }
     }
 
-    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int count, CancellationToken cancellationToken)
+    public async Task<ReadOnlyMemory<byte>> ReadAsync(int count, CancellationToken cancellationToken)
     {
         for (; ;)
         {
@@ -68,11 +68,11 @@ internal sealed class PipeQueue
                 wait = changed.Task;
             }
 
-            await wait.WaitAsync(cancellationToken);
+            await Waiting.UntilAsync(wait, cancellationToken);
         }
     }
 
-    public async ValueTask<int> WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
+    public async Task<int> WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
     {
         int sofar = 0;
         do
@@ -118,10 +118,10 @@ internal sealed class PipeQueue
         }
     }
 
-    private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private static TaskCompletionSource<bool> NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     // qflow: the writer waits until no more than the limit is queued ahead of the end of its write.
-    private async ValueTask FlowAsync(long end, CancellationToken cancellationToken)
+    private async Task FlowAsync(long end, CancellationToken cancellationToken)
     {
         while (true)
         {
@@ -136,14 +136,14 @@ internal sealed class PipeQueue
                 wait = changed.Task;
             }
 
-            await wait.WaitAsync(cancellationToken);
+            await Waiting.UntilAsync(wait, cancellationToken);
         }
     }
 
     private void Signal()
     {
-        TaskCompletionSource previous = changed;
+        TaskCompletionSource<bool> previous = changed;
         changed = NewSignal();
-        previous.SetResult();
+        previous.SetResult(true);
     }
 }

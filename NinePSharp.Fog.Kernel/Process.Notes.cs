@@ -59,10 +59,11 @@ public sealed partial class Process
         }
     }
 
-    // pushnote: false when the process has exited or NNOTE notes already wait.
+    // pushnote: false when the process has exited or NNOTE notes already wait. The interrupt is
+    // under the lock, as procinterrupt is under p->debug, so a note taken by Noted is never left
+    // with its interrupt still to come.
     internal bool PostNote(string note)
     {
-        CancellationTokenSource interrupted;
         lock (debug)
         {
             if (Exited || notes.Count >= NoteMax)
@@ -71,11 +72,9 @@ public sealed partial class Process
             }
 
             notes.Add(note);
-            interrupted = interrupt;
+            interrupt.Cancel();
+            return true;
         }
-
-        interrupted.Cancel();
-        return true;
     }
 
     // devproc's read of note: the first note waiting, taken from the process.
@@ -116,11 +115,11 @@ public sealed partial class Process
 
     // Each kernel call passes the process's interrupt with its own token, and fails "interrupted"
     // when a note cancels it.
-    private CancellationTokenSource Interruptible(CancellationToken cancellationToken)
+    private Interruption Interruptible(CancellationToken cancellationToken)
     {
         lock (debug)
         {
-            return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, interrupt.Token);
+            return new Interruption(cancellationToken, interrupt.Token);
         }
     }
 
@@ -197,5 +196,28 @@ public sealed partial class Process
         }
 
         public void Dispose() => process.Noted();
+    }
+
+    // A token cancelled by either of two, without a linked source, whose disposal waits for a
+    // cancellation already running: each registration is only unregistered, as Rendezvous does.
+    private sealed class Interruption : IDisposable
+    {
+        private readonly CancellationTokenSource source = new();
+        private readonly CancellationTokenRegistration caller;
+        private readonly CancellationTokenRegistration note;
+
+        public Interruption(CancellationToken caller, CancellationToken note)
+        {
+            this.caller = caller.Register(source.Cancel);
+            this.note = note.Register(source.Cancel);
+        }
+
+        public CancellationToken Token => source.Token;
+
+        public void Dispose()
+        {
+            caller.Unregister();
+            note.Unregister();
+        }
     }
 }

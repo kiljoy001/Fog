@@ -112,39 +112,6 @@ internal sealed class MountConnection
         }
     }
 
-    // The task's end or the token's cancellation, whichever comes first; the task itself goes on. Both
-    // set one signal, as Rendezvous does: a Coyote-rewritten caller controls neither WaitAsync nor a
-    // Task.WhenAny of a signal's task. Unregistered rather than disposed, which would wait for a
-    // cancellation already running. A task's failure is its waiter's to see when it awaits it.
-    private static async Task UntilAsync(Task task, CancellationToken cancellationToken)
-    {
-        var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        CancellationTokenRegistration registration = cancellationToken.Register(() => ended.TrySetResult(false));
-        _ = SignalAsync(task, ended);
-        bool done = await ended.Task;
-
-        // Stryker disable once Statement : unregistering only spares the token a callback that can no longer change the signal it would set
-        registration.Unregister();
-        if (!done)
-        {
-            throw new OperationCanceledException(cancellationToken);
-        }
-    }
-
-    private static async Task SignalAsync(Task task, TaskCompletionSource<bool> ended)
-    {
-        try
-        {
-            await task;
-        }
-        catch
-        {
-            // Whoever waits on the task has its failure.
-        }
-
-        ended.TrySetResult(true);
-    }
-
     private static byte[] Encode(ISerializable message)
     {
         byte[] bytes = new byte[message.Size];
@@ -217,7 +184,7 @@ internal sealed class MountConnection
 
             try
             {
-                await UntilAsync(wake, cancellationToken);
+                await Waiting.UntilAsync(wake, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -248,7 +215,7 @@ internal sealed class MountConnection
                 byte[] reply;
                 try
                 {
-                    await UntilAsync(frame, cancellationToken);
+                    await Waiting.UntilAsync(frame, cancellationToken);
                     reply = await frame;
                 }
                 catch (IOException)

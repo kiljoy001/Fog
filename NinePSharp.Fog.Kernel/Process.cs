@@ -147,18 +147,18 @@ public sealed partial class Process
         }
     }
 
-    public ValueTask<ReadOnlyMemory<byte>> ReadAsync(int fd, int count, CancellationToken cancellationToken = default)
-        => PReadAsync(fd, count, -1, cancellationToken);
+    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(int fd, int count, CancellationToken cancellationToken = default)
+        => await PReadAsync(fd, count, -1, cancellationToken);
 
-    public ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
-        => PWriteAsync(fd, data, -1, cancellationToken);
+    public async ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
+        => await PWriteAsync(fd, data, -1, cancellationToken);
 
     /// <summary>pread: reads at an offset without moving the descriptor's; -1 reads at and advances it, as read does.</summary>
     public async ValueTask<ReadOnlyMemory<byte>> PReadAsync(int fd, int count, long offset, CancellationToken cancellationToken = default)
     {
         using Return returning = new(this);
         await CheckModeAsync(fd, NinePConstants.OREAD);
-        using CancellationTokenSource interruptible = Interruptible(cancellationToken);
+        using Interruption interruptible = Interruptible(cancellationToken);
         try
         {
             return await calls.PReadAsync(fd, offset, (uint)count, interruptible.Token);
@@ -182,7 +182,7 @@ public sealed partial class Process
     {
         using Return returning = new(this);
         await CheckModeAsync(fd, NinePConstants.OWRITE);
-        using CancellationTokenSource interruptible = Interruptible(cancellationToken);
+        using Interruption interruptible = Interruptible(cancellationToken);
         try
         {
             return (int)await calls.PWriteAsync(fd, offset, data, interruptible.Token);
@@ -597,7 +597,7 @@ public sealed partial class Process
             throw new SyscallException(Errors.NoChild);
         }
 
-        using CancellationTokenSource interruptible = Interruptible(cancellationToken);
+        using Interruption interruptible = Interruptible(cancellationToken);
         Waitmsg message;
         try
         {
