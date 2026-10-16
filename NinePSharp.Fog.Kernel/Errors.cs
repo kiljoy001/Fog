@@ -21,6 +21,7 @@ internal static class Errors
     public const string Mount = "inconsistent mount";
     public const string IsMountPoint = "is a mount point";
     public const string NoAttach = "mount/attach disallowed";
+    public const string BadSharp = "unknown device in # filename";
     public const string Interrupted = "interrupted";
     public const string NoteNotPosted = "note not posted";
     public const string TooBig = "read or write too large";

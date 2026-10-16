@@ -33,8 +33,8 @@ public sealed class ProcessTests
     public async Task ForkRejectsFlagsTheKernelDoesNotImplement()
     {
         Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
-        var error = Assert.Throws<NotSupportedException>(() => init.Fork(RforkFlags.Nomnt, process => Task.CompletedTask));
-        Assert.Equal("rfork flags Nomnt are not implemented", error.Message);
+        var error = Assert.Throws<NotSupportedException>(() => init.Fork((RforkFlags)(1 << 20), process => Task.CompletedTask));
+        Assert.Equal("rfork flags 1048576 are not implemented", error.Message);
     }
 
     [Fact]

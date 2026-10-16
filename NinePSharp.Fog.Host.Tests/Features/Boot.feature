@@ -42,7 +42,7 @@ Feature: The host boots the kernel on a gefs store kept in a file
 
   @FOG_HOST_003
   Scenario: A boot that fails after the store is opened lets the store file go
-    Given the host is to install a program named "a/b"
+    Given the host is to install a program named "a//b"
     When the host boots
     Then the boot fails with "create/wstat -- bad character in file name"
     When the host is to install no programs

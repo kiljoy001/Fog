@@ -385,7 +385,7 @@ public sealed partial class Process
         var source = new NamespaceMountSource(NamespaceChannel.Restore([new ChannelFrame("/", tree.Root)]), NinePConstants.ORDWR, aname, closeAsync: () => CloseAsync(fd));
         try
         {
-            await new NamespaceSyscalls(devices).MountAsync(process, source, old, flags);
+            await new NamespaceSyscalls(devices, Attach).MountAsync(process, source, old, flags);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -409,7 +409,7 @@ public sealed partial class Process
 
         try
         {
-            await new NamespaceSyscalls(devices).BindAsync(process, name, old, flags);
+            await new NamespaceSyscalls(devices, Attach).BindAsync(process, name, old, flags);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -435,7 +435,7 @@ public sealed partial class Process
 
         // Without its flags, each group is shared, which leaves it as it is.
         await kernel.Table.RforkDescriptorsAsync(Pid, DescriptorMode(flags));
-        kernel.Table.RforkNamespace(Pid, NamespaceMode(flags));
+        kernel.Table.RforkNamespace(Pid, NamespaceMode(flags), (flags & RforkFlags.Nomnt) != 0);
         (plane, calls) = Bind();
         Environment = EnvironmentFor(flags);
         if ((flags & RforkFlags.Noteg) != 0)
@@ -489,7 +489,7 @@ public sealed partial class Process
     {
         using Return returning = new(this);
         Validate(flags);
-        VProcess forked = kernel.Table.Fork(Pid, NamespaceMode(flags), descriptorMode: DescriptorMode(flags));
+        VProcess forked = kernel.Table.Fork(Pid, NamespaceMode(flags), (flags & RforkFlags.Nomnt) != 0, DescriptorMode(flags));
 
         // RFNOWAIT: the child has no parent to tell of its end.
         bool waited = (flags & RforkFlags.Nowait) == 0;
@@ -710,7 +710,7 @@ public sealed partial class Process
 
         // RFMEM is taken as given: a managed child shares what its body closes over.
         const RforkFlags implemented = RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Cfdg | RforkFlags.Nameg | RforkFlags.Cnameg
-            | RforkFlags.Envg | RforkFlags.Cenvg | RforkFlags.Noteg | RforkFlags.Rend | RforkFlags.Mem | RforkFlags.Nowait;
+            | RforkFlags.Envg | RforkFlags.Cenvg | RforkFlags.Noteg | RforkFlags.Rend | RforkFlags.Mem | RforkFlags.Nowait | RforkFlags.Nomnt;
         if ((flags & ~implemented) != 0)
         {
             throw new NotSupportedException($"rfork flags {flags} are not implemented");
@@ -824,10 +824,32 @@ public sealed partial class Process
         }
     }
 
+    // namec's #: the device whose rune is given, as its attach gives its root; under RFNOMNT, only
+    // the devices sysproc.c's nomntdevs leaves. #| makes no pipe yet, so it names no device.
+    private ResourceHandle Attach(string device, string spec)
+    {
+        ResourceHandle root = device switch
+        {
+            "c" => ConsDevice.Root,
+            "d" => DupDevice.Root,
+            "e" => Environment.Root,
+            "p" => ProcDevice.Root,
+            "I" => IpDevice.Root,
+            "/" => RootDevice.Root,
+            _ => throw new IOException(Errors.BadSharp),
+        };
+        if (process.ProcessGroup.MountTable.MountsDisabled && !"|decp".Contains(device, StringComparison.Ordinal))
+        {
+            throw new IOException(Errors.NoAttach);
+        }
+
+        return root;
+    }
+
     private (LocalNamespaceDataPlane Plane, Plan9FileSyscalls Calls) Bind()
     {
         var data = new LocalNamespaceDataPlane(process.ProcessGroup.MountTable, devices);
-        return (data, new Plan9FileSyscalls(process, data, () => kernel.Context(Pid, User), fileStats: new KernelFileStats(devices)));
+        return (data, new Plan9FileSyscalls(process, data, () => kernel.Context(Pid, User), fileStats: new KernelFileStats(devices), attach: Attach));
     }
 
     private RamFs EnvironmentFor(RforkFlags flags)
@@ -835,8 +857,8 @@ public sealed partial class Process
 
     private async ValueTask<bool> ResolvesAsync(string path)
     {
-        string[] names = Elements(path);
-        return (await plane.WalkAsync(Start(path), names, CancellationToken.None)).Complete(names.Length);
+        (NamespaceChannel start, string[] walked) = Begin(path);
+        return (await plane.WalkAsync(start, walked, CancellationToken.None)).Complete(walked.Length);
     }
 
     // A managed program first, then whichever loader claims the header.
@@ -915,20 +937,47 @@ public sealed partial class Process
     private async Task<NamespaceChannel> ResolveAsync(string path)
     {
         Namec(path);
-        string[] names = Elements(path);
-        NamespaceWalkResult walked = await plane.WalkAsync(Start(path), names, CancellationToken.None);
+        (NamespaceChannel start, string[] names) = Begin(path);
+        NamespaceWalkResult walked = await plane.WalkAsync(start, names, CancellationToken.None);
         return walked.Complete(names.Length) ? walked.Channel : throw NameError(path, walked);
     }
 
     private async Task<SyscallException> NotFoundAsync(string path)
-        => NameError(path, await plane.WalkAsync(Start(path), Elements(path), CancellationToken.None));
+    {
+        (NamespaceChannel start, string[] names) = Begin(path);
+        return NameError(path, await plane.WalkAsync(start, names, CancellationToken.None));
+    }
 
+    // The name as far as the walk went; a #-name's device counts as its first element.
     private SyscallException NameError(string path, NamespaceWalkResult walked)
-        => walked.Channel.Current.IsDirectory
-            ? new(Errors.Name(path, walked.Qids.Count + 1, Errors.NotExist))
-            : new(Errors.Name(path, walked.Qids.Count, Errors.NotDirectory));
+    {
+        int head = path.StartsWith('#') ? 1 : 0;
+        return walked.Channel.Current.IsDirectory
+            ? new(Errors.Name(path, walked.Qids.Count + 1 + head, Errors.NotExist))
+            : new(Errors.Name(path, walked.Qids.Count + head, Errors.NotDirectory));
+    }
 
-    private NamespaceChannel Start(string path) => path.StartsWith('/') ? process.Root.Clone() : process.CurrentDirectory.Clone();
+    // namec: / starts at the root, # at the device it names, and anything else at dot.
+    private (NamespaceChannel Start, string[] Names) Begin(string path)
+    {
+        if (!path.StartsWith('#'))
+        {
+            return (path.StartsWith('/') ? process.Root.Clone() : process.CurrentDirectory.Clone(), Elements(path));
+        }
+
+        string device = path.Length > 1 ? System.Text.Rune.GetRuneAt(path, 1).ToString() : string.Empty;
+        int slash = path.IndexOf('/', 1 + device.Length);
+        string head = slash < 0 ? path : path[..slash];
+        try
+        {
+            ResourceHandle root = Attach(device, head[(1 + device.Length)..]);
+            return (NamespaceChannel.Restore([new ChannelFrame(head, root)]), Elements(slash < 0 ? string.Empty : path[(slash + 1)..]));
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
+        }
+    }
 
     private async Task RunAsync(Func<Process, Task> body)
     {
