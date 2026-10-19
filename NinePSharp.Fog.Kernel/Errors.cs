@@ -19,6 +19,8 @@ internal static class Errors
     public const string NoFd = "no free file descriptors";
     public const string NoCreate = "mounted directory forbids creation";
     public const string Mount = "inconsistent mount";
+    public const string Unmount = "not mounted";
+    public const string Union = "not in union";
     public const string IsMountPoint = "is a mount point";
     public const string NoAttach = "mount/attach disallowed";
     public const string BadSharp = "unknown device in # filename";

@@ -397,6 +397,35 @@ public sealed partial class Process
         }
     }
 
+    // sysunmount: every mount on old, or only name among them; old is looked up as mount looks it
+    // up, and then name, as an open would.
+    public async ValueTask UnmountAsync(string? name, string old)
+    {
+        using Return returning = new(this);
+        Namec(old);
+        if (name is not null)
+        {
+            Namec(name);
+        }
+
+        try
+        {
+            await new NamespaceSyscalls(devices, Attach).UnmountAsync(process, old, name);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
+        {
+            throw await NotFoundAsync(name is not null && await ResolvesAsync(old) ? name : old);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.MountNotFound)
+        {
+            throw new SyscallException(Errors.Unmount);
+        }
+        catch (NamespaceException error) when (error.Error == NamespaceError.UnionMemberNotFound)
+        {
+            throw new SyscallException(Errors.Union);
+        }
+    }
+
     // bindmount: the first name is resolved before the second is looked at.
     public async ValueTask BindAsync(string name, string old, MountFlags flags)
     {

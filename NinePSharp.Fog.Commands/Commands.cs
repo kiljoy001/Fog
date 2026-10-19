@@ -16,5 +16,6 @@ public static class Commands
         ["rm"] = Rm.MainAsync,
         ["sleep"] = Sleep.MainAsync,
         ["test"] = Test.MainAsync,
+        ["unmount"] = Unmount.MainAsync,
     };
 }

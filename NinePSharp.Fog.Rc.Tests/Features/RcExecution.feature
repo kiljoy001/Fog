@@ -5766,3 +5766,31 @@ Feature: rc runs scripts as 9front rc does
       slept for nonsense
       slept for less than nothing
       """
+
+  @FOG_RC_RUN_228
+  Scenario: unmount takes a whole mount point, or one member of its union, named as mount names them
+    When rc runs the script
+      """
+      mkdir -p /tmp/ua /tmp/ub /tmp/um; echo a >/tmp/ua/a; echo b >/tmp/ub/b
+      bind /tmp/ua /tmp/um; bind -a /tmp/ub /tmp/um
+      unmount /tmp/ua /tmp/um
+      cat /tmp/um/b; test -e /tmp/um/a || echo a is gone
+      unmount /tmp/um
+      test -e /tmp/um/b || echo b is gone
+      unmount /tmp/um >[2=1]
+      bind /tmp/ua /tmp/um; unmount /tmp/ub /tmp/um >[2=1]
+      unmount /dev/none /tmp/um >[2=1]
+      unmount >[2=1]; ~ $status *usage && echo usage
+      """
+    Then it prints
+      """
+      b
+      a is gone
+      b is gone
+      unmount: /tmp/um: not mounted
+      unmount: /tmp/um: not in union
+      unmount: /tmp/um: file does not exist: '/dev/none'
+      usage: unmount mountpoint
+             unmount mounted mountpoint
+      usage
+      """
