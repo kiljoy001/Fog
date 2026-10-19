@@ -724,5 +724,17 @@
     "mutator": "Statement mutation",
     "line": "queue.Remove(answered);",
     "reason": "every answered request stays queued, and the tag cycle's search of the queue for each reply grows past the bound"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Statement mutation",
+    "line": "await task;",
+    "reason": "the signal is set before the task ends, so a caller asleep for the reader wakes at once and sleeps again, forever"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Equality mutation",
+    "line": "while (nextTag is 0 or NoTag || tags.Contains(nextTag));",
+    "reason": "the search for a free tag passes over every tag, forever"
   }
 ]
