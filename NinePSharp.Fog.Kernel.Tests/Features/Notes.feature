@@ -5,7 +5,9 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
   a write on a closed pipe posts "sys: write on closed pipe". At most five notes wait for a
   process, and a note of ERRMAX bytes or more is refused. Posting a note interrupts a kernel call
   the process is blocked in, which fails "interrupted"; the note is then delivered as the call
-  returns, or, for a process not in a kernel call, as its next one does. A process that has set
+  returns. A process not in a kernel call is given the note as its next call begins, standing in
+  for the clock tick on which 9front would have given it, and that call then goes on as if no note
+  had come. A process that has set
   a handler with notify is given the note and either continues or leaves the note to its
   default, which ends the process with the note as its exit status; a process with no handler
   ends so at once. A process shares its parent's note group unless rfork(RFNOTEG) gives it a new
@@ -57,11 +59,19 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
     Then the child's wait fails with "interrupted"
 
   @FOG_KERNEL_053
-  Scenario: A note posted to a process outside a kernel call is delivered as its next call returns
+  Scenario: A note posted to a process outside a kernel call is delivered as its next call begins
     Given a child that continues after every note, held before its next call
     When the process writes "alarm" to the child's note
     And the child is let go to stat "/"
     Then the child's stat succeeds
+    And the child's handler saw "alarm"
+
+  @FOG_KERNEL_053
+  Scenario: The call a note waited for goes on undisturbed once the note is delivered
+    Given a child that continues after every note, held before its next call
+    When the process writes "alarm" to the child's note
+    And the child is let go to read 4 bytes of "/dev/zero"
+    Then the child's read gives 4 bytes
     And the child's handler saw "alarm"
 
   @FOG_KERNEL_053

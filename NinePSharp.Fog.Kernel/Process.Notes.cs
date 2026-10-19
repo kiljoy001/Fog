@@ -184,9 +184,18 @@ public sealed partial class Process
         kernel.Leave(this);
     }
 
-    // A call's end, in a using declaration: whatever the call did, a note waiting is delivered.
-    private readonly struct Return(Process process) : IDisposable
+    // A call's start and end, in a using declaration: a note waiting as the call begins is delivered
+    // first, as 9front's clock would have given it, and one that came during the call as it returns.
+    private readonly struct Return : IDisposable
     {
+        private readonly Process process;
+
+        public Return(Process process)
+        {
+            this.process = process;
+            process.Noted();
+        }
+
         public void Dispose() => process.Noted();
     }
 }

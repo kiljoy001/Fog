@@ -157,7 +157,7 @@ public sealed class NoteTests : IAsyncDisposable
         await BootAsync();
         var (read, write) = await init.PipeAsync();
         Agent child = await StartAsync(true);
-        Task<ReadOnlyMemory<byte>> first = child.Do(p => p.ReadAsync(read, 1).AsTask());
+        Task<ReadOnlyMemory<byte>> first = await child.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
         Assert.True(child.Process.PostNote("hangup"));
         Assert.Equal(Errors.Interrupted, (await Assert.ThrowsAsync<SyscallException>(() => first.WaitAsync(KernelDriver.Bound))).Message);
 
@@ -187,7 +187,7 @@ public sealed class NoteTests : IAsyncDisposable
         var (_, write) = await init.PipeAsync();
         byte[] full = new byte[PipeQueue.MaxLimit + 1];
         Agent child = await StartAsync(true);
-        Task<int> blocked = child.Do(p => p.PWriteAsync(write, full, -1).AsTask());
+        Task<int> blocked = await child.BeginAsync(p => p.PWriteAsync(write, full, -1).AsTask());
         Assert.True(child.Process.PostNote("hangup"));
         Assert.Equal(Errors.Interrupted, (await Assert.ThrowsAsync<SyscallException>(() => blocked.WaitAsync(KernelDriver.Bound))).Message);
 

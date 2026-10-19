@@ -46,6 +46,20 @@ internal sealed class Agent(Process parent, bool? continues, RforkFlags flags = 
         return await result.Task;
     }
 
+    // Starts the call and waits until it has begun, past the delivery of any note waiting for it.
+    public async Task<Task<T>> BeginAsync<T>(Func<Process, Task<T>> call)
+    {
+        var begun = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<T> result = Do(process =>
+        {
+            Task<T> running = call(process);
+            begun.TrySetResult();
+            return running;
+        });
+        await begun.Task.WaitAsync(KernelDriver.Bound);
+        return result;
+    }
+
     public Task Do(Func<Process, Task> call) => Do(async process =>
     {
         await call(process);

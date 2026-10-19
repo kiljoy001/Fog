@@ -21,6 +21,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
     private Agent? grandchild;
     private Task? blocked;
     private Task? childCall;
+    private Task<int>? childRead;
     private string? failure;
 
     private Process Init => driver.Init;
@@ -56,7 +57,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         for (int i = 0; i < count; i++)
         {
             Agent agent = await StartAsync(Init, true);
-            _ = agent.Do(p => p.ReadAsync(read, 1).AsTask());
+            _ = await agent.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
         }
     }
 
@@ -65,7 +66,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
     {
         child = await StartAsync(Init, true);
         grandchild = await child.Do(p => StartAsync(p, null));
-        blocked = child.Do(p => p.WaitAsync());
+        blocked = await child.BeginAsync(p => p.WaitAsync());
     }
 
     [Given("a child that continues after every note, held before its next call")]
@@ -152,6 +153,13 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
     [When(@"^the child is let go to stat ""(.*)""$")]
     public void WhenLetGo(string path) => childCall = child!.Do(p => p.StatAsync(path).AsTask());
 
+    [When(@"^the child is let go to read (\d+) bytes of ""(.*)""$")]
+    public void WhenLetGoRead(int count, string path) => childRead = child!.Do(async p =>
+    {
+        int fd = await p.OpenAsync(path, NinePConstants.OREAD);
+        return (await p.PReadAsync(fd, count, 0)).Length;
+    });
+
     [When("the child writes to the pipe")]
     public void WhenChildWrites() => childCall = child!.Do(p => p.WriteAsync(pipes[^1], "x"u8.ToArray()).AsTask());
 
@@ -192,6 +200,9 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         Task task = call == "write" ? childCall! : blocked!;
         Assert.Equal(message, (await Assert.ThrowsAsync<SyscallException>(() => Bounded(task))).Message);
     }
+
+    [Then(@"^the child's read gives (\d+) bytes$")]
+    public async Task ThenReadGives(int count) => Assert.Equal(count, await Bounded(childRead!));
 
     [Then("the child's stat succeeds")]
     public Task ThenStatSucceeds() => Bounded(childCall!);
@@ -330,7 +341,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
     {
         int read = await PipeAsync();
         child = await StartAsync(Init, continues);
-        blocked = child.Do(p => p.ReadAsync(read, 1).AsTask());
+        blocked = await child.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
     }
 
     private async Task WriterAsync(bool? continues)
