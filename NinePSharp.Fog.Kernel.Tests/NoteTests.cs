@@ -152,6 +152,34 @@ public sealed class NoteTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ANoteWaitingAsACallBeginsIsHandledBeforeTheCallDoesItsWork()
+    {
+        await BootAsync();
+        bool? existed = null;
+        var started = new TaskCompletionSource<Process>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var go = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        init.Fork(RforkFlags.Proc, async p =>
+        {
+            p.Notify(_ =>
+            {
+                existed = Exists(p, "/tmp/made");
+                return true;
+            });
+            started.SetResult(p);
+            await go.Task;
+            await p.CloseAsync(await p.CreateAsync("/tmp/made", NinePConstants.OWRITE, 0b110_110_110));
+            done.SetResult();
+        });
+        Process child = await started.Task.WaitAsync(KernelDriver.Bound);
+        Assert.True(child.PostNote("alarm"));
+        go.SetResult();
+        await done.Task.WaitAsync(KernelDriver.Bound);
+
+        Assert.False(existed);
+    }
+
+    [Fact]
     public async Task AfterAHandledNoteACallBlocksAgainUntilItIsDone()
     {
         await BootAsync();
@@ -218,6 +246,19 @@ public sealed class NoteTests : IAsyncDisposable
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    private static bool Exists(Process process, string path)
+    {
+        try
+        {
+            process.StatAsync(path).AsTask().GetAwaiter().GetResult();
+            return true;
+        }
+        catch (SyscallException)
+        {
+            return false;
+        }
     }
 
     private async Task BootAsync()
