@@ -69,6 +69,53 @@ public sealed partial class Process
 
     internal long ParentPid => process.ParentId ?? 0;
 
+    public static List<string> Tokenize(string line, int max)
+    {
+        var tokens = new List<string>();
+        int t = 0;
+        while (tokens.Count < max)
+        {
+            while (t < line.Length && Separator(line[t]))
+            {
+                t++;
+            }
+
+            if (t == line.Length)
+            {
+                break;
+            }
+
+            var token = new StringBuilder();
+            bool quoting = false;
+            while (t < line.Length && (quoting || !Separator(line[t])))
+            {
+                if (line[t] != '\'')
+                {
+                    token.Append(line[t++]);
+                }
+                else if (!quoting)
+                {
+                    quoting = true;
+                    t++;
+                }
+                else if (t + 1 == line.Length || line[t + 1] != '\'')
+                {
+                    quoting = false;
+                    t++;
+                }
+                else
+                {
+                    token.Append('\'');
+                    t += 2;
+                }
+            }
+
+            tokens.Add(token.ToString());
+        }
+
+        return tokens;
+    }
+
     public async ValueTask<int> OpenAsync(string path, int mode)
     {
         using Return returning = new(this);
@@ -671,53 +718,6 @@ public sealed partial class Process
 
         Interlocked.Decrement(ref children);
         return message;
-    }
-
-    internal static List<string> Tokenize(string line, int max)
-    {
-        var tokens = new List<string>();
-        int t = 0;
-        while (tokens.Count < max)
-        {
-            while (t < line.Length && Separator(line[t]))
-            {
-                t++;
-            }
-
-            if (t == line.Length)
-            {
-                break;
-            }
-
-            var token = new StringBuilder();
-            bool quoting = false;
-            while (t < line.Length && (quoting || !Separator(line[t])))
-            {
-                if (line[t] != '\'')
-                {
-                    token.Append(line[t++]);
-                }
-                else if (!quoting)
-                {
-                    quoting = true;
-                    t++;
-                }
-                else if (t + 1 == line.Length || line[t + 1] != '\'')
-                {
-                    quoting = false;
-                    t++;
-                }
-                else
-                {
-                    token.Append('\'');
-                    t += 2;
-                }
-            }
-
-            tokens.Add(token.ToString());
-        }
-
-        return tokens;
     }
 
     // Rendezvous does not exist yet, so its group needs nothing.

@@ -9,6 +9,7 @@ public static class Commands
     {
         ["auth/newns"] = AuthNewns.MainAsync,
         ["aux/listen1"] = Listen1.MainAsync,
+        ["aux/trampoline"] = Trampoline.MainAsync,
         ["bind"] = Bind.MainAsync,
         ["cat"] = Cat.MainAsync,
         ["echo"] = Echo.MainAsync,

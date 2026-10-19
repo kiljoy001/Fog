@@ -204,23 +204,26 @@ public sealed partial class Process
     // alarmkproc: the note posted, unless the alarm was cancelled or set anew first.
     private async Task RingAsync(long milliseconds, CancellationTokenSource ringing)
     {
-        try
+        using (ringing)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, ringing.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        lock (debug)
-        {
-            if (alarm != ringing)
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, ringing.Token);
+            }
+            catch (OperationCanceledException)
             {
                 return;
             }
 
-            alarm = null;
+            lock (debug)
+            {
+                if (alarm != ringing)
+                {
+                    return;
+                }
+
+                alarm = null;
+            }
         }
 
         PostNote("alarm");

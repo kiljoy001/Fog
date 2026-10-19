@@ -5915,3 +5915,80 @@ Feature: rc runs scripts as 9front rc does
       usage
       aux/listen1: announce bogus: bad dial string: bogus
       """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline copies its input to the call it dials and the call's data to its output
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17094' /bin/rc -c 'read; echo bye' &
+      sleep 1
+      {echo hello; sleep 2} | aux/trampoline 'tcp!127.0.0.1!17094'
+      """
+    Then it prints
+      """
+      hello
+      bye
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -a joins the call it dials to another it dials
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17095' /bin/echo from a &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17096' /bin/rc -c 'read >/tmp/got' &
+      sleep 1
+      aux/trampoline -a 'tcp!127.0.0.1!17095' 'tcp!127.0.0.1!17096'
+      sleep 1
+      cat /tmp/got
+      """
+    Then it prints
+      """
+      from a
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -t ends once nothing has passed for the time given, and -o writes the call's ctl
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17097' /bin/rc -c 'sleep 2' &
+      sleep 1
+      {sleep 2} | aux/trampoline -t 300 -o bogus 'tcp!127.0.0.1!17097' >[2=1]; ~ $status *timeout && echo timed out
+      """
+    Then it prints
+      """
+      aux/trampoline: can't write bogus: unknown control request
+      timed out
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -9 copies only whole 9P messages
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script, its \x escapes bytes
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17098' /bin/rc -c 'echo -n ''\x0A\x00\x00\x00hello\x0A\x0A\x00\x00''' &
+      sleep 1
+      {sleep 2} | aux/trampoline -9 'tcp!127.0.0.1!17098' | {read -c 4 >/dev/null; cat}
+      """
+    Then it prints
+      """
+      hello
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline fails a call it cannot dial, -m every caller, and prints its usage
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/trampoline 'tcp!127.0.0.1!1' >[2=1]
+      aux/trampoline -m /net/tcp/0 'tcp!127.0.0.1!1'; ~ $status *'bad mac' && echo bad mac
+      aux/trampoline >[2=1]
+      """
+    Then it prints
+      """
+      aux/trampoline: dial tcp!127.0.0.1!1: connection refused
+      bad mac
+      usage: trampoline [-9] [-a addr] [-m netdir] [-o opt] [-t timeout] addr
+      """
