@@ -141,12 +141,13 @@ internal sealed class MountTree
         }
     }
 
-    // mntrdwr: pieces of at most the iounit, until one comes up short.
+    // mntrdwr: pieces of at most the iounit, until one comes up short; one is asked for even of
+    // nothing.
     public async Task<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle handle, ulong offset, uint count, CancellationToken cancellationToken)
     {
         (uint fid, uint iounit) = Opened(handle);
         var data = new List<byte>();
-        while (data.Count < count)
+        do
         {
             uint piece = Math.Min(count - (uint)data.Count, iounit);
             var read = new Rread(await Connection.RpcAsync(tag => new Tread(tag, fid, offset + (ulong)data.Count, piece), MessageTypes.Rread, cancellationToken));
@@ -156,6 +157,7 @@ internal sealed class MountTree
                 break;
             }
         }
+        while (data.Count < count);
 
         return data.ToArray();
     }
@@ -164,7 +166,7 @@ internal sealed class MountTree
     {
         (uint fid, uint iounit) = Opened(handle);
         uint done = 0;
-        while (done < data.Length)
+        do
         {
             ReadOnlyMemory<byte> piece = data.Slice((int)done, (int)Math.Min((uint)data.Length - done, iounit));
             var wrote = new Rwrite(await Connection.RpcAsync(tag => new Twrite(tag, fid, offset + done, piece), MessageTypes.Rwrite, cancellationToken));
@@ -174,6 +176,7 @@ internal sealed class MountTree
                 break;
             }
         }
+        while (done < data.Length);
 
         return done;
     }

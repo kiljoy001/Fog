@@ -69,6 +69,18 @@ public sealed class MountTreeTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AReadOrWriteOfNothingIsStillAskedOfTheServer()
+    {
+        MountTree tree = await AttachAsync();
+        ResourceOpenHandle open = await Bounded(tree.OpenAsync(await WalkAsync(tree, "notes"), NinePConstants.ORDWR, default));
+
+        Assert.True((await Bounded(tree.ReadAsync(open, 0, 0, default))).IsEmpty);
+        Assert.Equal(0u, await Bounded(tree.WriteAsync(open, 0, ReadOnlyMemory<byte>.Empty, default)));
+        Assert.Equal(0u, new Tread(server.Of(MessageTypes.Tread).Single()).Count);
+        Assert.Equal(0u, new Twrite(server.Of(MessageTypes.Twrite).Single()).Count);
+    }
+
+    [Fact]
     public async Task ClosingAFileTwiceClunksItOnce()
     {
         MountTree tree = await AttachAsync();

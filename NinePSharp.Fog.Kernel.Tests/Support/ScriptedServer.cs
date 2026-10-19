@@ -143,6 +143,8 @@ internal sealed class ScriptedServer : IAsyncDisposable
                     : Data;
                 int from = (int)Math.Min(read.Offset, (ulong)content.Length);
                 return new Rread(tag, content.AsMemory(from, (int)Math.Min(read.Count, (uint)(content.Length - from))));
+            case MessageTypes.Twrite:
+                return new Rwrite(tag, new Twrite(request).Count);
             case MessageTypes.Tstat:
                 string stated = fids[new Tstat(request).Fid];
                 return new Rstat(tag, new Stat(0, 0, 0, QidOf(stated, stated.Length == 0 ? 0 : Paths[stated]), 0b110_100_100, 0, 0, 0, stated, "glenda", "glenda", "glenda"));
