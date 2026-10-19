@@ -5863,3 +5863,55 @@ Feature: rc runs scripts as 9front rc does
       glenda /usr/glenda
       glenda
       """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 -1t runs the command once, on the call it takes, with the call as its input and output
+    Given 9front's oracle has no route to its loopback and a listen1 older than -q, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17091' /bin/echo hello &
+      sleep 1
+      {
+          n=`{read -c 11 <[0=3]}
+          echo -n connect 127.0.0.1!17091 >[1=3]
+          cat /net/tcp/$n/data
+      } <>[3]/net/tcp/clone
+      """
+    Then it prints
+      """
+      hello
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 without -t runs the command as none, in the namespace newns builds, with $net naming the call
+    Given 9front's oracle has no route to its loopback and a listen1 older than -q, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1q 'tcp!127.0.0.1!17092' /bin/rc -c 'cat /dev/user; echo; ~ $net /net/tcp/* && echo net names the call' &
+      sleep 1
+      {
+          n=`{read -c 11 <[0=3]}
+          echo -n connect 127.0.0.1!17092 >[1=3]
+          cat /net/tcp/$n/data
+      } <>[3]/net/tcp/clone
+      """
+    Then it prints
+      """
+      none
+      net names the call
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 prints its usage without an address and command, and fails an address it cannot announce
+    Given 9front's oracle has no route to its loopback and a listen1 older than -q, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -t tcp!127.0.0.1!17093 >[2=1]; ~ $status *usage && echo usage
+      aux/listen1 -tq bogus /bin/echo >[2=1]
+      """
+    Then it prints
+      """
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      usage
+      aux/listen1: announce bogus: bad dial string: bogus
+      """
