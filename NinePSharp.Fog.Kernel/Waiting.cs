@@ -5,7 +5,7 @@ internal static class Waiting
     // The task's end or the token's cancellation, whichever comes first; the task itself goes on. Both
     // set one signal, as Rendezvous does: a Coyote-rewritten caller controls neither WaitAsync nor a
     // Task.WhenAny of a signal's task. Unregistered rather than disposed, which would wait for a
-    // cancellation already running.
+    // cancellation already running. A task's failure is its waiter's to see when it awaits it.
     public static async Task UntilAsync(Task task, CancellationToken cancellationToken)
     {
         var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -19,8 +19,6 @@ internal static class Waiting
         {
             throw new OperationCanceledException(cancellationToken);
         }
-
-        await task;
     }
 
     private static async Task SignalAsync(Task task, TaskCompletionSource<bool> ended)
