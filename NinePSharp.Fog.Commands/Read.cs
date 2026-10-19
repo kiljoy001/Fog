@@ -12,6 +12,9 @@ public static class Read
 {
     private const int Buf = 8 * 1024;
 
+    // runes reads up to UTFmax short of its buffer, leaving room to finish a rune cut short.
+    private const int RuneRead = Buf - Utf.UtfMax;
+
     public static async Task MainAsync(Process process, IReadOnlyList<string> argv)
     {
         var reader = new Reader(process);
@@ -22,15 +25,15 @@ public static class Read
             switch (c)
             {
                 case 'c':
-                    reader.Count = Atoll(arguments.Value() ?? await UsageAsync(process));
+                    reader.Count = Libc.Strtoll(arguments.Value() ?? await UsageAsync(process), 10, out _);
                     proc = reader.CharsAsync;
                     break;
                 case 'r':
-                    reader.Count = Atoll(arguments.Value() ?? await UsageAsync(process));
+                    reader.Count = Libc.Strtoll(arguments.Value() ?? await UsageAsync(process), 10, out _);
                     proc = reader.RunesAsync;
                     break;
                 case 'n':
-                    reader.Count = (int)Atoll(arguments.Value() ?? await UsageAsync(process));
+                    reader.Count = Libc.Strtol(arguments.Value() ?? await UsageAsync(process), 10, out _);
                     break;
                 case 'm':
                     reader.Multi = true;
@@ -73,25 +76,6 @@ public static class Read
         await process.WriteAsync(2, "usage: read [ -m | -n nlines | -c nbytes | -r nrunes ] [ file ... ]\n"u8.ToArray());
         process.Exits("usage");
         return string.Empty;
-    }
-
-    // atoll: white space, a sign, then decimal digits.
-    private static long Atoll(string s)
-    {
-        ReadOnlySpan<char> t = s.AsSpan().TrimStart(" \t\n");
-        bool negative = t.StartsWith("-");
-        if (t.StartsWith("-") || t.StartsWith("+"))
-        {
-            t = t[1..];
-        }
-
-        long n = 0;
-        for (int i = 0; i < t.Length && char.IsAsciiDigit(t[i]); i++)
-        {
-            n = (n * 10) + (t[i] - '0');
-        }
-
-        return negative ? -n : n;
     }
 
     private sealed class Reader(Process process)
@@ -139,14 +123,14 @@ public static class Read
         {
             while (Count > 0)
             {
-                var buf = new List<byte>((await ReadAsync(fd, (int)(Count + Utf.UtfMax < Buf ? Count : Buf - Utf.UtfMax), file)).ToArray());
+                var buf = new List<byte>((await ReadAsync(fd, (int)Math.Min(Count, RuneRead), file)).ToArray());
                 if (buf.Count == 0)
                 {
                     break;
                 }
 
                 int s = 0;
-                for (; s < buf.Count && Full(buf, s); s += Width(buf, s))
+                for (; Full(buf, s); s += Width(buf, s))
                 {
                     Count--;
                 }

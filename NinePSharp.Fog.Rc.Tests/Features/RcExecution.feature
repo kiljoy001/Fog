@@ -4480,6 +4480,21 @@ Feature: rc runs scripts as 9front rc does
       % 
       """
 
+  @FOG_RC_RUN_175
+  Scenario: A login shell reads the profile in its home's lib
+    Given rc is started as a login shell
+    And "/lib/profile" holds the line "echo profile read"
+    When rc -i reads the script
+      """
+      echo hi
+      """
+    Then it prints, ending with a prompt
+      """
+      profile read
+      % hi
+      % 
+      """
+
   @FOG_RC_RUN_176
   Scenario: Case patterns made by concatenation or in parentheses are not globbed
     When rc runs the script
@@ -5220,6 +5235,17 @@ Feature: rc runs scripts as 9front rc does
       usage
       """
 
+  @FOG_RC_RUN_218
+  Scenario: rm -r reports a file that is not there as rm does
+    When rc runs the script
+      """
+      rm -r /dev/rmnone >[2=1]
+      """
+    Then it prints
+      """
+      rm: /dev/rmnone: file does not exist: '/dev/rmnone'
+      """
+
   @FOG_RC_RUN_219
   Scenario: read copies one line of its input, and with -n that many, and with -m all of them
     When rc runs the script
@@ -5265,6 +5291,89 @@ Feature: rc runs scripts as 9front rc does
       eof
       a
       b
+      """
+
+  @FOG_RC_RUN_220
+  Scenario: read of nothing is no eof, a short read is none either, and a rune ends where its count does
+    When rc runs the script
+      """
+      read -c 0 </dev/null && echo reading no bytes is no eof
+      read -c 5 </dev/null || echo bytes at eof
+      echo ab | read -c 5 && echo a short read is no eof
+      read -r 5 </dev/null && echo runes at eof are no failure
+      read </dev/null || echo a line at eof
+      echo -n ab | read -r 1; echo
+      echo after
+      """
+    Then it prints
+      """
+      reading no bytes is no eof
+      bytes at eof
+      ab
+      a short read is no eof
+      runes at eof are no failure
+      a line at eof
+      a
+      after
+      """
+
+  @FOG_RC_RUN_220
+  Scenario: read -c asks for what is left of its count, a piece at a time
+    Given a file server holding "notes" with "hello", on descriptor 3, giving at most 1 byte a read
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      read -c 3 /tmp/fs/notes; echo
+      read -r 0 /tmp/fs/notes
+      """
+    Then it prints
+      """
+      hel
+      """
+    And the largest read the file server was asked for was 3 bytes
+
+  @FOG_RC_RUN_220
+  Scenario: read -r 0 reads nothing at all
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      read -r 0 /tmp/fs/notes && echo none read
+      """
+    Then it prints
+      """
+      none read
+      """
+    And the file server was asked for no reads
+
+  @FOG_RC_RUN_220
+  Scenario: read reports a read that fails, and exits with read error
+    Given a file server holding "notes" with "hello", on descriptor 3, whose reads fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      read /tmp/fs/notes >[2=1]; ~ $status *'read error' && echo read error
+      """
+    Then it prints
+      """
+      read: error reading /tmp/fs/notes: no reading
+      read error
+      """
+
+  @FOG_RC_RUN_220
+  Scenario: read -r warns of a rune its input ends within, and copies what it read
+    Given "/tmp/partial" holds "a\xC3"
+    When rc runs the script, its \x escapes bytes
+      """
+      read -r 2 /tmp/partial >[2=1]; echo
+      """
+    Then it prints
+      """
+      warning: partial rune at end of /tmp/partial: 
+      a�
       """
 
   @FOG_RC_RUN_220
@@ -5421,6 +5530,116 @@ Feature: rc runs scripts as 9front rc does
       not older than itself
       not newer than itself
       test: bad time syntax, 1x
+      """
+
+  @FOG_RC_RUN_222
+  Scenario: test takes the operand of a branch it does not evaluate, and reports what is missing
+    When rc runs the script
+      """
+      test '' -a x || echo the right of a false -a is taken but not asked
+      test '' -o -e /dev/null && echo the right of a false -o is asked
+      test x -a && echo a trailing -a asks nothing more
+      test abc -a def && echo both strings are not empty
+      test 3 -gt 3 || echo 3 is not greater than 3
+      test 3 -lt 3 || echo 3 is not less than 3
+      test 1 -foo 2 >[2=1]
+      test 1 -eq >[2=1]
+      test '(' x y >[2=1]
+      test -n >[2=1]
+      test -z >[2=1]
+      test a '=' >[2=1]
+      test a '!=' >[2=1]
+      test a -older >[2=1]
+      test a -ot >[2=1]
+      test a -nt >[2=1]
+      """
+    Then it prints
+      """
+      the right of a false -a is taken but not asked
+      the right of a false -o is asked
+      a trailing -a asks nothing more
+      both strings are not empty
+      3 is not greater than 3
+      3 is not less than 3
+      test: unexpected operator/operand: -foo
+      test: unexpected operator/operand: -eq
+      test: ) expected
+      test: argument expected
+      test: argument expected
+      test: argument expected
+      test: argument expected
+      test: argument expected
+      test: argument expected
+      test: argument expected
+      """
+
+  @FOG_RC_RUN_222
+  Scenario: test opens no file in a branch it does not evaluate
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      test x -o -r /tmp/fs/notes && echo x
+      test '' -a -r /tmp/fs/notes || echo not the empty string
+      test x -o '(' '' -o -r /tmp/fs/notes ')' && echo x or a group
+      test x -o '(' y -a -r /tmp/fs/notes ')' && echo x or another group
+      """
+    Then it prints
+      """
+      x
+      not the empty string
+      x or a group
+      x or another group
+      """
+    And the file server was asked to open nothing
+
+  @FOG_RC_RUN_223
+  Scenario: test -t asks of standard output with no operand, and is true of a descriptor open on /dev/cons
+    When rc runs the script
+      """
+      mkdir -p /tmp/d; echo -n >/tmp/d/cons; bind -a /tmp/d /dev
+      test -t || echo standard output is not the console
+      test -t 9 || echo descriptor 9 is not open
+      test -t 3 <[3]/dev/cons && echo descriptor 3 is the console
+      test -t 4 <[4]/dev/null || echo descriptor 4 is not
+      """
+    Then it prints
+      """
+      standard output is not the console
+      descriptor 9 is not open
+      descriptor 3 is the console
+      descriptor 4 is not
+      """
+
+  @FOG_RC_RUN_223
+  Scenario: test -older counts a time with units back from now, and takes one without as a time
+    Given "/tmp/old" holds "x"
+    And the clock moves on by 7200 seconds
+    And "/tmp/new" holds "y"
+    When rc runs the script
+      """
+      test /tmp/old -older 1h && echo older than an hour
+      test /tmp/old -older 3h || echo not three hours old
+      test /tmp/old -older 119m && echo older than 119 minutes
+      test /tmp/old -older 121m || echo not 121 minutes old
+      test /tmp/old -older 1h59m59s && echo older than an hour, 59 minutes and 59 seconds
+      test /tmp/old -older 1 || echo not older than the first second
+      test /tmp/none -older 1s || echo what is not there is not older
+      test /tmp/old -ot /tmp/new && echo old is older than new
+      test /tmp/new -nt /tmp/old && echo new is newer than old
+      """
+    Then it prints
+      """
+      older than an hour
+      not three hours old
+      older than 119 minutes
+      not 121 minutes old
+      older than an hour, 59 minutes and 59 seconds
+      not older than the first second
+      what is not there is not older
+      old is older than new
+      new is newer than old
       """
 
   @FOG_RC_RUN_224

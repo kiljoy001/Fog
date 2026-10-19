@@ -21,6 +21,7 @@ public sealed class RcExecutionSteps
 
     // Each read is bounded, and so is the whole run, so an rc that keeps printing fails the scenario too.
     private static readonly TimeSpan RunBound = TimeSpan.FromSeconds(10);
+    private readonly ManualClock clock = new() { Now = DateTimeOffset.UtcNow };
     private Process? init;
     private string script = string.Empty;
     private string output = string.Empty;
@@ -43,7 +44,7 @@ public sealed class RcExecutionSteps
     public async Task GivenAKernel()
     {
         var programs = new Dictionary<string, ProgramMain>(Commands.Commands.All) { ["rc"] = RcProgram.MainAsync };
-        init = await FogKernel.InMemory(programs, "glenda").BootAsync();
+        init = await FogKernel.InMemory(programs, "glenda", clock).BootAsync();
         await init.CloseAsync(await init.CreateAsync("/root/rc/lib", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
         await WriteAsync("/root/rc/lib/rcmain", RcProgram.Rcmain);
     }
@@ -60,6 +61,9 @@ public sealed class RcExecutionSteps
     [Given(@"^""(.*)"" holds ""(.*)""$")]
     public Task GivenHolds(string path, string text) => WriteAsync(path, text);
 
+    [Given(@"^""(.*)"" holds the line ""(.*)""$")]
+    public Task GivenHoldsLine(string path, string text) => WriteAsync(path, text + "\n");
+
     [Given(@"^the executable ""(.*)"" holds ""(.*)"", which 9front would need chmod for$")]
     public Task GivenExecutable(string path, string text)
     {
@@ -69,22 +73,29 @@ public sealed class RcExecutionSteps
 
     // 9front's rc cannot be handed this file server, so these run on Fog alone.
     [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3$")]
-    public async Task GivenFileServer(string file, string text)
+    public Task GivenFileServer(string file, string text) => ServeAsync(file, text, new FileServerHarness());
+
+    [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3, giving at most (\d+) bytes? a read$")]
+    public Task GivenLimitedFileServer(string file, string text, int limit) => ServeAsync(file, text, new FileServerHarness { ReadLimit = limit });
+
+    [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3, whose reads fail with ""(.*)""$")]
+    public Task GivenFailingFileServer(string file, string text, string error) => ServeAsync(file, text, new FileServerHarness { ReadRefusal = error });
+
+    [Then("the file server was asked to open nothing")]
+    public void ThenOpenedNothing() => Assert.Empty(server!.OpenModes);
+
+    [Then("the file server was asked for no reads")]
+    public void ThenNoReads() => Assert.Empty(server!.ReadTags);
+
+    [Then(@"^the largest read the file server was asked for was (\d+) bytes$")]
+    public void ThenLargestRead(int count) => Assert.Equal(count, server!.LargestData);
+
+    // 9front's clock cannot be moved, so these run on Fog alone.
+    [Given(@"^the clock moves on by (\d+) seconds$")]
+    public void GivenClockMoves(int seconds)
     {
         fogOnly = true;
-        server = new FileServerHarness();
-        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile(file, Encoding.UTF8.GetBytes(text + "\n")));
-
-        // Its pipe is 3 and 4, past the descriptors rc's output takes as the other scenarios do.
-        int[] low = [await init!.OpenAsync("/dev/null", NinePConstants.OREAD), await init.OpenAsync("/dev/null", NinePConstants.OREAD), await init.OpenAsync("/dev/null", NinePConstants.OREAD)];
-        var (client, end) = await init.PipeAsync();
-        foreach (int fd in low)
-        {
-            await init.CloseAsync(fd);
-        }
-
-        server.Serve(init, end);
-        served = client;
+        clock.Now += TimeSpan.FromSeconds(seconds);
     }
 
     [Then(@"^the file server was attached as ""(.*)"" to ""(.*)""$")]
@@ -197,6 +208,24 @@ public sealed class RcExecutionSteps
     }
 
     // What happens while rc runs, given its pid.
+    private async Task ServeAsync(string file, string text, FileServerHarness harness)
+    {
+        fogOnly = true;
+        server = harness;
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile(file, Encoding.UTF8.GetBytes(text + "\n")));
+
+        // Its pipe is 3 and 4, past the descriptors rc's output takes as the other scenarios do.
+        int[] low = [await init!.OpenAsync("/dev/null", NinePConstants.OREAD), await init.OpenAsync("/dev/null", NinePConstants.OREAD), await init.OpenAsync("/dev/null", NinePConstants.OREAD)];
+        var (client, end) = await init.PipeAsync();
+        foreach (int fd in low)
+        {
+            await init.CloseAsync(fd);
+        }
+
+        server.Serve(init, end);
+        served = client;
+    }
+
     private async Task RunAsync(string text, string input, string[] arguments, Func<long, Task>? meanwhile = null, string? error = null)
     {
         script = text;

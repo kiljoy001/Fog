@@ -11,7 +11,6 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 {
     public const string Provider = "proc";
     private const ulong Slots = 8;
-    private const long Overflow = (long)int.MaxValue + 1;
     private const uint Directory = (uint)NinePConstants.FileMode9P.DMDIR | 0b101_101_101;
     private const uint ProcMode = 0b110_100_000;
     private static readonly int[] Access = [0b100_000_000, 0b010_000_000, 0b110_000_000, 0b001_000_000];
@@ -188,7 +187,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 
                 break;
             case File.NoteId:
-                kernel.ChangeNoteId(kernel.Processes.GetValueOrDefault(context.ProcessId), process, (uint)Atoi(text));
+                kernel.ChangeNoteId(kernel.Processes.GetValueOrDefault(context.ProcessId), process, (uint)Libc.Strtol(text, 10, out _));
                 break;
             default:
                 throw new IOException(Errors.Permission);
@@ -238,31 +237,6 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     {
         int nul = data.IndexOf((byte)0);
         return Encoding.UTF8.GetString(nul < 0 ? data : data[..nul]);
-    }
-
-    // atoi, as strtol reads it: white space, a sign, then decimal digits, held to a long's range
-    // as Plan 9's long is 32 bits; 0 for none.
-    private static int Atoi(string text)
-    {
-        ReadOnlySpan<char> s = text.AsSpan().TrimStart(" \t\n\f\r\v");
-        bool negative = s.StartsWith("-");
-        if (negative || s.StartsWith("+"))
-        {
-            s = s[1..];
-        }
-
-        long value = 0;
-        foreach (char c in s)
-        {
-            if (!char.IsAsciiDigit(c))
-            {
-                break;
-            }
-
-            value = Math.Min((value * 10) + (c - '0'), Overflow);
-        }
-
-        return (int)Math.Clamp(negative ? -value : value, int.MinValue, int.MaxValue);
     }
 
     private void NoNone(Process? caller, Process process) => NoNone(caller, process, kernel.User);

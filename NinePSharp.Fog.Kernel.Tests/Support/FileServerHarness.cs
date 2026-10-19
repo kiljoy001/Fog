@@ -69,6 +69,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     // The number of names each Twalk carried, in order.
     public ConcurrentQueue<int> Walks { get; } = [];
 
+    // Every read is refused with this error.
+    public string? ReadRefusal { get; set; }
+
     // An open of this file is refused with this error.
     public (string File, string Error)? Refusal { get; set; }
 
@@ -157,6 +160,11 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
             case NinePMessage.MsgTread read:
                 ReadTags.Add(read.Item.Tag);
                 LargestData = Math.Max(LargestData, (int)read.Item.Count);
+                if (ReadRefusal is { } error)
+                {
+                    return new Rerror(read.Item.Tag, error);
+                }
+
                 if (HoldReads && await HoldAsync(read.Item.Tag) is { } interrupted)
                 {
                     return interrupted;

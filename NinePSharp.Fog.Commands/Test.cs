@@ -54,96 +54,10 @@ public static class Test
         process.Exits("bad syntax");
     }
 
-    // strtol with base 0, as Plan 9's libc: 32-bit, a 0x always skipped, and end at the start when no
-    // digit was read.
-    private static int Strtol(string s, out int end)
-    {
-        int p = Spaces(s);
-        bool neg = p < s.Length && s[p] == '-';
-        if (p < s.Length && s[p] is '-' or '+')
-        {
-            p++;
-        }
-
-        int radix = 10;
-        if (p < s.Length && s[p] == '0')
-        {
-            radix = 8;
-            if (p + 1 < s.Length && s[p + 1] is 'x' or 'X')
-            {
-                p += 2;
-                radix = 16;
-            }
-        }
-
-        int m = int.MaxValue / radix, n = 0, ndig = 0;
-        bool ovfl = false;
-        for (; p < s.Length && Digit(s[p]) < radix; p++, ndig++)
-        {
-            ovfl |= n > m;
-            int nn = unchecked((n * radix) + Digit(s[p]));
-            ovfl |= nn < n;
-            n = nn;
-        }
-
-        end = ndig == 0 ? 0 : p;
-        return ovfl ? (neg ? int.MinValue : int.MaxValue) : neg ? unchecked(-n) : n;
-    }
-
-    // strtoul with base 0, as Plan 9's libc: 32-bit, a 0x skipped only before a hex digit.
-    private static uint Strtoul(string s, out int end)
-    {
-        int p = Spaces(s);
-        bool neg = p < s.Length && s[p] == '-';
-        if (p < s.Length && s[p] is '-' or '+')
-        {
-            p++;
-        }
-
-        uint radix = p < s.Length && s[p] == '0' ? (p + 1 < s.Length && s[p + 1] is 'x' or 'X' ? 16u : 8u) : 10u;
-        if (radix == 16 && p + 2 < s.Length && Uri.IsHexDigit(s[p + 2]))
-        {
-            p += 2;
-        }
-
-        uint m = uint.MaxValue / radix, n = 0;
-        int ndig = 0;
-        bool ovfl = false;
-        for (; p < s.Length && Digit(s[p]) < radix; p++, ndig++)
-        {
-            ovfl |= n > m;
-            uint nn = unchecked((n * radix) + (uint)Digit(s[p]));
-            ovfl |= nn < n;
-            n = nn;
-        }
-
-        end = ndig == 0 ? 0 : p;
-        return ovfl ? uint.MaxValue : neg ? unchecked(0u - n) : n;
-    }
-
-    private static int Spaces(string s)
-    {
-        int p = 0;
-        while (p < s.Length && s[p] is ' ' or '\t' or '\n' or '\f' or '\r' or '\v')
-        {
-            p++;
-        }
-
-        return p;
-    }
-
-    private static int Digit(char c) => c switch
-    {
-        >= '0' and <= '9' => c - '0',
-        >= 'a' and <= 'z' => c - 'a' + 10,
-        >= 'A' and <= 'Z' => c - 'A' + 10,
-        _ => 36,
-    };
-
     // isint: strtol read the whole string.
     private static bool IsInt(string s, out int value)
     {
-        value = Strtol(s, out int end);
+        value = Libc.Strtol(s, 0, out int end);
         return end == s.Length;
     }
 
@@ -158,7 +72,6 @@ public static class Test
             {
                 if (mt)
                 {
-                    ap++;
                     return null;
                 }
 
@@ -181,7 +94,7 @@ public static class Test
 
                 if (!p1 && eval)
                 {
-                    p1 |= await E1Async(true);
+                    p1 = await E1Async(true);
                 }
                 else
                 {
@@ -205,7 +118,7 @@ public static class Test
 
                 if (p1 && eval)
                 {
-                    p1 &= await E2Async(true);
+                    p1 = await E2Async(true);
                 }
                 else
                 {
@@ -241,7 +154,8 @@ public static class Test
 
         private async Task<bool> E3Async(bool eval)
         {
-            string a = (await NxtargAsync(false))!;
+            // e2 has seen the operand.
+            string a = av[ap++];
             if (a == "(")
             {
                 bool p1 = await EAsync(eval);
@@ -270,14 +184,13 @@ public static class Test
                         return eval && await IsattyAsync(1);
                     }
 
-                    if (ap < ac && IsInt(av[ap], out int fd))
+                    if (!IsInt(av[ap], out int fd))
                     {
-                        ap++;
-                        return eval && await IsattyAsync(fd);
+                        await SynbadAsync(process, "not a valid file descriptor number ", string.Empty);
                     }
 
-                    await SynbadAsync(process, "not a valid file descriptor number ", string.Empty);
-                    return false;
+                    ap++;
+                    return eval && await IsattyAsync(fd);
                 case "-n":
                     return await NxtargAsync(false) != string.Empty;
                 case "-z":
@@ -412,7 +325,7 @@ public static class Test
             bool relative = true;
             for (string p = pin; p.Length != 0;)
             {
-                uint m = Strtoul(p, out int end);
+                uint m = Libc.Strtoul(p, 0, out int end);
                 p = p[end..];
                 if (p.Length == 0)
                 {
@@ -460,18 +373,11 @@ public static class Test
         private async Task<bool> MtimesAsync(string a, string b, Func<uint, uint, bool> compare)
             => await DirstatAsync(a) is { } ad && await DirstatAsync(b) is { } bd && compare(ad.Mtime, bd.Mtime);
 
-        // time: nsec's read of /dev/bintime, in seconds.
+        // time: nsec's read of /dev/bintime, in seconds, from the descriptor libc keeps open for it.
         private async Task<long> TimeAsync()
         {
-            int fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD | NinePConstants.OCEXEC);
-            try
-            {
-                return BinaryPrimitives.ReadInt64BigEndian((await process.PReadAsync(fd, 8, 0)).Span) / 1_000_000_000;
-            }
-            finally
-            {
-                await process.CloseAsync(fd);
-            }
+            int fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD);
+            return BinaryPrimitives.ReadInt64BigEndian((await process.PReadAsync(fd, 8, 0)).Span) / 1_000_000_000;
         }
     }
 }

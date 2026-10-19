@@ -18,6 +18,16 @@ public sealed class ConsDeviceTests
     }
 
     [Fact]
+    public async Task AProcessThatIsNotTheHostOwnerHasTheOthersPermissions()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), "glenda").BootAsync();
+        int user = await init.OpenAsync("/dev/user", NinePSharp.Constants.NinePConstants.OWRITE);
+        await init.WriteAsync(user, "none"u8.ToArray());
+
+        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/bintime", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
+    }
+
+    [Fact]
     public async Task EachFileStatsWithItsNameAndPermissions()
     {
         Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), "glenda").BootAsync();
