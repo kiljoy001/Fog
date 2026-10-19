@@ -129,6 +129,7 @@ internal sealed partial class RcShell
     {
         if (pid >= 0 && !waitpids.Contains(pid))
         {
+            // Stryker disable once Boolean : the loops that retry an interrupted wait never ask of a pid that is not waited for, and the builtins that do ignore the answer
             return false;
         }
 
@@ -139,6 +140,8 @@ internal sealed partial class RcShell
             if (w.Pid == pid)
             {
                 Setstatus(RcText.Rc(w.Message));
+
+                // Stryker disable once Boolean : a true here only has the loops wait once more, finding the pid no longer waited for
                 return false;
             }
 
