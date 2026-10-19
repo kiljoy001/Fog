@@ -35,6 +35,12 @@ public sealed class LibcTests
     [InlineData("-2147483648", 10, int.MinValue, 11)]
     [InlineData("-2147483649", 10, int.MinValue, 11)]
     [InlineData("99999999999", 10, int.MaxValue, 11)]
+    [InlineData("2147483640", 10, 2147483640, 10)]
+    [InlineData("0755281220e0878", 16, int.MaxValue, 15)]
+    [InlineData("a", 16, 10, 1)]
+    [InlineData("A", 16, 10, 1)]
+    [InlineData("1x5", 16, 1, 1)]
+    [InlineData("0x5", 10, 0, 1)]
     public void StrtolReadsAsPlan9sLibcDoes(string s, int radix, int value, int end)
     {
         Assert.Equal((value, end), (Libc.Strtol(s, radix, out int stop), stop));
@@ -81,6 +87,11 @@ public sealed class LibcTests
     [InlineData("4294967295", 10, uint.MaxValue, 10)]
     [InlineData("4294967296", 10, uint.MaxValue, 10)]
     [InlineData("42949672950", 10, uint.MaxValue, 11)]
+    [InlineData("4294967290", 10, 4294967290u, 10)]
+    [InlineData("9999999999", 10, uint.MaxValue, 10)]
+    [InlineData("999999999999", 10, uint.MaxValue, 12)]
+    [InlineData("2x5", 16, 2u, 1)]
+    [InlineData("0x5", 10, 0u, 1)]
     public void StrtoulReadsAsPlan9sLibcDoes(string s, int radix, uint value, int end)
     {
         Assert.Equal((value, end), (Libc.Strtoul(s, radix, out int stop), stop));

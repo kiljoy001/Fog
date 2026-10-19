@@ -26,7 +26,7 @@ public static class Libc
         }
 
         uint n = 0;
-        int ndig = 0;
+        int start = p;
         bool ovfl = false;
         if (radix is >= 2 and <= 36)
         {
@@ -36,7 +36,7 @@ public static class Libc
             }
 
             uint m = uint.MaxValue / (uint)radix;
-            for (; Digit(At(s, p)) < radix; p++, ndig++)
+            for (; Digit(At(s, p)) < radix; p++)
             {
                 ovfl |= n > m;
                 uint nn = unchecked((n * (uint)radix) + (uint)Digit(s[p]));
@@ -45,7 +45,7 @@ public static class Libc
             }
         }
 
-        end = ndig == 0 ? 0 : p;
+        end = p == start ? 0 : p;
         return ovfl ? uint.MaxValue : neg ? unchecked(0u - n) : n;
     }
 
@@ -78,13 +78,13 @@ public static class Libc
         }
 
         T n = T.Zero;
-        int ndig = 0;
+        int start = p;
         bool ovfl = false;
         if (radix is >= 1 and <= 36)
         {
             T b = T.CreateTruncating(radix);
             T m = T.MaxValue / b;
-            for (; Digit(At(s, p)) < radix; p++, ndig++)
+            for (; Digit(At(s, p)) < radix; p++)
             {
                 ovfl |= n > m;
                 T nn = (n * b) + T.CreateTruncating(Digit(s[p]));
@@ -93,7 +93,7 @@ public static class Libc
             }
         }
 
-        end = ndig == 0 ? 0 : p;
+        end = p == start ? 0 : p;
         return ovfl ? (neg ? T.MinValue : T.MaxValue) : neg ? -n : n;
     }
 

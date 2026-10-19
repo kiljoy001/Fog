@@ -736,5 +736,17 @@
     "mutator": "Equality mutation",
     "line": "while (nextTag is 0 or NoTag || tags.Contains(nextTag));",
     "reason": "the search for a free tag passes over every tag, forever"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "while (At(s, p) is ' ' or '\\t' or '\\n' or '\\f' or '\\r' or '\\v')",
+    "reason": "the white space strtol skips is skipped forever past the end of the string"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "p++;",
+    "reason": "the white space strtol skips is never passed"
   }
 ]

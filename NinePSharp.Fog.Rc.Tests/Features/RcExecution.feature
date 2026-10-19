@@ -5428,6 +5428,7 @@ Feature: rc runs scripts as 9front rc does
     When rc runs the script
       """
       test -n abc && echo n
+      test -n '' || echo the empty string is not -n
       test -z '' && echo z
       test abc && echo abc is not empty
       test '' || echo the empty string is
@@ -5443,6 +5444,7 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       n
+      the empty string is not -n
       z
       abc is not empty
       the empty string is
@@ -5600,6 +5602,7 @@ Feature: rc runs scripts as 9front rc does
       """
       mkdir -p /tmp/d; echo -n >/tmp/d/cons; bind -a /tmp/d /dev
       test -t || echo standard output is not the console
+      test -t >>/dev/cons && echo standard output on the console is
       test -t 9 || echo descriptor 9 is not open
       test -t 3 <[3]/dev/cons && echo descriptor 3 is the console
       test -t 4 <[4]/dev/null || echo descriptor 4 is not
@@ -5607,6 +5610,7 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       standard output is not the console
+      standard output on the console is
       descriptor 9 is not open
       descriptor 3 is the console
       descriptor 4 is not

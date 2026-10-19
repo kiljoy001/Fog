@@ -75,7 +75,7 @@ public static class Read
     {
         await process.WriteAsync(2, "usage: read [ -m | -n nlines | -c nbytes | -r nrunes ] [ file ... ]\n"u8.ToArray());
         process.Exits("usage");
-        return string.Empty;
+        return default!;
     }
 
     private sealed class Reader(Process process)

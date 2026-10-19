@@ -70,16 +70,19 @@ public static class Rm
             }
         }
 
+        // dirstat: nil for a file that cannot be stated.
         public async Task<Stat?> DirstatAsync(string f)
         {
+            Stat? dir = null;
             try
             {
-                return await process.StatAsync(f);
+                dir = await process.StatAsync(f);
             }
             catch (SyscallException)
             {
-                return null;
             }
+
+            return dir;
         }
 
         public async Task ErrAsync(string f, string error)

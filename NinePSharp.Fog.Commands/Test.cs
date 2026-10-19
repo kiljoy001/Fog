@@ -264,16 +264,19 @@ public static class Test
             _ => null,
         };
 
+        // dirstat: nil for a file that cannot be stated.
         private async Task<Stat?> DirstatAsync(string f)
         {
+            Stat? dir = null;
             try
             {
-                return await process.StatAsync(f);
+                dir = await process.StatAsync(f);
             }
             catch (SyscallException)
             {
-                return null;
             }
+
+            return dir;
         }
 
         private async Task<bool> HasModeAsync(string f, uint m) => await DirstatAsync(f) is { } dir && (dir.Mode & m) != 0;
