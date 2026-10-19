@@ -14,6 +14,7 @@ public static class Commands
         ["mount"] = Mount.MainAsync,
         ["read"] = Read.MainAsync,
         ["rm"] = Rm.MainAsync,
+        ["sleep"] = Sleep.MainAsync,
         ["test"] = Test.MainAsync,
     };
 }

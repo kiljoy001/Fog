@@ -5749,3 +5749,20 @@ Feature: rc runs scripts as 9front rc does
       failed
       quiet
       """
+
+  @FOG_RC_RUN_227
+  Scenario: sleep sleeps the seconds it is given and succeeds, with none or nonsense at once
+    When rc runs the script
+      """
+      sleep 0.01 && echo slept a hundredth
+      sleep && echo slept for nothing
+      sleep x && echo slept for nonsense
+      sleep -1 && echo slept for less than nothing
+      """
+    Then it prints
+      """
+      slept a hundredth
+      slept for nothing
+      slept for nonsense
+      slept for less than nothing
+      """
