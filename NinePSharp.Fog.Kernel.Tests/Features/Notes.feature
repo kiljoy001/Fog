@@ -177,3 +177,21 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
     When the child makes a note group of its own
     And the child writes "hangup" to the grandchild's note
     Then the child's write fails with "permission denied"
+
+  @FOG_KERNEL_072
+  Scenario: alarm posts the process an alarm note once its time has passed
+    Given a child that continues after every note, blocked reading an empty pipe after setting an alarm of 50 milliseconds
+    Then the child's read fails with "interrupted"
+    And the child's handler saw "alarm"
+
+  @FOG_KERNEL_072
+  Scenario: alarm 0 cancels the alarm, giving the milliseconds it had left, and 0 when none is set
+    Given a child that continues after every note, held before its next call
+    When the child sets alarms of 60000, 0 and 0 milliseconds
+    Then the alarms gave 0, nearly 60000 and 0 milliseconds
+
+  @FOG_KERNEL_072
+  Scenario: A process forked from one whose alarm is set has none of its own
+    Given a child that continues after every note, held before its next call
+    When the child sets an alarm of 60000 milliseconds and forks a grandchild that cancels its own
+    Then the grandchild's alarm gave 0 milliseconds

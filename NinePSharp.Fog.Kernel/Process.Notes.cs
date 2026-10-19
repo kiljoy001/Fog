@@ -17,6 +17,8 @@ public sealed partial class Process
     private CancellationTokenSource interrupt = new();
     private byte[] args = [];
     private string? setArgs;
+    private CancellationTokenSource? alarm;
+    private DateTimeOffset alarmDue;
 
     internal long NoteId { get; set; }
 
@@ -59,6 +61,30 @@ public sealed partial class Process
             Func<string, bool>? previous = notify;
             notify = handler;
             return previous;
+        }
+    }
+
+    /// <summary>
+    /// alarm(2): an alarm note posted once the milliseconds have passed by the kernel's clock, or
+    /// none for 0; the milliseconds the alarm set before had left are returned.
+    /// </summary>
+    public ValueTask<long> AlarmAsync(long milliseconds)
+    {
+        using Return returning = new(this);
+        lock (debug)
+        {
+            DateTimeOffset now = kernel.Clock.GetUtcNow();
+            long old = alarm is null ? 0 : Math.Max(0, (long)(alarmDue - now).TotalMilliseconds);
+            alarm?.Cancel();
+            alarm = null;
+            if (milliseconds > 0)
+            {
+                var ringing = new CancellationTokenSource();
+                (alarm, alarmDue) = (ringing, now + TimeSpan.FromMilliseconds(milliseconds));
+                _ = RingAsync(milliseconds, ringing);
+            }
+
+            return ValueTask.FromResult(old);
         }
     }
 
@@ -175,10 +201,36 @@ public sealed partial class Process
         }
     }
 
+    // alarmkproc: the note posted, unless the alarm was cancelled or set anew first.
+    private async Task RingAsync(long milliseconds, CancellationTokenSource ringing)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, ringing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        lock (debug)
+        {
+            if (alarm != ringing)
+            {
+                return;
+            }
+
+            alarm = null;
+        }
+
+        PostNote("alarm");
+    }
+
     private void Exit()
     {
         lock (debug)
         {
+            alarm?.Cancel();
             Exited = true;
             notes.Clear();
         }

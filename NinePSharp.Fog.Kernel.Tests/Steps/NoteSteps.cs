@@ -17,6 +17,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
     private readonly List<Agent> agents = [];
     private readonly List<int> pipes = [];
     private readonly List<string?> writes = [];
+    private readonly List<long> alarms = [];
     private Agent? child;
     private Agent? grandchild;
     private Task? blocked;
@@ -67,6 +68,15 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         child = await StartAsync(Init, true);
         grandchild = await child.Do(p => StartAsync(p, null));
         blocked = await child.BeginAsync(p => p.WaitAsync());
+    }
+
+    [Given(@"^a child that continues after every note, blocked reading an empty pipe after setting an alarm of (\d+) milliseconds$")]
+    public async Task GivenAlarmBlocked(long milliseconds)
+    {
+        int read = await PipeAsync();
+        child = await StartAsync(Init, true);
+        await child.Do(p => p.AlarmAsync(milliseconds).AsTask());
+        blocked = await child.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
     }
 
     [Given("a child that continues after every note, held before its next call")]
@@ -160,6 +170,23 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         return (await p.PReadAsync(fd, count, 0)).Length;
     });
 
+    [When(@"^the child sets alarms of (\d+), (\d+) and (\d+) milliseconds$")]
+    public async Task WhenAlarms(long first, long second, long third)
+    {
+        foreach (long milliseconds in new[] { first, second, third })
+        {
+            alarms.Add(await child!.Do(p => p.AlarmAsync(milliseconds).AsTask()));
+        }
+    }
+
+    [When(@"^the child sets an alarm of (\d+) milliseconds and forks a grandchild that cancels its own$")]
+    public async Task WhenGrandchildAlarm(long milliseconds)
+    {
+        await child!.Do(p => p.AlarmAsync(milliseconds).AsTask());
+        Agent forked = await child.Do(p => StartAsync(p, true));
+        alarms.Add(await forked.Do(p => p.AlarmAsync(0).AsTask()));
+    }
+
     [When("the child writes to the pipe")]
     public void WhenChildWrites() => childCall = child!.Do(p => p.WriteAsync(pipes[^1], "x"u8.ToArray()).AsTask());
 
@@ -203,6 +230,17 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
 
     [Then(@"^the child's read gives (\d+) bytes$")]
     public async Task ThenReadGives(int count) => Assert.Equal(count, await Bounded(childRead!));
+
+    [Then(@"^the alarms gave 0, nearly (\d+) and 0 milliseconds$")]
+    public void ThenAlarmsGave(long nearly)
+    {
+        Assert.Equal(0, alarms[0]);
+        Assert.InRange(alarms[1], nearly - 1000, nearly);
+        Assert.Equal(0, alarms[2]);
+    }
+
+    [Then(@"^the grandchild's alarm gave (\d+) milliseconds$")]
+    public void ThenGrandchildAlarm(long milliseconds) => Assert.Equal(milliseconds, Assert.Single(alarms));
 
     [Then("the child's stat succeeds")]
     public Task ThenStatSucceeds() => Bounded(childCall!);
