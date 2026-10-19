@@ -38,7 +38,7 @@ public sealed class MountConnectionTests
         };
         var connection = new MountConnection(peer, peer.Handle, peer, () => ScriptedPeer.Context);
 
-        Assert.Equal(error, (await Assert.ThrowsAsync<IOException>(connection.VersionAsync)).Message);
+        Assert.Equal(error, (await Assert.ThrowsAsync<IOException>(() => connection.VersionAsync().WaitAsync(KernelDriver.Bound))).Message);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class MountConnectionTests
     {
         await using var peer = new ScriptedPeer { Version = (tag, _) => new Rversion(tag, 256, "9P2000.u") };
         var smallest = new MountConnection(peer, peer.Handle, peer, () => ScriptedPeer.Context);
-        await smallest.VersionAsync();
+        await smallest.VersionAsync().WaitAsync(KernelDriver.Bound);
         (MountConnection largest, _) = await ConnectAsync();
 
         Assert.Equal((256, MountConnection.MaxRpc), (smallest.MessageSize, largest.MessageSize));
@@ -194,6 +194,37 @@ public sealed class MountConnectionTests
         Assert.Equal(PipeQueue.Hungup, (await Assert.ThrowsAsync<IOException>(() => StatAsync(connection, 1))).Message);
     }
 
+    // Every tag comes round again once the others have been used: one whose write failed and one a
+    // flush took are each free to be used and answered.
+    [Fact]
+    public async Task TheTagsOfAFailedWriteAndOfAFlushAreUsedAgain()
+    {
+        (MountConnection connection, ScriptedPeer peer) = await ConnectAsync();
+        peer.RefuseWrites = true;
+        await Assert.ThrowsAsync<IOException>(() => StatAsync(connection, 1));
+        peer.RefuseWrites = false;
+        using var cancel = new CancellationTokenSource();
+        Task<byte[]> flushed = StatAsync(connection, 1, cancel.Token);
+        await peer.RequestAsync(0);
+        await cancel.CancelAsync();
+        byte[] flush = await peer.RequestAsync(1);
+        peer.Reply(new Rflush(ScriptedPeer.Tag(flush)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => flushed);
+        using var stop = new CancellationTokenSource();
+        Task answering = AnswerClunksAsync(peer, 2, stop.Token);
+        for (int call = 0; call < ushort.MaxValue - 1; call++)
+        {
+            await connection.RpcAsync(tag => new Tclunk(tag, 0), MessageTypes.Rclunk, default).WaitAsync(KernelDriver.Bound);
+        }
+
+        await stop.CancelAsync();
+        await answering.ContinueWith(_ => { }, TaskScheduler.Default);
+        ushort[] used = [.. (await peer.RequestsAsync(2)).Skip(2).Select(ScriptedPeer.Tag)];
+
+        Assert.Equal((ushort)1, used[^3]);
+        Assert.Equal(ScriptedPeer.Tag(flush), used[^1]);
+    }
+
     [Theory]
     [InlineData(6)]
     [InlineData(MountConnection.MaxRpc + 1)]
@@ -213,7 +244,7 @@ public sealed class MountConnectionTests
     public async Task AFrameOfTheLargestLengthIsReadAsAreFramesArrivingInPieces()
     {
         (MountConnection connection, ScriptedPeer peer) = await ConnectAsync();
-        Task<byte[]> read = connection.RpcAsync(tag => new Tread(tag, 1, 0, 32768), MessageTypes.Rread, default);
+        Task<byte[]> read = connection.RpcAsync(tag => new Tread(tag, 1, 0, 32768), MessageTypes.Rread, default).WaitAsync(KernelDriver.Bound);
         ushort tag = ScriptedPeer.Tag(await peer.RequestAsync(0));
         byte[] largest = ScriptedPeer.Encode(new Rread(tag, new byte[MountConnection.MaxRpc - NinePConstants.HeaderSize - 4]));
         peer.Send(largest[..3]);
@@ -235,16 +266,25 @@ public sealed class MountConnectionTests
         Assert.Equal(MountConnection.RpcError, (await Assert.ThrowsAsync<IOException>(() => call.WaitAsync(TimeSpan.FromMilliseconds(Bound)))).Message);
     }
 
+    private static async Task AnswerClunksAsync(ScriptedPeer peer, int first, CancellationToken cancellationToken)
+    {
+        for (int index = first; ; index++)
+        {
+            byte[] request = await peer.RequestAsync(index).WaitAsync(Timeout.InfiniteTimeSpan, cancellationToken);
+            peer.Reply(new Rclunk(ScriptedPeer.Tag(request)));
+        }
+    }
+
     private static async Task<(MountConnection Connection, ScriptedPeer Peer)> ConnectAsync(uint firstFid = 0)
     {
         await using var peer = new ScriptedPeer();
         var connection = new MountConnection(peer, peer.Handle, peer, () => ScriptedPeer.Context, firstFid);
-        await connection.VersionAsync();
+        await connection.VersionAsync().WaitAsync(KernelDriver.Bound);
         return (connection, peer);
     }
 
     private static Task<byte[]> StatAsync(MountConnection connection, uint fid, CancellationToken cancellationToken = default)
-        => connection.RpcAsync(tag => new Tstat(tag, fid), MessageTypes.Rstat, cancellationToken);
+        => connection.RpcAsync(tag => new Tstat(tag, fid), MessageTypes.Rstat, cancellationToken).WaitAsync(KernelDriver.Bound, CancellationToken.None);
 
     private static byte[] StatReply(ushort tag, string name = "f")
         => ScriptedPeer.Encode(new Rstat(tag, new Stat(0, 0, 0, new Qid(QidType.QTFILE, 0, 1), 0b110_100_100, 0, 0, 0, name, "glenda", "glenda", "glenda")));

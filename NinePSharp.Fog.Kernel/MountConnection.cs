@@ -120,18 +120,14 @@ internal sealed class MountConnection
     {
         var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationTokenRegistration registration = cancellationToken.Register(() => ended.TrySetResult(false));
-        try
+        _ = SignalAsync(task, ended);
+        bool done = await ended.Task;
+
+        // Stryker disable once Statement : unregistering only spares the token a callback that can no longer change the signal it would set
+        registration.Unregister();
+        if (!done)
         {
-            _ = SignalAsync(task, ended);
-            if (!await ended.Task)
-            {
-                throw new OperationCanceledException(cancellationToken);
-            }
-        }
-        finally
-        {
-            // Stryker disable once Statement : unregistering only spares the token a callback that can no longer change the signal it would set
-            registration.Unregister();
+            throw new OperationCanceledException(cancellationToken);
         }
     }
 
@@ -194,7 +190,7 @@ internal sealed class MountConnection
             }
         }
 
-        return r.Reply ?? throw new IOException(r.Error ?? RpcError);
+        return r.Reply ?? throw new IOException(RpcError);
     }
 
     private async Task AwaitReplyAsync(Rpc r, CancellationToken cancellationToken)
@@ -215,7 +211,7 @@ internal sealed class MountConnection
                     break;
                 }
 
-                r.Wake = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                r.Wake = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 wake = r.Wake.Task;
             }
 
@@ -290,7 +286,7 @@ internal sealed class MountConnection
             queue.Remove(answered);
             answered.Reply = reply;
             answered.Done = true;
-            answered.Wake?.TrySetResult(true);
+            answered.Wake?.TrySetResult();
         }
     }
 
@@ -307,13 +303,7 @@ internal sealed class MountConnection
     // wakeup says whether anyone slept: a caller already woken, or no longer waiting, is passed over.
     private void Wakeup()
     {
-        foreach (Rpc q in queue)
-        {
-            if (!q.Done && q.Wake is { } wake && wake.TrySetResult(true))
-            {
-                return;
-            }
-        }
+        _ = queue.FirstOrDefault(q => !q.Done && q.Wake is { } wake && wake.TrySetResult());
     }
 
     // mntflushalloc and mntflushfree: a Tflush naming the request, waited for to its end; then the
@@ -346,9 +336,8 @@ internal sealed class MountConnection
             reading = null;
             foreach (Rpc q in queue)
             {
-                q.Error = RpcError;
                 q.Done = true;
-                q.Wake?.TrySetResult(true);
+                q.Wake?.TrySetResult();
             }
 
             queue.Clear();
@@ -442,8 +431,6 @@ internal sealed class MountConnection
 
         public byte[]? Reply { get; set; }
 
-        public string? Error { get; set; }
-
-        public TaskCompletionSource<bool>? Wake { get; set; }
+        public TaskCompletionSource? Wake { get; set; }
     }
 }

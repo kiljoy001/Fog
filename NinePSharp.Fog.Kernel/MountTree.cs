@@ -273,7 +273,7 @@ internal sealed class MountTree
     private uint IoUnit(uint iounit)
     {
         uint most = (uint)(Connection.MessageSize - MountConnection.HeaderRoom);
-        return iounit == 0 || iounit > most ? most : iounit;
+        return iounit == 0 ? most : Math.Min(iounit, most);
     }
 
     private (uint Fid, uint IoUnit) Opened(ResourceOpenHandle handle)
@@ -416,6 +416,7 @@ internal sealed class MountTree
                 return;
             }
 
+            entry.Forgotten = true;
             fid = entry.Uses == 0 ? entry.Fid : null;
             if (entry.Recent is not null)
             {
@@ -464,11 +465,19 @@ internal sealed class MountTree
         }
     }
 
-    private void Release(Entry entry)
+    // The fid of a file forgotten while in use is let go by its last use.
+    private async ValueTask ReleaseAsync(Entry entry)
     {
+        uint? fid;
         lock (gate)
         {
             entry.Uses--;
+            fid = entry.Forgotten && entry.Uses == 0 ? entry.Fid : null;
+        }
+
+        if (fid is { } held)
+        {
+            await ClunkFidAsync(held);
         }
     }
 
@@ -481,20 +490,14 @@ internal sealed class MountTree
         public int Uses { get; set; }
 
         public LinkedListNode<ulong>? Recent { get; set; }
+
+        public bool Forgotten { get; set; }
     }
 
     private sealed class Use(MountTree tree, Entry? entry, uint fid) : IAsyncDisposable
     {
         public uint Fid { get; } = fid;
 
-        public ValueTask DisposeAsync()
-        {
-            if (entry is not null)
-            {
-                tree.Release(entry);
-            }
-
-            return ValueTask.CompletedTask;
-        }
+        public ValueTask DisposeAsync() => entry is null ? ValueTask.CompletedTask : tree.ReleaseAsync(entry);
     }
 }
