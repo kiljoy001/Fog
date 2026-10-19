@@ -52,6 +52,9 @@ public sealed class RcExecutionSteps
     [Given("rc starts with all but two of its 5000 descriptors in use")]
     public void GivenDescriptorsInUse() => (lastBusy, fogOnly) = (4997, true);
 
+    [Given(@"^9front.*, so this runs on Fog alone$")]
+    public void GivenFogAlone() => fogOnly = true;
+
     [Given("rc is started as a login shell")]
     public void GivenLogin() => (name, fogOnly) = ("-rc", true);
 

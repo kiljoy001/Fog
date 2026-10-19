@@ -5794,3 +5794,72 @@ Feature: rc runs scripts as 9front rc does
              unmount mounted mountpoint
       usage
       """
+
+  @FOG_RC_RUN_229
+  Scenario: auth/newns -a runs a command in the namespace a file adds to, as libauth's addns reads it
+    When rc runs the script
+      """
+      mkdir -p /tmp/na /tmp/nb /tmp/nc /tmp/nd; echo a >/tmp/na/f; echo b >/tmp/nb/g; echo d >/tmp/nd/h
+      x=nb
+      cat >/tmp/ns <<'!'
+      # a comment, and a line indented
+         bind /tmp/na /tmp/nc
+      bind -a /tmp/$x /tmp/nc
+      'bind' -b '/tmp/nd' /tmp/nb
+      nonesuch op
+      . /tmp/ns3
+      cd /tmp/nc
+      !
+      auth/newns -a -n /tmp/ns rc -c 'cat f g; cat /tmp/nb/h'
+      test -e /tmp/nc/f || echo the namespace outside is as it was
+      echo -n bind /tmp/na /tmp/nd >/tmp/ns4
+      auth/newns -a -n /tmp/ns4 cat /tmp/nd/h
+      auth/newns -a -n /tmp/nonesuch rc -c 'echo ran without the namespace'
+      auth/newns -x >[2=1]
+      """
+    Then it prints
+      """
+      a
+      b
+      d
+      the namespace outside is as it was
+      d
+      ran without the namespace
+      usage: auth/newns [-ad] [-n namespace] [cmd [args...]]
+      """
+
+  @FOG_RC_RUN_229
+  Scenario: auth/newns -d prints each line of the namespace file it runs, and what fails
+    Given 9front has factotum and #c/drivers, which Fog has not, so this runs on Fog alone
+    When rc runs the script
+      """
+      echo 'bind /dev/zz /tmp' >/tmp/ns
+      echo 'unmount /tmp' >>/tmp/ns
+      auth/newns -a -d -n /tmp/ns rc -c 'echo done' >[2=1]
+      """
+    Then it prints
+      """
+      open /mnt/factotum/rpc: file does not exist: '/mnt/factotum'
+      open #c/drivers: file does not exist: '#c/drivers'
+      bind /dev/zz /tmp 
+      addns: bind: /dev/zz /tmp: file does not exist: '/dev/zz'
+      unmount /tmp 
+      done
+      """
+
+  @FOG_RC_RUN_229
+  Scenario: auth/newns builds the namespace of /lib/namespace, the one the kernel booted with, as the user
+    Given 9front's /lib/namespace is its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      x=`{echo /* /bin/* /dev/* /net/*}
+      y=`{auth/newns /bin/rc -c 'echo /* /bin/* /dev/* /net/*'}
+      ~ $"x $"y && echo the same
+      auth/newns /bin/rc -c 'echo $user $home; cat /env/user; echo'
+      """
+    Then it prints
+      """
+      the same
+      glenda /usr/glenda
+      glenda
+      """

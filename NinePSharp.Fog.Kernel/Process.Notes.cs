@@ -50,12 +50,15 @@ public sealed partial class Process
     /// <summary>
     /// notify(2): each note is given to the handler, which returns true to continue, as noted(NCONT)
     /// does, or false to leave the note to its default, which ends the process with it as its status.
+    /// The handler it replaces is returned, so one may be stacked on another as atnotify does.
     /// </summary>
-    public void Notify(Func<string, bool>? handler)
+    public Func<string, bool>? Notify(Func<string, bool>? handler)
     {
         lock (debug)
         {
+            Func<string, bool>? previous = notify;
             notify = handler;
+            return previous;
         }
     }
 
