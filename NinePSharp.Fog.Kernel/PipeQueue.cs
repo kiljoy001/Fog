@@ -8,7 +8,7 @@ internal sealed class PipeQueue
     private const int Atomic = 64 * 1024;
     private readonly object gate = new();
     private readonly LinkedList<byte[]> blocks = new();
-    private TaskCompletionSource<bool> changed = NewSignal();
+    private TaskCompletionSource changed = NewSignal();
     private long read;
     private long written;
     private bool closed;
@@ -118,7 +118,7 @@ internal sealed class PipeQueue
         }
     }
 
-    private static TaskCompletionSource<bool> NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     // qflow: the writer waits until no more than the limit is queued ahead of the end of its write.
     private async Task FlowAsync(long end, CancellationToken cancellationToken)
@@ -142,8 +142,8 @@ internal sealed class PipeQueue
 
     private void Signal()
     {
-        TaskCompletionSource<bool> previous = changed;
+        TaskCompletionSource previous = changed;
         changed = NewSignal();
-        previous.SetResult(true);
+        previous.SetResult();
     }
 }

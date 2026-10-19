@@ -214,9 +214,13 @@ public sealed partial class Process
 
         public CancellationToken Token => source.Token;
 
+        // Unregistered rather than disposed, which would wait for a cancellation already running.
         public void Dispose()
         {
+            // Stryker disable once Statement : unregistering only spares the caller's token a callback for a call that has ended
             caller.Unregister();
+
+            // Stryker disable once Statement : unregistering only spares the process's interrupt a callback for a call that has ended
             note.Unregister();
         }
     }
