@@ -5303,6 +5303,7 @@ Feature: rc runs scripts as 9front rc does
       read -r 5 </dev/null && echo runes at eof are no failure
       read </dev/null || echo a line at eof
       echo -n ab | read -r 1; echo
+      {read </dev/null; echo nothing was written for the line} | cat
       echo after
       """
     Then it prints
@@ -5314,6 +5315,7 @@ Feature: rc runs scripts as 9front rc does
       runes at eof are no failure
       a line at eof
       a
+      nothing was written for the line
       after
       """
 
@@ -5368,7 +5370,7 @@ Feature: rc runs scripts as 9front rc does
     Given "/tmp/partial" holds "a\xC3"
     When rc runs the script, its \x escapes bytes
       """
-      read -r 2 /tmp/partial >[2=1]; echo
+      read -r 2 /tmp/partial >[2=1] && echo
       """
     Then it prints
       """
