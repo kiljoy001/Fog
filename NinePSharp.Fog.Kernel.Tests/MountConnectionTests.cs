@@ -241,6 +241,22 @@ public sealed class MountConnectionTests
     }
 
     [Fact]
+    public async Task ABrokenConnectionFailsEveryCallerWaitingWithoutReadingAgain()
+    {
+        (MountConnection connection, ScriptedPeer peer) = await ConnectAsync();
+        Task<byte[]>[] calls = [StatAsync(connection, 1), StatAsync(connection, 2)];
+        await peer.RequestsAsync(2);
+        byte[] frame = new byte[7];
+        BinaryPrimitives.WriteUInt32LittleEndian(frame, 6);
+        peer.Send(frame);
+
+        foreach (Task<byte[]> call in calls)
+        {
+            Assert.Equal(MountConnection.RpcError, (await Assert.ThrowsAsync<IOException>(() => call)).Message);
+        }
+    }
+
+    [Fact]
     public async Task AFrameOfTheLargestLengthIsReadAsAreFramesArrivingInPieces()
     {
         (MountConnection connection, ScriptedPeer peer) = await ConnectAsync();

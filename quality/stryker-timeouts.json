@@ -700,5 +700,29 @@
     "mutator": "Equality mutation",
     "line": "for (int done = 0; done < reply.Length;)",
     "reason": "the read loop takes nothing once the reply is full, so it never reaches past its end"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Statement mutation",
+    "line": "Free(r);",
+    "reason": "with no tag freed, the search for a free tag never ends once the tag cycle has used them all"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Statement mutation",
+    "line": "tags.Remove(r.Tag);",
+    "reason": "with no tag freed, the search for a free tag never ends once the tag cycle has used them all"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Statement mutation",
+    "line": "reading = null;",
+    "reason": "the reader takes the frame it has already muxed again, forever"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Statement mutation",
+    "line": "queue.Remove(answered);",
+    "reason": "every answered request stays queued, and the tag cycle's search of the queue for each reply grows past the bound"
   }
 ]

@@ -81,7 +81,20 @@ internal sealed class ScriptedServer : IAsyncDisposable
         }
     }
 
+    // A fid it does not know is refused, as a server refuses one.
     private ISerializable Answer(byte[] request)
+    {
+        try
+        {
+            return Serve(request);
+        }
+        catch (KeyNotFoundException)
+        {
+            return new Rerror(ScriptedPeer.Tag(request), "unknown fid");
+        }
+    }
+
+    private ISerializable Serve(byte[] request)
     {
         ushort tag = ScriptedPeer.Tag(request);
         switch (ScriptedPeer.Type(request))

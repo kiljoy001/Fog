@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using NinePSharp.Constants;
 using NinePSharp.Messages;
 using NinePSharp.Namespaces;
@@ -14,7 +15,7 @@ internal sealed class MountTree
     private readonly object gate = new();
     private readonly Dictionary<ulong, Entry> entries = [];
     private readonly LinkedList<ulong> recent = new();
-    private readonly Dictionary<string, (uint Fid, uint IoUnit)> opened = [];
+    private readonly ConcurrentDictionary<string, (uint Fid, uint IoUnit)> opened = new(StringComparer.Ordinal);
     private readonly int bound;
 
     private MountTree(MountConnection connection, string device, uint fid, Qid root, int bound)
@@ -179,18 +180,10 @@ internal sealed class MountTree
 
     public async Task ClunkAsync(ResourceOpenHandle handle)
     {
-        uint fid;
-        lock (gate)
+        if (opened.TryRemove(handle.HandleId, out (uint Fid, uint IoUnit) open))
         {
-            if (!opened.Remove(handle.HandleId, out (uint Fid, uint IoUnit) open))
-            {
-                return;
-            }
-
-            fid = open.Fid;
+            await Connection.RpcAsync(tag => new Tclunk(tag, open.Fid), MessageTypes.Rclunk, CancellationToken.None);
         }
-
-        await Connection.RpcAsync(tag => new Tclunk(tag, fid), MessageTypes.Rclunk, CancellationToken.None);
     }
 
     // mntremove: Tremove clunks the fid it names, the open file's or a clone of the file's.
@@ -199,10 +192,7 @@ internal sealed class MountTree
         uint fid;
         if (openHandle is not null)
         {
-            lock (gate)
-            {
-                fid = opened.Remove(openHandle.HandleId, out (uint Fid, uint IoUnit) open) ? open.Fid : throw new IOException(Errors.BadUseFd);
-            }
+            fid = opened.TryRemove(openHandle.HandleId, out (uint Fid, uint IoUnit) open) ? open.Fid : throw new IOException(Errors.BadUseFd);
         }
         else
         {
@@ -261,11 +251,7 @@ internal sealed class MountTree
     {
         uint unit = IoUnit(iounit);
         string id = $"{Device}/{fid}";
-        lock (gate)
-        {
-            opened[id] = (fid, unit);
-        }
-
+        opened[id] = (fid, unit);
         return new ResourceOpenHandle(resource, id, mode, unit);
     }
 
@@ -277,12 +263,7 @@ internal sealed class MountTree
     }
 
     private (uint Fid, uint IoUnit) Opened(ResourceOpenHandle handle)
-    {
-        lock (gate)
-        {
-            return opened.TryGetValue(handle.HandleId, out (uint Fid, uint IoUnit) open) ? open : throw new IOException(Errors.BadUseFd);
-        }
-    }
+        => opened.TryGetValue(handle.HandleId, out (uint Fid, uint IoUnit) open) ? open : throw new IOException(Errors.BadUseFd);
 
     // A fid for the file, walked to again by its names if it has none, held from being let go
     // while it is in use.

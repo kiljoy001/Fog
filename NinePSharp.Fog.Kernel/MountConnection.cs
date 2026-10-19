@@ -257,7 +257,7 @@ internal sealed class MountConnection
                     throw new IOException(RpcError);
                 }
 
-                Mux(frame, reply);
+                Mux(reply);
             }
         }
         finally
@@ -267,15 +267,13 @@ internal sealed class MountConnection
     }
 
     // mountmux: hand the reply to the request it answers, waking its caller unless it is the reader.
-    private void Mux(Task<byte[]> frame, byte[] reply)
+    // Only the reader muxes, so the frame it read is the one the next read must not take again.
+    private void Mux(byte[] reply)
     {
         ushort tag = BinaryPrimitives.ReadUInt16LittleEndian(reply.AsSpan(5, 2));
         lock (gate)
         {
-            if (reading == frame)
-            {
-                reading = null;
-            }
+            reading = null;
 
             Rpc? answered = queue.Find(q => q.Tag == tag);
             if (answered is null)
@@ -326,21 +324,20 @@ internal sealed class MountConnection
         }
     }
 
-    // A connection whose reads fail is broken: every request still waiting fails with mount rpc
-    // error, and so does every later one.
+    // A connection whose reads fail is broken: what it had read is dropped, every request still
+    // waiting fails with mount rpc error, and so does every later one.
     private void Break()
     {
         lock (gate)
         {
             broken = true;
             reading = null;
+            input = [];
             foreach (Rpc q in queue)
             {
                 q.Done = true;
                 q.Wake?.TrySetResult();
             }
-
-            queue.Clear();
         }
 
         _ = lease.DisposeAsync().AsTask();
@@ -350,7 +347,6 @@ internal sealed class MountConnection
     {
         lock (gate)
         {
-            r.Done = true;
             queue.Remove(r);
         }
     }
