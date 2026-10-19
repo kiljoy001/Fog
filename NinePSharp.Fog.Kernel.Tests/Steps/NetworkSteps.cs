@@ -110,17 +110,21 @@ public sealed class NetworkSteps(KernelDriver driver) : IAsyncDisposable
     public Task WhenClosesCall() => Init.CloseAsync(call).AsTask();
 
     [When("a child that continues after every note waits in the announced conversation's listen")]
-    public Task WhenChildListens() => ChildWaitsAsync(async child =>
+    public Task WhenChildListens() => ChildWaitsAsync(async (child, begun) =>
     {
-        await child.OpenAsync($"/net/tcp/{announcedNumber}/listen", NinePConstants.ORDWR);
+        Task listen = child.OpenAsync($"/net/tcp/{announcedNumber}/listen", NinePConstants.ORDWR).AsTask();
+        begun();
+        await listen;
     });
 
     [When("a child that continues after every note waits to read the call's data twice")]
-    public Task WhenChildReads() => ChildWaitsAsync(async child =>
+    public Task WhenChildReads() => ChildWaitsAsync(async (child, begun) =>
     {
         int data = await child.OpenAsync($"/net/tcp/{callNumber}/data", NinePConstants.ORDWR);
         await child.ReadAsync(data, 64);
-        await child.ReadAsync(data, 64);
+        Task read = child.ReadAsync(data, 64).AsTask();
+        begun();
+        await read;
     });
 
     [When(@"^the process posts ""(.*)"" to the child$")]
@@ -250,17 +254,17 @@ public sealed class NetworkSteps(KernelDriver driver) : IAsyncDisposable
         }
     }
 
-    private async Task ChildWaitsAsync(Func<Process, Task> wait)
+    // The child signals once the call it waits in has begun, past any note waiting for it.
+    private async Task ChildWaitsAsync(Func<Process, Action, Task> wait)
     {
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var waited = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         childPid = Init.Fork(RforkFlags.Fdg, async child =>
         {
             child.Notify(_ => true);
-            started.SetResult(true);
             try
             {
-                await wait(child);
+                await wait(child, () => started.SetResult(true));
                 waited.SetResult("returned");
             }
             catch (SyscallException error)
