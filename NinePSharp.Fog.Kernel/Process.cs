@@ -865,6 +865,7 @@ public sealed partial class Process
             "p" => ProcDevice.Root,
             "I" => IpDevice.Root,
             "/" => RootDevice.Root,
+            "R" => kernel.Store,
             _ => throw new IOException(Errors.BadSharp),
         };
         if (process.ProcessGroup.MountTable.MountsDisabled && !"|decp".Contains(device, StringComparison.Ordinal))

@@ -8,6 +8,32 @@ namespace NinePSharp.Fog.Kernel;
 
 public sealed class FogKernel
 {
+    // The namespace newns builds, as 9front's /lib/namespace: what BootAsync composes, with the
+    // store reached by its name #R where 9front mounts /srv/boot.
+    public const string NamespaceFile = """
+        # kernel devices
+        bind #c /dev
+        bind #d /fd
+        bind -c #e /env
+        bind #p /proc
+
+        # root
+        bind #R /root
+        bind -a /root /
+
+        # standard bin
+        bind -c /root/bin /bin
+        bind /root/rc /rc
+
+        # internal networks
+        bind -a #I /net
+
+        cd /usr/$user
+
+        . /lib/namespace.local
+
+        """;
+
     private static readonly string[] StoreDirectories = ["adm", "bin", "lib", "rc", "tmp", "usr"];
     private readonly IReadOnlyDictionary<string, ProgramMain> programs;
     private readonly ResourceHandle store;
@@ -56,6 +82,9 @@ public sealed class FogKernel
     internal RootDevice Slash { get; }
 
     internal MountDevice Mounts { get; } = new();
+
+    // The store the kernel boots from, which #R names.
+    internal ResourceHandle Store => store;
 
     internal ProcDevice Procs { get; }
 
@@ -112,6 +141,13 @@ public sealed class FogKernel
             await Files.WriteAsync(program, 0, Encoding.UTF8.GetBytes($"\0fog {name}\n"), Context(0, User), CancellationToken.None);
             await Files.ClunkAsync(program, Context(0, User), CancellationToken.None);
         }
+
+        ResourceHandle lib = await DirectoryAsync("lib");
+        ResourceOpenHandle namespaceFile = await Files.WalkAsync(lib, "namespace", CancellationToken.None) is { } written
+            ? await Files.OpenAsync(written, NinePConstants.OWRITE | NinePConstants.OTRUNC, Context(0, User), CancellationToken.None)
+            : await Files.CreateAndOpenAsync(lib, "namespace", 0b110_100_100, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
+        await Files.WriteAsync(namespaceFile, 0, Encoding.UTF8.GetBytes(NamespaceFile), Context(0, User), CancellationToken.None);
+        await Files.ClunkAsync(namespaceFile, Context(0, User), CancellationToken.None);
 
         VProcess first = Table.CreateInitial(new NamespaceNavigator(new MountTable(), Files).Attach(RootDevice.Root));
         MountTable mounts = first.ProcessGroup.MountTable;

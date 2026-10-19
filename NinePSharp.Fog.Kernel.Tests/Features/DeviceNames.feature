@@ -2,7 +2,8 @@
 Feature: A name starting with # begins at the device it names, as 9front's namec does
   After the #, a name gives a device's rune and the spec that device attaches with, up to the next
   slash, and the rest of the name is walked from the device's root: #c is the console, #d the
-  descriptors, #e the environment group, #p the processes, #I the network and #/ the root device. A
+  descriptors, #e the environment group, #p the processes, #I the network, #/ the root device, and
+  the store the kernel boots from is #R, which 9front reaches through /srv/boot instead. A
   rune that names no device fails "unknown device in # filename". A process whose namespace was
   forked with RFNOMNT may attach only the devices 9front leaves it, |, d, e, c and p, and any other
   fails "mount/attach disallowed". So the names of /lib/namespace, and libc's and libauth's uses
@@ -25,6 +26,7 @@ Feature: A name starting with # begins at the device it names, as 9front's namec
       | #p   | 1     |
       | #I   | tcp   |
       | #/   | net   |
+      | #R   | lib   |
 
   @FOG_KERNEL_069
   Scenario: A file under a device is reached by its name under the device's rune
@@ -58,3 +60,7 @@ Feature: A name starting with # begins at the device it names, as 9front's namec
       | #c/nonesuch     | file does not exist: '#c/nonesuch'       |
       | #c/nonesuch/x   | file does not exist: '#c/nonesuch'       |
       | #c/user/x       | not a directory: '#c/user'               |
+
+  @FOG_KERNEL_071
+  Scenario: Each boot writes /lib/namespace, the namespace file newns builds a namespace from
+    Then reading "/lib/namespace" gives the namespace file the kernel writes

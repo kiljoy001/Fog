@@ -65,6 +65,14 @@ public sealed class DeviceNameSteps(KernelDriver driver)
         await Init.CloseAsync(fd);
     }
 
+    [Then(@"^reading ""/lib/namespace"" gives the namespace file the kernel writes$")]
+    public async Task ThenNamespaceFile()
+    {
+        int fd = await Init.OpenAsync("/lib/namespace", NinePConstants.OREAD);
+        Assert.Equal(FogKernel.NamespaceFile, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 8192)).Span));
+        await Init.CloseAsync(fd);
+    }
+
     [Then(@"^the call fails with ""(.*)""$")]
     public void ThenFails(string message) => Assert.Equal(message, failure);
 }
