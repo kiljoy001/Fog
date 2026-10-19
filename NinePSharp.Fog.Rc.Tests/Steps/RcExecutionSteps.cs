@@ -22,6 +22,7 @@ public sealed class RcExecutionSteps
     // Each read is bounded, and so is the whole run, so an rc that keeps printing fails the scenario too.
     private static readonly TimeSpan RunBound = TimeSpan.FromSeconds(10);
     private readonly ManualClock clock = new() { Now = DateTimeOffset.UtcNow };
+    private FogKernel? kernel;
     private Process? init;
     private string script = string.Empty;
     private string output = string.Empty;
@@ -44,13 +45,25 @@ public sealed class RcExecutionSteps
     public async Task GivenAKernel()
     {
         var programs = new Dictionary<string, ProgramMain>(Commands.Commands.All) { ["rc"] = RcProgram.MainAsync };
-        init = await FogKernel.InMemory(programs, "glenda", clock).BootAsync();
+        kernel = FogKernel.InMemory(programs, "glenda", clock);
+        init = await kernel.BootAsync();
         await init.CloseAsync(await init.CreateAsync("/root/rc/lib", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
         await WriteAsync("/root/rc/lib/rcmain", RcProgram.Rcmain);
     }
 
     [Given("rc starts with all but two of its 5000 descriptors in use")]
     public void GivenDescriptorsInUse() => (lastBusy, fogOnly) = (4997, true);
+
+    // A process a scenario leaves running, as a listener does, is killed, so its port is free for
+    // the next.
+    [AfterScenario]
+    public void KillLeftovers()
+    {
+        foreach (Process process in kernel?.Processes.Values ?? Enumerable.Empty<Process>())
+        {
+            process.PostNote("kill");
+        }
+    }
 
     [Given(@"^9front.*, so this runs on Fog alone$")]
     public void GivenFogAlone() => fogOnly = true;

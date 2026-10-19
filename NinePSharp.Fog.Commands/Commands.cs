@@ -8,6 +8,7 @@ public static class Commands
     public static IReadOnlyDictionary<string, ProgramMain> All { get; } = new Dictionary<string, ProgramMain>
     {
         ["auth/newns"] = AuthNewns.MainAsync,
+        ["aux/listen"] = Listen.MainAsync,
         ["aux/listen1"] = Listen1.MainAsync,
         ["aux/trampoline"] = Trampoline.MainAsync,
         ["bind"] = Bind.MainAsync,

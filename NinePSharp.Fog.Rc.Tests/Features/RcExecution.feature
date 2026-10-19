@@ -5992,3 +5992,45 @@ Feature: rc runs scripts as 9front rc does
       bad mac
       usage: trampoline [-9] [-a addr] [-m netdir] [-o opt] [-t timeout] addr
       """
+
+  @FOG_RC_RUN_232
+  Scenario: aux/listen runs a trusted service's file for each call to the port the file is named for
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    And the executable "/tmp/tcp17099" holds "#!/bin/rc\x0Aecho hello from $1 over $2, as `{cat /dev/user}", which 9front would need chmod for
+    When rc runs the script
+      """
+      aux/listen -iq -t /tmp -a 127.0.0.1 tcp >/dev/null >[2]/dev/null &
+      sleep 1
+      for(i in 1 2){
+          {
+              n=`{read -c 11 <[0=3]}
+              echo -n connect 127.0.0.1!17099 >[1=3]
+              cat /net/tcp/$n/data
+          } <>[3]/net/tcp/clone
+      }
+      """
+    Then it prints
+      """
+      hello from tcp17099 over tcp, as glenda
+      hello from tcp17099 over tcp, as glenda
+      """
+
+  @FOG_RC_RUN_232
+  Scenario: aux/listen runs a service as none in the namespace newns builds, and not a namespace file
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    And the executable "/tmp/tcp17100" holds "#!/bin/rc\x0Aecho as `{cat /dev/user}", which 9front would need chmod for
+    And the executable "/tmp/tcp17101.namespace" holds "bind /tmp /n", which 9front would need chmod for
+    When rc runs the script
+      """
+      aux/listen -iq -d /tmp -a 127.0.0.1 tcp >/dev/null >[2]/dev/null &
+      sleep 1
+      {
+          n=`{read -c 11 <[0=3]}
+          echo -n connect 127.0.0.1!17100 >[1=3]
+          cat /net/tcp/$n/data
+      } <>[3]/net/tcp/clone
+      """
+    Then it prints
+      """
+      as none
+      """

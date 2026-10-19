@@ -10,6 +10,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="NinePSharp.Fog.Kernel.Tests" />
     <InternalsVisibleTo Include="NinePSharp.Fog.Coyote.Tests" />
+    <InternalsVisibleTo Include="NinePSharp.Fog.Rc.Tests" />
     <InternalsVisibleTo Include="NinePSharp.Fog.Wasm" />
     <InternalsVisibleTo Include="NinePSharp.Fog.Wasm.Tests" />
   </ItemGroup>
