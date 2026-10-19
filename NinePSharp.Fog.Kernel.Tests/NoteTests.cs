@@ -161,7 +161,7 @@ public sealed class NoteTests : IAsyncDisposable
         Assert.True(child.Process.PostNote("hangup"));
         Assert.Equal(Errors.Interrupted, (await Assert.ThrowsAsync<SyscallException>(() => first.WaitAsync(KernelDriver.Bound))).Message);
 
-        Task<ReadOnlyMemory<byte>> second = child.Do(p => p.ReadAsync(read, 1).AsTask());
+        Task<ReadOnlyMemory<byte>> second = await child.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
         await init.WriteAsync(write, "x"u8.ToArray());
 
         Assert.Equal("x", Encoding.ASCII.GetString((await second.WaitAsync(KernelDriver.Bound)).Span));
