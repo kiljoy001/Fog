@@ -20,6 +20,8 @@ internal static class Errors
     public const string NoCreate = "mounted directory forbids creation";
     public const string Mount = "inconsistent mount";
     public const string Unmount = "not mounted";
+    public const string Exist = "file already exists";
+    public const string Shutdown = "device shut down";
     public const string Union = "not in union";
     public const string IsMountPoint = "is a mount point";
     public const string NoAttach = "mount/attach disallowed";

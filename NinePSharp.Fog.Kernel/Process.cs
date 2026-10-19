@@ -32,7 +32,7 @@ public sealed partial class Process
         Cons = new ConsDevice(this, kernel.User, kernel.Clock, kernel.Booted);
         Text = text;
         User = user;
-        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs, kernel.Ip);
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs, kernel.Ip, kernel.Srv);
         (plane, calls) = Bind();
 
         // pidalloc: a process given no note group has one numbered by its own pid.
@@ -142,6 +142,10 @@ public sealed partial class Process
         {
             return await OpenDescriptorAsync(dup.Descriptor, mode);
         }
+        catch (SrvOpenException posted)
+        {
+            return process.Descriptors.Share(posted.Posted, (mode & NinePConstants.OCEXEC) != 0);
+        }
         catch (IOException error)
         {
             throw new SyscallException(error.Message);
@@ -168,6 +172,10 @@ public sealed partial class Process
         {
             return await OpenDescriptorAsync(dup.Descriptor, mode);
         }
+        catch (SrvOpenException posted)
+        {
+            return process.Descriptors.Share(posted.Posted, (mode & NinePConstants.OCEXEC) != 0);
+        }
         catch (NamespaceException error) when (error.Error == NamespaceError.CreateNotPermitted)
         {
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.NoCreate));
@@ -175,6 +183,10 @@ public sealed partial class Process
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotDirectory)
         {
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.CreateNonDirectory));
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
         }
         catch (ArgumentOutOfRangeException)
         {
@@ -866,6 +878,7 @@ public sealed partial class Process
             "I" => IpDevice.Root,
             "/" => RootDevice.Root,
             "R" => kernel.Store,
+            "s" => SrvDevice.Root,
             _ => throw new IOException(Errors.BadSharp),
         };
         if (process.ProcessGroup.MountTable.MountsDisabled && !"|decp".Contains(device, StringComparison.Ordinal))
