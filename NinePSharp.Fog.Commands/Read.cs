@@ -25,15 +25,15 @@ public static class Read
             switch (c)
             {
                 case 'c':
-                    reader.Count = Libc.Strtoll(arguments.Value() ?? await UsageAsync(process), 10, out _);
+                    reader.Count = Libc.Strtoll(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
                     proc = reader.CharsAsync;
                     break;
                 case 'r':
-                    reader.Count = Libc.Strtoll(arguments.Value() ?? await UsageAsync(process), 10, out _);
+                    reader.Count = Libc.Strtoll(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
                     proc = reader.RunesAsync;
                     break;
                 case 'n':
-                    reader.Count = Libc.Strtol(arguments.Value() ?? await UsageAsync(process), 10, out _);
+                    reader.Count = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
                     break;
                 case 'm':
                     reader.Multi = true;

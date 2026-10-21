@@ -196,6 +196,32 @@ public sealed class NoteTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AHostCallGivesWhatTheHostGivesAndANoteInterruptsIt()
+    {
+        await BootAsync();
+        Agent child = await StartAsync(true);
+        Assert.Same(kernel.Host, await child.Do(p => p.HostAsync(host => Task.FromResult(host))));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => child.Do(p => p.HostAsync<int>(_ => Task.FromException<int>(new InvalidOperationException()))));
+
+        var never = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<int> call = await child.BeginAsync(p => p.HostAsync(_ => never.Task));
+        Assert.True(child.Process.PostNote("hangup"));
+        Assert.Equal(Errors.Interrupted, (await Assert.ThrowsAsync<SyscallException>(() => call.WaitAsync(KernelDriver.Bound))).Message);
+    }
+
+    [Fact]
+    public async Task ANoteToAProcessWithNoHandlerEndsItInAHostCall()
+    {
+        await BootAsync();
+        Agent child = await StartAsync(null);
+        var never = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = await child.BeginAsync(p => p.HostAsync(_ => never.Task));
+        Assert.True(child.Process.PostNote("hangup"));
+
+        Assert.EndsWith(": hangup", (await init.WaitAsync().WaitAsync(KernelDriver.Bound)).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnExitedProcessTakesNoNoteAndKeepsNoneThatWaited()
     {
         await BootAsync();

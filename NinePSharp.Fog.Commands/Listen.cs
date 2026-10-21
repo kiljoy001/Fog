@@ -107,28 +107,28 @@ public sealed class Listen(string argv0)
             switch (c)
             {
                 case 'a':
-                    addr = arguments.Value() ?? await UsageAsync(process);
+                    addr = await arguments.EargfAsync(() => UsageAsync(process));
                     break;
                 case 'd':
-                    servdir = arguments.Value() ?? await UsageAsync(process);
+                    servdir = await arguments.EargfAsync(() => UsageAsync(process));
                     break;
                 case 'q':
                     quiet = true;
                     break;
                 case 't':
-                    trustdir = arguments.Value() ?? await UsageAsync(process);
+                    trustdir = await arguments.EargfAsync(() => UsageAsync(process));
                     break;
                 case 'n':
-                    nspath = arguments.Value() ?? await UsageAsync(process);
+                    nspath = await arguments.EargfAsync(() => UsageAsync(process));
                     break;
                 case 'p':
-                    _ = Libc.Strtol(arguments.Value() ?? await UsageAsync(process), 10, out _);
+                    _ = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
                     break;
                 case 'o':
-                    await OptionAsync(process, copts, arguments.Value() ?? await UsageAsync(process), "-o");
+                    await OptionAsync(process, copts, await arguments.EargfAsync(() => UsageAsync(process)), "-o");
                     break;
                 case 'O':
-                    await OptionAsync(process, sopts, arguments.Value() ?? await UsageAsync(process), "-O");
+                    await OptionAsync(process, sopts, await arguments.EargfAsync(() => UsageAsync(process)), "-O");
                     break;
                 case 'i':
                     // A fixed configuration, without the periodic rescan of the service directory.

@@ -163,7 +163,7 @@ public sealed class FilesSteps(KernelDriver driver)
     [Then(@"^the process can still open ""(.*)""$")]
     public async Task ThenCanOpen(string path) => Assert.Equal(4999, await driver.Init.OpenAsync(path, NinePConstants.OREAD));
 
-    [When(@"^the process (opens|creates|stats|removes|changes to|wstats|execs) the name ""(.*)""$")]
+    [When(@"^the process (opens|creates|stats|removes|changes to|wstats|execs|unmounts|unmounts from) the name ""(.*)""$")]
     public Task WhenNames(string call, string name) => CallAsync(async () =>
     {
         string path = Expand(name);
@@ -186,6 +186,12 @@ public sealed class FilesSteps(KernelDriver driver)
                 break;
             case "wstats":
                 await driver.Init.WStatAsync(path, Process.NullDir);
+                break;
+            case "unmounts":
+                await driver.Init.UnmountAsync(path, "/tmp");
+                break;
+            case "unmounts from":
+                await driver.Init.UnmountAsync("/tmp", path);
                 break;
             default:
                 await driver.Init.ExecAsync(path, ["x"]);

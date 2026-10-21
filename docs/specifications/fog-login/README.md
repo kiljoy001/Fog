@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; slices 1 to 4, the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, and mount, rm, test and read, are built.
+Status: design; slices 1 to 5, the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, and `#I` with tcp, `ndb/cs` and `aux/listen`, are built.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -204,7 +204,16 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 
 ## Divergences
 
-- `ndb/cs` asks the host's resolver for DNS names instead of `ndb/dns`.
+- `ndb/cs` asks the host's resolver for DNS names instead of `ndb/dns`: libndb's `dnsquery`
+  answers from it as dns does, `dom=name ip=address` for each address and `ptr=name dom=name`
+  for a reverse lookup.
+- `#I` has no `ipifc`, since the host keeps the addresses, so libip's `readipifc` gives the host's
+  interfaces that are not down. cs translates an address only for an ip version one of them has.
+- libndb has no hash files, as Fog has no `ndb/mkhash`, and searches each file from its start. A
+  translation that fails reports cs's own error, not the missing hash file's that 9front's
+  libndb leaves in the error string.
+- `#I` has no ether devices, so cs's `ipid` does not look for a sys by an ethernet address, and
+  `cs -d` logs what cs does but not each 9P message, as Fog has no `fcallfmt` to print them.
 - Factotum's `-S` reads the host owner's key from the host's sealed key store, not NVRAM.
 - The root is one host's gefs store until it is replicated, as the architecture describes.
 - Fog has no `$cputype`: in place of `bind /$cputype/bin /bin`, the store's `/bin` is bound on
@@ -226,7 +235,8 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   server that needs no authentication; `-k` is taken and not used.
 - `mount -N` becomes none through `/dev/user`, as Fog names no device by `#`.
 - `#c/bintime` reads the host's clock, and its time cannot be set through it.
-- Fog has no `/dev/cons` yet, so `test -t` finds no descriptor is the console.
+- `#c/cons` writes to the host's console, its standard error, as devcons's writes go to the
+  screen; like devcons's it cannot be read, and there is no keyboard until kbdfs is ported.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.

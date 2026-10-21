@@ -265,6 +265,25 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
         }
     }
 
+    [When(@"^the process unmounts ""(.*)"" from ""(.*)""$")]
+    public Task WhenUnmounts(string name, string old) => Init.UnmountAsync(name, old).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process unmounts everything from ""(.*)""$")]
+    public Task WhenUnmountsAll(string old) => Init.UnmountAsync(null, old).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process tries to unmount ""(.*)"" from ""(.*)""$")]
+    public async Task WhenTriesUnmount(string name, string old)
+    {
+        try
+        {
+            await Init.UnmountAsync(name, old).AsTask().WaitAsync(Bound);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
+    }
+
     [When("the server hangs up")]
     public Task WhenHangsUp() => server.HangUpAsync(Init, serverEnd);
 

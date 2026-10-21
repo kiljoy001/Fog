@@ -24,7 +24,7 @@ public static class AuthNewns
                     debug = true;
                     break;
                 case 'n':
-                    file = arguments.Value() ?? await UsageAsync(process, argv[0]);
+                    file = await arguments.EargfAsync(() => UsageAsync(process, argv[0]));
                     break;
                 default:
                     await UsageAsync(process, argv[0]);

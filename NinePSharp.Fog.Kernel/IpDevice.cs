@@ -59,7 +59,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
             case File.Protodir when name == "clone":
                 found = Handle(0, 0, File.Clone);
                 break;
-            case File.Protodir when int.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out int x) && x.ToString(CultureInfo.InvariantCulture) == name && Find(x) is not null:
+            case File.Protodir when int.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out int x) && Number(x) == name && x < Count():
                 found = Handle(0, x, File.Convdir);
                 break;
             case File.Convdir when ConvFiles.FirstOrDefault(f => f.Name == name) is { Name: not null } file:
@@ -87,6 +87,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
         File type = Type(resource);
         if (type is File.Topdir or File.Protodir or File.Clone)
         {
+            // Stryker disable once String : the root and clone stat under the names they were reached by, as devstat names a file from its channel
             return ValueTask.FromResult(type switch
             {
                 File.Topdir => new ResourceStat(resource, "#I0", Directory, 0, 0, 0, Network, Network, Network),
@@ -101,15 +102,17 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
             (string name, uint mode) = type switch
             {
                 File.Convdir => (Number(c.X), Directory),
-                File.Ctl or File.Data or File.Listen => (ConvFiles.First(f => f.File == type).Name, c.Perm),
-                _ => (ConvFiles.First(f => f.File == type).Name, 0b100_100_100u),
+                File.Ctl or File.Data or File.Listen => (Name(type), c.Perm),
+                _ => (Name(type), 0b100_100_100u),
             };
             return ValueTask.FromResult(new ResourceStat(resource, name, mode, 0, c.Ctime, 0, c.Owner, c.Owner, c.Owner));
         }
     }
 
     // ipopen: clone reserves a conversation and opens its ctl; listen waits for a call and opens its
-    // ctl; ctl and data open by the owner's bits, or as the owner by the others'.
+    // ctl; ctl, data and listen open by the owner's bits for the owner, by the others' for anyone
+    // else, and always for the host owner. devip compares the owner with #I's attacher; Fog, whose
+    // channels do not carry one, with the process's user.
     public async ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
         int perm = (mode & 3) switch
@@ -136,11 +139,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
                 Conversation c = Get(Conv(resource));
                 lock (c)
                 {
-                    if ((perm & (c.Perm >> 6)) != perm && (context.User != c.Owner || (perm & c.Perm) != perm))
-                    {
-                        throw new IOException(Errors.Permission);
-                    }
-
+                    Check(c, perm, context);
                     if (++c.Ref == 1)
                     {
                         c.Owner = context.User;
@@ -157,11 +156,6 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
     public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
     {
         File type = Type(openHandle.Resource);
-        if (type is File.Topdir or File.Protodir or File.Convdir)
-        {
-            return ReadOnlyMemory<byte>.Empty;
-        }
-
         Conversation c = Get(Conv(openHandle.Resource));
         if (type == File.Data)
         {
@@ -189,13 +183,13 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
                 File.Ctl => Number(c.X),
                 File.Local => $"{Format(c.LocalAddress)}!{c.LocalPort}\n",
                 File.Remote => $"{Format(c.RemoteAddress)}!{c.RemotePort}\n",
-                File.Status => $"{c.TcpState} qin {Math.Max(0, Available(c))} qout 0\n",
+                File.Status => $"{c.TcpState} qin {(c.State == State.Announced ? 0 : c.Socket?.Available ?? 0)} qout 0\n",
                 _ => throw new IOException(Errors.Permission),
             };
         }
 
         byte[] bytes = Encoding.UTF8.GetBytes(text);
-        return offset >= (ulong)bytes.Length ? ReadOnlyMemory<byte>.Empty : bytes.AsMemory((int)offset);
+        return bytes.AsMemory((int)Math.Min(offset, (ulong)bytes.Length));
     }
 
     public async ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
@@ -254,52 +248,8 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
     public ValueTask RemoveAsync(ResourceHandle resource, ResourceOpenHandle? openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
         => throw new IOException(Errors.Permission);
 
-    private static ResourceHandle Handle(int proto, int conv, File type)
-        => new(new ResourceIdentity(Provider, "#I", (ulong)((proto << 16) | (conv << 4) | (int)type)), type is File.Topdir or File.Protodir or File.Convdir ? QidType.QTDIR : QidType.QTFILE);
-
-    private static File Type(ResourceHandle resource) => (File)(int)(resource.Identity.Path & 0xF);
-
-    private static int Conv(ResourceHandle resource) => (int)((resource.Identity.Path >> 4) & 0xFFF);
-
-    private static int Proto(ResourceHandle resource) => (int)((resource.Identity.Path >> 16) & 0xFF);
-
-    private static string Number(int x) => x.ToString(CultureInfo.InvariantCulture);
-
-    // %I: an IPv4 address as v4, any other as v6, and none as ::.
-    private static string Format(IPAddress? address)
-        => address is null ? "::" : address.IsIPv4MappedToIPv6 ? address.MapToIPv4().ToString() : address.ToString();
-
-    private static int Available(Conversation c)
-    {
-        try
-        {
-            return c.Socket?.Available ?? 0;
-        }
-        catch (Exception error) when (error is ObjectDisposedException or SocketException)
-        {
-            // A listening socket has no queue to measure.
-            return 0;
-        }
-    }
-
     // The host's reason a socket call failed, in Plan 9's words where they have them.
-    private static async Task<T> Host<T>(Func<Task<T>> call)
-    {
-        try
-        {
-            return await call();
-        }
-        catch (SocketException error)
-        {
-            throw Reason(error);
-        }
-        catch (ObjectDisposedException)
-        {
-            throw new IOException(PipeQueue.Hungup);
-        }
-    }
-
-    private static IOException Reason(SocketException error) => new(error.SocketErrorCode switch
+    internal static IOException Reason(SocketException error) => new(error.SocketErrorCode switch
     {
         SocketError.ConnectionRefused => "connection refused",
         SocketError.TimedOut => "connection timed out",
@@ -309,6 +259,51 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
         SocketError.ConnectionReset => "connection reset by peer",
         _ => error.Message,
     });
+
+    private static ResourceHandle Handle(int proto, int conv, File type)
+    {
+        // Stryker disable once Bitwise : tcp is #I's only protocol, numbered 0, which shifts to 0 either way
+        int protocol = proto << 16;
+        return new(new ResourceIdentity(Provider, "#I", (ulong)(protocol | (conv << 4) | (int)type)), type is File.Topdir or File.Protodir or File.Convdir ? QidType.QTDIR : QidType.QTFILE);
+    }
+
+    private static File Type(ResourceHandle resource) => (File)(int)(resource.Identity.Path & 0xF);
+
+    private static int Conv(ResourceHandle resource)
+    {
+        // Stryker disable once Bitwise : a path is unsigned, so >> already shifts in zeros as >>> does
+        ulong bits = resource.Identity.Path >> 4;
+        return (int)(bits & 0xFFF);
+    }
+
+    private static int Proto(ResourceHandle resource)
+    {
+        // Stryker disable once Bitwise : tcp is #I's only protocol, numbered 0, and any shift of a path's protocol bits gives 0
+        ulong bits = resource.Identity.Path >> 16;
+        return (int)(bits & 0xFF);
+    }
+
+    // A conversation file's name; ConvFiles holds them in the order of their types.
+    private static string Name(File type) => ConvFiles[type - File.Ctl].Name;
+
+    private static string Number(int x) => x.ToString(CultureInfo.InvariantCulture);
+
+    // %I: an IPv4 address as v4, any other as v6, and none as ::.
+    private static string Format(IPAddress? address)
+        => address is null ? "::" : address.IsIPv4MappedToIPv6 ? address.MapToIPv4().ToString() : address.ToString();
+
+    // A host socket call, failing with the reason Reason gives, or as hung up once its socket is let go.
+    private static async Task<T> Host<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await call();
+        }
+        catch (Exception error) when (error is SocketException or ObjectDisposedException)
+        {
+            throw error is SocketException socket ? Reason(socket) : new IOException(PipeQueue.Hungup);
+        }
+    }
 
     // parseip: a v4 or v6 address, or the error devip gives.
     private static IPAddress ParseIp(string text)
@@ -339,15 +334,32 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
         }
     }
 
-    private Conversation? Find(int x)
+    private int Count()
     {
         lock (tcp)
         {
-            return x < tcp.Count ? tcp[x] : null;
+            return tcp.Count;
         }
     }
 
-    private Conversation Get(int x) => Find(x) ?? throw new IOException(Errors.NotExist);
+    // A conversation a walk found; once made, one is never taken away.
+    private Conversation Get(int x)
+    {
+        lock (tcp)
+        {
+            return tcp[x];
+        }
+    }
+
+    // The permission check ipopen makes of ctl, data and listen. #I has no wstat, so a conversation's
+    // owner bits are always rw and only the others' bits can refuse.
+    private void Check(Conversation c, int perm, ResourceOperationContext context)
+    {
+        if (context.User != c.Owner && (perm & c.Perm) != perm && context.User != kernel.User)
+        {
+            throw new IOException(Errors.Permission);
+        }
+    }
 
     // protoclone: the lowest conversation no one holds, or a new one.
     private Conversation Clone(string user, Socket? socket)
@@ -392,12 +404,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
         Socket socket;
         lock (listening)
         {
-            int wanted = context.User == listening.Owner ? perm << 6 : perm;
-            if ((wanted & listening.Perm) != wanted && context.User != kernel.User)
-            {
-                throw new IOException(Errors.Permission);
-            }
-
+            Check(listening, perm, context);
             if (listening.State != State.Announced)
             {
                 throw new IOException("not announced");
@@ -406,12 +413,22 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
             socket = listening.Socket!;
         }
 
-        Socket accepted = await Host(() => socket.AcceptAsync(cancellationToken).AsTask());
+        Socket accepted;
+        try
+        {
+            accepted = await Host(() => socket.AcceptAsync(cancellationToken).AsTask());
+        }
+        catch (IOException) when (listening.State != State.Announced)
+        {
+            // ipopen gives up on a conversation hung up while it waits.
+            throw new IOException("listen hungup");
+        }
+
         Conversation call = Clone(context.User, accepted);
         lock (call)
         {
             call.State = State.Connected;
-            call.SetEnds();
+            call.SetEnds(kernel.Host);
         }
 
         return new ResourceOpenHandle(Handle(0, call.X, File.Ctl), handle, mode, 0);
@@ -442,7 +459,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
 
                 lock (c)
                 {
-                    c.SetLocal(f[1], announcing: false);
+                    c.SetLocal(f[1]);
                 }
 
                 break;
@@ -456,6 +473,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
             case "keepalive":
                 lock (c)
                 {
+                    // Stryker disable once Statement,Boolean : keepalive is the host socket's, which no file of #I shows
                     c.Socket?.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
                 }
 
@@ -489,16 +507,22 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
 
             IPAddress address = ParseIp(f[1][..bang]);
             int port = ParsePort(f[1][(bang + 1)..]);
+
+            // Fsstdconnect: a local address given, or the host's choice, whatever was bound before.
             if (f.Count == 3)
             {
-                c.SetLocal(f[2], announcing: false);
+                c.SetLocal(f[2]);
+            }
+            else
+            {
+                (c.LocalAddress, c.LocalPort) = (null, 0);
             }
 
-            remote = new IPEndPoint(address, port);
+            remote = new IPEndPoint(address, kernel.Host.HostPort(port));
             socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             if (c.LocalPort != 0 || c.LocalAddress is not null)
             {
-                socket.Bind(new IPEndPoint(c.LocalAddress ?? (address.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any), c.LocalPort));
+                socket.Bind(new IPEndPoint(c.LocalAddress ?? (address.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any), kernel.Host.HostPort(c.LocalPort)));
             }
 
             c.State = State.Connecting;
@@ -526,7 +550,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
         lock (c)
         {
             c.State = State.Connected;
-            c.SetEnds();
+            c.SetEnds(kernel.Host);
         }
     }
 
@@ -546,13 +570,14 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
                 throw new IOException("bad args to announce");
             }
 
-            string port = f[1].Contains('!', StringComparison.Ordinal) ? f[1][(f[1].IndexOf('!', StringComparison.Ordinal) + 1)..] : f[1];
+            // What follows the !, or all of it when there is none.
+            string port = f[1][(f[1].IndexOf('!', StringComparison.Ordinal) + 1)..];
             if (port == "*")
             {
                 throw new IOException(context.User == kernel.User ? "announce of every port is not supported" : Errors.Permission);
             }
 
-            c.SetLocal(f[1], announcing: true);
+            c.SetLocal(f[1]);
             IPAddress address = c.LocalAddress ?? IPAddress.IPv6Any;
             var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
@@ -562,18 +587,19 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
                     socket.DualMode = true;
                 }
 
-                socket.Bind(new IPEndPoint(address, c.LocalPort));
+                socket.Bind(new IPEndPoint(address, kernel.Host.HostPort(c.LocalPort)));
                 socket.Listen();
             }
             catch (SocketException error)
             {
+                // Stryker disable once Statement : a socket that could not bind holds no port; disposing it only gives its handle back sooner
                 socket.Dispose();
                 throw Reason(error);
             }
 
             c.Socket = socket;
             c.State = State.Announced;
-            c.LocalPort = ((IPEndPoint)socket.LocalEndPoint!).Port;
+            c.LocalPort = kernel.Host.FogPort(((IPEndPoint)socket.LocalEndPoint!).Port);
         }
     }
 
@@ -622,10 +648,12 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
             Ctime = now;
         }
 
-        // setladdrport: [addr!]port; without an address, any when announcing; ! r is ignored.
-        public void SetLocal(string text, bool announcing)
+        // setladdrport: [addr!]port; without an address, or with *, any when announcing and the
+        // host's choice otherwise, as setladdr gives the source address of the remote.
+        public void SetLocal(string text)
         {
             string port = text;
+            LocalAddress = null;
             int bang = text.IndexOf('!', StringComparison.Ordinal);
             if (bang >= 0)
             {
@@ -633,24 +661,20 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
                 port = text[(bang + 1)..];
                 LocalAddress = address == "*" ? null : ParseIp(address);
             }
-            else if (announcing)
-            {
-                LocalAddress = null;
-            }
 
             LocalPort = ParsePort(port);
         }
 
-        public void SetEnds()
+        public void SetEnds(HostNetwork host)
         {
             if (Socket?.LocalEndPoint is IPEndPoint local)
             {
-                (LocalAddress, LocalPort) = (local.Address, local.Port);
+                (LocalAddress, LocalPort) = (local.Address, host.FogPort(local.Port));
             }
 
             if (Socket?.RemoteEndPoint is IPEndPoint remote)
             {
-                (RemoteAddress, RemotePort) = (remote.Address, remote.Port);
+                (RemoteAddress, RemotePort) = (remote.Address, host.FogPort(remote.Port));
             }
         }
 
@@ -668,6 +692,7 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
                     // A socket never connected has nothing to shut down.
                 }
 
+                // Stryker disable once Statement : Shutdown has already ended the socket's calls, and a listener's listening; Dispose gives the host its handle back
                 socket.Dispose();
             }
 

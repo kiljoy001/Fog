@@ -39,7 +39,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
 
         Assert.Equal([Format(init.Pid), Format(child.Pid)], processes.Select(entry => entry.Name));
         Assert.Equal(directory, processes[1].Handle);
-        Assert.Equal(["args", "note", "noteid", "notepg"], files.Select(entry => entry.Name));
+        Assert.Equal(["args", "fd", "note", "noteid", "notepg"], files.Select(entry => entry.Name));
         foreach (ResourceDirectoryEntry file in files)
         {
             Assert.Equal(await proc.WalkAsync(directory, file.Name, default), file.Handle);
@@ -56,6 +56,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal(("#p", Directory), Describe(await proc.StatAsync(ProcDevice.Root, default)));
         Assert.Equal((Format(child.Pid), Directory), Describe(await proc.StatAsync(directory, default)));
         Assert.Equal(("args", 0b110_110_000u), Describe(await StatAsync(child.Pid, "args")));
+        Assert.Equal(("fd", 0b100_100_100u), Describe(await StatAsync(child.Pid, "fd")));
         Assert.Equal(("note", 0b110_100_000u), Describe(await StatAsync(child.Pid, "note")));
         Assert.Equal(("noteid", 0b110_110_100u), Describe(await StatAsync(child.Pid, "noteid")));
         Assert.Equal(("notepg", 0b110_100_000u), Describe(await StatAsync(child.Pid, "notepg")));
@@ -123,6 +124,64 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal(Errors.TooSmall, (await Assert.ThrowsAsync<IOException>(() => ReadAsync(note, 0, 0))).Message);
         Assert.Equal([0], (await ReadAsync(note, 0, 1)).ToArray());
         Assert.True((await ReadAsync(note, 0, 1)).IsEmpty);
+    }
+
+    [Fact]
+    public async Task FdStillGivesADescriptorWhoseFileHasBeenRemoved()
+    {
+        await BootAsync();
+        int srv = await init.CreateAsync("/srv/gone", NinePConstants.OWRITE, 0b110_110_110);
+        await init.RemoveAsync("/srv/gone");
+
+        int fd = await init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OREAD);
+        var lines = new List<string>();
+        for (string line; (line = Encoding.UTF8.GetString((await init.ReadAsync(fd, 8192)).Span)).Length > 0;)
+        {
+            lines.Add(line);
+        }
+
+        Assert.Equal($"{srv,3} w  s    0 (0000000000000004 0 00)     0        0 /srv/gone\n", lines[srv + 1]);
+    }
+
+    [Fact]
+    public async Task FdGivesDotAndEachOpenDescriptorALineAtATime()
+    {
+        await BootAsync();
+        await init.ChdirAsync("/tmp");
+        int file = await init.CreateAsync("/tmp/f", NinePConstants.ORDWR, 0b110_110_110);
+        await init.WriteAsync(file, "hello"u8.ToArray());
+        int dir = await init.OpenAsync("/tmp", NinePConstants.OREAD);
+        int null0 = await init.OpenAsync("/dev/null", NinePConstants.OWRITE);
+        await init.CloseAsync(await init.CreateAsync("/tmp/x", NinePConstants.OWRITE, 0b111_111_111));
+        int exec = await init.OpenAsync("/tmp/x", NinePConstants.OEXEC);
+        (int pipe, _) = await init.PipeAsync();
+        await init.CloseAsync(null0);
+        await init.DirReadAsync(dir);
+
+        int fd = await init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OREAD);
+        var lines = new List<string>();
+        for (string line; (line = Encoding.UTF8.GetString((await init.ReadAsync(fd, 8192)).Span)).Length > 0;)
+        {
+            lines.Add(line);
+        }
+
+        Assert.Equal(
+            [
+                "/tmp\n",
+                "  0 rw R    0 (0000000000000008 2 00)     0        5 /tmp/f\n",
+                "  1 r  R    0 (0000000000000005 0 80)     0        0 /tmp\n",
+                "  2 r  p    0 (000000000000000a 0 00)     0      123 /proc/1/fd\n",
+                "  3  R    0 (0000000000000009 0 00)     0        0 /tmp/x\n",
+                "  4 rw |    1 (0000000000000000 0 00)     0        0 #|/data\n",
+                "  5 rw |    1 (0000000000000001 0 00)     0        0 #|/data1\n",
+            ],
+            lines);
+        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OWRITE).AsTask())).Message);
+        ResourceOpenHandle opened = await proc.OpenAsync(await FileAsync(init.Pid, "fd"), NinePConstants.OREAD, Context(init.Pid, "eve"), default);
+        Assert.Equal("tm", Encoding.UTF8.GetString((await proc.ReadAsync(opened, 1, 2, default)).Span));
+        Assert.Equal("mp\n", Encoding.UTF8.GetString((await proc.ReadAsync(opened, 2, 100, default)).Span));
+        Assert.Empty((await proc.ReadAsync(opened, 100_000, 100, default)).ToArray());
+        _ = (file, dir, exec, pipe);
     }
 
     [Fact]

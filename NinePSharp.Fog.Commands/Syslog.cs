@@ -38,22 +38,40 @@ public static class Syslog
         return string.Create(CultureInfo.InvariantCulture, $"{t:MMM} {t.Day,2} {t:HH:mm:ss}");
     }
 
+    // sysname: /dev/sysname, read as libc's sysname reads it, or nothing.
     private static async Task<string> SysnameAsync(Process process)
     {
-        int fd = await TryOpenAsync(process, "/dev/sysname");
-        if (fd < 0)
+        try
+        {
+            int fd = await process.OpenAsync("/dev/sysname", NinePConstants.OREAD);
+            try
+            {
+                return Encoding.UTF8.GetString((await process.ReadAsync(fd, 127)).Span);
+            }
+            finally
+            {
+                await process.CloseAsync(fd);
+            }
+        }
+        catch (SyscallException)
         {
             return string.Empty;
         }
-
-        string name = Encoding.UTF8.GetString((await process.ReadAsync(fd, 127)).Span);
-        await process.CloseAsync(fd);
-        return name;
     }
 
+    // time: nsec's read of /dev/bintime, in seconds, or 0 when it cannot be opened.
     private static async Task<long> TimeAsync(Process process)
     {
-        int fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD);
+        int fd;
+        try
+        {
+            fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD);
+        }
+        catch (SyscallException)
+        {
+            return 0;
+        }
+
         long nanoseconds = BinaryPrimitives.ReadInt64BigEndian((await process.PReadAsync(fd, 8, 0)).Span);
         await process.CloseAsync(fd);
         return nanoseconds / 1_000_000_000;

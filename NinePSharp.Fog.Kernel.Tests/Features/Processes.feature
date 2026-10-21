@@ -191,6 +191,29 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
     Then descriptor 3 is closed in the parent
 
   @FOG_KERNEL_003
+  Scenario: exec closes a channel posted in /srv when its opener asked with OCEXEC, as namec's open of it does
+    Given the file "/tmp/f" holds "data"
+    And "/tmp/f" is posted as "/srv/f"
+    And a process with "/srv/f" open as descriptor 3 with OCEXEC
+    When it forks a child without RFFDG that runs "/bin/true"
+    Then descriptor 3 is closed in the parent
+
+  @FOG_KERNEL_003
+  Scenario: exec leaves open a channel posted in /srv opened without OCEXEC
+    Given the file "/tmp/f" holds "data"
+    And "/tmp/f" is posted as "/srv/f"
+    And a process with "/srv/f" open as descriptor 3 without OCEXEC
+    When it forks a child without RFFDG that runs "/bin/true"
+    Then descriptor 3 is still open in the parent
+
+  @FOG_KERNEL_003
+  Scenario: A child forked, or a namespace forked, without RFNOMNT may still attach any device
+    When it forks a child with RFNAMEG that lists "#s"
+    Then the child listed "clone"
+    When a process forks its namespace with RFNAMEG
+    Then the parent lists "clone" in "#s"
+
+  @FOG_KERNEL_003
   Scenario: rfork may not both copy and clear the environment
     When a process forks a child with RFENVG and RFCENVG
     Then it fails with "bad arg in system call"
@@ -351,6 +374,13 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
     Then at least 50 milliseconds have passed
     When a process sleeps 0 milliseconds
     Then the sleep has returned
+    When a process sleeps -1 milliseconds
+    Then the sleep has returned
+
+  @FOG_KERNEL_068
+  Scenario: A sleep of no time returns, and a note waiting is handled as it returns, as sleep(0) only yields
+    When a child that continues after every note is posted "alarm" and then sleeps 0 milliseconds
+    Then the child's sleep has returned
 
   @FOG_KERNEL_068
   Scenario: A note interrupts a sleep

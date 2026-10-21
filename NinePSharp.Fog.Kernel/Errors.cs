@@ -13,6 +13,7 @@ internal static class Errors
     public const string NoChild = "no living children";
     public const string BadExec = "exec header invalid";
     public const string BadArg = "bad arg in system call";
+    public const string Greg = "the front fell off";
     public const string BadOffset = "bad file offset or count";
     public const string BadUseFd = "inappropriate use of fd";
     public const string Permission = "permission denied";

@@ -5,8 +5,8 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-// devproc: #p, a directory for each process holding its args, note, noteid and notepg. The rest of
-// devproc's files, and its trace, are left out.
+// devproc: #p, a directory for each process holding its args, fd, note, noteid and notepg. The rest
+// of devproc's files, and its trace, are left out.
 internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 {
     public const string Provider = "proc";
@@ -19,6 +19,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     private static readonly (string Name, uint Permissions)[] Files =
     [
         ("args", 0b110_110_000),
+        ("fd", 0b100_100_100),
         ("note", 0),
         ("noteid", 0b110_110_100),
         ("notepg", 0),
@@ -28,6 +29,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     {
         Directory,
         Args,
+        Fd,
         Note,
         NoteId,
         NotePg,
@@ -118,20 +120,22 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
         return ValueTask.FromResult(new ResourceOpenHandle(resource, handle, mode, 0));
     }
 
-    public ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
+    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
     {
         if (openHandle.Resource.Identity.Path == 0 || Of(openHandle.Resource) == File.Directory)
         {
-            return ValueTask.FromResult(ReadOnlyMemory<byte>.Empty);
+            return ReadOnlyMemory<byte>.Empty;
         }
 
         Process process = Owner(openHandle.Resource);
         switch (Of(openHandle.Resource))
         {
             case File.Args:
-                return ValueTask.FromResult(Slice(Encoding.UTF8.GetBytes(process.Args), offset, count));
+                return Slice(Encoding.UTF8.GetBytes(process.Args), offset, count);
+            case File.Fd:
+                return Line(Encoding.UTF8.GetBytes(await process.FdsAsync()), offset, count);
             case File.NoteId:
-                return ValueTask.FromResult(Slice(Encoding.ASCII.GetBytes(Number(process.NoteId)), offset, count));
+                return Slice(Encoding.ASCII.GetBytes(Number(process.NoteId)), offset, count);
             case File.Note:
                 if (count < 1)
                 {
@@ -140,13 +144,12 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 
                 if (process.TakeNote() is not { } note)
                 {
-                    return ValueTask.FromResult(ReadOnlyMemory<byte>.Empty);
+                    return ReadOnlyMemory<byte>.Empty;
                 }
 
                 byte[] text = Encoding.UTF8.GetBytes(note);
                 int length = (int)Math.Min(count, (uint)text.Length + 1);
-                byte[] read = [.. text[..(length - 1)], 0];
-                return ValueTask.FromResult<ReadOnlyMemory<byte>>(read);
+                return (byte[])[.. text[..(length - 1)], 0];
             default:
                 throw new IOException(Errors.Permission);
         }
@@ -225,6 +228,14 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 
     // readnum: right-aligned in NUMSIZE-1 places and a space.
     private static string Number(long value) => value.ToString(CultureInfo.InvariantCulture).PadLeft(11) + " ";
+
+    // procread of fd: what is left of the line the offset is in, as readfd1 gives a line a read.
+    private static ReadOnlyMemory<byte> Line(byte[] data, ulong offset, uint count)
+    {
+        int start = (int)Math.Min(offset, (ulong)data.Length);
+        int end = Array.IndexOf(data, (byte)'\n', start) + 1;
+        return data.AsMemory(start, (int)Math.Min(count, (uint)((end == 0 ? data.Length : end) - start)));
+    }
 
     private static ReadOnlyMemory<byte> Slice(byte[] bytes, ulong offset, uint count)
     {

@@ -53,6 +53,11 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
         return tree;
     }
 
+    // The trees attached through the connection speaking on a channel, as cunmount finds a mount by
+    // its mchan.
+    public IReadOnlyList<MountTree> TreesOn(ResourceOpenHandle channel)
+        => [.. trees.Values.Where(tree => tree.Connection.Transport == channel)];
+
     public async ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
         => await Tree(directory).WalkAsync(directory, name, cancellationToken);
 

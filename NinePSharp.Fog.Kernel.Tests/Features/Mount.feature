@@ -230,6 +230,39 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     And the connection carried one Tversion
 
   @FOG_KERNEL_050
+  Scenario: Unmount takes a mount by a name that opens to the channel it was mounted from, as cunmount takes one by its mchan
+    When the process duplicates descriptor 3 as descriptor 5
+    And the process duplicates descriptor 3 as descriptor 4
+    And the process mounts descriptor 3 on "/n"
+    And the process mounts descriptor 4 on "/tmp"
+    And the process unmounts "#d/5" from "/tmp"
+    Then reading "/n/notes" gives "hello"
+    And reading "/tmp/notes" fails with "file does not exist"
+    When the process tries to unmount "#d/5" from "/tmp"
+    Then the call fails with "not mounted"
+    When the process tries to unmount "#d/5" from "/env"
+    Then the call fails with "not in union"
+    When the process tries to unmount "/nothing" from "/n"
+    Then the call fails with "file does not exist: '/nothing'"
+    When the process tries to unmount "/env" from "/nothing"
+    Then the call fails with "file does not exist: '/nothing'"
+    When the process tries to unmount "/dev" from "/env"
+    Then the call fails with "not in union"
+    When the process unmounts "#d/5" from "/n"
+    Then the names in "/n" are ""
+    And the names in "#d" are "0 0ctl 1 1ctl 2 2ctl 5 5ctl"
+    When the process mounts descriptor 5 on "/n"
+    And the process unmounts everything from "/n"
+    Then the names in "/n" are ""
+
+  @FOG_KERNEL_050
+  Scenario: Unmount finds the mount point by a name under a device, as namec does
+    When the process duplicates descriptor 3 as descriptor 5
+    And the process mounts descriptor 3 on "/n"
+    And the process unmounts "#d/5" from "#//n"
+    Then the names in "/n" are ""
+
+  @FOG_KERNEL_050
   Scenario: A server that refuses the version refuses the mount, and the descriptor can still be closed
     Given the server refuses Tversion with "no versions here"
     When the process tries to mount descriptor 3 on "/n"

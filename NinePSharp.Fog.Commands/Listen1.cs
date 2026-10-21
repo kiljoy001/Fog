@@ -16,14 +16,14 @@ public sealed class Listen1(Process process, string argv0)
     // remoteaddr: the system of the call's remote, or nothing.
     private static async Task<string> RemoteaddrAsync(Process process, string dir)
     {
+        // Stryker disable once String : the call's remote file is there for as long as the listener holds its ctl, so it always opens
+        string remote = string.Empty;
         try
         {
             int fd = await process.OpenAsync($"{dir}/remote", NinePConstants.OREAD);
             try
             {
-                string buf = Encoding.UTF8.GetString((await process.ReadAsync(fd, 128)).Span);
-                int bang = buf.IndexOf('!', StringComparison.Ordinal);
-                return bang < 0 ? buf : buf[..bang];
+                remote = Encoding.UTF8.GetString((await process.ReadAsync(fd, 128)).Span).Split('!')[0];
             }
             finally
             {
@@ -32,8 +32,10 @@ public sealed class Listen1(Process process, string argv0)
         }
         catch (SyscallException)
         {
-            return string.Empty;
+            // remoteaddr gives an empty system for a remote it cannot read.
         }
+
+        return remote;
     }
 
     private static async Task PutenvAsync(Process process, string name, string value)
@@ -58,11 +60,28 @@ public sealed class Listen1(Process process, string argv0)
 
     private static Task PrintAsync(Process process, string text) => process.WriteAsync(2, Encoding.UTF8.GetBytes(text)).AsTask();
 
+    // exec, which returns only when it fails, and then why.
+    private static async Task<string> ExecAsync(Process process, string path, IReadOnlyList<string> args)
+    {
+        try
+        {
+            await process.ExecAsync(path, args.Skip(1).ToList());
+        }
+        catch (SyscallException error)
+        {
+            return error.Message;
+        }
+
+        throw new System.Diagnostics.UnreachableException();
+    }
+
     private async Task RunAsync(IReadOnlyList<string> argv)
     {
         bool oneshot = false, trusted = false, quiet = false;
         string? nsfile = null;
         var sopts = new List<string>();
+
+        // Stryker disable once String,Initializer : #I, like devip, refuses an empty message and keeps keepalive to the host's socket, where no file shows it
         var copts = new List<string> { "keepalive" };
         var arguments = new Arguments(argv);
         foreach (char c in arguments.Flags())
@@ -81,16 +100,16 @@ public sealed class Listen1(Process process, string argv0)
                     quiet = true;
                     break;
                 case 'p':
-                    _ = Libc.Strtol(arguments.Value() ?? await UsageAsync(), 10, out _);
+                    _ = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync()), 10, out _);
                     break;
                 case 'n':
-                    nsfile = arguments.Value() ?? await UsageAsync();
+                    nsfile = await arguments.EargfAsync(() => UsageAsync());
                     break;
                 case 'o':
-                    await OptionAsync(copts, arguments.Value() ?? await UsageAsync(), "-o");
+                    await OptionAsync(copts, await arguments.EargfAsync(() => UsageAsync()), "-o");
                     break;
                 case 'O':
-                    await OptionAsync(sopts, arguments.Value() ?? await UsageAsync(), "-O");
+                    await OptionAsync(sopts, await arguments.EargfAsync(() => UsageAsync()), "-O");
                     break;
                 default:
                     await UsageAsync();
@@ -132,25 +151,19 @@ public sealed class Listen1(Process process, string argv0)
             (int nctl, string ndir) = await Or(() => Net.ListenAsync(process, dir), $"listen {args[0]}");
             if (oneshot)
             {
-                if (await AnswerAsync(process, args, ctl, nctl, ndir, copts, quiet, oneshot))
-                {
-                    return;
-                }
-
-                continue;
+                await AnswerAsync(process, args, ctl, nctl, ndir, copts, quiet, oneshot);
             }
-
-            process.Fork(RforkFlags.Fdg | RforkFlags.Proc | RforkFlags.Mem | RforkFlags.Envg | RforkFlags.Nameg | RforkFlags.Noteg | RforkFlags.Rend | RforkFlags.Nowait, async child =>
+            else
             {
-                await AnswerAsync(child, args, ctl, nctl, ndir, copts, quiet, oneshot);
-            });
-            await process.CloseAsync(nctl);
+                process.Fork(RforkFlags.Fdg | RforkFlags.Proc | RforkFlags.Mem | RforkFlags.Envg | RforkFlags.Nameg | RforkFlags.Noteg | RforkFlags.Rend | RforkFlags.Nowait, child => AnswerAsync(child, args, ctl, nctl, ndir, copts, quiet, oneshot));
+                await process.CloseAsync(nctl);
+            }
         }
     }
 
-    // A call taken, its process given the call's data and its ctl options, and then the command.
-    // False when a oneshot listener's accept failed, and it listens again.
-    private async Task<bool> AnswerAsync(Process process, IReadOnlyList<string> args, int ctl, int nctl, string ndir, List<string> copts, bool quiet, bool oneshot)
+    // A call taken, its process given the call's data and its ctl options, and then the command,
+    // which does not return; a oneshot listener whose accept failed returns, and listens again.
+    private async Task AnswerAsync(Process process, IReadOnlyList<string> args, int ctl, int nctl, string ndir, List<string> copts, bool quiet, bool oneshot)
     {
         int fd;
         try
@@ -163,11 +176,11 @@ public sealed class Listen1(Process process, string argv0)
             if (oneshot)
             {
                 await process.CloseAsync(nctl);
-                return false;
+                return;
             }
 
             process.Exits("accept");
-            return false;
+            return;
         }
 
         if (!quiet)
@@ -206,33 +219,14 @@ public sealed class Listen1(Process process, string argv0)
             await process.CloseAsync(fd);
         }
 
-        string error2;
-        try
-        {
-            await process.ExecAsync(args[1], args.Skip(1).ToList());
-            return true;
-        }
-        catch (SyscallException error)
-        {
-            error2 = error.Message;
-        }
-
+        string why = await ExecAsync(process, args[1], args);
         if (!args[1].StartsWith('/'))
         {
-            try
-            {
-                await process.ExecAsync($"/bin/{args[1]}", args.Skip(1).ToList());
-                return true;
-            }
-            catch (SyscallException error)
-            {
-                error2 = error.Message;
-            }
+            why = await ExecAsync(process, $"/bin/{args[1]}", args);
         }
 
-        await PrintAsync(process, $"{argv0}: exec: {error2}\n");
+        await PrintAsync(process, $"{argv0}: exec: {why}\n");
         process.Exits("exec");
-        return true;
     }
 
     // becomenone: the process made none, in the namespace newns builds for none.
@@ -291,7 +285,7 @@ public sealed class Listen1(Process process, string argv0)
     {
         await PrintAsync(process, $"usage: {argv0} [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...\n");
         process.Exits("usage");
-        return string.Empty;
+        return default!;
     }
 
     private Task FatalAsync(string message) => FatalAsync<bool>(message);

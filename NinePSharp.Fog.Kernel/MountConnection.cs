@@ -41,6 +41,9 @@ internal sealed class MountConnection
         this.context = context;
     }
 
+    // The channel the connection speaks on, devmnt's mchan.
+    public ResourceOpenHandle Transport => transport;
+
     public int MessageSize { get; private set; }
 
     public uint NewFid()

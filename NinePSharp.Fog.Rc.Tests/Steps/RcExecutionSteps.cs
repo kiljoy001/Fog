@@ -22,6 +22,8 @@ public sealed class RcExecutionSteps
     // Each read is bounded, and so is the whole run, so an rc that keeps printing fails the scenario too.
     private static readonly TimeSpan RunBound = TimeSpan.FromSeconds(10);
     private readonly ManualClock clock = new() { Now = DateTimeOffset.UtcNow };
+    private readonly FakeHostNetwork host = new();
+    private readonly FakeHostConsole console = new();
     private FogKernel? kernel;
     private Process? init;
     private string script = string.Empty;
@@ -45,10 +47,54 @@ public sealed class RcExecutionSteps
     public async Task GivenAKernel()
     {
         var programs = new Dictionary<string, ProgramMain>(Commands.Commands.All) { ["rc"] = RcProgram.MainAsync };
-        kernel = FogKernel.InMemory(programs, "glenda", clock);
+        kernel = FogKernel.InMemory(programs, "glenda", clock, host, console);
         init = await kernel.BootAsync();
         await init.CloseAsync(await init.CreateAsync("/root/rc/lib", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
         await WriteAsync("/root/rc/lib/rcmain", RcProgram.Rcmain);
+    }
+
+    // 9front's interfaces and resolver are its own, so these run on Fog alone.
+    [Given(@"^the host's only interface is ""(.*)"", with the addresses ""(.*)""$")]
+    public void GivenInterface(string name, string addresses)
+    {
+        fogOnly = true;
+        host.Ifcs.Clear();
+        host.Ifcs.Add(new HostInterface(name, [.. addresses.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(Address)]));
+    }
+
+    [Given("the host has no interfaces")]
+    public void GivenNoInterfaces()
+    {
+        fogOnly = true;
+        host.Ifcs.Clear();
+    }
+
+    [Given(@"^the host's resolver gives ""(.*)"" the addresses ""(.*)""$")]
+    public void GivenResolves(string name, string addresses)
+    {
+        fogOnly = true;
+        host.Names[name] = [.. addresses.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(System.Net.IPAddress.Parse)];
+    }
+
+    [Given(@"^the host's resolver gives the address ""(.*)"" the name ""(.*)""$")]
+    public void GivenReverse(string address, string name)
+    {
+        fogOnly = true;
+        host.Reverse[System.Net.IPAddress.Parse(address)] = name;
+    }
+
+    [Given(@"^the host's resolver fails every lookup with (\w+)$")]
+    public void GivenResolverFails(System.Net.Sockets.SocketError error)
+    {
+        fogOnly = true;
+        host.Failure = error;
+    }
+
+    [Given(@"^the host's resolver answers only after (\d+) seconds?$")]
+    public void GivenResolverIsSlow(int seconds)
+    {
+        fogOnly = true;
+        host.Gate = Task.Delay(TimeSpan.FromSeconds(seconds));
     }
 
     [Given("rc starts with all but two of its 5000 descriptors in use")]
@@ -195,6 +241,12 @@ public sealed class RcExecutionSteps
     [Then("it prints, ending with a prompt")]
     public Task ThenPrintsPrompt(string expected) => CompareAsync(expected);
 
+    private static HostAddress Address(string text)
+    {
+        int slash = text.IndexOf('/', StringComparison.Ordinal);
+        return new HostAddress(System.Net.IPAddress.Parse(text[..slash]), int.Parse(text[(slash + 1)..], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     // A here document's file is named for the process making it.
     private static string Here(string text) => Regex.Replace(text, "/tmp/here[0-9A-Za-z]+", "/tmp/hereN");
 
@@ -272,10 +324,17 @@ public sealed class RcExecutionSteps
         // A zero-length write reads as empty, so the output ends where the hung-up pipe refuses reads.
         using var run = new CancellationTokenSource(RunBound);
         var bytes = new List<byte>();
-        while (await ReadAsync(read, run.Token) is { } block)
+        try
         {
-            bytes.AddRange(block.ToArray());
-            Assert.True(bytes.Count <= MaxOutput, "rc printed more than any scenario expects");
+            while (await ReadAsync(read, run.Token) is { } block)
+            {
+                bytes.AddRange(block.ToArray());
+                Assert.True(bytes.Count <= MaxOutput, "rc printed more than any scenario expects");
+            }
+        }
+        catch (Exception stopped) when (stopped is TimeoutException or OperationCanceledException)
+        {
+            throw new TimeoutException($"rc stopped printing, having printed:\n{Encoding.UTF8.GetString(bytes.ToArray())}", stopped);
         }
 
         await acting.WaitAsync(Bound);

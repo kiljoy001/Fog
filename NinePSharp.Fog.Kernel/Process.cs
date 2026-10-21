@@ -61,6 +61,11 @@ public sealed partial class Process
 
     public string User { get; internal set; }
 
+    // The host's interfaces and resolver.
+    public HostNetwork Host => kernel.Host;
+
+    internal FogKernel Kernel => kernel;
+
     internal RamFs Environment { get; private set; }
 
     internal DupDevice Dup { get; }
@@ -172,10 +177,6 @@ public sealed partial class Process
         {
             return await OpenDescriptorAsync(dup.Descriptor, mode);
         }
-        catch (SrvOpenException posted)
-        {
-            return process.Descriptors.Share(posted.Posted, (mode & NinePConstants.OCEXEC) != 0);
-        }
         catch (NamespaceException error) when (error.Error == NamespaceError.CreateNotPermitted)
         {
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.NoCreate));
@@ -216,6 +217,27 @@ public sealed partial class Process
 
     public async ValueTask<int> WriteAsync(int fd, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
         => await PWriteAsync(fd, data, -1, cancellationToken);
+
+    /// <summary>
+    /// A call to the host's network, as a read of a network's file would be: a note interrupts it, and
+    /// is delivered as it returns; the call itself goes on, and what it gives is dropped.
+    /// </summary>
+    public async Task<T> HostAsync<T>(Func<HostNetwork, Task<T>> call)
+    {
+        using Return returning = new(this);
+        using Interruption interruptible = Interruptible(CancellationToken.None);
+        Task<T> answer = call(kernel.Host);
+        try
+        {
+            await Waiting.UntilAsync(answer, interruptible.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new SyscallException(Errors.Interrupted);
+        }
+
+        return await answer;
+    }
 
     /// <summary>pread: reads at an offset without moving the descriptor's; -1 reads at and advances it, as read does.</summary>
     public async ValueTask<ReadOnlyMemory<byte>> PReadAsync(int fd, int count, long offset, CancellationToken cancellationToken = default)
@@ -460,6 +482,8 @@ public sealed partial class Process
     // up, and then name, as an open would.
     public async ValueTask UnmountAsync(string? name, string old)
     {
+        // cunmount: a member is the one named, or one mounted from the channel the name opens to.
+        IReadOnlyList<MountTree> trees = name is null ? [] : await MountedFromAsync(name);
         using Return returning = new(this);
         Namec(old);
         if (name is not null)
@@ -469,7 +493,14 @@ public sealed partial class Process
 
         try
         {
-            await new NamespaceSyscalls(devices, Attach).UnmountAsync(process, old, name);
+            if (trees.Count == 0)
+            {
+                await new NamespaceSyscalls(devices, Attach).UnmountAsync(process, old, name);
+            }
+            else
+            {
+                await UnmountTreeAsync(old, trees);
+            }
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -689,16 +720,11 @@ public sealed partial class Process
     public async ValueTask SleepAsync(long milliseconds)
     {
         using Return returning = new(this);
-        if (milliseconds <= 0)
-        {
-            await Task.Yield();
-            return;
-        }
-
         using Interruption interruptible = Interruptible(CancellationToken.None);
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, interruptible.Token);
+            // A sleep of no time, or less, returns at once, before it looks for a note.
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(milliseconds, 0)), kernel.Clock, interruptible.Token);
         }
         catch (OperationCanceledException)
         {
@@ -739,6 +765,53 @@ public sealed partial class Process
     {
         ResourceHandle end = (await HandleAsync(fd) ?? throw new SyscallException(Errors.BadFd)).Resource;
         return end.Identity.Provider == PipeDevice.Provider ? kernel.Pipes.Readiness(end) : null;
+    }
+
+    // procfds: the process's dot, then each open descriptor as procfdprint prints it: its number,
+    // mode, device and its number, qid, iounit, offset and name.
+    internal async Task<string> FdsAsync()
+    {
+        var text = new StringBuilder($"{Clean(NameOf(process.CurrentDirectory))}\n");
+        foreach (DescriptorSlot slot in process.Descriptors.Snapshot().OrderBy(slot => slot.Number))
+        {
+            Stat d;
+            try
+            {
+                int at = 0;
+                d = new Stat((await calls.FStatAsync(slot.Number, ushort.MaxValue)).Span, ref at);
+            }
+            catch (ArgumentException)
+            {
+                // Closed since.
+                continue;
+            }
+            catch (IOException)
+            {
+                // A file removed since it was opened has no stat; procfdprint takes all it prints
+                // from the channel, and so does this, which then has only its name.
+                (char type, uint dev) = KernelFileStats.DeviceOf(slot.Handle.Resource);
+                d = new Stat(0, type, dev, slot.Handle.Resource.Qid, 0, 0, 0, 0, string.Empty, string.Empty, string.Empty, string.Empty);
+            }
+
+            long offset;
+            try
+            {
+                offset = await calls.SeekAsync(slot.Number, 0, Plan9SeekWhence.Current);
+            }
+            catch (NamespaceFidException)
+            {
+                // A directory's offset is where its reading has got to, which a seek does not give.
+                offset = 0;
+            }
+
+            // %.2s of "r w rw" from the mode's place: two letters, or none for exec.
+            int m = (slot.Handle.Mode & 3) * 2;
+            string mode = "r w rw".Substring(Math.Min(m, 6), Math.Max(0, Math.Min(2, 6 - m)));
+            string name = kernel.Names.TryGetValue(slot.Handle, out string? named) ? named : $"#|/{d.Name}";
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"{slot.Number,3} {mode} {(char)d.Type} {d.Dev,4} ({d.Qid.Path:x16} {d.Qid.Version} {(byte)d.Qid.Type:x2}) {slot.Handle.IoUnit,5} {offset,8} {name}\n");
+        }
+
+        return text.ToString();
     }
 
     private static void Validate(RforkFlags flags)
@@ -803,8 +876,16 @@ public sealed partial class Process
         => path.Split('/', StringSplitOptions.RemoveEmptyEntries).Where(name => name != ".").ToArray();
 
     // cleanname: elements of . and empty ones dropped, and .. taking away the one before, if any.
+    // A #-name keeps its device and spec, and what follows them is cleaned as a rooted name is, as
+    // addelem puts no second slash after the #/ of the root device.
     private static string Clean(string name)
     {
+        string start = "/";
+        if (name.StartsWith('#'))
+        {
+            (_, start, name) = DeviceName(name);
+        }
+
         var kept = new List<string>();
         foreach (string element in name.Split('/'))
         {
@@ -821,7 +902,24 @@ public sealed partial class Process
             }
         }
 
-        return "/" + string.Join('/', kept);
+        return kept.Count == 0 ? start : start.EndsWith('/') ? start + string.Join('/', kept) : $"{start}/{string.Join('/', kept)}";
+    }
+
+    // The name a channel was reached by: from /, or from the device a #-name began at.
+    private static string NameOf(NamespaceChannel channel)
+    {
+        // The root's frame is named /, which Clean takes as the start of a rooted name.
+        return $"{channel.Frames[0].Name}/{string.Join('/', channel.VisiblePath)}";
+    }
+
+    // namec's #: the device's rune and its spec, up to the first slash after the rune, and the rest.
+    private static (string Device, string Head, string Tail) DeviceName(string path)
+    {
+        string device = path.Length > 1 ? System.Text.Rune.GetRuneAt(path, 1).ToString() : string.Empty;
+        int slash = path.IndexOf('/', 1 + device.Length);
+
+        // Stryker disable once Equality : the slash is looked for past the #, so it is never at 0
+        return slash < 0 ? (device, path, string.Empty) : (device, path[..slash], path[(slash + 1)..]);
     }
 
     private ProgramMain? ManagedProgram(byte[] header)
@@ -867,7 +965,9 @@ public sealed partial class Process
 
     // namec's #: the device whose rune is given, as its attach gives its root; under RFNOMNT, only
     // the devices sysproc.c's nomntdevs leaves. #| makes no pipe yet, so it names no device.
-    private ResourceHandle Attach(string device, string spec)
+    private ResourceHandle Attach(string device, string spec) => Attach(device);
+
+    private ResourceHandle Attach(string device)
     {
         ResourceHandle root = device switch
         {
@@ -889,6 +989,50 @@ public sealed partial class Process
         return root;
     }
 
+    // The trees mounted from the channel the name opens to, or none.
+    private async Task<IReadOnlyList<MountTree>> MountedFromAsync(string name)
+    {
+        int fd;
+        try
+        {
+            fd = await OpenAsync(name, NinePConstants.OREAD);
+        }
+        catch (SyscallException)
+        {
+            return [];
+        }
+
+        try
+        {
+            return kernel.Mounts.TreesOn((await HandleAsync(fd))!);
+        }
+        finally
+        {
+            await CloseAsync(fd);
+        }
+    }
+
+    // The first of the trees that is a member of the union on old, unmounted; each is named to
+    // the namespace by its device, #M and its number.
+    private async Task UnmountTreeAsync(string old, IReadOnlyList<MountTree> trees)
+    {
+        foreach (MountTree tree in trees)
+        {
+            ResourceHandle MountAttach(string device, string spec) => device == "M" ? tree.Root : Attach(device);
+            try
+            {
+                await new NamespaceSyscalls(devices, MountAttach).UnmountAsync(process, old, tree.Device);
+                return;
+            }
+            catch (NamespaceException error) when (error.Error == NamespaceError.UnionMemberNotFound)
+            {
+                // Not this one.
+            }
+        }
+
+        throw new SyscallException(Errors.Union);
+    }
+
     private (LocalNamespaceDataPlane Plane, Plan9FileSyscalls Calls) Bind()
     {
         var data = new LocalNamespaceDataPlane(process.ProcessGroup.MountTable, devices);
@@ -907,7 +1051,7 @@ public sealed partial class Process
     // A managed program first, then whichever loader claims the header.
     private async ValueTask<int> NamedAsync(int fd, string path)
     {
-        string rooted = path.StartsWith('/') ? path : $"/{string.Join('/', process.CurrentDirectory.VisiblePath)}/{path}";
+        string rooted = path.StartsWith('/') || path.StartsWith('#') ? path : $"{NameOf(process.CurrentDirectory)}/{path}";
         if (await HandleAsync(fd) is { } handle)
         {
             kernel.Names.AddOrUpdate(handle, Clean(rooted));
@@ -1008,13 +1152,12 @@ public sealed partial class Process
             return (path.StartsWith('/') ? process.Root.Clone() : process.CurrentDirectory.Clone(), Elements(path));
         }
 
-        string device = path.Length > 1 ? System.Text.Rune.GetRuneAt(path, 1).ToString() : string.Empty;
-        int slash = path.IndexOf('/', 1 + device.Length);
-        string head = slash < 0 ? path : path[..slash];
+        // No device of Fog's takes a spec.
+        (string device, string head, string rest) = DeviceName(path);
         try
         {
-            ResourceHandle root = Attach(device, head[(1 + device.Length)..]);
-            return (NamespaceChannel.Restore([new ChannelFrame(head, root)]), Elements(slash < 0 ? string.Empty : path[(slash + 1)..]));
+            ResourceHandle root = Attach(device);
+            return (NamespaceChannel.Restore([new ChannelFrame(head, root)]), Elements(rest));
         }
         catch (IOException error)
         {

@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="NinePSharp.Fog.Rc.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog.Kernel\NinePSharp.Fog.Kernel.csproj" />
     <PackageReference Include="Plan9.Utf" Version="0.1.0" />
   </ItemGroup>

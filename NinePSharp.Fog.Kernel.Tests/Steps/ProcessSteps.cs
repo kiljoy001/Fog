@@ -61,6 +61,16 @@ public sealed class ProcessSteps
         await WriteAsync($"{directory}/{name}", string.Empty);
     }
 
+    [Given(@"^""(.*)"" is posted as ""(.*)""$")]
+    public async Task GivenPosted(string path, string srv)
+    {
+        int fd = await init!.OpenAsync(path, NinePConstants.ORDWR);
+        int post = await init.CreateAsync(srv, NinePConstants.OWRITE, 0b110_110_110);
+        await init.WriteAsync(post, Encoding.UTF8.GetBytes(fd.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        await init.CloseAsync(post);
+        await init.CloseAsync(fd);
+    }
+
     [Given(@"^a process with ""(.*)"" open as descriptor 3$")]
     public async Task GivenOpenAsThree(string path)
     {
@@ -69,12 +79,13 @@ public sealed class ProcessSteps
         await init.CloseAsync(fd);
     }
 
-    [Given(@"^a process with ""(.*)"" open as descriptor 3 with OCEXEC$")]
-    public async Task GivenOpenAsThreeCloseOnExec(string path)
+    // Opened as 3 itself, as a dup would not carry OCEXEC.
+    [Given(@"^a process with ""(.*)"" open as descriptor 3 (with|without) OCEXEC$")]
+    public async Task GivenOpenAsThreeCloseOnExec(string path, string with)
     {
         for (int fd = 0; fd < 4; fd++)
         {
-            Assert.Equal(fd, await init!.OpenAsync(path, NinePConstants.ORDWR | NinePConstants.OCEXEC));
+            Assert.Equal(fd, await init!.OpenAsync(path, NinePConstants.ORDWR | (with == "with" ? NinePConstants.OCEXEC : 0)));
         }
 
         for (int fd = 0; fd < 3; fd++)
@@ -118,7 +129,7 @@ public sealed class ProcessSteps
     public async Task ThenWaitFails(string message)
         => Assert.Equal(message, (await Assert.ThrowsAsync<SyscallException>(() => init!.WaitAsync())).Message);
 
-    [When(@"^a process sleeps (\d+) milliseconds$")]
+    [When(@"^a process sleeps (-?\d+) milliseconds$")]
     public async Task WhenSleeps(int milliseconds)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -154,6 +165,36 @@ public sealed class ProcessSteps
         await started.Task.WaitAsync(Bound);
         sleeping = outcome.Task;
     }
+
+    [When(@"^a child that continues after every note is posted ""(.*)"" and then sleeps (\d+) milliseconds$")]
+    public async Task WhenChildPostedSleeps(string note, int milliseconds)
+    {
+        var posted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var outcome = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        child = init!.Fork(RforkFlags.Fdg, async process =>
+        {
+            process.Notify(_ => true);
+            await posted.Task;
+            try
+            {
+                await process.SleepAsync(milliseconds);
+                outcome.SetResult("slept");
+            }
+            catch (SyscallException error)
+            {
+                outcome.SetResult(error.Message);
+            }
+        });
+        await WhenPosts(note);
+        posted.SetResult(true);
+        sleeping = outcome.Task;
+    }
+
+    [Then("the child's sleep has returned")]
+    public async Task ThenChildSlept() => Assert.Equal("slept", await sleeping!.WaitAsync(Bound));
+
+    [When("a process forks its namespace with RFNAMEG")]
+    public Task WhenRforks() => init!.RforkAsync(RforkFlags.Nameg).AsTask();
 
     [When(@"^the process posts ""(.*)"" to the child$")]
     public async Task WhenPosts(string note)

@@ -54,6 +54,18 @@
     "reason": "a write of nothing left keeps writing empty blocks"
   },
   {
+    "file": "IpDevice.cs",
+    "mutator": "Statement mutation",
+    "line": "end++;",
+    "reason": "the port's digits are never passed, so the scan for its end never ends"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Conditional (false) mutation",
+    "line": "var child = new Process(kernel, forked, waited ? this : null, EnvironmentFor(flags), Text, User, (flags & RforkFlags.Noteg) != 0 ? 0 : NoteId);",
+    "reason": "a child forked to be waited for has no parent to tell of its end, so the wait never ends"
+  },
+  {
     "file": "Process.cs",
     "mutator": "Statement mutation",
     "line": "entries.Add(new Stat(block.Span, ref offset));",
@@ -748,5 +760,113 @@
     "mutator": "Statement mutation",
     "line": "p++;",
     "reason": "the white space strtol skips is never passed"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (last.Next is not null) {",
+    "reason": "ndbcat's walk to the last file never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (last.Line == last.Entry) {",
+    "reason": "ndbreorder's walk to the end of the line never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (nt.Entry != last.Line) {",
+    "reason": "ndbreorder's walk to the line before never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (nt.Entry is not null) {",
+    "reason": "ndbreorder's walk to the end of the entry never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (prev.Line != x) {",
+    "reason": "ndbreorder's walk to the tuple before x never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Equality mutation",
+    "line": "if (nt.Entry == a)",
+    "reason": "ndbsubstitute points every tuple at b, so the entry becomes a ring that its walks never leave"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (end.Entry is not null) {",
+    "reason": "ndbsubstitute's walk to the end of b never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Logical mutation",
+    "line": "while (line[cp] is not ('\\n' or '\"'))",
+    "reason": "a quoted value's loop never ends"
+  },
+  {
+    "file": "Ip.cs",
+    "mutator": "Statement mutation",
+    "line": "i++;",
+    "reason": "%M's walk over the mask's all-ones bytes never moves"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "reason": "ndbfindattr goes round the line's ring for ever"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Equality mutation",
+    "line": "if (a is null)",
+    "reason": "ndbconcatenate walks an entry that is not there, and the search that called it never ends"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Equality mutation",
+    "line": "while (line[cp] is not ('=' or '\\n') && !IsWhite(line[cp]))",
+    "reason": "the attribute's loop never moves past the line's end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
+    "line": "while (line[cp] is not ('=' or '\\n') && !IsWhite(line[cp]))",
+    "reason": "the attribute's loop stops at once, so the parser never moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Negate expression",
+    "line": "while (line[cp] is not ('=' or '\\n') && !IsWhite(line[cp]))",
+    "reason": "the attribute's loop stops at once, so the parser never moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Equality mutation",
+    "line": "if (line[cp] == '=')",
+    "reason": "a tuple's value is never taken, so the parser never moves along the line"
+  },
+  {
+    "file": "ConsDevice.cs",
+    "mutator": "String mutation",
+    "line": "\"pid\" => Slice(Number(caller.Pid), offset, count),",
+    "reason": "pid reads as zeros, so a reader reading to the end never finishes"
   }
 ]

@@ -6,8 +6,10 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-// devcons's bintime, null, pid, ppid, user and zero, in consdir's order; each reads as the calling
-// process sees it. bintime's time is the host's, and is not set through it.
+// devcons's bintime, cons, null, pid, ppid, sysname, user and zero; each reads as the calling process
+// sees it. bintime's time is the host's, and is not set through it; sysname is the kernel's, which
+// only the host owner may write. What is written to cons goes to the host's console, as putstrn
+// puts it on the screen; it cannot be read, as the keyboard is kbdfs's.
 internal sealed class ConsDevice(Process caller, string owner, TimeProvider clock, long booted) : IResourceDataOperations
 {
     public const string Provider = "cons";
@@ -15,9 +17,11 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
     private static readonly (string Name, uint Permissions)[] Files =
     [
         ("bintime", 0b110_110_100),
+        ("cons", 0b110_110_000),
         ("null", 0b110_110_110),
         ("pid", 0b100_100_100),
         ("ppid", 0b100_100_100),
+        ("sysname", 0b110_110_100),
         ("user", 0b110_110_110),
         ("zero", 0b100_100_100),
     ];
@@ -62,9 +66,11 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
         ReadOnlyMemory<byte> data = Files[openHandle.Resource.Identity.Path - 1].Name switch
         {
             "bintime" => Bintime(count),
+            "cons" => throw new IOException(Errors.Greg),
             "null" => ReadOnlyMemory<byte>.Empty,
             "pid" => Slice(Number(caller.Pid), offset, count),
             "ppid" => Slice(Number(caller.ParentPid), offset, count),
+            "sysname" => Slice(Encoding.UTF8.GetBytes(caller.Kernel.Sysname), offset, count),
             "user" => Slice(Encoding.UTF8.GetBytes(caller.User), offset, count),
             _ => new byte[count],
         };
@@ -82,6 +88,23 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
         else if (name == "bintime")
         {
             throw new IOException(Errors.Permission);
+        }
+        else if (name == "cons")
+        {
+            caller.Kernel.Console.Write(data.Span);
+        }
+        else if (name == "sysname")
+        {
+            // From one write at the start, of less than conswrite's buffer, without a last newline.
+            if (offset != 0 || data.Length is <= 0 or >= 256)
+            {
+                throw new IOException(Errors.BadArg);
+            }
+
+            string sysname = Encoding.UTF8.GetString(data.Span);
+            int nul = sysname.IndexOf('\0', StringComparison.Ordinal);
+            sysname = nul < 0 ? sysname : sysname[..nul];
+            caller.Kernel.Sysname = sysname.EndsWith('\n') ? sysname[..^1] : sysname;
         }
 
         return ValueTask.FromResult((uint)data.Length);

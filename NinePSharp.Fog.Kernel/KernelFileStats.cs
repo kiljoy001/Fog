@@ -25,9 +25,15 @@ internal sealed class KernelFileStats(ProcessDevices devices) : IFileStatOperati
     internal static Stat ToStat(ResourceStat stat)
     {
         int size = 49 + new[] { stat.Name, stat.User, stat.Group, stat.LastModifier }.Sum(Encoding.UTF8.GetByteCount);
-        string device = stat.Resource.Identity.Device;
-        uint dev = device.Length > 2 ? uint.Parse(device[2..], CultureInfo.InvariantCulture) : 0;
-        return new Stat((ushort)size, device[1], dev, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
+        (char type, uint dev) = DeviceOf(stat.Resource);
+        return new Stat((ushort)size, type, dev, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
+    }
+
+    // The device's letter and number, from a device named # and the letter, then the number if it has one.
+    internal static (char Type, uint Dev) DeviceOf(ResourceHandle resource)
+    {
+        string device = resource.Identity.Device;
+        return (device[1], device.Length > 2 ? uint.Parse(device[2..], CultureInfo.InvariantCulture) : 0);
     }
 
     internal static byte[] Encode(Stat stat)

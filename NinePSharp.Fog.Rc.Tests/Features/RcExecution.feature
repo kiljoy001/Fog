@@ -434,6 +434,22 @@ Feature: rc runs scripts as 9front rc does
       can't cd
       """
 
+  @FOG_RC_RUN_024
+  Scenario: cd to a directory named under a device names it from the device, as the kernel's dot does
+    When rc runs the script
+      """
+      cd '#c'; read </proc/$pid/fd; cat user; echo
+      cd '#//env'; read </proc/$pid/fd
+      cd ../dev; read </proc/$pid/fd
+      """
+    Then it prints
+      """
+      #c
+      glenda
+      #/env
+      #/dev
+      """
+
   @FOG_RC_RUN_025
   Scenario: if not must follow an if
     When rc runs the script
@@ -5602,7 +5618,6 @@ Feature: rc runs scripts as 9front rc does
   Scenario: test -t asks of standard output with no operand, and is true of a descriptor open on /dev/cons
     When rc runs the script
       """
-      mkdir -p /tmp/d; echo -n >/tmp/d/cons; bind -a /tmp/d /dev
       test -t || echo standard output is not the console
       test -t >>/dev/cons && echo standard output on the console is
       test -t 9 || echo descriptor 9 is not open
@@ -5916,6 +5931,200 @@ Feature: rc runs scripts as 9front rc does
       aux/listen1: announce bogus: bad dial string: bogus
       """
 
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 without -1 answers each call in a process of its own, and without -q says what it does
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -t 'tcp!127.0.0.1!17110' echo hi >/dev/null >[2]/tmp/err &
+      sleep 1
+      for(i in 1 2){
+          {
+              n=`{read -c 11 <[0=3]}
+              echo -n connect 127.0.0.1!17110 >[1=3]
+              cat /net/tcp/$n/data
+          } <>[3]/net/tcp/clone
+      }
+      cat /tmp/err
+      """
+    Then it prints
+      """
+      hi
+      hi
+      listen tcp!127.0.0.1!17110 started
+      incoming call for tcp!127.0.0.1!17110 from 127.0.0.1 in /net/tcp/2
+      incoming call for tcp!127.0.0.1!17110 from 127.0.0.1 in /net/tcp/2
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 writes -O's messages to the announcement's ctl and -o's to each call's, and fails a command it cannot run
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq -p 3 -O bogus -O keepalive -o bogus2 'tcp!127.0.0.1!17111' /bin/echo hi >[2=1] &
+      sleep 1
+      {
+          n=`{read -c 11 <[0=3]}
+          echo -n connect 127.0.0.1!17111 >[1=3]
+          cat /net/tcp/$n/data
+      } <>[3]/net/tcp/clone
+      aux/listen1 -1tq 'tcp!127.0.0.1!17112' nosuchcommand >[2=1] &
+      sleep 1
+      {
+          n=`{read -c 11 <[0=3]}
+          echo -n connect 127.0.0.1!17112 >[1=3]
+          cat /net/tcp/$n/data
+      } <>[3]/net/tcp/clone
+      sleep 1
+      """
+    Then it prints
+      """
+      /net/tcp/0/ctl: can't write bogus: unknown control request
+      hi
+      aux/listen1: exec: file does not exist: '/bin/nosuchcommand'
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 takes at most 16 of each kind of option, needs each option's value, and fails a namespace it cannot build
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -o 1 -o 2 -o 3 -o 4 -o 5 -o 6 -o 7 -o 8 -o 9 -o 10 -o 11 -o 12 -o 13 -o 14 -o 15 -o 16 -o 17 a b >[2=1]
+      aux/listen1 -O 1 -O 2 -O 3 -O 4 -O 5 -O 6 -O 7 -O 8 -O 9 -O 10 -O 11 -O 12 -O 13 -O 14 -O 15 -O 16 -O 17 a b >[2=1]
+      for(o in -o -O -n -p -z) aux/listen1 $o >[2=1]
+      aux/listen1 -z 'tcp!127.0.0.1!17108' /bin/echo >[2=1]
+      aux/listen1 -1q -n /nonexistent 'tcp!127.0.0.1!17113' /bin/echo >[2=1]
+      @{ rfork n; mkdir -p /tmp/nodev; bind /tmp/nodev /dev; aux/listen1 -1q 'tcp!127.0.0.1!17146' /bin/echo >[2=1] }
+      mkdir -p /tmp/fake
+      echo -n >/tmp/fake/cs
+      aux/listen1 -tq '/tmp/fake/tcp!x!1' /bin/echo >[2=1]
+      aux/listen1 -tq '/tmp/fake/tcp!x y!1' /bin/echo >[2=1]
+      """
+    Then it prints
+      """
+      aux/listen1: too many -o options
+      aux/listen1: too many -O options
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      usage: aux/listen1 [-1tq] [-n namespace] [-p maxprocs] [-O msg] [-o msg] address cmd args...
+      aux/listen1: can't build namespace: can't open /nonexistent: file does not exist: '/nonexistent'
+      aux/listen1: can't become none: file does not exist: '/dev/user'
+      aux/listen1: announce /tmp/fake/tcp!x!1: 
+      aux/listen1: announce /tmp/fake/tcp!x y!1: announce opening /tmp/fake/y!1: file does not exist: '/tmp/fake/y!1'
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 writes -o's messages before the command runs, and leaves the call as standard error when it is descriptor 2
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq -o hangup 'tcp!127.0.0.1!17109' /bin/echo not hung up >[2]/dev/null &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17142' /bin/cat /nonexistent <[0=] >[1=] >[2=] &
+      sleep 1
+      {sleep 1} | aux/trampoline 'tcp!127.0.0.1!17109'
+      {sleep 1} | aux/trampoline 'tcp!127.0.0.1!17142'
+      """
+    Then it prints
+      """
+      cat: can't open /nonexistent: file does not exist: '/nonexistent'
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -m lets through only a caller whose ethernet address the database marks trampok
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      mkdir -p /tmp/fnet/tcp/0 /tmp/fnet/tcp/1 /tmp/fnet/tcp/2 /tmp/fnet/tcp/3 /tmp/fnet/tcp/4 /tmp/fnet/tcp/5 '#R/sys/log'
+      echo -n >/sys/log/trampoline
+      echo '10.0.0.1!564' >/tmp/fnet/tcp/0/local
+      echo '10.0.0.2!1234' >/tmp/fnet/tcp/0/remote
+      echo '10.0.0.1!564' >/tmp/fnet/tcp/1/local
+      echo '10.0.0.9!1234' >/tmp/fnet/tcp/1/remote
+      echo '10.0.0.3' >/tmp/fnet/tcp/2/remote
+      echo -n >/tmp/fnet/tcp/2/local
+      echo 'ether OK 10.0.0.9 aaaaaaaaaaaa' >/tmp/fnet/arp
+      echo 'ether WAIT 10.0.0.2 bbbbbbbbbbbb' >>/tmp/fnet/arp
+      echo 'short' >>/tmp/fnet/arp
+      echo 'ether OK 10.0.0.2 0011aabbccdd extra' >>/tmp/fnet/arp
+      echo '10.0.0.4!1234' >/tmp/fnet/tcp/4/remote
+      echo '10.0.0.5!1234' >/tmp/fnet/tcp/5/remote
+      echo 'ether OK 10.0.0.4 ''a b''' >>/tmp/fnet/arp
+      echo 'ether OK 10.0.0.5 ''it''''s''' >>/tmp/fnet/arp
+      bind /tmp/fnet /net.alt
+      echo 'ether=0011aabbccdd sys=tramp' >/tmp/ndb
+      echo '	trampok' >>/tmp/ndb
+      echo 'ether="a b" trampok' >>/tmp/ndb
+      echo 'ether=it''s trampok' >>/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      aux/listen1 -1tq 'tcp!127.0.0.1!17120' /bin/echo through &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17118' /bin/echo through a space &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17119' /bin/echo through a quote &
+      sleep 1
+      {sleep 2} | aux/trampoline -m /net.alt/tcp/0 'tcp!127.0.0.1!17120'
+      {sleep 2} | aux/trampoline -m /net.alt/tcp/4 'tcp!127.0.0.1!17118'
+      {sleep 2} | aux/trampoline -m /net.alt/tcp/5 'tcp!127.0.0.1!17119'
+      for(d in 1 2 3 /x){
+          m=/net.alt/tcp/$d
+          ~ $d /* && m=$d
+          aux/trampoline -m $m 'tcp!127.0.0.1!1'; ~ $status *'bad mac' && echo bad mac
+      }
+      ifs='
+      '{ lines=`{cat /sys/log/trampoline} }
+      for(l in $lines){ w=`{echo $l}; echo $w(5-) }
+      """
+    Then it prints
+      """
+      through
+      through a space
+      through a quote
+      bad mac
+      bad mac
+      bad mac
+      bad mac
+      badmac aaaaaaaaaaaa from 10.0.0.9!1234 for 10.0.0.1!564 on /net.alt
+      badmac <nil> from 10.0.0.3!unknown for unknown!unknown on /net.alt
+      badmac <nil> from unknown!unknown for unknown!unknown on /net.alt
+      badmac <nil> from unknown!unknown for unknown!unknown on /net
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: aux/listen1 -1 ends once its command has run, with the command's console the call, and fails a listen that ends
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      fn call {
+          {
+              n=`{read -c 11 <[0=3]}
+              echo -n connect 127.0.0.1!$1 >[1=3]
+              cat /net/tcp/$n/data
+          } <>[3]/net/tcp/clone
+      }
+      {sleep 1; call 17114} &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17114' /bin/rc -c 'echo -n to the console >/dev/cons'
+      wait
+      echo
+      {sleep 1; call 17115} &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17115' echo relative
+      wait
+      {sleep 1; call 17116} &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17116' nosuchcommand >[2=1]; ~ $status *exec && echo exec
+      wait
+      {sleep 1; echo -n hangup >/net/tcp/0/ctl} &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17117' /bin/echo >[2=1]
+      wait
+      """
+    Then it prints
+      """
+      to the console
+      relative
+      aux/listen1: exec: file does not exist: '/bin/nosuchcommand'
+      exec
+      aux/listen1: listen tcp!127.0.0.1!17117: listen opening /net/tcp/0/listen: listen hungup
+      """
+
   @FOG_RC_RUN_231
   Scenario: aux/trampoline copies its input to the call it dials and the call's data to its output
     Given 9front's oracle has no route to its loopback, so this runs on Fog alone
@@ -5978,6 +6187,101 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_231
+  Scenario: aux/trampoline hangs up its other half once either way ends, and exits cleanly when the call's data ends
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17103' /bin/echo short &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17104' /bin/rc -c 'sleep 1; echo late' >[2]/dev/null &
+      sleep 1
+      aux/trampoline 'tcp!127.0.0.1!17103' < <{sleep 2 >[2]/dev/null}
+      ~ $status '' && echo clean
+      unnamed=()
+      for(a in /proc/*/args) { w=`{cat $a}; ~ $#w 0 && unnamed=($unnamed $a) }
+      echo $#unnamed unnamed
+      aux/trampoline 'tcp!127.0.0.1!17104' </dev/null; ~ $status *hangup && echo hung up
+      sleep 2
+      """
+    Then it prints
+      """
+      short
+      clean
+      1 unnamed
+      hung up
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -t ends what it relays once it times out, and times out a dial too slow
+    Given the host's resolver answers only after 3 seconds
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17105' /bin/rc -c 'sleep 1; echo late' >[2]/dev/null &
+      sleep 1
+      aux/trampoline -t 300 'tcp!127.0.0.1!17105' < <{sleep 2 >[2]/dev/null}; ~ $status *timeout && echo timed out
+      sleep 1
+      echo 'sys=fogtest' >/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      aux/trampoline -t 300 'tcp!slow.example!1' >[2=1]; ~ $status *alarm && echo alarm
+      """
+    Then it prints
+      """
+      timed out
+      alarm
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -9 copies each whole message, and not one cut short, and counts each as activity
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script, its \x escapes bytes
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17106' /bin/rc -c 'echo -n ''\x07\x00\x00\x00ab\x0A\x07\x00\x00\x00cd\x0A\x0A\x00''' &
+      sleep 1
+      aux/listen1 -1tq 'tcp!127.0.0.1!17147' /bin/rc -c 'echo -n ''\x06\x00\x00\x00ab''; sleep 5' >[2]/dev/null &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17148' /bin/rc -c 'for(m in a b c){ echo -n ''\x05\x00\x00\x00''$m; sleep 0.4 }; echo -n ''\x0A\x00\x00\x00ef''' >[2]/dev/null &
+      sleep 1
+      aux/trampoline -9 'tcp!127.0.0.1!17106' < <{sleep 2 >[2]/dev/null} >/tmp/out
+      ~ $status '' && echo clean
+      {read -c 4 >/dev/null; read -c 3; read -c 4 >/dev/null; cat} </tmp/out
+      aux/trampoline -9 'tcp!127.0.0.1!17147' < <{sleep 5 >[2]/dev/null} >[1=]
+      echo a write that fails ends it
+      aux/trampoline -9 -t 600 'tcp!127.0.0.1!17148' < <{sleep 2 >[2]/dev/null} >/tmp/out
+      {for(i in 1 2 3){ read -c 4 >/dev/null; read -c 1 }; cat} </tmp/out
+      echo
+      """
+    Then it prints
+      """
+      clean
+      ab
+      cd
+      a write that fails ends it
+      abc
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: dial takes at most 127 bytes of the address, and an address without its network, with #'s device unslashed or with a / not after a # as it is
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17107' /bin/echo cut short &
+      sleep 1
+      {sleep 2} | aux/trampoline '/net/./././././././././././././././././././././././././././././././././././././././././././././././././././tcp!127.0.0.01!171070'
+      aux/trampoline '!x' >[2=1]
+      aux/trampoline '#Itcp!127.0.0.1!1' >[2=1]
+      aux/trampoline 'x/tcp!127.0.0.1!1' >[2=1]
+      mkdir -p /tmp/alt/tcp/clone
+      bind /tmp/alt /net.alt
+      aux/trampoline 'tcp!127.0.0.1!1' >[2=1]
+      """
+    Then it prints
+      """
+      cut short
+      aux/trampoline: dial !x: file does not exist: '/net//clone'
+      aux/trampoline: dial #Itcp!127.0.0.1!1: file does not exist: '/net/#Itcp'
+      aux/trampoline: dial x/tcp!127.0.0.1!1: file does not exist: '/net/x'
+      aux/trampoline: dial tcp!127.0.0.1!1: connection refused
+      """
+
+  @FOG_RC_RUN_231
   Scenario: aux/trampoline fails a call it cannot dial, -m every caller, and prints its usage
     Given 9front's oracle has no route to its loopback, so this runs on Fog alone
     When rc runs the script
@@ -5991,6 +6295,98 @@ Feature: rc runs scripts as 9front rc does
       aux/trampoline: dial tcp!127.0.0.1!1: connection refused
       bad mac
       usage: trampoline [-9] [-a addr] [-m netdir] [-o opt] [-t timeout] addr
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: dial takes a network directory from the address, or tries /net and then /net.alt, and through cs each answer until one is taken
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -tq '/net/tcp!127.0.0.1!17121' /bin/echo a >/dev/null >[2=1] &
+      aux/listen1 -tq '#I/tcp!127.0.0.1!17122' /bin/echo b >/dev/null >[2=1] &
+      sleep 1
+      {sleep 1} | aux/trampoline '/net/tcp!127.0.0.1!17121'
+      {sleep 1} | aux/trampoline '#I/tcp!127.0.0.1!17122'
+      echo 'sys=two ip=127.0.0.2 ip=127.0.0.1' >/tmp/ndb
+      echo 'tcp=svc port=17122' >>/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      {sleep 1} | aux/trampoline 'tcp!two!svc'
+      aux/trampoline 'tcp!two!nosuchsvc' >[2=1]
+      aux/trampoline 'tcp!127.0.0.1!1' >[2=1]
+      unmount /srv/cs /net
+      bind '#I' /net.alt
+      unmount '#I' /net
+      aux/listen1 -1tq '/net.alt/tcp!127.0.0.1!17124' /bin/echo c >/dev/null >[2=1] &
+      sleep 1
+      {sleep 1} | aux/trampoline 'tcp!127.0.0.1!17124'
+      aux/trampoline 'tcp!127.0.0.1!1' >[2=1]
+      aux/trampoline 'foo!127.0.0.1!1' >[2=1]
+      aux/trampoline '/nonexistent/tcp!127.0.0.1!17124' >[2=1]
+      aux/trampoline tcp >[2=1]
+      """
+    Then it prints
+      """
+      a
+      b
+      b
+      aux/trampoline: dial tcp!two!nosuchsvc: cs: can't translate service
+      aux/trampoline: dial tcp!127.0.0.1!1: connection refused
+      c
+      aux/trampoline: dial tcp!127.0.0.1!1: connection refused
+      aux/trampoline: dial foo!127.0.0.1!1: file does not exist: '/net/foo'
+      aux/trampoline: dial /nonexistent/tcp!127.0.0.1!17124: file does not exist: '/nonexistent'
+      aux/trampoline: dial tcp: file does not exist: '/net/net'
+      """
+
+  @FOG_RC_RUN_230
+  Scenario: announce takes a network directory from the address, cs's translation, or the address as it is without cs
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      echo 'tcp=svc port=17123' >/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      aux/listen1 -1tq 'tcp!127.0.0.1!svc' /bin/echo through cs >/dev/null >[2=1] &
+      sleep 1
+      {sleep 1} | aux/trampoline 'tcp!127.0.0.1!17123'
+      aux/listen1 -1tq 'tcp!*!nosuchsvc' /bin/echo >[2=1]
+      aux/listen1 -1tq '/tcp!*!1' /bin/echo >[2=1]
+      aux/listen1 -1tq 'foo!*!1' /bin/echo >[2=1]
+      aux/listen1 -1tq '/net.alt/tcp!*!1' /bin/echo >[2=1]
+      aux/listen1 -1tq '!foo' /bin/echo >[2=1]
+      """
+    Then it prints
+      """
+      through cs
+      aux/listen1: announce tcp!*!nosuchsvc: cs: can't translate service
+      aux/listen1: announce /tcp!*!1: bad dial string: /tcp!*!1
+      aux/listen1: announce foo!*!1: announce opening /net/foo/clone: file does not exist: '/net/foo'
+      aux/listen1: announce /net.alt/tcp!*!1: announce opening /net.alt/tcp/clone: file does not exist: '/net.alt/tcp'
+      aux/listen1: announce !foo: cs: bad query
+      """
+
+  @FOG_RC_RUN_231
+  Scenario: aux/trampoline -t relays what passes and ends once nothing has, and its statuses say why it ended
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      aux/listen1 -1tq 'tcp!127.0.0.1!17125' /bin/rc -c 'echo quick; sleep 3' >/dev/null >[2=1] &
+      sleep 1
+      {sleep 3} | aux/trampoline -t 1000 'tcp!127.0.0.1!17125'; ~ $status *': timeout' && echo timeout
+      aux/trampoline 'tcp!127.0.0.1!1' >[2]/dev/null; ~ $status *': dial tcp!127.0.0.1!1: connection refused' && echo refused
+      aux/trampoline >[2]/dev/null; ~ $status *': usage' && echo usage
+      aux/trampoline -z x >[2]/dev/null; ~ $status *': usage' && echo usage
+      aux/trampoline -o 1 -o 2 -o 3 -o 4 -o 5 -o 6 -o 7 -o 8 -o 9 -o 10 -o 11 -o 12 -o 13 -o 14 -o 15 -o 16 -o 17 x >[2=1]
+      aux/trampoline -o 1 -o 2 -o 3 -o 4 -o 5 -o 6 -o 7 -o 8 -o 9 -o 10 -o 11 -o 12 -o 13 -o 14 -o 15 -o 16 'tcp!127.0.0.1!1' >[2=1]
+      """
+    Then it prints
+      """
+      quick
+      timeout
+      refused
+      usage
+      usage
+      aux/trampoline: too many -o options
+      aux/trampoline: dial tcp!127.0.0.1!1: connection refused
       """
 
   @FOG_RC_RUN_232
@@ -6033,4 +6429,637 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       as none
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs translates an address into the clone file of its network and the address to give it
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'tcp=rcpu port=17019' >/tmp/ndb
+      echo 'tcp=9fs port=564 restricted' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs 'tcp!*!17019' 'tcp!*!rcpu' 'net!*!9fs' 'tcp!*!17019!r' foo!bar!baz foo!bar
+      """
+    Then it prints
+      """
+      /tmp/net/tcp/clone 17019
+
+      /tmp/net/tcp/clone 17019
+
+      /tmp/net/tcp/clone 564!r
+
+      /tmp/net/tcp/clone 17019!r
+
+      /tmp/net/foo/clone bar!baz
+
+      /tmp/net/foo/clone bar
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs translates a host's address, or a name the database gives one, for a network of an interface's ip version
+    Given 9front's oracle has no ip address of its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=fogtest ip=10.1.2.3' >/tmp/ndb
+      echo 'tcp=rcpu port=17019' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs tcp!127.0.0.1!17019 tcp!fogtest!rcpu 'tcp![10.1.2.3]!1' net!fogtest!1!r
+      """
+    Then it prints
+      """
+      /tmp/net/tcp/clone 127.0.0.1!17019
+
+      /tmp/net/tcp/clone 10.1.2.3!17019
+
+      /tmp/net/tcp/clone 10.1.2.3!1
+
+      /tmp/net/tcp/clone 10.1.2.3!1!r
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs asks dns, in a slave, for a name the database does not hold, and for the name of an address
+    Given 9front's oracle has no ip address of its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=fogtest ip=10.1.2.3' >/tmp/ndb
+      ndb/cs -4 -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs tcp!localhost!17019 '!ip=127.0.0.1'
+      """
+    Then it prints
+      """
+      /tmp/net/tcp/clone 127.0.0.1!17019
+
+      ptr=1.0.0.127.in-addr.arpa dom=localhost
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs answers a query of the database with the entry that matches, or ipinfo's attributes
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'ipnet=fognet ip=10.1.0.0 ipmask=255.255.0.0 fs=10.1.0.9' >/tmp/ndb
+      echo 'sys=fogtest ip=10.1.2.3' >>/tmp/ndb
+      echo '	dom=fogtest.example' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!sys=fogtest' '!sys=fogtest ip=*' '!ipinfo ip=10.1.2.3 ipmask fs' >[2=1]
+      ndb/csquery /tmp/net/cs '!sys=nobody' '!ipinfo' '!' >[2=1]
+      """
+    Then it prints
+      """
+      sys=fogtest ip=10.1.2.3
+      dom=fogtest.example
+
+      sys=fogtest ip=10.1.2.3
+      dom=fogtest.example
+
+      ipmask=255.255.0.0 fs=10.1.0.9
+
+      translating !sys=nobody: cs: no match
+      translating !ipinfo: cs: bad query
+      translating !: cs: bad query
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs's ipinfo looks in each containing network once, at the mask where the address's next bit is set
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'ipnet=fognet ip=10.1.0.0 ipmask=255.255.0.0 fs=10.1.0.9' >/tmp/ndb
+      echo 'ipnet=wide ip=10.0.0.0 ipmask=255.0.0.0 fs=10.0.0.9 auth=10.0.0.8' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!ipinfo ip=10.1.2.3 fs auth' '!ipinfo ip=10.1.2.3 fs nothing' >[2=1]
+      """
+    Then it prints
+      """
+      fs=10.1.0.9 auth=10.0.0.8
+
+      fs=10.1.0.9
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs parses an address for ipinfo as libip does, and makes up the mask of its class or kind
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'ipnet=v6net ip=2001:db8:: ipmask=/32 fs=v6fs' >/tmp/ndb
+      echo 'ipnet=bnet ip=172.16.0.0 ipmask=255.255.0.0 fs=bfs' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      for(a in 10.1.2.3 172.16.1 192.168.1.2 10.1 0x0a.1.2.3 ::1 fe80::1 ff02::1 ff02::1:ff00:1 2001:db8::1 2001:db8:0:0:0:0:0:1 1::2::3 12345::1 1:2:3:4:5:6:7:8:9 ::ffff:1.2.3.4 1:2:3:4:5:6:7:1.2.3.4 1.2.3.4x)
+          ndb/csquery /tmp/net/cs '!ipinfo ip='$a' ipmask fs' >[2=1]
+      """
+    Then it prints
+      """
+      ipmask=/104
+
+      ipmask=255.255.0.0 fs=bfs
+
+      ipmask=/120
+
+      ipmask=/104
+
+      ipmask=/104
+
+      ipmask=/128
+
+      ipmask=/64
+
+      ipmask=/8
+
+      ipmask=/104
+
+      ipmask=/32 fs=v6fs
+
+      ipmask=/32 fs=v6fs
+
+      translating !ipinfo ip=1::2::3 ipmask fs: cs: no match
+      translating !ipinfo ip=12345::1 ipmask fs: cs: no match
+      translating !ipinfo ip=1:2:3:4:5:6:7:8:9 ipmask fs: cs: no match
+      ipmask=/104
+
+      translating !ipinfo ip=1:2:3:4:5:6:7:1.2.3.4 ipmask fs: cs: no match
+      translating !ipinfo ip=1.2.3.4x ipmask fs: cs: no match
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs gives an address as libip prints it, dotted for v4 and with v6's longest run of zeros elided
+    Given 9front's oracle has no ip address of its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=fogtest ip=10.1.2.3' >/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      for(a in 10.1 172.16.1 012.010.1.2 '[::ffff:1.2.3.4]' 2001:db8:0:0:1:0:0:1 0:0:1:0:0:0:1:0 1:2:3:4:5:6:7:8 1:0:0:2:0:0:0:3 fe80::)
+          ndb/csquery /tmp/net/cs 'tcp!'$a'!1' >[2=1]
+      ndb/csquery /tmp/net/cs 'tcp!1::2::3!1' 'tcp!12345::1!1' >[2=1]
+      """
+    Then it prints
+      """
+      /tmp/net/tcp/clone 10.0.0.1!1
+
+      /tmp/net/tcp/clone 172.16.0.1!1
+
+      /tmp/net/tcp/clone 10.8.1.2!1
+
+      /tmp/net/tcp/clone 1.2.3.4!1
+
+      /tmp/net/tcp/clone 2001:db8::1:0:0:1!1
+
+      /tmp/net/tcp/clone 0:0:1::1:0!1
+
+      /tmp/net/tcp/clone 1:2:3:4:5:6:7:8!1
+
+      /tmp/net/tcp/clone 1:0:0:2::3!1
+
+      /tmp/net/tcp/clone fe80::!1
+
+      translating tcp!1::2::3!1: cs: can't translate address
+      translating tcp!12345::1!1: cs: can't translate address
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs reads the database as libndb does, through the files its database entry names, and again once one changes
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'database=' >/tmp/ndb
+      echo '	file=/tmp/ndb2' >>/tmp/ndb
+      echo '	file=/tmp/nosuchfile' >>/tmp/ndb
+      echo '	file=/tmp/ndb' >>/tmp/ndb
+      echo 'sys=x ip=10.0.0.1' >>/tmp/ndb
+      echo 'sys=x ip=10.0.0.2 # a comment' >/tmp/ndb2
+      echo '# a comment between its lines' >>/tmp/ndb2
+      echo '	dom=x.example' >>/tmp/ndb2
+      echo 'sys=quoted vendor="a b#c" empty=   bare tab=	x "open=quote' >>/tmp/ndb2
+      echo 'sys=long aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=1' >>/tmp/ndb2
+      echo -n 'sys=nonewline ip=10.0.0.9' >>/tmp/ndb2
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!sys=x' '!sys=x ip=10.0.0.1' '!sys=quoted' '!sys=long' '!sys=nonewline' >[2=1]
+      echo >>/tmp/ndb2
+      echo 'sys=late ip=10.0.0.3' >>/tmp/ndb2
+      ndb/csquery /tmp/net/cs '!sys=nonewline' '!sys=late' >[2=1]
+      """
+    Then it prints
+      """
+      sys=x ip=10.0.0.2
+      dom=x.example
+
+      sys=x ip=10.0.0.1
+
+      sys=quoted vendor="a b#c" empty= bare= tab= x= "open=quote
+
+      sys=long aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=1
+
+      translating !sys=nonewline: cs: no match
+      sys=nonewline ip=10.0.0.9
+
+      sys=late ip=10.0.0.3
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs gives ipinfo's attributes from the line of the address first, once each, and resolves those asked for with @
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=m fs=mfs' >/tmp/ndb
+      echo '	ip=10.5.5.5 auth=10.5.5.6' >>/tmp/ndb
+      echo 'sys=m2 ip=10.5.5.5 auth=10.5.5.6 fs=nobody' >>/tmp/ndb
+      echo 'sys=mfs ip=10.6.6.6' >>/tmp/ndb
+      echo '	ip=10.6.6.7' >>/tmp/ndb
+      echo 'ipnet=n ip=10.5.0.0 ipmask=255.255.0.0 auth=10.5.5.6 dns=mfs' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!ipinfo ip=10.5.5.5 sys fs auth' '!ipinfo ip=10.5.5.5 @fs @dns auth' '!ipinfo ip=10.5.5.5 @auth' '!ipinfo sys=m auth' >[2=1]
+      """
+    Then it prints
+      """
+      auth=10.5.5.6 sys=m fs=mfs
+      fs=nobody sys=m2
+
+      auth=10.5.5.6 fs=10.6.6.6 fs=10.6.6.7 dns=10.6.6.6 dns=10.6.6.7
+
+      auth=10.5.5.6
+
+      auth=10.5.5.6
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs gives a telephone number, or the one the database names a system by, for telco
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=office telco=5551234' >/tmp/ndb
+      echo 'tcp=9fs port=564 restricted' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs telco!office!1 telco!5559876 telco!office!1!r 'telco!office' 'tcp!*!564' 'tcp!*!9fs' 'tcp!*!1023' 'udp!*!9fs' 'tcp!*!-' 'tcp!*!$x' '[1.2.3.4]' >[2=1]
+      """
+    Then it prints
+      """
+      /tmp/net/telco/clone 5551234!1
+
+      /tmp/net/telco/clone 5559876
+
+      /tmp/net/telco/clone 5551234!1!r
+
+      /tmp/net/telco/clone 5551234
+
+      /tmp/net/tcp/clone 564!r
+
+      /tmp/net/tcp/clone 564!r
+
+      /tmp/net/tcp/clone 1023
+
+      translating udp!*!9fs: cs: can't translate service
+      translating tcp!*!-: cs: can't translate service
+      translating tcp!*!$x: cs: can't translate service
+      translating [1.2.3.4]: cs: can't translate service
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs fails a service or address it cannot translate, and a request too long
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=fogtest ip=10.1.2.3' >/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery -s /tmp/net/cs 'tcp!127.0.0.1!no.such'; ~ $status *errors && echo errors
+      ndb/csquery /tmp/net/cs 'tcp!127.0.0.1!no.such' tcp!127.0.0.1!nosuchservice tcp!0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789!1 >[2=1]
+      """
+    Then it prints
+      """
+      errors
+      translating tcp!127.0.0.1!no.such: cs: can't translate service
+      translating tcp!127.0.0.1!nosuchservice: cs: can't translate service
+      translating tcp!0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789!1: cs: request too long
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs serves a directory holding only cs, which cannot be removed
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=fogtest ip=10.1.2.3' >/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      unmount /tmp/net
+      mount -a /srv/cs_tmp_net /tmp/net
+      echo /tmp/net/*
+      rm /tmp/net/cs >[2=1]
+      """
+    Then it prints
+      """
+      /tmp/net/cs
+      rm: /tmp/net/cs: cs: remove permission denied
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs prints its usage for an option without its value
+    When rc runs the script
+      """
+      ndb/cs -x >[2=1]; ~ $status *usage && echo usage
+      ndb/cs -f >[2=1]; ~ $status *usage && echo usage
+      """
+    Then it prints
+      """
+      usage: ndb/cs [-46dn] [-f ndb-file] [-x netmtpt]
+      usage
+      usage: ndb/cs [-46dn] [-f ndb-file] [-x netmtpt]
+      usage
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs takes a service by its name in the database, by its number, or not at all
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'tcp=my-svc port=1234' >/tmp/ndb
+      echo 'tcp=low port=1023 restricted' >>/tmp/ndb
+      echo 'tcp=high port=1024 restricted' >>/tmp/ndb
+      echo 'tcp=9fs port=564 restricted' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs 'tcp!*!my-svc' 'tcp!*!1.2' 'tcp!*!1023' 'tcp!*!1024' 'udp!*!564' 'il!*!564' >[2=1]
+      """
+    Then it prints
+      """
+      /tmp/net/tcp/clone 1234
+
+      translating tcp!*!1.2: cs: can't translate service
+      /tmp/net/tcp/clone 1023!r
+
+      /tmp/net/tcp/clone 1024
+
+      /tmp/net/udp/clone 564
+
+      /tmp/net/il/clone 564
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs takes a query's pairs and ipinfo's attributes as genquery and ipinfoquery read them
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=m ip=10.5.5.5 fs=mfs fs=mfs2 dns=:: auth=10.5.5.6' >/tmp/ndb
+      echo 'sys=mfs ip=10.6.6.6' >>/tmp/ndb
+      echo 'sys=mfs2 ip=10.6.6.8' >>/tmp/ndb
+      echo '=x sys=blank' >>/tmp/ndb
+      echo 'ipnet=n ip=10.5.0.0 ipmask=255.255.0.0 fs=netfs' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!=x' '!sys' '!ipinfo =x sys' '!ipinfo ip=10.5.5.5' '!ipinfo ip=10.5.5.5 fs' '!ipinfo ip=10.5.5.5 @fs sys' '!ipinfo ip=10.5.5.5 @dns @auth' '!ipinfo sys=10.5.5.5 ipmask' >[2=1]
+      """
+    Then it prints
+      """
+      =x sys=blank
+
+      translating !sys: cs: bad query
+      translating !ipinfo =x sys: cs: no match
+      translating !ipinfo ip=10.5.5.5: cs: bad query
+      fs=mfs fs=mfs2
+
+      fs=10.6.6.6 fs=10.6.6.8 sys=m
+
+      dns=:: auth=10.5.5.6
+
+      translating !ipinfo sys=10.5.5.5 ipmask: cs: no match
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs finds the closest network holding an attribute by each network's own mask, or its class's when it has none it can use
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=gw ip=10.16.0.0 smtp=gw' >/tmp/ndb
+      echo 'ipnet=a ip=10.16.0.0 ipmask=/12 fs=a' >>/tmp/ndb
+      echo 'ipnet=b ip=10.0.0.0 ipmask=/64 fs=b auth=b' >>/tmp/ndb
+      echo 'ipnet=c ip=10.0.0.0 ipmask=ffff:: fs=c dns=c' >>/tmp/ndb
+      echo 'ipnet=d ip=10.0.0.0 fs=d smtp=d' >>/tmp/ndb
+      echo 'ipnet=e ip=172.16.0.0 ipmask=255.255.0.0 fs=e1' >>/tmp/ndb
+      echo 'ipnet=e2 ip=172.16.0.0 ipmask=255.255.0.0 fs=e2' >>/tmp/ndb
+      echo 'ipnet=f ip=172.16.0.0 ipmask=255.255.255.0 fs=f' >>/tmp/ndb
+      echo 'ipnet=all ip=:: ipmask=/0 fs=all' >>/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!ipinfo ip=10.20.1.1 fs auth dns smtp ipmask' '!ipinfo ip=10.200.1.1 fs' '!ipinfo ip=172.16.0.9 fs' '!ipinfo ip=172.16.5.9 fs ipmask' '!ipinfo ip=0:1::1 fs' >[2=1]
+      """
+    Then it prints
+      """
+      ipmask=/12 fs=a auth=b
+
+      fs=b
+
+      fs=f
+
+      ipmask=255.255.0.0 fs=e1
+
+      fs=all
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: ndb/cs opens only the files a database entry names, keeping the default file first when it is named first
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'database=' >/tmp/ndb
+      echo '	file=/tmp/ndb' >>/tmp/ndb
+      echo '	notfile=/tmp/ndb3' >>/tmp/ndb
+      echo '	file=/tmp/ndb2' >>/tmp/ndb
+      echo 'sys=x ip=10.0.0.1' >>/tmp/ndb
+      echo 'sys=x ip=10.0.0.2' >/tmp/ndb2
+      echo 'sys=y ip=10.0.0.3' >/tmp/ndb3
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      ndb/csquery /tmp/net/cs '!sys=x' '!sys=y' '!ip=10.0.0.2' >[2=1]
+      """
+    Then it prints
+      """
+      sys=x ip=10.0.0.1
+
+      translating !sys=y: cs: no match
+      sys=x ip=10.0.0.2
+
+      """
+
+  @FOG_RC_RUN_233
+  Scenario: unmount takes a mount by the srv file of the channel it was mounted from
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=x ip=10.0.0.1' >/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      test -e /tmp/net/cs && echo cs is mounted
+      unmount /srv/cs_tmp_net /tmp/net
+      test -e /tmp/net/cs || echo cs is not
+      test -e /tmp/net/tcp && echo tcp still is
+      unmount /srv/cs_tmp_net /tmp/net >[2=1]
+      """
+    Then it prints
+      """
+      cs is mounted
+      cs is not
+      tcp still is
+      unmount: /tmp/net: not in union
+      """
+
+  @FOG_RC_RUN_235
+  Scenario: /proc's fd gives a process's dot and, for each open descriptor, its mode, device, qid, iounit, offset and name
+    Given 9front's devices and qids are its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      cd /tmp
+      echo hello >/tmp/f
+      {
+          read -c 2 <[0=3] >/dev/null
+          cat /proc/$pid/fd
+      } <[3]/tmp/f >[4]/dev/null <>[5]/net/tcp/clone
+      """
+    Then it prints
+      """
+      /tmp
+        0 r  c    0 (0000000000000003 0 00)     0        0 /dev/null
+        1 rw |    1 (0000000000000001 0 00)     0       68 #|/data1
+        2 rw |    1 (0000000000000001 0 00)     0      130 #|/data1
+        3 r  R    0 (000000000000001e 2 00)     0      130 /tmp/s
+        4 r  R    0 (000000000000001f 2 00)     0        2 /tmp/f
+        5 w  c    0 (0000000000000003 0 00)     0        0 /dev/null
+        6 rw I    0 (0000000000000006 0 00)     0        0 /net/tcp/clone
+      """
+
+  @FOG_RC_RUN_235
+  Scenario: aux/listen1's command and a relaying aux/trampoline hold only the descriptors they work with
+    Given 9front's devices and qids are its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      fn call {
+          {
+              n=`{read -c 11 <[0=3]}
+              echo -n connect 127.0.0.1!$1 >[1=3]
+              cat /net/tcp/$n/data
+          } <>[3]/net/tcp/clone
+      }
+      mkdir -p /tmp/fnet/tcp/0
+      echo '10.0.0.1!564' >/tmp/fnet/tcp/0/local
+      echo '10.0.0.2!1234' >/tmp/fnet/tcp/0/remote
+      echo 'ether OK 10.0.0.2 0011aabbccdd' >/tmp/fnet/arp
+      bind /tmp/fnet /net.alt
+      echo 'sys=two ip=127.0.0.2 ip=127.0.0.1' >/tmp/ndb
+      echo 'tcp=svc1 port=17126' >>/tmp/ndb
+      echo 'tcp=svc2 port=17127' >>/tmp/ndb
+      echo 'ether=0011aabbccdd trampok' >>/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      aux/listen1 -1t 'tcp!127.0.0.1!svc1' /bin/rc -c 'cat /proc/$pid/fd' >/dev/null >[2=1] &
+      sleep 1
+      call 17126
+      aux/listen1 -1q 'tcp!127.0.0.1!17129' /bin/rc -c 'cat /proc/$pid/fd' >/dev/null >[2=1] &
+      sleep 1
+      call 17129
+      aux/listen1 -1tq 'tcp!127.0.0.1!svc2' /bin/rc -c 'sleep 3' >/dev/null >[2=1] &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17128' /bin/rc -c 'sleep 3' >/dev/null >[2=1] &
+      sleep 1
+      aux/trampoline -t 5000 -m /net.alt/tcp/0 -a 'tcp!127.0.0.1!17128' 'tcp!two!svc2' &
+      sleep 1
+      for(p in /proc/*){
+          a=`{cat $p/args}
+          ~ $a(1) aux/trampoline && {
+              ifs='
+      '{ lines=`{cat $p/fd} }
+              for(l in $lines){ w=`{echo $l}; echo $w(1-3) }
+          }
+      }
+      """
+    Then it prints
+      """
+      /
+        0 rw I    0 (0000000000000027 0 00)     0        2 /net/tcp/2/data
+        1 rw I    0 (0000000000000027 0 00)     0       71 /net/tcp/2/data
+        2 w  c    0 (0000000000000003 0 00)     0      100 /dev/null
+        3 r  p    0 (000000000000007a 0 00)     0      203 /proc/15/fd
+      /
+        0 rw I    0 (0000000000000027 0 00)     0        2 /net/tcp/2/data
+        1 rw I    0 (0000000000000027 0 00)     0       71 /net/tcp/2/data
+        2 w  c    0 (0000000000000003 0 00)     0        0 /dev/null
+        3 r  p    0 (00000000000000a2 0 00)     0      203 /proc/20/fd
+      /
+      0 r c
+      1 rw |
+      2 rw |
+      5 rw I
+      6 rw I
+      """
+
+  @FOG_RC_RUN_234
+  Scenario: dial asks the cs on /net to translate the names it is given
+    Given 9front's oracle has no route to its loopback, so this runs on Fog alone
+    When rc runs the script
+      """
+      echo 'sys=here ip=127.0.0.1' >/tmp/ndb
+      echo 'tcp=fogecho port=17102' >>/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      aux/listen1 -1tq 'tcp!127.0.0.1!17102' /bin/echo hello through cs &
+      sleep 1
+      {sleep 2} | aux/trampoline tcp!here!fogecho
+      """
+    Then it prints
+      """
+      hello through cs
+      """
+
+  @FOG_RC_RUN_234
+  Scenario: ndb/csquery asks /net/cs when it is given no file, and an empty line is an empty address
+    Given 9front's oracle has its own cs on /net, so this runs on Fog alone
+    When rc runs the script
+      """
+      echo 'sys=x ip=10.0.0.1' >/tmp/ndb
+      ndb/cs -f /tmp/ndb >/dev/null >[2=1]
+      {echo; echo 'tcp!*!1'} | ndb/csquery >[2]/dev/null
+      """
+    Then it prints
+      """
+      /net/tcp/clone 1
+
+      """
+
+  @FOG_RC_RUN_234
+  Scenario: ndb/csquery reads its addresses from its input after a prompt, and prints its usage
+    When rc runs the script
+      """
+      mkdir -p /tmp/net
+      bind '#I' /tmp/net
+      echo 'sys=fogtest ip=10.1.2.3' >/tmp/ndb
+      ndb/cs -x /tmp/net -f /tmp/ndb >/dev/null >[2=1]
+      echo 'tcp!*!1' | ndb/csquery /tmp/net/cs >[2]/dev/null
+      prompt=`{ndb/csquery /tmp/net/cs </dev/null >[2=1]}
+      echo $#prompt $prompt
+      ndb/csquery -z >[2=1]; ~ $status *usage && echo usage
+      ndb/csquery '#I/nothing' tcp!fogtest!1 >[2=1]
+      """
+    Then it prints
+      """
+      /tmp/net/tcp/clone 1
+
+      1 >
+      usage: ndb/csquery [/net/cs [addr...]]
+      usage
+      ndb/csquery: cannot open #I/nothing: file does not exist: '#I/nothing'
       """

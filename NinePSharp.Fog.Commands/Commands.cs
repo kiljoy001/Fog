@@ -16,6 +16,8 @@ public static class Commands
         ["echo"] = Echo.MainAsync,
         ["mkdir"] = Mkdir.MainAsync,
         ["mount"] = Mount.MainAsync,
+        ["ndb/cs"] = Cs.MainAsync,
+        ["ndb/csquery"] = Csquery.MainAsync,
         ["read"] = Read.MainAsync,
         ["rm"] = Rm.MainAsync,
         ["sleep"] = Sleep.MainAsync,

@@ -333,6 +333,8 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | changes to | /tmp/a\x0ab      | bad character in file name: '/tmp/a\x0ab'  |
       | wstats     | /tmp/a\x1fb      | bad character in file name: '/tmp/a\x1fb'  |
       | execs      | /tmp/a\tb        | bad character in file name: '/tmp/a\tb'    |
+      | unmounts   | /tmp/a\tb        | bad character in file name: '/tmp/a\tb'    |
+      | unmounts from | /tmp/a\tb     | bad character in file name: '/tmp/a\tb'    |
       | opens      | /tmp/<65531 a>   | name too long                              |
       | creates    | /tmp/<32766 é>   | name too long                              |
       | stats      | /<32767 é>a      | name too long                              |

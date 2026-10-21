@@ -22,7 +22,7 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
   @FOG_KERNEL_051
   Scenario: The process device is bound on /proc and holds the note files of each process
     Then "/proc" is a directory of device "p"
-    And the names in the process's own /proc directory are "args note noteid notepg"
+    And the names in the process's own /proc directory are "args fd note noteid notepg"
 
   @FOG_KERNEL_051
   Scenario: /proc lists each process by its pid until it has exited

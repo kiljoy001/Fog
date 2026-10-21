@@ -44,5 +44,8 @@ public sealed class Arguments
         return next + 1 < argv.Count ? argv[++next] : null;
     }
 
+    // EARGF: ARGF, or what usage does when there is none, which exits.
+    public async Task<string> EargfAsync(Func<Task<string>> usage) => Value() ?? await usage();
+
     public IReadOnlyList<string> Rest() => argv.Skip(next).ToArray();
 }

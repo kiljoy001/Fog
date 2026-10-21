@@ -7,8 +7,8 @@ namespace NinePSharp.Fog.Commands;
 
 // aux/trampoline, as 9front's trampoline.c: a call dialed to the address, its data copied to and
 // from the standard input and output, or a call dialed to -a's; with -9 by 9P messages, with -t
-// ended once nothing has passed for so long. -m checks the caller's ethernet address against ndb,
-// which Fog has neither /net/arp nor cs to answer, so every caller is a bad mac.
+// ended once nothing has passed for so long. -m lets through only a caller whose ethernet address,
+// as the network's arp holds it, has trampok in the database cs serves.
 public sealed class Trampoline(string argv0)
 {
     private const int IoUnit = 32768;
@@ -33,7 +33,7 @@ public sealed class Trampoline(string argv0)
 
                 string text = Encoding.UTF8.GetString(buf[..^1]);
                 int bang = text.IndexOf('!', StringComparison.Ordinal);
-                return bang < 0 ? (text, "unknown") : (text[..bang], text[(bang + 1)..]);
+                return bang == -1 ? (text, "unknown") : (text[..bang], text[(bang + 1)..]);
             }
             finally
             {
@@ -91,14 +91,10 @@ public sealed class Trampoline(string argv0)
         try
         {
             int fd = await process.OpenAsync($"/proc/{process.Pid}/notepg", NinePConstants.OWRITE);
-            try
-            {
-                await process.WriteAsync(fd, Encoding.UTF8.GetBytes(note));
-            }
-            finally
-            {
-                await process.CloseAsync(fd);
-            }
+            await process.WriteAsync(fd, Encoding.UTF8.GetBytes(note));
+
+            // Stryker disable once Statement : every postnote here is followed by the exit of the process posting it, which closes the descriptor
+            await process.CloseAsync(fd);
         }
         catch (SyscallException)
         {
@@ -147,13 +143,13 @@ public sealed class Trampoline(string argv0)
                     nineP = true;
                     break;
                 case 'a':
-                    altaddr = arguments.Value() ?? await UsageAsync(process);
+                    altaddr = await arguments.EargfAsync(() => UsageAsync(process));
                     break;
                 case 'm':
-                    checkmac = arguments.Value() ?? await UsageAsync(process);
+                    checkmac = await arguments.EargfAsync(() => UsageAsync(process));
                     break;
                 case 't':
-                    timeout = Libc.Strtol(arguments.Value() ?? await UsageAsync(process), 10, out _);
+                    timeout = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
                     break;
                 case 'o':
                     if (opts.Count >= 16)
@@ -161,7 +157,7 @@ public sealed class Trampoline(string argv0)
                         await FatalAsync(process, "too many -o options");
                     }
 
-                    opts.Add(arguments.Value() ?? await UsageAsync(process));
+                    opts.Add(await arguments.EargfAsync(() => UsageAsync(process)));
                     break;
                 default:
                     await UsageAsync(process);
@@ -188,10 +184,10 @@ public sealed class Trampoline(string argv0)
         int fd0 = 0, fd1 = 1;
         if (altaddr is not null)
         {
-            fd0 = fd1 = (await DialAsync(process, altaddr, false)).Data;
+            fd0 = fd1 = await DialAsync(process, () => Net.DialAsync(process, altaddr), altaddr);
         }
 
-        Net.Call call = await DialAsync(process, args[0], true);
+        Net.Call call = await DialAsync(process, () => Net.DialCtlAsync(process, args[0]), args[0]);
         foreach (string opt in opts)
         {
             try
@@ -209,6 +205,8 @@ public sealed class Trampoline(string argv0)
         if (timeout > 0)
         {
             await process.AlarmAsync(0);
+
+            // Stryker disable once Bitwise : Fog's fork always makes a process, and a managed child shares what its body closes over, as RFMEM would
             process.Fork(RforkFlags.Proc | RforkFlags.Mem, child => RelayAsync(child, nineP, fd0, fd1, call.Data));
 
             // The parent watches for a timeout with nothing passing, as trampoline.c's does.
@@ -219,6 +217,7 @@ public sealed class Trampoline(string argv0)
             }
             while (activity);
 
+            // Stryker disable once String : any note kills the halves relaying, and nothing waits for their status
             await PostnoteGroupAsync(process, "timeout");
             process.Exits("timeout");
         }
@@ -229,12 +228,15 @@ public sealed class Trampoline(string argv0)
     // Each way in a process of its own; whichever ends first hangs the other up.
     private async Task RelayAsync(Process process, bool nineP, int fd0, int fd1, int fd)
     {
+        // Stryker disable once Bitwise : Fog's fork always makes a process, and a managed child shares what its body closes over, as RFMEM would
         process.Fork(RforkFlags.Proc | RforkFlags.Mem, async child =>
         {
             await XferAsync(child, nineP, fd0, fd);
             await PostnoteGroupAsync(child, "hangup");
         });
         await XferAsync(process, nineP, fd, fd1);
+
+        // Stryker disable once String : any note kills the half still relaying, and nothing waits for its status
         await PostnoteGroupAsync(process, "hangup");
         process.Exits(null);
     }
@@ -269,10 +271,8 @@ public sealed class Trampoline(string argv0)
                 return;
             }
 
-            if (timeout > 0)
-            {
-                activity = true;
-            }
+            // Only a watcher of a timeout looks.
+            activity = true;
         }
     }
 
@@ -294,45 +294,47 @@ public sealed class Trampoline(string argv0)
                 return;
             }
 
+            // A write is whole or fails, as devpipe's and devip's are, so its count is not looked at.
             try
             {
-                if (await process.WriteAsync(to, (byte[])[.. size, .. rest]) != n)
-                {
-                    return;
-                }
+                await process.WriteAsync(to, (byte[])[.. size, .. rest]);
             }
             catch (SyscallException)
             {
                 return;
             }
 
-            if (timeout > 0)
-            {
-                activity = true;
-            }
+            activity = true;
         }
     }
 
     private async Task CheckmacAsync(Process process, string dir)
     {
         int slash = dir.IndexOf('/', 1);
-        string net = slash < 0 ? "/net" : dir[..slash];
+        string net = slash == -1 ? "/net" : dir[..slash];
         (string lsys, string lserv) = await EndpointAsync(process, dir, "local");
         (string rsys, string rserv) = await EndpointAsync(process, dir, "remote");
         string? mac = await IptomacAsync(process, rsys, net);
+
+        // macok: the database lets the ethernet address through trampolines.
+        if (mac is not null && await Ndb.CsGetValueAsync(process, "/net", "ether", mac, "trampok") is not null)
+        {
+            return;
+        }
+
         await Syslog.WriteAsync(process, false, "trampoline", $"badmac {mac ?? "<nil>"} from {rsys}!{rserv} for {lsys}!{lserv} on {net}");
         process.Exits("bad mac");
     }
 
-    private async Task<Net.Call> DialAsync(Process process, string addr, bool ctl)
+    private async Task<T> DialAsync<T>(Process process, Func<Task<T>> dial, string addr)
     {
         try
         {
-            return await Net.DialAsync(process, addr, null, ctl);
+            return await dial();
         }
         catch (SyscallException error)
         {
-            return await FatalAsync<Net.Call>(process, $"dial {addr}: {error.Message}");
+            return await FatalAsync<T>(process, $"dial {addr}: {error.Message}");
         }
     }
 

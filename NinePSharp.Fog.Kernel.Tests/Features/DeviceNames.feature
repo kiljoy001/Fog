@@ -27,6 +27,7 @@ Feature: A name starting with # begins at the device it names, as 9front's namec
       | #I   | tcp   |
       | #/   | net   |
       | #R   | lib   |
+      | #s   | clone |
 
   @FOG_KERNEL_069
   Scenario: A file under a device is reached by its name under the device's rune
@@ -39,9 +40,31 @@ Feature: A name starting with # begins at the device it names, as 9front's namec
     Then reading "/n/user" gives "glenda"
 
   @FOG_KERNEL_069
-  Scenario: A rune that names no device is refused
-    When the process stats "#z/x"
+  Scenario Outline: A rune that names no device, or no rune, is refused
+    When the process stats "<name>"
     Then the call fails with "unknown device in # filename"
+
+    Examples:
+      | name |
+      | #z/x |
+      | #    |
+
+  @FOG_KERNEL_069
+  Scenario Outline: A file opened by a name relative to a directory under a device is named from the device, as fd2path gives it
+    When the process changes to "<directory>"
+    And the process opens "<file>"
+    Then the opened file is named "<name>"
+
+    Examples:
+      | directory | file    | name       |
+      | #c        | user    | #c/user    |
+      | #p/1      | fd      | #p/1/fd    |
+      | #p        | 1/fd    | #p/1/fd    |
+      | #//env    | home    | #/env/home |
+      | /proc/1   | fd      | /proc/1/fd |
+      | /         | #c/user | #c/user    |
+      | /         | #c      | #c         |
+      | /         | #/      | #/         |
 
   @FOG_KERNEL_070
   Scenario: Under RFNOMNT only the devices 9front leaves may be attached by name

@@ -14,7 +14,7 @@ Feature: /dev holds devcons's bintime, null, zero, pid, ppid and user, as 9front
   @FOG_KERNEL_013
   Scenario: /dev lists the console files in devcons's order
     When the process lists "/dev"
-    Then it sees "bintime null pid ppid user zero"
+    Then it sees "bintime cons null pid ppid sysname user zero"
 
   @FOG_KERNEL_013
   Scenario: /dev/null reads nothing and takes every write

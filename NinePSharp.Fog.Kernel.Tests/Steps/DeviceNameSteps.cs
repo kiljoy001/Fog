@@ -12,6 +12,7 @@ namespace NinePSharp.Fog.Kernel.Tests.Steps;
 public sealed class DeviceNameSteps(KernelDriver driver)
 {
     private string? failure;
+    private int opened;
 
     private Process Init => driver.Init;
 
@@ -48,6 +49,15 @@ public sealed class DeviceNameSteps(KernelDriver driver)
             failure = error.Message;
         }
     }
+
+    [When(@"^the process changes to ""(.*)""$")]
+    public Task WhenChangesTo(string path) => Init.ChdirAsync(path).AsTask();
+
+    [When(@"^the process opens ""(.*)""$")]
+    public async Task WhenOpens(string path) => opened = await Init.OpenAsync(path, NinePConstants.OREAD);
+
+    [Then(@"^the opened file is named ""(.*)""$")]
+    public async Task ThenOpenedNamed(string name) => Assert.Equal(name, await Init.Fd2PathAsync(opened));
 
     [Then(@"^the names in ""(.*)"" include ""(.*)""$")]
     public async Task ThenNamesInclude(string path, string name)

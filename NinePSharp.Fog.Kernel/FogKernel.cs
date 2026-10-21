@@ -73,7 +73,16 @@ public sealed class FogKernel
         }
     }
 
+    // The host's interfaces and resolver, which the programs that need them ask, as Fog keeps no network of its own.
+    public HostNetwork Host { get; init; } = HostNetwork.System;
+
+    // The host's console, which #c/cons writes to.
+    public HostConsole Console { get; init; } = HostConsole.System;
+
     internal long Booted { get; private set; } = TimeProvider.System.GetTimestamp();
+
+    // devcons's sysname, empty until it is written.
+    internal string Sysname { get; set; } = string.Empty;
 
     internal VProcessTable Table { get; } = new();
 
@@ -112,10 +121,12 @@ public sealed class FogKernel
         IReadOnlyDictionary<string, ProgramMain> programs,
         string user = "none",
         TimeProvider? clock = null,
+        HostNetwork? host = null,
+        HostConsole? console = null,
         params IReadOnlyList<ExecLoader> loaders)
     {
         var files = new RamFs("ram", "#R", user, clock: clock);
-        return new FogKernel(programs, files, files.Root, user, loaders) { Clock = clock ?? TimeProvider.System };
+        return new FogKernel(programs, files, files.Root, user, loaders) { Clock = clock ?? TimeProvider.System, Host = host ?? HostNetwork.System, Console = console ?? HostConsole.System };
     }
 
     // The store may hold what an earlier boot left: its directories are kept, and each program's file
