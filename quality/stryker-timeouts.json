@@ -54,6 +54,12 @@
     "reason": "a write of nothing left keeps writing empty blocks"
   },
   {
+    "file": "CapDevice.cs",
+    "mutator": "Statement mutation",
+    "line": "capalloc.RemoveAt(0);",
+    "reason": "a capability to let go is never let go, so trimming never ends"
+  },
+  {
     "file": "IpDevice.cs",
     "mutator": "Statement mutation",
     "line": "end++;",
@@ -64,6 +70,12 @@
     "mutator": "Conditional (false) mutation",
     "line": "var child = new Process(kernel, forked, waited ? this : null, EnvironmentFor(flags), Text, User, (flags & RforkFlags.Noteg) != 0 ? 0 : NoteId);",
     "reason": "a child forked to be waited for has no parent to tell of its end, so the wait never ends"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
+    "line": "for (ReadOnlyMemory<byte> block; !(block = await ReadAsync(fd, 8192)).IsEmpty;)",
+    "reason": "a listing that reads nothing leaves the scenarios that wait for an entry waiting"
   },
   {
     "file": "Process.cs",

@@ -24,7 +24,7 @@ public sealed class ConsDeviceTests
         int user = await init.OpenAsync("/dev/user", NinePSharp.Constants.NinePConstants.OWRITE);
         await init.WriteAsync(user, "none"u8.ToArray());
 
-        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/bintime", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
+        Assert.Equal("permission denied: '/dev/bintime'", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/bintime", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class ConsDeviceTests
         Assert.Equal(child, (await init.WaitAsync()).Pid);
         int user = await init.OpenAsync("/dev/user", NinePSharp.Constants.NinePConstants.OWRITE);
         await init.WriteAsync(user, "none"u8.ToArray());
-        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/sysname", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
+        Assert.Equal("permission denied: '/dev/sysname'", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/sysname", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
         Assert.Equal(new string('x', 255), await ReadAsync(init, "/dev/sysname"));
     }
 
@@ -85,8 +85,8 @@ public sealed class ConsDeviceTests
 
         int user = await init.OpenAsync("/dev/user", NinePSharp.Constants.NinePConstants.OWRITE);
         await init.WriteAsync(user, "none"u8.ToArray());
-        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/cons", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
-        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/cons", NinePSharp.Constants.NinePConstants.OREAD).AsTask())).Message);
+        Assert.Equal("permission denied: '/dev/cons'", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/cons", NinePSharp.Constants.NinePConstants.OWRITE).AsTask())).Message);
+        Assert.Equal("permission denied: '/dev/cons'", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync("/dev/cons", NinePSharp.Constants.NinePConstants.OREAD).AsTask())).Message);
     }
 
     [Fact]

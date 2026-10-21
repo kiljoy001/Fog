@@ -382,6 +382,14 @@ public sealed class ProcessSteps
         await init.CloseAsync(fd);
     }
 
+    [Then(@"^""(.*)"" holds ""(.*)"" once$")]
+    public async Task ThenHoldsOnce(string path, string name)
+    {
+        int fd = await init!.OpenAsync(path, NinePConstants.OREAD);
+        Assert.Single((await init.DirReadAsync(fd)).Where(entry => entry.Name == name));
+        await init.CloseAsync(fd);
+    }
+
     [Then("no file is left open")]
     public void ThenNothingOpen() => Assert.Equal(0, files.Open);
 
@@ -473,6 +481,11 @@ public sealed class ProcessSteps
             return Task.CompletedTask;
         },
         ["return"] = (process, argv) => Task.CompletedTask,
+        ["aux/true"] = (process, argv) =>
+        {
+            process.Exits(null);
+            return Task.CompletedTask;
+        },
         ["crash"] = (process, argv) => throw new InvalidOperationException("boom"),
     };
 }

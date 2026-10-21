@@ -17,6 +17,7 @@ public sealed class FogKernel
         bind -c #e /env
         bind #p /proc
         bind -c #s /srv
+        bind -a #¤ /dev
 
         # root
         bind #R /root
@@ -60,6 +61,7 @@ public sealed class FogKernel
         Procs = new ProcDevice(this);
         Ip = new IpDevice(this);
         Srv = new SrvDevice(this);
+        Cap = new CapDevice(this);
     }
 
     // The host's clock, which #c's bintime reads, and when the kernel was made by it.
@@ -102,6 +104,8 @@ public sealed class FogKernel
     internal IpDevice Ip { get; }
 
     internal SrvDevice Srv { get; }
+
+    internal CapDevice Cap { get; }
 
     // proctab: each process from its creation until it exits.
     internal ConcurrentDictionary<long, Process> Processes { get; } = new();
@@ -177,6 +181,7 @@ public sealed class FogKernel
         mounts.Mount(ProcDevice.Root, RootDevice.MountPoint("proc"));
         mounts.Mount(IpDevice.Root, RootDevice.MountPoint("net"), MountFlags.After);
         mounts.Mount(SrvDevice.Root, RootDevice.MountPoint("srv"), MountFlags.Replace | MountFlags.Create);
+        mounts.Mount(CapDevice.Root, RootDevice.MountPoint("dev"), MountFlags.After);
         return new Process(this, first, null, environment, "*init*", User, 0);
     }
 

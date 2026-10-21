@@ -53,10 +53,10 @@ Feature: /fd names a process's open descriptors as 9front's devdup does
 
     Examples:
       | opened                | mode                  | error                       |
-      | reading               | writing               | inappropriate use of fd     |
-      | writing               | reading               | inappropriate use of fd     |
-      | reading               | reading and writing   | inappropriate use of fd     |
-      | reading               | reading, removed on close | permission denied       |
+      | reading               | writing               | inappropriate use of fd: '/fd/0' |
+      | writing               | reading               | inappropriate use of fd: '/fd/0' |
+      | reading               | reading and writing   | inappropriate use of fd: '/fd/0' |
+      | reading               | reading, removed on close | permission denied: '/fd/0'   |
 
   @FOG_KERNEL_012
   Scenario Outline: Opening /fd/N in a mode descriptor N allows succeeds
@@ -94,7 +94,7 @@ Feature: /fd names a process's open descriptors as 9front's devdup does
   Scenario: Creating /fd/N in a mode descriptor N was not opened with fails
     Given a process with "/tmp/f" open for reading as descriptor 0
     When it creates "/fd/0" for writing
-    Then the open fails with "inappropriate use of fd"
+    Then the open fails with "inappropriate use of fd: '/fd/0'"
 
   @FOG_KERNEL_024
   Scenario Outline: Reading or writing a descriptor in a mode it was not opened with fails, as fdtochan refuses it

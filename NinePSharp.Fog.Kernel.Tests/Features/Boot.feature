@@ -35,7 +35,7 @@ Feature: The kernel boots its root as 9front's bootrc and /lib/namespace build i
   @FOG_KERNEL_038
   Scenario: The root device opens for reading only
     When the process opens "/mnt" for writing
-    Then the call fails with "permission denied"
+    Then the call fails with "permission denied: '/mnt'"
 
   @FOG_KERNEL_039
   Scenario: The root takes no new files

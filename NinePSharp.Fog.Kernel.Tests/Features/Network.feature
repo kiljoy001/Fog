@@ -44,7 +44,7 @@ Feature: /net/tcp is ip(3)'s file interface over the host's sockets, as 9front b
   Scenario: The network makes at most 4095 conversations, as many as a qid's conversation bits hold
     When the process opens "/net/tcp/clone" 4095 times
     And the process opens "/net/tcp/clone"
-    Then the call fails with "no free devices"
+    Then the call fails with "no free devices: '/net/tcp/clone'"
 
   @FOG_KERNEL_060
   Scenario Outline: A walk finds only the conversations there are, by the numbers devip gives them
@@ -223,7 +223,7 @@ Feature: /net/tcp is ip(3)'s file interface over the host's sockets, as 9front b
   Scenario: Only an announced conversation can be listened on
     When the process opens "/net/tcp/clone" as "a"
     And the process opens "/net/tcp/0/listen"
-    Then the call fails with "not announced"
+    Then the call fails with "not announced: '/net/tcp/0/listen'"
 
   @FOG_KERNEL_063
   Scenario Outline: Only the host owner may take every port with announce *
@@ -270,14 +270,14 @@ Feature: /net/tcp is ip(3)'s file interface over the host's sockets, as 9front b
     Given a conversation announced on "127.0.0.1!0"
     When a child that continues after every note waits in the announced conversation's listen
     And the process posts "hangup" to the child
-    Then the child's wait fails with "interrupted"
+    Then the child's wait fails with "interrupted: '/net/tcp/0/listen'"
 
   @FOG_KERNEL_065
   Scenario: A process waiting in listen gives up when the conversation is hung up
     Given a conversation announced on "127.0.0.1!0"
     When a child that continues after every note waits in the announced conversation's listen
     And the process writes "hangup" to the announced conversation's ctl
-    Then the child's wait fails with "listen hungup"
+    Then the child's wait fails with "listen hungup: '/net/tcp/0/listen'"
 
   @FOG_KERNEL_065
   Scenario: A conversation whose call the far end has not answered is Syn_sent, and a note interrupts the caller
@@ -309,7 +309,7 @@ Feature: /net/tcp is ip(3)'s file interface over the host's sockets, as 9front b
   Scenario Outline: Only a conversation's owner, or the host owner, may open its ctl and data
     When the process opens "/net/tcp/clone" as "a"
     And a child that becomes "none" opens "/net/tcp/0/<file>"
-    Then the child's open fails with "permission denied"
+    Then the child's open fails with "permission denied: '/net/tcp/0/<file>'"
 
     Examples:
       | file |
@@ -339,4 +339,4 @@ Feature: /net/tcp is ip(3)'s file interface over the host's sockets, as 9front b
   Scenario: Only the conversation's owner, or the host owner, may listen on it
     Given a conversation announced on "127.0.0.1!0"
     When a child that becomes "none" opens "/net/tcp/0/listen"
-    Then the child's open fails with "permission denied"
+    Then the child's open fails with "permission denied: '/net/tcp/0/listen'"

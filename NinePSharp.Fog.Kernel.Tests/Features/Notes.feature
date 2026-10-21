@@ -125,7 +125,7 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
   @FOG_KERNEL_055
   Scenario: notepg opens for writing only
     When the process opens its own notepg for reading
-    Then the call fails with "permission denied"
+    Then the call fails with "permission denied: '/proc/1/notepg'"
 
   @FOG_KERNEL_056
   Scenario: noteid reads the number of the process's note group as the kernel writes numbers
@@ -176,7 +176,7 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
     And reading the grandchild's note gives "hangup"
     When the child makes a note group of its own
     And the child writes "hangup" to the grandchild's note
-    Then the child's write fails with "permission denied"
+    Then the child's write fails with "permission denied: '/proc/3/note'"
 
   @FOG_KERNEL_072
   Scenario: alarm posts the process an alarm note once its time has passed

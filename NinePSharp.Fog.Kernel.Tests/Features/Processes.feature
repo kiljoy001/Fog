@@ -356,6 +356,7 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
     And a process runs "/bin/false"
     Then its parent's wait message for it is "false <pid>: false"
     And reading "/tmp/f" gives "kept"
+    And "/bin" holds "aux" once
 
   @FOG_KERNEL_067
   Scenario: A child forked with RFNOWAIT is no child of its parent's to wait for

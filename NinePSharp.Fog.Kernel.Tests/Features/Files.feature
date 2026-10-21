@@ -270,7 +270,7 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
   @FOG_KERNEL_018
   Scenario Outline: A directory opens only for reading, as devopen allows
     When the process opens "/tmp" for <mode>
-    Then the call fails with "permission denied"
+    Then the call fails with "permission denied: '/tmp'"
 
     Examples:
       | mode                |
@@ -291,14 +291,14 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
       | 0200        | writing             | the open succeeds                       |
       | 0600        | reading and writing | the open succeeds                       |
       | 0100        | executing           | the open succeeds                       |
-      | 0400        | writing             | the call fails with "permission denied" |
-      | 0200        | reading             | the call fails with "permission denied" |
-      | 0400        | reading and writing | the call fails with "permission denied" |
-      | 0400        | truncating          | the call fails with "permission denied" |
-      | 0600        | executing           | the call fails with "permission denied" |
+      | 0400        | writing             | the call fails with "permission denied: '/tmp/p'" |
+      | 0200        | reading             | the call fails with "permission denied: '/tmp/p'" |
+      | 0400        | reading and writing | the call fails with "permission denied: '/tmp/p'" |
+      | 0400        | truncating          | the call fails with "permission denied: '/tmp/p'" |
+      | 0600        | executing           | the call fails with "permission denied: '/tmp/p'" |
       | 0404        | reading             | the open succeeds                       |
       | 0600        | writing, truncating | the open succeeds                       |
-      | 0400        | writing, truncating | the call fails with "permission denied" |
+      | 0400        | writing, truncating | the call fails with "permission denied: '/tmp/p'" |
 
   @FOG_KERNEL_034
   Scenario Outline: A file stats as the device that serves it, as devdir gives it

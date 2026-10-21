@@ -32,7 +32,7 @@ public sealed partial class Process
         Cons = new ConsDevice(this, kernel.User, kernel.Clock, kernel.Booted);
         Text = text;
         User = user;
-        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs, kernel.Ip, kernel.Srv);
+        devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs, kernel.Ip, kernel.Srv, kernel.Cap);
         (plane, calls) = Bind();
 
         // pidalloc: a process given no note group has one numbered by its own pid.
@@ -132,7 +132,7 @@ public sealed partial class Process
         }
         catch (OperationCanceledException)
         {
-            throw new SyscallException(Errors.Interrupted);
+            throw new SyscallException(Named(path, Errors.Interrupted));
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -140,12 +140,13 @@ public sealed partial class Process
         }
         catch (NamespaceFidException)
         {
-            // devopen: a directory opens only for reading.
-            throw new SyscallException(Errors.Permission);
+            // devopen: a directory opens only for reading, unless its device says otherwise.
+            NamespaceChannel directory = await ResolveAsync(path);
+            throw new SyscallException(Named(path, devices.Device(directory.Current) is IDirectoryOpenRefusal device ? device.Refusal((byte)mode) : Errors.Permission));
         }
         catch (DupOpenException dup)
         {
-            return await OpenDescriptorAsync(dup.Descriptor, mode);
+            return await OpenDescriptorAsync(dup.Descriptor, mode, path);
         }
         catch (SrvOpenException posted)
         {
@@ -153,7 +154,7 @@ public sealed partial class Process
         }
         catch (IOException error)
         {
-            throw new SyscallException(error.Message);
+            throw new SyscallException(Named(path, error.Message));
         }
         catch (ArgumentOutOfRangeException)
         {
@@ -175,7 +176,7 @@ public sealed partial class Process
         }
         catch (DupOpenException dup)
         {
-            return await OpenDescriptorAsync(dup.Descriptor, mode);
+            return await OpenDescriptorAsync(dup.Descriptor, mode, path);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.CreateNotPermitted)
         {
@@ -187,7 +188,7 @@ public sealed partial class Process
         }
         catch (IOException error)
         {
-            throw new SyscallException(error.Message);
+            throw new SyscallException(Named(path, error.Message));
         }
         catch (ArgumentOutOfRangeException)
         {
@@ -306,6 +307,10 @@ public sealed partial class Process
         catch (ArgumentException)
         {
             throw new SyscallException(Errors.BadFd);
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(error.Message);
         }
     }
 
@@ -723,8 +728,16 @@ public sealed partial class Process
         using Interruption interruptible = Interruptible(CancellationToken.None);
         try
         {
-            // A sleep of no time, or less, returns at once, before it looks for a note.
-            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(milliseconds, 0)), kernel.Clock, interruptible.Token);
+            // A sleep of no time, or less, returns at once, before it looks for a note. A timer counts
+            // whole milliseconds and may end a little early, so what is left is slept again.
+            long start = kernel.Clock.GetTimestamp();
+            TimeSpan wanted = TimeSpan.FromMilliseconds(Math.Max(milliseconds, 0));
+
+            // Stryker disable once Equality : a delay of no time returns at once, before it looks at the token, as if it were not made
+            for (TimeSpan left = wanted; left > TimeSpan.Zero; left = wanted - kernel.Clock.GetElapsedTime(start))
+            {
+                await Task.Delay(left, kernel.Clock, interruptible.Token);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -849,6 +862,14 @@ public sealed partial class Process
     private static string? NamecProblem(string path)
         => path.Length == 0 ? Errors.EmptyName : Errors.NameProblem(path, slashOk: true) ?? (Errors.Blank(path) ? Errors.BlankName : null);
 
+    // namec: an error once the name is walked, as a device's open or create gives, names the file,
+    // unless the name has no element past its start, as . and a bare #-name have none.
+    private static string Named(string path, string error)
+    {
+        int elements = Elements(path).Length;
+        return Errors.Name(path, path.StartsWith('#') && elements == 1 ? 0 : elements, error);
+    }
+
     private static void Namec(string path)
     {
         if (NamecProblem(path) is { } problem)
@@ -930,9 +951,18 @@ public sealed partial class Process
             : null;
     }
 
-    private async ValueTask<int> OpenDescriptorAsync(int fd, int mode)
+    // dupopen's check is made within namec, which names the file in its error; the new descriptor is sysopen's.
+    private async ValueTask<int> OpenDescriptorAsync(int fd, int mode, string path)
     {
-        await CheckModeAsync(fd, mode);
+        try
+        {
+            await CheckModeAsync(fd, mode);
+        }
+        catch (SyscallException error)
+        {
+            throw new SyscallException(Named(path, error.Message));
+        }
+
         return await DupAsync(fd, -1);
     }
 
@@ -979,6 +1009,7 @@ public sealed partial class Process
             "/" => RootDevice.Root,
             "R" => kernel.Store,
             "s" => SrvDevice.Root,
+            "¤" => CapDevice.Root,
             _ => throw new IOException(Errors.BadSharp),
         };
         if (process.ProcessGroup.MountTable.MountsDisabled && !"|decp".Contains(device, StringComparison.Ordinal))

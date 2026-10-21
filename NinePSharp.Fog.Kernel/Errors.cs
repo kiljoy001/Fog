@@ -31,6 +31,7 @@ internal static class Errors
     public const string NoteNotPosted = "note not posted";
     public const string TooBig = "read or write too large";
     public const string TooSmall = "read or write too small";
+    public const string Short = "i/o count too small";
     public const string ProcessExited = "process exited";
     public const string EmptyName = "empty file name";
     public const string TooLong = "name too long";

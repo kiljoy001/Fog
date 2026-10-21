@@ -176,7 +176,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
                 "  5 rw |    1 (0000000000000001 0 00)     0        0 #|/data1\n",
             ],
             lines);
-        Assert.Equal("permission denied", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OWRITE).AsTask())).Message);
+        Assert.Equal($"permission denied: '/proc/{init.Pid}/fd'", (await Assert.ThrowsAsync<SyscallException>(() => init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OWRITE).AsTask())).Message);
         ResourceOpenHandle opened = await proc.OpenAsync(await FileAsync(init.Pid, "fd"), NinePConstants.OREAD, Context(init.Pid, "eve"), default);
         Assert.Equal("tm", Encoding.UTF8.GetString((await proc.ReadAsync(opened, 1, 2, default)).Span));
         Assert.Equal("mp\n", Encoding.UTF8.GetString((await proc.ReadAsync(opened, 2, 100, default)).Span));

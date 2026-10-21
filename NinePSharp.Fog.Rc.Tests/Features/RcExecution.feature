@@ -450,6 +450,32 @@ Feature: rc runs scripts as 9front rc does
       #/dev
       """
 
+  @FOG_RC_RUN_236
+  Scenario: The device #¤ refuses a capability it was not given, and anything that is not one, and each device refuses a directory opened for writing in its own words
+    When rc runs the script
+      """
+      cd '#¤'
+      echo -n alice >capuse
+      echo -n alice@k >capuse
+      echo -n bob@alice@k >capuse
+      cat capuse
+      echo -n x >caphash
+      @{cat <>.}
+      @{cat <>/srv}
+      @{cat <>/proc}
+      """
+    Then it prints
+      """
+      echo: write error: i/o count too small
+      echo: write error: invalid capability alice@k
+      echo: write error: capability must match user
+      cat: error reading capuse: permission denied
+      echo: write error: i/o count too small
+      /tmp/s:7: <> can't open: .: bad arg in system call
+      /tmp/s:8: <> can't open: /srv: file is a directory: '/srv'
+      /tmp/s:9: <> can't open: /proc: permission denied: '/proc'
+      """
+
   @FOG_RC_RUN_025
   Scenario: if not must follow an if
     When rc runs the script
@@ -6122,7 +6148,7 @@ Feature: rc runs scripts as 9front rc does
       relative
       aux/listen1: exec: file does not exist: '/bin/nosuchcommand'
       exec
-      aux/listen1: listen tcp!127.0.0.1!17117: listen opening /net/tcp/0/listen: listen hungup
+      aux/listen1: listen tcp!127.0.0.1!17117: listen opening /net/tcp/0/listen: listen hungup: '/net/tcp/0/listen'
       """
 
   @FOG_RC_RUN_231

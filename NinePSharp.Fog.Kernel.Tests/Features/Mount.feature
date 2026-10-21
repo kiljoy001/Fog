@@ -49,7 +49,7 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     Given the server refuses to open "notes" with "no way"
     When the process mounts descriptor 3 on "/n"
     And the process opens "/n/notes" for reading
-    Then the call fails with "no way"
+    Then the call fails with "no way: '/n/notes'"
 
   @FOG_KERNEL_046
   Scenario: A write and a read larger than a message go in pieces

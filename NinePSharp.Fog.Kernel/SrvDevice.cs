@@ -7,8 +7,10 @@ namespace NinePSharp.Fog.Kernel;
 
 // devsrv: #s, files that hold open channels, and boards made by opening clone that hold more. A
 // walk carries no user, so walking into another's board is not checked as srvgen checks it; opens,
-// creates and removes are.
-internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IResourceWStatOperations
+// creates and removes are. A board is held, as boardclunk counts, by its lease and by each open of
+// it or of a file made in it, which is the board's channel's aux; a walk alone, as a bind or a
+// current directory keeps, does not hold it.
+internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IResourceWStatOperations, IDirectoryOpenRefusal
 {
     public const string Provider = "srv";
     private const string Clone = "clone";
@@ -20,16 +22,20 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
     private readonly object gate = new();
     private readonly Dictionary<ulong, Board> boards = [];
     private readonly Dictionary<ulong, (Srv Srv, Board Board)> srvs = [];
+    private readonly Dictionary<string, Board> auxes = [];
+
+    // Stryker disable once String : the root stats under the name it was reached by, as srvgen's dot is named by the channel's path
     private readonly Board root = new() { Name = "#s", Perm = 0b111_111_111, Owner = kernel.User };
     private ulong srvpath = 1;
 
     public static ResourceHandle Root { get; } = Handle(0, Qsrv, QidType.QTDIR);
 
+    // srvgen by name: clone, a posted file, then a board; no name as long as genbuf is ever made.
     public ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
     {
         lock (gate)
         {
-            if (Encoding.UTF8.GetByteCount(name) >= GenbufSize || BoardOf(directory) is not { } b)
+            if (BoardOf(directory) is not { } b)
             {
                 return ValueTask.FromResult<ResourceHandle?>(null);
             }
@@ -45,6 +51,7 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         }
     }
 
+    // A board reached by a walk alone that has gone since is shut down.
     public ValueTask<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
     {
         lock (gate)
@@ -60,19 +67,24 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         }
     }
 
+    // srvstat: a board as srvgen gives its dot, and a file as devstat finds it among its board's
+    // entries, where a lease, whose qid no entry has, is not found.
     public ValueTask<ResourceStat> StatAsync(ResourceHandle resource, CancellationToken cancellationToken)
     {
         lock (gate)
         {
             return ValueTask.FromResult(Type(resource) switch
             {
-                Qclone or Qlease => new ResourceStat(resource, Type(resource) == Qclone ? Clone : BoardOf(resource)!.Name, 0b100_100_100, 0, 0, 0, kernel.User, kernel.User, kernel.User),
-                _ when resource.IsDirectory && BoardOf(resource) is { } b => new ResourceStat(resource, b.Name, b.Perm | (uint)NinePConstants.FileMode9P.DMDIR, 0, 0, 0, b.Owner, b.Owner, b.Owner),
-                _ when srvs.TryGetValue(SrvPath(resource), out var posted) => new ResourceStat(resource, posted.Srv.Name, posted.Srv.Perm, 0, 0, 0, posted.Srv.Owner, posted.Srv.Owner, posted.Srv.Owner),
-                _ => throw new IOException(Errors.Shutdown),
+                Qclone => new ResourceStat(resource, Clone, 0b100_100_100, 0, 0, 0, kernel.User, kernel.User, kernel.User),
+                Qsrv when resource.IsDirectory && BoardOf(resource) is { } b => new ResourceStat(resource, b.Name, b.Perm | (uint)NinePConstants.FileMode9P.DMDIR, 0, 0, 0, b.Owner, b.Owner, b.Owner),
+                Qsrv when !resource.IsDirectory && srvs.TryGetValue(SrvPath(resource), out var posted) => new ResourceStat(resource, posted.Srv.Name, posted.Srv.Perm, 0, 0, 0, posted.Srv.Owner, posted.Srv.Owner, posted.Srv.Owner),
+                _ => throw new IOException(Errors.NotExist),
             });
         }
     }
+
+    // srvopen of a board for more than reading: Eexist for OTRUNC, as for any file, and Eisdir.
+    public string Refusal(byte mode) => (mode & NinePConstants.OTRUNC) != 0 ? Errors.Exist : Errors.IsDirectory;
 
     // srvopen: clone makes a board; a board opens for reading; a posted file gives its channel.
     public ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
@@ -89,37 +101,9 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
 
         lock (gate)
         {
-            if (Type(resource) == Qclone)
+            if (Type(resource) == Qclone || resource.IsDirectory)
             {
-                Board b = BoardOf(resource) ?? throw new IOException(Errors.Shutdown);
-                if (b.Closed)
-                {
-                    throw new IOException(Errors.Shutdown);
-                }
-
-                var ch = new Board { Perm = 0b111_111_000, Owner = context.User, Parent = b };
-                do
-                {
-                    ch.Path = srvpath++;
-                    ch.Name = ch.Path.ToString(CultureInfo.InvariantCulture);
-                }
-                while (b.Srv.Exists(sp => sp.Name == ch.Name));
-
-                b.Child.Insert(0, ch);
-                boards[ch.Path] = ch;
-                return ValueTask.FromResult(Opened(Handle(ch.Path, Qlease, QidType.QTFILE), mode, context));
-            }
-
-            if (resource.IsDirectory)
-            {
-                Board b = BoardOf(resource) ?? throw new IOException(Errors.Shutdown);
-                if (mode != NinePConstants.OREAD)
-                {
-                    throw new IOException(Errors.IsDirectory);
-                }
-
-                PermCheck(context, b.Owner, b.Perm, mode);
-                return ValueTask.FromResult(Opened(resource, mode, context));
+                return ValueTask.FromResult(OpenBoard(resource, mode, context, BoardOf(resource) ?? throw new IOException(Errors.Shutdown)));
             }
 
             if (!srvs.TryGetValue(SrvPath(resource), out var posted) || posted.Board.Closed || posted.Srv.Chan is not { } nc)
@@ -139,8 +123,9 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         }
     }
 
+    // The namespace makes a file in #s only by opening what it makes.
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
-        => throw new NotSupportedException("#s creates only by opening what it creates");
+        => throw new NotSupportedException();
 
     // srvcreate: an empty file, open for writing the number of the descriptor to post.
     public ValueTask<ResourceOpenHandle> CreateAndOpenAsync(ResourceHandle directory, string name, uint permissions, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
@@ -177,20 +162,17 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
             var sp = new Srv { Name = name, Owner = context.User, Perm = permissions & 0b111_111_111, Path = srvpath++ };
             b.Srv.Insert(0, sp);
             srvs[sp.Path] = (sp, b);
-            return ValueTask.FromResult(Opened(Handle(sp.Path, Qsrv, QidType.QTFILE), mode, context));
+            b.Ref++;
+            return ValueTask.FromResult(Opened(Handle(sp.Path, Qsrv, QidType.QTFILE), mode, context, b));
         }
     }
 
+    // srvread: a lease reads its board's name; a board's own reading is its directory's.
     public ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
     {
-        if (Type(openHandle.Resource) != Qlease)
-        {
-            return ValueTask.FromResult(ReadOnlyMemory<byte>.Empty);
-        }
-
         lock (gate)
         {
-            byte[] name = Encoding.UTF8.GetBytes(BoardOf(openHandle.Resource)!.Name);
+            byte[] name = Encoding.UTF8.GetBytes(auxes[openHandle.HandleId].Name);
             int from = (int)Math.Min(offset, (ulong)name.Length);
             return ValueTask.FromResult<ReadOnlyMemory<byte>>(name.AsMemory(from, (int)Math.Min(count, (uint)(name.Length - from))));
         }
@@ -223,13 +205,15 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         string? error;
         lock (gate)
         {
-            error = !srvs.TryGetValue(SrvPath(openHandle.Resource), out var posted) ? Errors.NotExist
-                : posted.Board.Closed ? Errors.Shutdown
-                : posted.Srv.Chan is not null ? Errors.BadUseFd
+            Board b = auxes[openHandle.HandleId];
+            Srv? sp = b.Srv.Find(sp => sp.Path == SrvPath(openHandle.Resource));
+            error = b.Closed ? Errors.Shutdown
+                : sp is null ? Errors.NotExist
+                : sp.Chan is not null ? Errors.BadUseFd
                 : null;
             if (error is null)
             {
-                posted.Srv.Chan = c1;
+                sp!.Chan = c1;
             }
         }
 
@@ -242,41 +226,11 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         return (uint)data.Length;
     }
 
-    // srvclose: a lease's close closes its board and what is posted in it; a file created with
-    // ORCLOSE is removed.
+    // srvclose: a file created with ORCLOSE is removed; a lease's close closes its board and what
+    // is posted in it; and the board is let go.
     public async ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        if (Type(openHandle.Resource) == Qlease)
-        {
-            List<Srv> released;
-            lock (gate)
-            {
-                Board b = BoardOf(openHandle.Resource)!;
-                released = [.. b.Srv];
-                b.Srv.Clear();
-                b.Closed = true;
-                foreach (Srv sp in released)
-                {
-                    srvs.Remove(sp.Path);
-                }
-
-                // A board is left while it has children; a closed leaf takes its closed parents with it.
-                for (; b.Closed && b.Child.Count == 0 && b.Parent is { } parent; b = parent)
-                {
-                    parent.Child.Remove(b);
-                    boards.Remove(b.Path);
-                }
-            }
-
-            foreach (Srv sp in released)
-            {
-                await ReleaseAsync(sp);
-            }
-
-            return;
-        }
-
-        if ((openHandle.Mode & NinePConstants.ORCLOSE) != 0)
+        if ((openHandle.Mode & NinePConstants.ORCLOSE) != 0 && Type(openHandle.Resource) != Qlease)
         {
             try
             {
@@ -286,6 +240,29 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
             {
                 // A file that cannot be removed now stays, as srvclose leaves it.
             }
+        }
+
+        List<Srv> released = [];
+        lock (gate)
+        {
+            auxes.Remove(openHandle.HandleId, out Board? b);
+            if (Type(openHandle.Resource) == Qlease)
+            {
+                released = [.. b!.Srv];
+                b.Srv.Clear();
+                b.Closed = true;
+                foreach (Srv sp in released)
+                {
+                    srvs.Remove(sp.Path);
+                }
+            }
+
+            Boardclunk(b!);
+        }
+
+        foreach (Srv sp in released)
+        {
+            await ReleaseAsync(sp);
         }
     }
 
@@ -318,88 +295,30 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         await ReleaseAsync(sp);
     }
 
-    // srvwstat: a name, owner and mode, by the owner or the host owner.
     public ValueTask<uint> WStatAsync(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
     {
-        if (Type(resource) != Qsrv || (resource.IsDirectory && SrvPath(resource) == 0))
-        {
-            throw new ResourceWStatRejectedException(Errors.Permission);
-        }
-
         lock (gate)
         {
-            Link lp;
-            Board scope;
-            if (resource.IsDirectory)
-            {
-                Board b = BoardOf(resource) ?? throw new ResourceWStatRejectedException(Errors.NotExist);
-                (lp, scope) = (b, b.Parent!);
-                if (b.Closed)
-                {
-                    throw new ResourceWStatRejectedException(Errors.Shutdown);
-                }
-            }
-            else
-            {
-                if (!srvs.TryGetValue(SrvPath(resource), out var posted))
-                {
-                    throw new ResourceWStatRejectedException(Errors.NotExist);
-                }
-
-                (lp, scope) = posted;
-                if (posted.Board.Closed)
-                {
-                    throw new ResourceWStatRejectedException(Errors.Shutdown);
-                }
-            }
-
-            if (lp.Owner != context.User && context.User != kernel.User)
-            {
-                throw new ResourceWStatRejectedException(Errors.Permission);
-            }
-
-            if (stat.Name.Length != 0 && stat.Name != lp.Name)
-            {
-                if (stat.Name.Contains('/', StringComparison.Ordinal))
-                {
-                    throw new ResourceWStatRejectedException(Errors.BadChar);
-                }
-
-                if (Encoding.UTF8.GetByteCount(stat.Name) >= GenbufSize)
-                {
-                    throw new ResourceWStatRejectedException(Errors.TooLong);
-                }
-
-                if (stat.Name == Clone || scope.Srv.Exists(sp => sp.Name == stat.Name) || scope.Child.Exists(ch => ch.Name == stat.Name))
-                {
-                    throw new ResourceWStatRejectedException(Errors.Exist);
-                }
-
-                lp.Name = stat.Name;
-            }
-
-            if (stat.User.Length != 0)
-            {
-                lp.Owner = stat.User;
-            }
-
-            if (stat.Mode != uint.MaxValue)
-            {
-                lp.Perm = stat.Mode & 0b111_111_111;
-            }
-
-            return ValueTask.FromResult(stat.EncodedLength);
+            return ValueTask.FromResult(WStat(resource, resource.IsDirectory ? BoardOf(resource) : srvs.GetValueOrDefault(SrvPath(resource)).Board, stat, context));
         }
     }
 
     public ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
-        => WStatAsync(handle.Resource, stat, context, cancellationToken);
+    {
+        lock (gate)
+        {
+            return ValueTask.FromResult(WStat(handle.Resource, auxes.GetValueOrDefault(handle.HandleId), stat, context));
+        }
+    }
 
     private static ResourceHandle Handle(ulong path, int type, QidType qid) => new(new ResourceIdentity(Provider, "#s", (path << 2) | (uint)type), qid);
 
     private static int Type(ResourceHandle resource) => (int)(resource.Identity.Path & 3);
 
+    // Stryker disable once Bitwise : a path is unsigned, so >> already shifts in zeros as >>> does
     private static ulong SrvPath(ResourceHandle resource) => resource.Identity.Path >> 2;
+
+    private static string Number(ulong path) => path.ToString(CultureInfo.InvariantCulture);
 
     private static async ValueTask ReleaseAsync(Srv sp)
     {
@@ -409,8 +328,111 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         }
     }
 
-    private static ResourceOpenHandle Opened(ResourceHandle resource, byte mode, ResourceOperationContext context)
-        => new(resource, $"{context.OperationId.SessionId}/{context.OperationId.Sequence}", mode, 0);
+    // srvwstat: a name, owner and mode of a board or a posted file of its board, by the owner or the
+    // host owner; not of the root, clone or a lease. The board is the channel's, or the one the
+    // file was found in. A name with a slash is refused by validstat before it gets here.
+    private uint WStat(ResourceHandle resource, Board? b, ResourceWStat stat, ResourceOperationContext context)
+    {
+        if (Type(resource) != Qsrv || (resource.IsDirectory && SrvPath(resource) == 0))
+        {
+            throw new ResourceWStatRejectedException(Errors.Permission);
+        }
+
+        if (b is null)
+        {
+            throw new ResourceWStatRejectedException(Errors.NotExist);
+        }
+
+        if (b.Closed)
+        {
+            throw new ResourceWStatRejectedException(Errors.Shutdown);
+        }
+
+        Link lp = resource.IsDirectory ? b : b.Srv.Find(sp => sp.Path == SrvPath(resource)) ?? throw new ResourceWStatRejectedException(Errors.NotExist);
+        if (lp.Owner != context.User && context.User != kernel.User)
+        {
+            throw new ResourceWStatRejectedException(Errors.Permission);
+        }
+
+        if (stat.Name.Length != 0 && stat.Name != lp.Name)
+        {
+            if (Encoding.UTF8.GetByteCount(stat.Name) >= GenbufSize)
+            {
+                throw new ResourceWStatRejectedException(Errors.TooLong);
+            }
+
+            Board scope = resource.IsDirectory ? b.Parent! : b;
+            if (stat.Name == Clone || scope.Srv.Exists(sp => sp.Name == stat.Name) || scope.Child.Exists(ch => ch.Name == stat.Name))
+            {
+                throw new ResourceWStatRejectedException(Errors.Exist);
+            }
+
+            lp.Name = stat.Name;
+        }
+
+        if (stat.User.Length != 0)
+        {
+            lp.Owner = stat.User;
+        }
+
+        if (stat.Mode != uint.MaxValue)
+        {
+            lp.Perm = stat.Mode & 0b111_111_111;
+        }
+
+        return stat.EncodedLength;
+    }
+
+    // A clone, which makes a board held by its lease, or a board itself, opened for reading.
+    private ResourceOpenHandle OpenBoard(ResourceHandle resource, byte mode, ResourceOperationContext context, Board b)
+    {
+        if (Type(resource) == Qclone)
+        {
+            if (b.Closed)
+            {
+                throw new IOException(Errors.Shutdown);
+            }
+
+            ulong path;
+            do
+            {
+                path = srvpath++;
+            }
+            while (b.Srv.Exists(sp => sp.Name == Number(path)));
+
+            var ch = new Board { Name = Number(path), Owner = context.User, Perm = 0b111_111_000, Path = path, Parent = b, Ref = 1 };
+            b.Child.Insert(0, ch);
+            boards[ch.Path] = ch;
+            return Opened(Handle(ch.Path, Qlease, QidType.QTFILE), mode, context, ch);
+        }
+
+        PermCheck(context, b.Owner, b.Perm, mode);
+        b.Ref++;
+        return Opened(resource, mode, context, b);
+    }
+
+    private ResourceOpenHandle Opened(ResourceHandle resource, byte mode, ResourceOperationContext context, Board b)
+    {
+        var opened = new ResourceOpenHandle(resource, $"{context.OperationId.SessionId}/{context.OperationId.Sequence}", mode, 0);
+        auxes[opened.HandleId] = b;
+        return opened;
+    }
+
+    // boardclunk: the root is never let go; another board, once nothing holds it, goes when it is
+    // closed and has no children, and takes its closed and childless parents with it.
+    private void Boardclunk(Board b)
+    {
+        if (b == root || --b.Ref > 0)
+        {
+            return;
+        }
+
+        for (; b.Closed && b.Child.Count == 0; b = b.Parent!)
+        {
+            b.Parent!.Child.Remove(b);
+            boards.Remove(b.Path);
+        }
+    }
 
     // devpermcheck: the owner's bits for the owner, the group's for the host owner, the others' else.
     private void PermCheck(ResourceOperationContext context, string owner, uint perm, int mode)
@@ -427,13 +449,13 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
 
     private abstract class Link
     {
-        public string Name { get; set; } = string.Empty;
+        public required string Name { get; set; }
 
-        public string Owner { get; set; } = string.Empty;
+        public required string Owner { get; set; }
 
         public uint Perm { get; set; }
 
-        public ulong Path { get; set; }
+        public ulong Path { get; init; }
     }
 
     private sealed class Srv : Link
@@ -450,5 +472,7 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         public Board? Parent { get; init; }
 
         public bool Closed { get; set; }
+
+        public int Ref { get; set; }
     }
 }

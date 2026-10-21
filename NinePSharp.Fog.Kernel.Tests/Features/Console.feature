@@ -14,7 +14,7 @@ Feature: /dev holds devcons's bintime, null, zero, pid, ppid and user, as 9front
   @FOG_KERNEL_013
   Scenario: /dev lists the console files in devcons's order
     When the process lists "/dev"
-    Then it sees "bintime cons null pid ppid sysname user zero"
+    Then it sees "bintime cons null pid ppid sysname user zero capuse caphash"
 
   @FOG_KERNEL_013
   Scenario: /dev/null reads nothing and takes every write
@@ -53,7 +53,7 @@ Feature: /dev holds devcons's bintime, null, zero, pid, ppid and user, as 9front
 
     Examples:
       | permissions | outcome                        |
-      | 0440        | fails with "permission denied" |
+      | 0440        | fails with "permission denied: '/tmp/kept'" |
       | 0444        | succeeds                       |
 
   @FOG_KERNEL_015
@@ -70,9 +70,9 @@ Feature: /dev holds devcons's bintime, null, zero, pid, ppid and user, as 9front
       | file      | outcome                          |
       | /dev/null | succeeds                         |
       | /dev/user | succeeds                         |
-      | /dev/pid  | fails with "permission denied"   |
-      | /dev/ppid | fails with "permission denied"   |
-      | /dev/zero | fails with "permission denied"   |
+      | /dev/pid  | fails with "permission denied: '/dev/pid'"   |
+      | /dev/ppid | fails with "permission denied: '/dev/ppid'"  |
+      | /dev/zero | fails with "permission denied: '/dev/zero'"  |
 
   @FOG_KERNEL_013
   Scenario: A name devcons does not have is not in /dev
