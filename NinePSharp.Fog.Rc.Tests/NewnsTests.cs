@@ -73,7 +73,7 @@ public sealed class NewnsTests : IAsyncLifetime
             "# a comment",
             "  \t# an indented comment",
             $"x $v/a $v.b $v!c $v'd' $v$v '$v' $/e $long $nul/z ${LongName}/f {a27}$v",
-            "q a''b 'it''s' 'q r'",
+            "q a''b 'it''s' 'q r' 'it''' 'a'b'' 'x'$v",
             $"y {a250}$v",
             $"y {a250}a$v",
             $"z $v/{a247}$v",
@@ -87,7 +87,7 @@ public sealed class NewnsTests : IAsyncLifetime
         ];
         string expected = string.Concat(
             $"x V/a V.b V!c Vd VV $v /e {Long[..27]} /z /f {a27}V \n",
-            "q ab it's q r \n",
+            "q ab it's q r it' ab xV \n",
             $"y {a250}V \n",
             $"z V/{a247}V \n",
             $"w {new string('a', 278)} \n",
@@ -102,6 +102,7 @@ public sealed class NewnsTests : IAsyncLifetime
         string errors = await ReadAsync("/tmp/errors");
         Assert.StartsWith("open /mnt/factotum/rpc: ", errors, StringComparison.Ordinal);
         Assert.Contains("\nopen #c/drivers: ", errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("comment", errors, StringComparison.Ordinal);
         Assert.Equal(expected, errors[errors.IndexOf("x V/a", StringComparison.Ordinal)..]);
     }
 
@@ -129,12 +130,23 @@ public sealed class NewnsTests : IAsyncLifetime
         });
         Assert.Equal("b b", r4);
 
+        // A quoted blank is within the argument.
+        await MkdirAsync("/tmp/q r");
+        await WriteAsync("/tmp/q r/f", "q");
+        string quoted = await InChildAsync(async c =>
+        {
+            await Newns.AddnsAsync(c, "glenda", await FileAsync("bind '/tmp/q r' /tmp/x\n"));
+            return await ReadAsync(c, "/tmp/x/f");
+        });
+        Assert.Equal("q", quoted);
+
         // One argument unmounts all of what is mounted there; two, the one named.
         string r5 = await InChildAsync(async c =>
         {
             await c.BindAsync("/tmp/b", "/tmp/x", MountFlags.Before);
             await c.BindAsync("/tmp/a", "/tmp/x", MountFlags.Before);
             await c.BindAsync("/tmp/a", "/tmp/b", MountFlags.Replace);
+            await c.BindAsync("/tmp/c", "/tmp/b", MountFlags.Before);
             await Newns.AddnsAsync(c, "glenda", await FileAsync("unmount /tmp/b\nunmount /tmp/a /tmp/x\n"));
             string x = (await NamesAsync(c, "/tmp/x")).Contains("onlyb") ? "x" : "-";
             return $"{await ReadAsync(c, "/tmp/b/f")} {x}";

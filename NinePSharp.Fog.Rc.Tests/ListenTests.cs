@@ -163,10 +163,13 @@ public sealed class ListenTests : IAsyncLifetime
     public async Task WithIAServiceThatEndsIsAnnouncedAgainAMinuteFromTheRoundsStartAndNoNewOneIsFound()
     {
         await ServiceAsync("tcp17142", "echo fixed");
+        await ServiceAsync("tcp17145", "echo other");
         await ListenAsync("-iq", "-t", "/tmp/svc", "-a", "127.0.0.1");
         Assert.Equal("fixed\n", await CallWhenAnsweredAsync(17142));
+        Assert.Equal("other\n", await CallWhenAnsweredAsync(17145));
 
-        // Ten seconds into the round its process ends, and it waits out the other fifty.
+        // Ten seconds into the round its process ends, and it waits out the other fifty, though
+        // the other service's process goes on.
         clock.Advance(TimeSpan.FromSeconds(10));
         Process announcer = kernel.Processes.Values.Single(p => p.Args.EndsWith("tcp!127.0.0.1!17142]", StringComparison.Ordinal));
         announcer.PostNote("kill");
@@ -185,6 +188,14 @@ public sealed class ListenTests : IAsyncLifetime
         Assert.Null(await CallAsync(17142));
         await RoundAsync();
         Assert.Equal("fixed\n", await CallWhenAnsweredAsync(17142));
+
+        // Past the stagger of any announcement the round made, the new one was not among them.
+        for (int i = 0; i < 10; i++)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            await Task.Delay(10);
+        }
+
         Assert.Null(await CallAsync(17143));
     }
 

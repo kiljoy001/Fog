@@ -116,6 +116,22 @@ public sealed class Dp9ikTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnyUsersKeyOfTheDomainSpeaksForTheHostsOwnUserNamedInTheConversation()
+    {
+        // The auth server lets bob speak for glenda; without speaking for her, the conversation
+        // would want a key of her own.
+        await ServeAsync();
+        rules.Add(new SpeaksForRule("bob", "glenda"));
+        await StartAsync("/tmp/a");
+        await StartAsync("/tmp/b", "-a", AuthAddr);
+        await KeyAsync("/tmp/a", "key proto=dp9ik role=server user=glenda dom=fog !password=glendapw");
+        await KeyAsync("/tmp/b", "key proto=dp9ik user=bob dom=fog !password=bobpassw");
+        Conv server = await ConvAsync("/tmp/a", Server), client = await ConvAsync("/tmp/b", $"{Client} user=glenda");
+        byte[] pakreq = await PakreqAsync(client, server);
+        Assert.Equal("ok", (await client.CallAsync("write", pakreq)).Status);
+    }
+
+    [Fact]
     public async Task OfMoreThanSevenAuthServersGivenTheLastTakesTheSeventhsPlace()
     {
         await ServeAsync();

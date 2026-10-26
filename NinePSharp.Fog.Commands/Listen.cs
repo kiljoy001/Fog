@@ -83,15 +83,17 @@ public sealed class Listen(string argv0)
             {
                 return Encoding.UTF8.GetString((await process.ReadAsync(fd, 127)).Span);
             }
+
+            // Stryker disable once Block,Statement : a call closes 3 through 19 before it runs its service
             finally
             {
-                // Stryker disable once Statement : a call closes 3 through 19 before it runs its service
                 await process.CloseAsync(fd);
             }
         }
+
+        // Stryker disable once Block,String : a call's directory holds its remote while the call has its data open
         catch (SyscallException)
         {
-            // Stryker disable once String : a call's directory holds its remote while the call has its data open
             return string.Empty;
         }
     }
@@ -190,8 +192,7 @@ public sealed class Listen(string argv0)
         }
         else if (c == 'p')
         {
-            // Stryker disable once Statement : without a wait file to count calls by, -p's value is read and let be
-            _ = Libc.Strtol(value, 10, out _);
+            // Without a wait file to count calls by, -p's value is let be.
         }
         else
         {
@@ -203,12 +204,10 @@ public sealed class Listen(string argv0)
     // environment and namespace.
     private void Listendir(Process process, string? srvdir, bool trusted)
     {
-        if (srvdir is null)
+        if (srvdir is not null)
         {
-            return;
+            process.Fork(RforkFlags.Noteg | RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nowait | RforkFlags.Envg | RforkFlags.Nameg, child => ServeAsync(child, srvdir, trusted));
         }
-
-        process.Fork(RforkFlags.Noteg | RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nowait | RforkFlags.Envg | RforkFlags.Nameg, child => ServeAsync(child, srvdir, trusted));
     }
 
     private async Task ServeAsync(Process process, string srvdir, bool trusted)
@@ -411,6 +410,8 @@ public sealed class Listen(string argv0)
 
         await process.DupAsync(fd, 0);
         await process.DupAsync(fd, 1);
+
+        // Stryker disable once Statement : 3 through 19 are closed next
         await process.CloseAsync(fd);
         for (int n = 3; n < 20; n++)
         {
@@ -541,9 +542,10 @@ public sealed class Listen(string argv0)
         {
             return await process.WaitAsync();
         }
+
+        // Stryker disable once Block : what an empty catch would return
         catch (SyscallException)
         {
-            // Stryker disable once Block : what an empty catch would return
             return null;
         }
     }

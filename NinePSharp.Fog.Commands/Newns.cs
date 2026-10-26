@@ -189,12 +189,7 @@ public static class Newns
             bool quoting = false;
             while (p < s.Length && (quoting || !sep.Contains((char)s[p], StringComparison.Ordinal)))
             {
-                if (s[p] == '\'' && quoting && p + 1 < s.Length && s[p + 1] == '\'')
-                {
-                    p += 2;
-                    continue;
-                }
-
+                // A doubled quote within quotes ends them and begins them again.
                 quoting ^= s[p] == '\'';
                 p++;
             }
