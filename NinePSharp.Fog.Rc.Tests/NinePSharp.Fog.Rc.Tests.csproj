@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NinePSharp.Fog.Rc\NinePSharp.Fog.Rc.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Commands\NinePSharp.Fog.Commands.csproj" />
+    <ProjectReference Include="..\NinePSharp.Fog.Auth\NinePSharp.Fog.Auth.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -32,6 +33,7 @@
     <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\FileServerHarness.cs" Link="Support\FileServerHarness.cs" />
     <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\DescriptorStream.cs" Link="Support\DescriptorStream.cs" />
     <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\ManualClock.cs" Link="Support\ManualClock.cs" />
+    <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\TypingConsole.cs" Link="Support\TypingConsole.cs" />
   </ItemGroup>
 
 </Project>

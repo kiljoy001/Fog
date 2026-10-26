@@ -17,11 +17,15 @@ public sealed class Listen(string argv0)
     private const int Maxserv = 64;
     private const string Listenlog = "listen";
     private readonly List<string> sopts = [];
+
+    // Stryker disable once String : keepalive is the host socket's, which no file of #I shows, and what writing it returns is not looked at
     private readonly List<string> copts = ["keepalive"];
     private readonly List<Announce> announcements = [];
     private bool quiet;
     private bool immutable;
     private string proto = "tcp";
+
+    // Stryker disable once String : the start sets it before anything reads it
     private string protodir = "tcp";
     private string addr = "*";
     private string? nspath;
@@ -81,11 +85,13 @@ public sealed class Listen(string argv0)
             }
             finally
             {
+                // Stryker disable once Statement : a call closes 3 through 19 before it runs its service
                 await process.CloseAsync(fd);
             }
         }
         catch (SyscallException)
         {
+            // Stryker disable once String : a call's directory holds its remote while the call has its data open
             return string.Empty;
         }
     }
@@ -100,46 +106,8 @@ public sealed class Listen(string argv0)
 
     private async Task RunAsync(Process process, IReadOnlyList<string> argv)
     {
-        string? servdir = null, trustdir = null;
         var arguments = new Arguments(argv);
-        foreach (char c in arguments.Flags())
-        {
-            switch (c)
-            {
-                case 'a':
-                    addr = await arguments.EargfAsync(() => UsageAsync(process));
-                    break;
-                case 'd':
-                    servdir = await arguments.EargfAsync(() => UsageAsync(process));
-                    break;
-                case 'q':
-                    quiet = true;
-                    break;
-                case 't':
-                    trustdir = await arguments.EargfAsync(() => UsageAsync(process));
-                    break;
-                case 'n':
-                    nspath = await arguments.EargfAsync(() => UsageAsync(process));
-                    break;
-                case 'p':
-                    _ = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
-                    break;
-                case 'o':
-                    await OptionAsync(process, copts, await arguments.EargfAsync(() => UsageAsync(process)), "-o");
-                    break;
-                case 'O':
-                    await OptionAsync(process, sopts, await arguments.EargfAsync(() => UsageAsync(process)), "-O");
-                    break;
-                case 'i':
-                    // A fixed configuration, without the periodic rescan of the service directory.
-                    immutable = true;
-                    break;
-                default:
-                    await UsageAsync(process);
-                    break;
-            }
-        }
-
+        (string? servdir, string? trustdir) = await FlagsAsync(process, arguments);
         if (servdir is null && trustdir is null)
         {
             servdir = "/bin/service";
@@ -170,11 +138,65 @@ public sealed class Listen(string argv0)
 
         await Syslog.WriteAsync(process, false, Listenlog, $"started on {proto}");
         protodir = proto;
-        int slash = proto.LastIndexOf('/');
-        proto = slash < 0 ? protodir : proto[(slash + 1)..];
+        proto = proto[(proto.LastIndexOf('/') + 1)..];
         Listendir(process, servdir, false);
         Listendir(process, trustdir, true);
         process.Exits(null);
+    }
+
+    // The flags, as listen.c's ARGBEGIN takes them: the service and trusted service directories.
+    private async Task<(string? Servdir, string? Trustdir)> FlagsAsync(Process process, Arguments arguments)
+    {
+        string? servdir = null, trustdir = null;
+        foreach (char c in arguments.Flags())
+        {
+            if (c == 'q')
+            {
+                quiet = true;
+            }
+            else if (c == 'i')
+            {
+                // A fixed configuration, without the periodic rescan of the service directory.
+                immutable = true;
+            }
+            else if (c is 'd' or 't')
+            {
+                string value = await arguments.EargfAsync(() => UsageAsync(process));
+                (servdir, trustdir) = c == 'd' ? (value, trustdir) : (servdir, value);
+            }
+            else if (c is 'a' or 'n' or 'p' or 'o' or 'O')
+            {
+                await ValueAsync(process, c, await arguments.EargfAsync(() => UsageAsync(process)));
+            }
+            else
+            {
+                await UsageAsync(process);
+            }
+        }
+
+        return (servdir, trustdir);
+    }
+
+    // -a's address, -n's namespace, -p's priority, read and let be, and -o's and -O's options.
+    private async Task ValueAsync(Process process, char c, string value)
+    {
+        if (c == 'a')
+        {
+            addr = value;
+        }
+        else if (c == 'n')
+        {
+            nspath = value;
+        }
+        else if (c == 'p')
+        {
+            // Stryker disable once Statement : without a wait file to count calls by, -p's value is read and let be
+            _ = Libc.Strtol(value, 10, out _);
+        }
+        else
+        {
+            await OptionAsync(process, c == 'o' ? copts : sopts, value, $"-{c}");
+        }
     }
 
     // A process for the directory's services, insulated from later changes to the console's
@@ -250,10 +272,7 @@ public sealed class Listen(string argv0)
             }
 
             long left = 60 - (await TimeAsync(process) - start);
-            if (left > 0)
-            {
-                await process.SleepAsync(left * 1000);
-            }
+            await process.SleepAsync(Math.Max(left, 0) * 1000);
         }
     }
 
@@ -376,6 +395,8 @@ public sealed class Listen(string argv0)
         {
             string remote = await ReadstrAsync(process, dir, "remote");
             int bang = remote.IndexOf('!', StringComparison.Ordinal);
+
+            // Stryker disable once Conditional,Equality : a call's remote is an address and its port, which a bang parts
             await Syslog.WriteAsync(process, false, Listenlog, $"{proto} call for {serv} on chan {dir} ({(bang < 0 ? remote : remote[..bang])})");
         }
 
@@ -522,6 +543,7 @@ public sealed class Listen(string argv0)
         }
         catch (SyscallException)
         {
+            // Stryker disable once Block : what an empty catch would return
             return null;
         }
     }

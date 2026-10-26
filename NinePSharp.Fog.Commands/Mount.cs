@@ -13,46 +13,8 @@ public static class Mount
 
     public static async Task MainAsync(Process process, IReadOnlyList<string> argv)
     {
-        MountFlags flag = MountFlags.Replace;
-        bool qflag = false, asnone = false;
         var arguments = new Arguments(argv);
-        foreach (char c in arguments.Flags())
-        {
-            switch (c)
-            {
-                case 'a':
-                    flag |= MountFlags.After;
-                    break;
-                case 'b':
-                    flag |= MountFlags.Before;
-                    break;
-                case 'c':
-                    flag |= MountFlags.Create;
-                    break;
-                case 'C':
-                    flag |= MountFlags.Cache;
-                    break;
-                case 'k':
-                    if (arguments.Value() is null)
-                    {
-                        await UsageAsync(process);
-                    }
-
-                    break;
-                case 'N':
-                    asnone = true;
-                    break;
-                case 'n':
-                    break;
-                case 'q':
-                    qflag = true;
-                    break;
-                default:
-                    await UsageAsync(process);
-                    break;
-            }
-        }
-
+        (MountFlags flag, bool qflag, bool asnone) = await FlagsAsync(process, arguments);
         IReadOnlyList<string> args = arguments.Rest();
         string spec = string.Empty;
         if (args.Count == 3)
@@ -82,17 +44,7 @@ public static class Mount
 
         if (asnone)
         {
-            try
-            {
-                // procsetuser writes #c/user, which Fog, naming no devices by #, binds on /dev.
-                int user = await process.OpenAsync("/dev/user", NinePConstants.OWRITE);
-                await process.WriteAsync(user, "none"u8.ToArray());
-                await process.CloseAsync(user);
-            }
-            catch (SyscallException error)
-            {
-                await FailAsync(process, qflag, $"can't become none: {error.Message}", "becomenone");
-            }
+            await BecomeNoneAsync(process, qflag);
         }
 
         process.Notify(note =>
@@ -110,6 +62,70 @@ public static class Mount
         }
 
         process.Exits(null);
+    }
+
+    // The flags, as mount.c's ARGBEGIN takes them: the mount's, -q and -N; -k's value is needed.
+    private static async Task<(MountFlags Flag, bool Qflag, bool Asnone)> FlagsAsync(Process process, Arguments arguments)
+    {
+        MountFlags flag = MountFlags.Replace;
+        bool qflag = false, asnone = false;
+        foreach (char c in arguments.Flags())
+        {
+            switch (c)
+            {
+                case 'a':
+                    flag |= MountFlags.After;
+                    break;
+                case 'b':
+                    flag |= MountFlags.Before;
+                    break;
+                case 'c':
+                    flag |= MountFlags.Create;
+                    break;
+                case 'C':
+                    // Stryker disable once Assignment : Fog's mount keeps no cache, so -C twice, which a toggle would undo, mounts as once does
+                    flag |= MountFlags.Cache;
+                    break;
+                case 'k':
+                    if (arguments.Value() is null)
+                    {
+                        // Stryker disable once Statement : no value for -k leaves no arguments either, which is usage all the same
+                        await UsageAsync(process);
+                    }
+
+                    break;
+                case 'N':
+                    asnone = true;
+                    break;
+                case 'n':
+                    break;
+                case 'q':
+                    qflag = true;
+                    break;
+                default:
+                    await UsageAsync(process);
+                    break;
+            }
+        }
+
+        return (flag, qflag, asnone);
+    }
+
+    // procsetuser of none, which writes #c/user, which Fog, naming no devices by #, binds on /dev.
+    private static async Task BecomeNoneAsync(Process process, bool qflag)
+    {
+        try
+        {
+            int user = await process.OpenAsync("/dev/user", NinePConstants.OWRITE);
+            await process.WriteAsync(user, "none"u8.ToArray());
+
+            // Stryker disable once Statement : mount exits once it has mounted, which closes what it left open
+            await process.CloseAsync(user);
+        }
+        catch (SyscallException error)
+        {
+            await FailAsync(process, qflag, $"can't become none: {error.Message}", "becomenone");
+        }
     }
 
     private static async Task FailAsync(Process process, bool qflag, string message, string status)

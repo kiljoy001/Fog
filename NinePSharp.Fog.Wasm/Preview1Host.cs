@@ -20,6 +20,14 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     // longer vector of buffers or of subscriptions INVAL, or path NAMETOOLONG, once it lies in memory.
     public const int CopyLimit = 1 << 20;
 
+    // path_open's oflags.
+    private const int OCreate = 1;
+    private const int ODirectory = 2;
+    private const int OExclusive = 4;
+    private const int OTruncate = 8;
+
+    // The rights that write a file.
+    private const Rights Writing = Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize;
     private const ulong Nanoseconds = 1_000_000_000;
     private const int Append = 1;
     private const int Nonblock = 4;
@@ -50,57 +58,10 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         await directories.FindPreopensAsync();
     }
 
-    public Delegate Function(string name) => name switch
-    {
-        "args_get" => new Func<int, int, int>((list, buffer) => Call(() => Strings(argv, (uint)list, (uint)buffer))),
-        "args_sizes_get" => new Func<int, int, int>((count, size) => Call(() => Sizes(argv, (uint)count, (uint)size))),
-        "environ_get" => new Func<int, int, int>((list, buffer) => Call(() => Strings(environment, (uint)list, (uint)buffer))),
-        "environ_sizes_get" => new Func<int, int, int>((count, size) => Call(() => Sizes(environment, (uint)count, (uint)size))),
-        "fd_write" => new Func<int, int, int, int, int>((fd, vector, count, written) => Call(() => Write(Require(fd, Rights.FdWrite), (uint)vector, (uint)count, -1, (uint)written))),
-        "fd_pwrite" => new Func<int, int, int, long, int, int>((fd, vector, count, offset, written) => Call(() => Write(Require(fd, Rights.FdWrite | Rights.FdSeek), (uint)vector, (uint)count, Offset(offset), (uint)written))),
-        "fd_read" => new Func<int, int, int, int, int>((fd, vector, count, read) => Call(() => Read(Require(fd, Rights.FdRead), (uint)vector, (uint)count, -1, (uint)read))),
-        "fd_pread" => new Func<int, int, int, long, int, int>((fd, vector, count, offset, read) => Call(() => Read(Require(fd, Rights.FdRead | Rights.FdSeek), (uint)vector, (uint)count, Offset(offset), (uint)read))),
-        "fd_seek" => new Func<int, long, int, int, int>((fd, offset, whence, position) => Call(() => Seek(Require(fd, Rights.FdSeek), offset, whence, (uint)position))),
-        "fd_tell" => new Func<int, int, int>((fd, position) => Call(() => Seek(Require(fd, Rights.FdTell), 0, 1, (uint)position))),
-        "fd_close" => new Func<int, int>(fd => Call(() => Close(fd))),
-        "fd_renumber" => new Func<int, int, int>((fd, to) => Call(() => Renumber(fd, to))),
-        "fd_fdstat_get" => new Func<int, int, int>((fd, stat) => Call(() => FdStat(fd, (uint)stat))),
-        "fd_fdstat_set_flags" => new Func<int, int, int>((fd, flags) => Call(() => SetFlags(Require(fd, Rights.FdFdstatSetFlags), flags))),
-        "fd_fdstat_set_rights" => new Func<int, long, long, int>((fd, held, inheriting) => Call(() => Narrow(fd, (Rights)held, (Rights)inheriting))),
-        "fd_filestat_get" => new Func<int, int, int>((fd, stat) => Call(() => FileStat(Stat(Require(fd, Rights.FdFilestatGet)), (uint)stat))),
-        "fd_filestat_set_size" => new Func<int, long, int>((fd, size) => Call(() => SetSize(Require(fd, Rights.FdFilestatSetSize), size))),
-        "fd_filestat_set_times" => new Func<int, long, long, int, int>((fd, atim, mtim, flags) => Call(() => SetTimes(Require(fd, Rights.FdFilestatSetTimes), mtim, flags))),
-        "fd_advise" => new Func<int, long, long, int, int>((fd, offset, length, advice) => Call(() => Advise(Require(fd, Rights.FdAdvise), advice))),
-        "fd_allocate" => new Func<int, long, long, int>((fd, offset, length) => Call(() => Allocate(Require(fd, Rights.FdAllocate)))),
-        "clock_res_get" => new Func<int, int, int>((id, resolution) => Call(() => Clock(id, (uint)resolution, Resolution))),
-        "clock_time_get" => new Func<int, long, int, int>((id, precision, time) => Call(() => Clock(id, (uint)time, Now))),
-        "random_get" => new Func<int, int, int>((buffer, length) => Call(() => Random((uint)buffer, (uint)length))),
-        "sched_yield" => new Func<int>(() => (int)Errno.Success),
-        "sock_accept" => new Func<int, int, int, int>((fd, flags, opened) => Call(() => NotSocket(fd))),
-        "sock_recv" => new Func<int, int, int, int, int, int, int>((fd, vector, count, flags, read, returned) => Call(() => NotSocket(fd))),
-        "sock_send" => new Func<int, int, int, int, int, int>((fd, vector, count, flags, written) => Call(() => NotSocket(fd))),
-        "sock_shutdown" => new Func<int, int, int>((fd, how) => Call(() => NotSocket(fd))),
-        "fd_prestat_get" => new Func<int, int, int>((fd, prestat) => Call(() => Prestat(fd, (uint)prestat))),
-        "fd_prestat_dir_name" => new Func<int, int, int, int>((fd, name, length) => Call(() => PrestatName(fd, (uint)name, (uint)length))),
-        "fd_readdir" => new Func<int, int, int, long, int, int>((fd, buffer, length, cookie, used) => Call(() => ReadDirectory(Require(fd, Rights.FdReaddir), (uint)buffer, (uint)length, (ulong)cookie, (uint)used))),
-        "path_open" => new Func<int, int, int, int, int, long, long, int, int, int>((fd, lookup, path, length, oflags, held, inheriting, fdflags, opened)
-            => Call(() => PathOpen(Require(fd, Rights.PathOpen), Path(fd, (uint)path, (uint)length), oflags, (Rights)held, (Rights)inheriting, fdflags, (uint)opened))),
-        "path_create_directory" => new Func<int, int, int, int>((fd, path, length) => Call(() => MakeDirectory(Path(Require(fd, Rights.PathCreateDirectory), (uint)path, (uint)length)))),
-        "path_remove_directory" => new Func<int, int, int, int>((fd, path, length) => Call(() => Remove(Path(Require(fd, Rights.PathRemoveDirectory), (uint)path, (uint)length), directory: true))),
-        "path_unlink_file" => new Func<int, int, int, int>((fd, path, length) => Call(() => Remove(Path(Require(fd, Rights.PathUnlinkFile), (uint)path, (uint)length), directory: false))),
-        "path_rename" => new Func<int, int, int, int, int, int, int>((fd, from, fromLength, newfd, to, toLength)
-            => Call(() => Rename(Path(Require(fd, Rights.PathRenameSource), (uint)from, (uint)fromLength), Path(Require(newfd, Rights.PathRenameTarget), (uint)to, (uint)toLength)))),
-        "path_filestat_get" => new Func<int, int, int, int, int, int>((fd, lookup, path, length, stat)
-            => Call(() => FileStat(Wait(process.StatAsync(Path(Require(fd, Rights.PathFilestatGet), (uint)path, (uint)length))), (uint)stat))),
-        "path_filestat_set_times" => new Func<int, int, int, int, long, long, int, int>((fd, lookup, path, length, atim, mtim, flags)
-            => Call(() => SetTimes(Path(Require(fd, Rights.PathFilestatSetTimes), (uint)path, (uint)length), mtim, flags))),
-        "path_link" => new Func<int, int, int, int, int, int, int, int>((oldfd, lookup, from, fromLength, newfd, to, toLength) => (int)Errno.Notsup),
-        "path_symlink" => new Func<int, int, int, int, int, int>((from, fromLength, fd, to, toLength) => (int)Errno.Notsup),
-        "path_readlink" => new Func<int, int, int, int, int, int, int>((fd, path, length, buffer, bufferLength, used) => (int)Errno.Notsup),
-        "poll_oneoff" => new Func<int, int, int, int, int>((subscriptions, events, count, ready) => Call(() => Poll((uint)subscriptions, (uint)events, (uint)count, (uint)ready))),
-        "proc_exit" => new Action<int>(code => throw new ProcExitException((uint)code)),
-        _ => Preview1.Unsupported(Preview1.Unprovided[name]),
-    };
+    // The guest's import of the name: each of preview1's this host gives, or one that fails as
+    // unsupported for what it leaves out.
+    public Delegate Function(string name)
+        => Functions().TryGetValue(name, out Delegate? function) ? function : Preview1.Unsupported(Preview1.Unprovided[name]);
 
     private static int Call(Func<Errno> call)
     {
@@ -195,6 +156,58 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return new Stat(0, none.Type, none.Dev, none.Qid, none.Mode, none.Atime, mtime, length, name, none.Uid, none.Gid, none.Muid);
     }
 
+    // Each function the host gives, made anew for each import.
+    private Dictionary<string, Delegate> Functions() => new()
+    {
+        ["args_get"] = new Func<int, int, int>((list, buffer) => Call(() => Strings(argv, (uint)list, (uint)buffer))),
+        ["args_sizes_get"] = new Func<int, int, int>((count, size) => Call(() => Sizes(argv, (uint)count, (uint)size))),
+        ["environ_get"] = new Func<int, int, int>((list, buffer) => Call(() => Strings(environment, (uint)list, (uint)buffer))),
+        ["environ_sizes_get"] = new Func<int, int, int>((count, size) => Call(() => Sizes(environment, (uint)count, (uint)size))),
+        ["fd_write"] = new Func<int, int, int, int, int>((fd, vector, count, written) => Call(() => Write(Require(fd, Rights.FdWrite), (uint)vector, (uint)count, -1, (uint)written))),
+        ["fd_pwrite"] = new Func<int, int, int, long, int, int>((fd, vector, count, offset, written) => Call(() => Write(Require(fd, Rights.FdWrite | Rights.FdSeek), (uint)vector, (uint)count, Offset(offset), (uint)written))),
+        ["fd_read"] = new Func<int, int, int, int, int>((fd, vector, count, read) => Call(() => Read(Require(fd, Rights.FdRead), (uint)vector, (uint)count, -1, (uint)read))),
+        ["fd_pread"] = new Func<int, int, int, long, int, int>((fd, vector, count, offset, read) => Call(() => Read(Require(fd, Rights.FdRead | Rights.FdSeek), (uint)vector, (uint)count, Offset(offset), (uint)read))),
+        ["fd_seek"] = new Func<int, long, int, int, int>((fd, offset, whence, position) => Call(() => Seek(Require(fd, Rights.FdSeek), offset, whence, (uint)position))),
+        ["fd_tell"] = new Func<int, int, int>((fd, position) => Call(() => Seek(Require(fd, Rights.FdTell), 0, 1, (uint)position))),
+        ["fd_close"] = new Func<int, int>(fd => Call(() => Close(fd))),
+        ["fd_renumber"] = new Func<int, int, int>((fd, to) => Call(() => Renumber(fd, to))),
+        ["fd_fdstat_get"] = new Func<int, int, int>((fd, stat) => Call(() => FdStat(fd, (uint)stat))),
+        ["fd_fdstat_set_flags"] = new Func<int, int, int>((fd, flags) => Call(() => SetFlags(Require(fd, Rights.FdFdstatSetFlags), flags))),
+        ["fd_fdstat_set_rights"] = new Func<int, long, long, int>((fd, held, inheriting) => Call(() => Narrow(fd, (Rights)held, (Rights)inheriting))),
+        ["fd_filestat_get"] = new Func<int, int, int>((fd, stat) => Call(() => FileStat(Stat(Require(fd, Rights.FdFilestatGet)), (uint)stat))),
+        ["fd_filestat_set_size"] = new Func<int, long, int>((fd, size) => Call(() => SetSize(Require(fd, Rights.FdFilestatSetSize), size))),
+        ["fd_filestat_set_times"] = new Func<int, long, long, int, int>((fd, atim, mtim, flags) => Call(() => SetTimes(Require(fd, Rights.FdFilestatSetTimes), mtim, flags))),
+        ["fd_advise"] = new Func<int, long, long, int, int>((fd, offset, length, advice) => Call(() => Advise(Require(fd, Rights.FdAdvise), advice))),
+        ["fd_allocate"] = new Func<int, long, long, int>((fd, offset, length) => Call(() => Allocate(Require(fd, Rights.FdAllocate)))),
+        ["clock_res_get"] = new Func<int, int, int>((id, resolution) => Call(() => Clock(id, (uint)resolution, Resolution))),
+        ["clock_time_get"] = new Func<int, long, int, int>((id, precision, time) => Call(() => Clock(id, (uint)time, Now))),
+        ["random_get"] = new Func<int, int, int>((buffer, length) => Call(() => Random((uint)buffer, (uint)length))),
+        ["sched_yield"] = new Func<int>(() => (int)Errno.Success),
+        ["sock_accept"] = new Func<int, int, int, int>((fd, flags, opened) => Call(() => NotSocket(fd))),
+        ["sock_recv"] = new Func<int, int, int, int, int, int, int>((fd, vector, count, flags, read, returned) => Call(() => NotSocket(fd))),
+        ["sock_send"] = new Func<int, int, int, int, int, int>((fd, vector, count, flags, written) => Call(() => NotSocket(fd))),
+        ["sock_shutdown"] = new Func<int, int, int>((fd, how) => Call(() => NotSocket(fd))),
+        ["fd_prestat_get"] = new Func<int, int, int>((fd, prestat) => Call(() => Prestat(fd, (uint)prestat))),
+        ["fd_prestat_dir_name"] = new Func<int, int, int, int>((fd, name, length) => Call(() => PrestatName(fd, (uint)name, (uint)length))),
+        ["fd_readdir"] = new Func<int, int, int, long, int, int>((fd, buffer, length, cookie, used) => Call(() => ReadDirectory(Require(fd, Rights.FdReaddir), (uint)buffer, (uint)length, (ulong)cookie, (uint)used))),
+        ["path_open"] = new Func<int, int, int, int, int, long, long, int, int, int>((fd, lookup, path, length, oflags, held, inheriting, fdflags, opened)
+            => Call(() => PathOpen(Require(fd, Rights.PathOpen), Path(fd, (uint)path, (uint)length), oflags, (Rights)held, (Rights)inheriting, fdflags, (uint)opened))),
+        ["path_create_directory"] = new Func<int, int, int, int>((fd, path, length) => Call(() => MakeDirectory(Path(Require(fd, Rights.PathCreateDirectory), (uint)path, (uint)length)))),
+        ["path_remove_directory"] = new Func<int, int, int, int>((fd, path, length) => Call(() => Remove(Path(Require(fd, Rights.PathRemoveDirectory), (uint)path, (uint)length), directory: true))),
+        ["path_unlink_file"] = new Func<int, int, int, int>((fd, path, length) => Call(() => Remove(Path(Require(fd, Rights.PathUnlinkFile), (uint)path, (uint)length), directory: false))),
+        ["path_rename"] = new Func<int, int, int, int, int, int, int>((fd, from, fromLength, newfd, to, toLength)
+            => Call(() => Rename(Path(Require(fd, Rights.PathRenameSource), (uint)from, (uint)fromLength), Path(Require(newfd, Rights.PathRenameTarget), (uint)to, (uint)toLength)))),
+        ["path_filestat_get"] = new Func<int, int, int, int, int, int>((fd, lookup, path, length, stat)
+            => Call(() => FileStat(Wait(process.StatAsync(Path(Require(fd, Rights.PathFilestatGet), (uint)path, (uint)length))), (uint)stat))),
+        ["path_filestat_set_times"] = new Func<int, int, int, int, long, long, int, int>((fd, lookup, path, length, atim, mtim, flags)
+            => Call(() => SetTimes(Path(Require(fd, Rights.PathFilestatSetTimes), (uint)path, (uint)length), mtim, flags))),
+        ["path_link"] = new Func<int, int, int, int, int, int, int, int>((oldfd, lookup, from, fromLength, newfd, to, toLength) => (int)Errno.Notsup),
+        ["path_symlink"] = new Func<int, int, int, int, int, int>((from, fromLength, fd, to, toLength) => (int)Errno.Notsup),
+        ["path_readlink"] = new Func<int, int, int, int, int, int, int>((fd, path, length, buffer, bufferLength, used) => (int)Errno.Notsup),
+        ["poll_oneoff"] = new Func<int, int, int, int, int>((subscriptions, events, count, ready) => Call(() => Poll((uint)subscriptions, (uint)events, (uint)count, (uint)ready))),
+        ["proc_exit"] = new Action<int>(code => throw new ProcExitException((uint)code)),
+    };
+
     private (Rights Base, Rights Inheriting) Held(int fd) => rights.GetValueOrDefault(fd, (directories.Holds(fd) ? Rights.Directory : Rights.All, Rights.All));
 
     private int Require(int fd, Rights needed) => (Held(fd).Base & needed) == needed ? fd : throw new NotCapableException();
@@ -252,21 +265,8 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
     // sync, so they are NOTSUP.
     private Errno PathOpen(int fd, string path, int oflags, Rights wanted, Rights inheriting, int fdflags, uint opened)
     {
-        const int Create = 1, Directory = 2, Exclusive = 4, Truncate = 8;
-        const Rights Writing = Rights.FdWrite | Rights.FdAllocate | Rights.FdFilestatSetSize;
-        Rights allowed = Held(fd).Inheriting;
-        bool truncate = (oflags & Truncate) != 0;
-        Require(fd, ((oflags & Create) != 0 ? Rights.PathCreateFile : 0) | (truncate ? Rights.PathFilestatSetSize : 0));
-        if ((wanted & ~allowed) != 0 || (inheriting & ~allowed) != 0)
-        {
-            throw new NotCapableException();
-        }
-
-        if ((fdflags & Synced) != 0)
-        {
-            throw new NotSupportedByFogException();
-        }
-
+        bool truncate = (oflags & OTruncate) != 0;
+        CheckOpen(fd, oflags, wanted, inheriting, fdflags, truncate);
         memory.Check(opened, 4);
         Stat? existing = Existing(path);
         if (existing is { } directory && HeldDirectories.IsDirectory(directory))
@@ -274,14 +274,9 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
             wanted = (wanted & Writing) != 0 || truncate ? throw new SyscallException(Errors.IsDirectory) : wanted & Rights.Directory;
         }
 
-        bool write = (wanted & Writing) != 0 || truncate;
-        bool read = (wanted & (Rights.FdRead | Rights.FdReaddir)) != 0 || !write;
-        int mode = (read && write ? NinePConstants.ORDWR : write ? NinePConstants.OWRITE : NinePConstants.OREAD) | (truncate ? NinePConstants.OTRUNC : 0);
-        int newfd = existing is not null && (oflags & Create) != 0 && (oflags & Exclusive) != 0 ? throw new SyscallException(AlreadyExists)
-            : existing is not null || (oflags & Create) == 0 ? Wait(process.OpenAsync(path, mode))
-            : Wait(process.CreateAsync(path, mode, 0b110_110_110));
+        int newfd = OpenOrCreate(path, existing is not null, oflags, wanted, truncate);
         bool isDirectory = HeldDirectories.IsDirectory(Stat(newfd));
-        if ((oflags & Directory) != 0 && !isDirectory)
+        if ((oflags & ODirectory) != 0 && !isDirectory)
         {
             Wait(process.CloseAsync(newfd));
             throw new SyscallException(Errors.NotDirectory);
@@ -296,6 +291,35 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
 
         memory.WriteUInt32(opened, (uint)newfd);
         return Errno.Success;
+    }
+
+    // What path_open asks of the directory's rights, which must also hold what is wanted of the
+    // file and what it is to pass on; and no sync flag.
+    private void CheckOpen(int fd, int oflags, Rights wanted, Rights inheriting, int fdflags, bool truncate)
+    {
+        Rights allowed = Held(fd).Inheriting;
+        Require(fd, ((oflags & OCreate) != 0 ? Rights.PathCreateFile : 0) | (truncate ? Rights.PathFilestatSetSize : 0));
+        if ((wanted & ~allowed) != 0 || (inheriting & ~allowed) != 0)
+        {
+            throw new NotCapableException();
+        }
+
+        if ((fdflags & Synced) != 0)
+        {
+            throw new NotSupportedByFogException();
+        }
+    }
+
+    // The file opened in the mode the rights ask for, or created when it is not there and CREAT
+    // says to; with EXCL, one that exists is EXIST.
+    private int OpenOrCreate(string path, bool exists, int oflags, Rights wanted, bool truncate)
+    {
+        bool write = (wanted & Writing) != 0 || truncate;
+        bool read = (wanted & (Rights.FdRead | Rights.FdReaddir)) != 0 || !write;
+        int mode = (read && write ? NinePConstants.ORDWR : write ? NinePConstants.OWRITE : NinePConstants.OREAD) | (truncate ? NinePConstants.OTRUNC : 0);
+        return exists && (oflags & OCreate) != 0 && (oflags & OExclusive) != 0 ? throw new SyscallException(AlreadyExists)
+            : exists || (oflags & OCreate) == 0 ? Wait(process.OpenAsync(path, mode))
+            : Wait(process.CreateAsync(path, mode, 0b110_110_110));
     }
 
     private Stat? Existing(string path)

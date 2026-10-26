@@ -5,7 +5,7 @@ using NinePSharp.Namespaces;
 namespace NinePSharp.Fog.Kernel;
 
 // devpipe: each pipe is a pair of ends; an end reads its own queue and writes the other's.
-internal sealed class PipeDevice(string owner) : IResourceDataOperations, IResourceWStatOperations
+internal sealed class PipeDevice(Func<string> owner) : IResourceDataOperations, IResourceWStatOperations
 {
     public const string Provider = "pipe";
     private readonly object gate = new();
@@ -89,7 +89,7 @@ internal sealed class PipeDevice(string owner) : IResourceDataOperations, IResou
     {
         ulong end = resource.Identity.Path;
         long queued = Queue(resource, 0).Length;
-        return ValueTask.FromResult(new ResourceStat(resource, end == 0 ? "data" : "data1", 0b110_110_110, 0, 0, (ulong)queued, owner, owner, owner));
+        return ValueTask.FromResult(new ResourceStat(resource, end == 0 ? "data" : "data1", 0b110_110_110, 0, 0, (ulong)queued, owner(), owner(), owner()));
     }
 
     // Readiness, which 9P cannot ask: what is queued for an end to read, and whether the other end

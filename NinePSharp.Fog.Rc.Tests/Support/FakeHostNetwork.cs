@@ -49,7 +49,8 @@ internal sealed class FakeHostNetwork : HostNetwork
     // What every reading of the interfaces waits for, when one is set.
     public ManualResetEventSlim? InterfacesGate { get; set; }
 
-    public override int HostPort(int port) => port is >= 17000 and < 18000 ? port + Shift : port;
+    // The auth server's 567, which no test may take, is 17567 of the test's slot.
+    public override int HostPort(int port) => port is >= 17000 and < 18000 ? port + Shift : port == 567 ? 17567 + Shift : port;
 
     public override int FogPort(int port) => port >= 17000 + Shift && port < 18000 + Shift ? port - Shift : port;
 

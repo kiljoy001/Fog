@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Time.Testing;
@@ -63,10 +64,21 @@ public sealed class ListenTests : IAsyncLifetime
 
         Assert.Equal("started on tcp", Logged().Single());
 
+        // A third round announces nothing already announced, which would be in use.
+        await RoundAsync();
+        Assert.Equal("two\n", await CallWhenAnsweredAsync(17131));
+        Assert.Equal("started on tcp", Logged().Single());
+        Assert.Equal(string.Empty, console.Text);
+
+        // Only the directory given has a process, in a note group of its own.
+        Process serving = kernel.Processes.Values.Single(p => p.Args.StartsWith("listen [tcp ", StringComparison.Ordinal));
+        Assert.EndsWith(" /tmp/svc]", serving.Args, StringComparison.Ordinal);
+        Assert.NotEqual(await ReadAsync($"/proc/{init.Pid}/noteid"), await ReadAsync($"/proc/{serving.Pid}/noteid"));
+
         // Each round's scan, sleep, alarm and log leaves no descriptor open behind it, once a round
         // in progress has finished with what it opened.
-        const string Serving = "/\n  0 w  c    0 (0000000000000003 0 00)     0        0 /dev/null\n  2 w  c    0 (0000000000000003 0 00)     0        0 /dev/null\n";
-        const string Announcer = "/\n  0 w  c    0 (0000000000000003 0 00)     0        0 /dev/null\n  1 rw I    0 (0000000000000006 0 00)     0       25 /net/tcp/clone\n  2 w  c    0 (0000000000000003 0 00)     0        0 /dev/null\n";
+        const string Serving = "/\n  0 w  c    0 (0000000000000005 0 00)     0        0 /dev/null\n  2 w  c    0 (0000000000000005 0 00)     0        0 /dev/null\n";
+        const string Announcer = "/\n  0 w  c    0 (0000000000000005 0 00)     0        0 /dev/null\n  1 rw I    0 (0000000000000006 0 00)     0       25 /net/tcp/clone\n  2 w  c    0 (0000000000000005 0 00)     0        0 /dev/null\n";
         await WaitForAsync(async () => await FdsAsync("listen [tcp 127.0.0.1 /tmp/svc]") == Serving && await FdsAsync("tcp!127.0.0.1!17131]") == Announcer);
     }
 
@@ -102,6 +114,7 @@ public sealed class ListenTests : IAsyncLifetime
         Assert.Contains("started on tcp", logged);
         Assert.Contains(logged, l => Regex.IsMatch(l, @"^tcp call for tcp17133 on chan /net/tcp/\d+ \(127\.0\.0\.1\)$"));
         Assert.Contains(logged, l => Regex.IsMatch(l, @"^/net/tcp/\d+/ctl: can't write bogus: unknown control request$"));
+        Assert.DoesNotContain(logged, l => l.Contains("bogus2", StringComparison.Ordinal));
         Assert.Contains("tcp: /tmp/svc/tcp17134: exec header invalid", logged);
         await WaitForAsync(() => Task.FromResult(Logged().Any(l => l.StartsWith("can't build namespace /tmp/svc/tcp17135.namespace: ", StringComparison.Ordinal))));
     }
@@ -120,6 +133,7 @@ public sealed class ListenTests : IAsyncLifetime
         await WaitForAsync(() => Task.FromResult(Logged().Any(l => l.StartsWith("listen: ", StringComparison.Ordinal))));
         Assert.Equal("again\n", await CallWhenAnsweredAsync(17140));
         Assert.Equal("/net/tcp/", dir);
+        Assert.DoesNotContain("call for", console.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -138,9 +152,93 @@ public sealed class ListenTests : IAsyncLifetime
             Assert.Equal("usage", await RunAsync(flag));
         }
 
-        Assert.Equal("usage", await RunAsync("tcp", "udp"));
-        Assert.Equal("too many -o options", await RunAsync([.. Enumerable.Range(0, 17).SelectMany(i => (string[])["-o", "x"])]));
+        Assert.Equal("usage", await ErrorsAsync("tcp", "udp"));
+        Assert.Equal("usage: aux/listen [-iq] [-d srvdir] [-t trustsrvdir] [-n namespace] [-p maxprocs] [-o copt] [-O sopt] [-a addr] [proto]", await ReadAsync("/tmp/errors"));
+        Assert.Equal("too many -o options", await ErrorsAsync([.. Enumerable.Range(0, 17).SelectMany(i => (string[])["-o", "x"])]));
+        Assert.Equal("aux/listen: too many -o options\n", await ReadAsync("/tmp/errors"));
         Assert.Equal("too many -O options", await RunAsync([.. Enumerable.Range(0, 17).SelectMany(i => (string[])["-O", "x"])]));
+    }
+
+    [Fact]
+    public async Task WithIAServiceThatEndsIsAnnouncedAgainAMinuteFromTheRoundsStartAndNoNewOneIsFound()
+    {
+        await ServiceAsync("tcp17142", "echo fixed");
+        await ListenAsync("-iq", "-t", "/tmp/svc", "-a", "127.0.0.1");
+        Assert.Equal("fixed\n", await CallWhenAnsweredAsync(17142));
+
+        // Ten seconds into the round its process ends, and it waits out the other fifty.
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Process announcer = kernel.Processes.Values.Single(p => p.Args.EndsWith("tcp!127.0.0.1!17142]", StringComparison.Ordinal));
+        announcer.PostNote("kill");
+        while (kernel.Processes.ContainsKey(announcer.Pid))
+        {
+            await Task.Delay(10);
+        }
+
+        await ServiceAsync("tcp17143", "echo new");
+        for (int i = 0; i < 40; i++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10);
+        }
+
+        Assert.Null(await CallAsync(17142));
+        await RoundAsync();
+        Assert.Equal("fixed\n", await CallWhenAnsweredAsync(17142));
+        Assert.Null(await CallAsync(17143));
+    }
+
+    [Fact]
+    public async Task AServiceThatCannotBeAnnouncedForAnotherReasonIsLoggedEachRound()
+    {
+        await ServiceAsync("tcp17144", "echo never");
+        await ListenAsync("-q", "-t", "/tmp/svc", "-a", "127.0.0.1", "/net.none/tcp");
+        await WaitForAsync(() => Task.FromResult(Logged().Count == 2));
+        await RoundAsync();
+        await WaitForAsync(() => Task.FromResult(Logged().Count == 3));
+        Assert.StartsWith("giving up on /net.none/tcp!127.0.0.1!17144: ", Logged()[1], StringComparison.Ordinal);
+        Assert.Equal(Logged()[1], Logged()[2]);
+    }
+
+    [Fact]
+    public async Task AnUntrustedServiceRunsAsNoneInTheNamespaceNewnsBuilds()
+    {
+        // newns names none in the environment it gives the service.
+        await ServiceAsync("tcp17145", "echo $user $home");
+        await ListenAsync("-q", "-d", "/tmp/svc", "-a", "127.0.0.1", "-n", "/lib/namespace");
+        Assert.Equal("none /usr/none\n", await CallWhenAnsweredAsync(17145));
+        const string Serving = "/\n  0 w  c    0 (0000000000000005 0 00)     0        0 /dev/null\n  2 w  c    0 (0000000000000005 0 00)     0        0 /dev/null\n";
+        await WaitForAsync(async () => await FdsAsync("listen [tcp 127.0.0.1 /tmp/svc]") == Serving);
+    }
+
+    [Fact]
+    public async Task AnUntrustedServiceThatCannotBecomeNoneOrBuildItsNamespaceIsAnError()
+    {
+        await ListenAsync("-q", "-d", "/tmp/svc", "-n", "/tmp/nonesuch");
+        await WaitForAsync(() => Task.FromResult(Logged().Any(l => l.StartsWith("tcp: can't build namespace: ", StringComparison.Ordinal))));
+
+        await MkdirAsync("/tmp/nodev");
+        Assert.Equal(string.Empty, await RunAsync(c => c.BindAsync("/tmp/nodev", "/dev", NinePSharp.Namespaces.MountFlags.Replace).AsTask(), "-q", "-d", "/tmp/svc"));
+        await WaitForAsync(() => Task.FromResult(Logged().Any(l => l.StartsWith("tcp: can't become none: ", StringComparison.Ordinal))));
+    }
+
+    [Fact]
+    public async Task AServiceHasTheCallOnItsInputAndOutputAndNothingOpenFromThreeToNineteen()
+    {
+        await ServiceAsync("tcp17146", "cat /proc/$pid/fd");
+        int log = await init.OpenAsync("/sys/log/listen", NinePConstants.OREAD);
+        await init.DupAsync(log, 5);
+        await init.DupAsync(log, 20);
+        await init.CloseAsync(log);
+        await ListenAsync("-q", "-t", "/tmp/svc", "-a", "127.0.0.1");
+
+        // Of what it was given open, 5 is closed and 20, past where newcall stops, is not.
+        Dictionary<int, string> open = (await CallWhenAnsweredAsync(17146)).Split('\n').Skip(1).Where(l => l.Length != 0)
+            .ToDictionary(l => int.Parse(l[..3], CultureInfo.InvariantCulture), l => l.Split(' ')[^1]);
+        Assert.Equal([0, 1, 2, 3, 20], open.Keys);
+        Assert.Matches(@"^/net/tcp/\d+/data$", open[0]);
+        Assert.Equal(open[0], open[1]);
+        Assert.Equal(["/dev/null", "/tmp/svc/tcp17146", "/sys/log/listen"], [open[2], open[3], open[20]]);
     }
 
     [Fact]
@@ -175,7 +273,7 @@ public sealed class ListenTests : IAsyncLifetime
             await Task.Delay(50);
         }
 
-        Assert.Fail($"the condition never held; listen logged: {string.Join(" | ", Logged())}; processes: {string.Join(" | ", kernel.Processes.Values.Select(p => $"{p.Pid}:{p.Args}"))}");
+        Assert.Fail($"the condition never held; listen logged: {string.Join(" | ", Logged())}; the console: {console.Text}; processes: {string.Join(" | ", kernel.Processes.Values.Select(p => $"{p.Pid}:{p.Args}"))}");
     }
 
     private async Task ServiceAsync(string name, string body) => await WriteAsync($"/tmp/svc/{name}", $"#!/bin/rc\n{body}\n");
@@ -186,12 +284,25 @@ public sealed class ListenTests : IAsyncLifetime
         Assert.Equal(string.Empty, await RunAsync(arguments));
     }
 
-    // aux/listen's exit status, without the name and pid it is reported with.
-    private async Task<string> RunAsync(params string[] arguments)
+    // aux/listen's exit status, without the name and pid it is reported with; its errors are left
+    // in /tmp/errors.
+    private async Task<string> ErrorsAsync(params string[] arguments)
+        => await RunAsync(async c => await c.DupAsync(await c.CreateAsync("/tmp/errors", NinePConstants.OWRITE, 0b110_110_110), 2), arguments);
+
+    // The same, its errors to /dev/null.
+    private Task<string> RunAsync(params string[] arguments) => RunAsync(null, arguments);
+
+    // The same, its namespace prepared first.
+    private async Task<string> RunAsync(Func<Process, Task>? prepare, params string[] arguments)
     {
-        init.Fork(RforkFlags.Proc, async child =>
+        init.Fork(RforkFlags.Proc | (prepare is null ? 0 : RforkFlags.Nameg), async child =>
         {
             await child.DupAsync(await child.OpenAsync("/dev/null", NinePConstants.OWRITE), 2);
+            if (prepare is not null)
+            {
+                await prepare(child);
+            }
+
             await child.ExecAsync("/bin/aux/listen", ["aux/listen", .. arguments]);
         });
         string message = (await init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(5))).Message;

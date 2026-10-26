@@ -15,6 +15,56 @@ public sealed class NoteTests : IAsyncDisposable
     private Process init = null!;
 
     [Fact]
+    public async Task ANoteInterruptsAMountWhoseServerDoesNotAnswerItsVersion()
+    {
+        await BootAsync();
+        init.Notify(note => note == "interrupt");
+        (int client, int server) = await init.PipeAsync();
+        Task mounted = init.MountAsync(client, -1, "/n", NinePSharp.Namespaces.MountFlags.Replace, string.Empty).AsTask();
+        byte[] tversion = (await init.ReadAsync(server, 8192).AsTask().WaitAsync(KernelDriver.Bound)).ToArray();
+        Assert.Equal((byte)NinePSharp.Constants.MessageTypes.Tversion, tversion[4]);
+        Assert.True(init.PostNote("interrupt"));
+        Assert.Equal("interrupted", (await Assert.ThrowsAsync<SyscallException>(() => mounted.WaitAsync(KernelDriver.Bound))).Message);
+    }
+
+    [Fact]
+    public async Task ANoteInterruptsAMountWaitingForAnotherToBeVersioned()
+    {
+        await BootAsync();
+        init.Notify(note => note == "interrupt");
+        (int first, int firstServer) = await init.PipeAsync();
+        (int second, int secondServer) = await init.PipeAsync();
+        Task versioning = init.MountAsync(first, -1, "/n", NinePSharp.Namespaces.MountFlags.Replace, string.Empty).AsTask();
+        Assert.Equal((byte)NinePSharp.Constants.MessageTypes.Tversion, (await init.ReadAsync(firstServer, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Span[4]);
+
+        // The second waits its turn behind the first, sending nothing until a note ends its wait.
+        var waiting = new TaskCompletionSource<Process>();
+        var failed = new TaskCompletionSource<string>();
+        init.Fork(RforkFlags.Proc | RforkFlags.Fdg, async c =>
+        {
+            c.Notify(note => note == "interrupt");
+            waiting.SetResult(c);
+            try
+            {
+                await c.MountAsync(second, -1, "/n", NinePSharp.Namespaces.MountFlags.Replace, string.Empty);
+                failed.SetResult(string.Empty);
+            }
+            catch (SyscallException error)
+            {
+                failed.SetResult(error.Message);
+            }
+        });
+        Process child = await waiting.Task.WaitAsync(KernelDriver.Bound);
+        await Task.Delay(50);
+        Assert.True(child.PostNote("interrupt"));
+        Assert.Equal("interrupted", await failed.Task.WaitAsync(KernelDriver.Bound));
+        Assert.True(init.PostNote("interrupt"));
+        await Assert.ThrowsAsync<SyscallException>(() => versioning.WaitAsync(KernelDriver.Bound));
+        await init.CloseAsync(second);
+        Assert.Equal(0, (await init.ReadAsync(secondServer, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Length);
+    }
+
+    [Fact]
     public async Task AForkedChildKeepsItsParentsHandler()
     {
         await BootAsync();

@@ -158,13 +158,7 @@ public static class Test
             string a = av[ap++];
             if (a == "(")
             {
-                bool p1 = await EAsync(eval);
-                if (await NxtargAsync(false) != ")")
-                {
-                    await SynbadAsync(process, ") expected", string.Empty);
-                }
-
-                return p1;
+                return await ParenAsync(eval);
             }
 
             // Each file operator takes its operand whether or not the expression is being evaluated.
@@ -174,27 +168,9 @@ public static class Test
                 return eval && await check(b);
             }
 
-            switch (a)
+            if (await UnaryAsync(a, eval) is bool unary)
             {
-                case "-c" or "-b" or "-u" or "-g":
-                    return false;
-                case "-t":
-                    if (ap >= ac)
-                    {
-                        return eval && await IsattyAsync(1);
-                    }
-
-                    if (!IsInt(av[ap], out int fd))
-                    {
-                        await SynbadAsync(process, "not a valid file descriptor number ", string.Empty);
-                    }
-
-                    ap++;
-                    return eval && await IsattyAsync(fd);
-                case "-n":
-                    return await NxtargAsync(false) != string.Empty;
-                case "-z":
-                    return await NxtargAsync(false) == string.Empty;
+                return unary;
             }
 
             string? p2 = await NxtargAsync(true);
@@ -203,6 +179,73 @@ public static class Test
                 return a.Length != 0;
             }
 
+            if (await BinaryAsync(a, p2, eval) is bool binary)
+            {
+                return binary;
+            }
+
+            if (Compare(a, p2) is bool compared)
+            {
+                return compared;
+            }
+
+            ap--;
+            return a.Length != 0;
+        }
+
+        // A parenthesised expression, which must be closed.
+        private async Task<bool> ParenAsync(bool eval)
+        {
+            bool p1 = await EAsync(eval);
+            if (await NxtargAsync(false) != ")")
+            {
+                await SynbadAsync(process, ") expected", string.Empty);
+            }
+
+            return p1;
+        }
+
+        // The operators of one operand but the files': -c, -b, -u and -g, never true; -t, of 1 or
+        // the descriptor given; -n and -z of the string. Null for another.
+        private Task<bool?> UnaryAsync(string a, bool eval)
+        {
+            Task<bool?> Never() => Task.FromResult<bool?>(false);
+            var operators = new Dictionary<string, Func<Task<bool?>>>
+            {
+                ["-c"] = Never,
+                ["-b"] = Never,
+                ["-u"] = Never,
+                ["-g"] = Never,
+                ["-t"] = () => TtyAsync(eval),
+                ["-n"] = () => EmptyAsync(true),
+                ["-z"] = () => EmptyAsync(false),
+            };
+            return operators.TryGetValue(a, out Func<Task<bool?>>? op) ? op() : Task.FromResult<bool?>(null);
+        }
+
+        // -n and -z: whether the string is not, or is, empty.
+        private async Task<bool?> EmptyAsync(bool nonempty) => (await NxtargAsync(false) != string.Empty) == nonempty;
+
+        // -t: whether 1, or the descriptor given, is the console.
+        private async Task<bool?> TtyAsync(bool eval)
+        {
+            if (ap >= ac)
+            {
+                return eval && await IsattyAsync(1);
+            }
+
+            if (!IsInt(av[ap], out int fd))
+            {
+                await SynbadAsync(process, "not a valid file descriptor number ", string.Empty);
+            }
+
+            ap++;
+            return eval && await IsattyAsync(fd);
+        }
+
+        // The operators of two strings or files: =, !=, -older, -ot and -nt. Null for another.
+        private async Task<bool?> BinaryAsync(string a, string p2, bool eval)
+        {
             switch (p2)
             {
                 case "=":
@@ -218,51 +261,55 @@ public static class Test
                 case "-nt":
                     string newer = (await NxtargAsync(false))!;
                     return eval && await MtimesAsync(newer, a, (b, c) => b < c);
+                default:
+                    return null;
             }
-
-            if (IsInt(a, out int int1))
-            {
-                if (ap < ac && IsInt(av[ap], out int int2))
-                {
-                    ap++;
-                    switch (p2)
-                    {
-                        case "-eq":
-                            return int1 == int2;
-                        case "-ne":
-                            return int1 != int2;
-                        case "-gt":
-                            return int1 > int2;
-                        case "-lt":
-                            return int1 < int2;
-                        case "-ge":
-                            return int1 >= int2;
-                        case "-le":
-                            return int1 <= int2;
-                    }
-
-                    ap--;
-                }
-            }
-
-            ap--;
-            return a.Length != 0;
         }
 
-        private Func<string, Task<bool>>? FileOperator(string a) => a switch
+        // The integer comparisons, of two integers, the second taken; null for another.
+        private bool? Compare(string a, string p2)
         {
-            "-A" => b => HasModeAsync(b, DmAppend),
-            "-L" => b => HasModeAsync(b, DmExcl),
-            "-T" => b => HasModeAsync(b, DmTmp),
-            "-f" => async b => await DirstatAsync(b) is { } dir && (dir.Mode & (uint)NinePConstants.FileMode9P.DMDIR) == 0,
-            "-d" => b => HasModeAsync(b, (uint)NinePConstants.FileMode9P.DMDIR),
-            "-r" => b => TioAsync(b, ARead),
-            "-w" => b => TioAsync(b, AWrite),
-            "-x" => b => TioAsync(b, AExec),
-            "-e" => b => TioAsync(b, AExist),
-            "-s" => async b => await DirstatAsync(b) is { Length: > 0 },
-            _ => null,
-        };
+            if (!IsInt(a, out int int1) || ap >= ac || !IsInt(av[ap], out int int2))
+            {
+                return null;
+            }
+
+            bool? compared = p2 switch
+            {
+                "-eq" => int1 == int2,
+                "-ne" => int1 != int2,
+                "-gt" => int1 > int2,
+                "-lt" => int1 < int2,
+                "-ge" => int1 >= int2,
+                "-le" => int1 <= int2,
+                _ => null,
+            };
+            if (compared is not null)
+            {
+                ap++;
+            }
+
+            return compared;
+        }
+
+        // The file operators' checks of their operand; null for another operator.
+        private Func<string, Task<bool>>? FileOperator(string a)
+        {
+            var checks = new Dictionary<string, Func<string, Task<bool>>>
+            {
+                ["-A"] = b => HasModeAsync(b, DmAppend),
+                ["-L"] = b => HasModeAsync(b, DmExcl),
+                ["-T"] = b => HasModeAsync(b, DmTmp),
+                ["-f"] = async b => await DirstatAsync(b) is { } dir && (dir.Mode & (uint)NinePConstants.FileMode9P.DMDIR) == 0,
+                ["-d"] = b => HasModeAsync(b, (uint)NinePConstants.FileMode9P.DMDIR),
+                ["-r"] = b => TioAsync(b, ARead),
+                ["-w"] = b => TioAsync(b, AWrite),
+                ["-x"] = b => TioAsync(b, AExec),
+                ["-e"] = b => TioAsync(b, AExist),
+                ["-s"] = async b => await DirstatAsync(b) is { Length: > 0 },
+            };
+            return checks.GetValueOrDefault(a);
+        }
 
         // dirstat: nil for a file that cannot be stated.
         private async Task<Stat?> DirstatAsync(string f)

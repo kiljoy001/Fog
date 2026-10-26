@@ -131,40 +131,8 @@ public sealed class Trampoline(string argv0)
 
     private async Task RunAsync(Process process, IReadOnlyList<string> argv)
     {
-        string? altaddr = null, checkmac = null;
-        bool nineP = false;
-        var opts = new List<string>();
         var arguments = new Arguments(argv);
-        foreach (char c in arguments.Flags())
-        {
-            switch (c)
-            {
-                case '9':
-                    nineP = true;
-                    break;
-                case 'a':
-                    altaddr = await arguments.EargfAsync(() => UsageAsync(process));
-                    break;
-                case 'm':
-                    checkmac = await arguments.EargfAsync(() => UsageAsync(process));
-                    break;
-                case 't':
-                    timeout = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
-                    break;
-                case 'o':
-                    if (opts.Count >= 16)
-                    {
-                        await FatalAsync(process, "too many -o options");
-                    }
-
-                    opts.Add(await arguments.EargfAsync(() => UsageAsync(process)));
-                    break;
-                default:
-                    await UsageAsync(process);
-                    break;
-            }
-        }
-
+        (string? altaddr, string? checkmac, bool nineP, List<string> opts) = await FlagsAsync(process, arguments);
         IReadOnlyList<string> args = arguments.Rest();
         if (args.Count != 1)
         {
@@ -223,6 +191,46 @@ public sealed class Trampoline(string argv0)
         }
 
         await RelayAsync(process, nineP, fd0, fd1, call.Data);
+    }
+
+    // The flags, as trampoline.c's ARGBEGIN takes them: -a's address, -m's interface, -9, and the
+    // -o's, at most 16; -t sets the timeout.
+    private async Task<(string? Altaddr, string? Checkmac, bool NineP, List<string> Opts)> FlagsAsync(Process process, Arguments arguments)
+    {
+        string? altaddr = null, checkmac = null;
+        bool nineP = false;
+        var opts = new List<string>();
+        foreach (char c in arguments.Flags())
+        {
+            switch (c)
+            {
+                case '9':
+                    nineP = true;
+                    break;
+                case 'a':
+                    altaddr = await arguments.EargfAsync(() => UsageAsync(process));
+                    break;
+                case 'm':
+                    checkmac = await arguments.EargfAsync(() => UsageAsync(process));
+                    break;
+                case 't':
+                    timeout = Libc.Strtol(await arguments.EargfAsync(() => UsageAsync(process)), 10, out _);
+                    break;
+                case 'o':
+                    if (opts.Count >= 16)
+                    {
+                        await FatalAsync(process, "too many -o options");
+                    }
+
+                    opts.Add(await arguments.EargfAsync(() => UsageAsync(process)));
+                    break;
+                default:
+                    await UsageAsync(process);
+                    break;
+            }
+        }
+
+        return (altaddr, checkmac, nineP, opts);
     }
 
     // Each way in a process of its own; whichever ends first hangs the other up.

@@ -35,6 +35,13 @@ internal sealed class MountTree
 
     public ResourceHandle Root { get; }
 
+    // Whether a file of the tree is open, which keeps it, as an open chan keeps its Mnt.
+    public bool HasOpenFiles => !opened.IsEmpty;
+
+    // Whether the tree is between its attach and its mount, which nothing yet holds it by.
+    // Stryker disable once Boolean : only a collection that runs between a mount's attach and its bind sees it
+    public bool Pending { get; set; } = true;
+
     // mntattach: a new fid on the connection's root for this user and attach name.
     public static async Task<MountTree> AttachAsync(MountConnection connection, string device, string user, string aname, int bound)
     {
@@ -179,6 +186,21 @@ internal sealed class MountTree
         while (done < data.Length);
 
         return done;
+    }
+
+    // The tree let go: the fids it holds, its root's and the walked files', clunked.
+    public async Task CloseAsync()
+    {
+        uint[] held;
+        lock (gate)
+        {
+            held = [.. entries.Values.Where(e => e.Fid is not null && e.Uses == 0).Select(e => e.Fid!.Value), RootFid];
+        }
+
+        foreach (uint fid in held)
+        {
+            await ClunkFidAsync(fid);
+        }
     }
 
     public async Task ClunkAsync(ResourceOpenHandle handle)

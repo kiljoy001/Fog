@@ -23,27 +23,7 @@ public static class WasiRunner
 
     public static async Task<int> RunAsync(IReadOnlyList<string> args, Stream stdin, Stream stdout, Stream stderr)
     {
-        var environment = new List<string>();
-        string? host = null;
-        int at = 0;
-        for (; at + 1 < args.Count && args[at].StartsWith("--", StringComparison.Ordinal); at += 2)
-        {
-            string value = args[at + 1];
-            if (args[at] == "--env" && value.IndexOf('=') > 0)
-            {
-                environment.Add(value);
-            }
-            else if (args[at] == "--dir" && host is null && value.EndsWith("::/", StringComparison.Ordinal))
-            {
-                host = value[..^3];
-            }
-            else
-            {
-                return await FailAsync(stderr, Usage, Misused);
-            }
-        }
-
-        if (at == args.Count || args[at].StartsWith("--", StringComparison.Ordinal))
+        if (Options(args) is not var (environment, host, at))
         {
             return await FailAsync(stderr, Usage, Misused);
         }
@@ -105,6 +85,33 @@ public static class WasiRunner
         }
 
         return await FailAsync(stderr, status + "\n", status.StartsWith("wasm-trap: ", StringComparison.Ordinal) ? Trapped : 1);
+    }
+
+    // The --env variables, the --dir directory, and where the module's name is among the
+    // arguments; or null for arguments the usage does not allow.
+    private static (List<string> Environment, string? Host, int At)? Options(IReadOnlyList<string> args)
+    {
+        var environment = new List<string>();
+        string? host = null;
+        int at = 0;
+        for (; at + 1 < args.Count && args[at].StartsWith("--", StringComparison.Ordinal); at += 2)
+        {
+            string value = args[at + 1];
+            if (args[at] == "--env" && value.IndexOf('=') > 0)
+            {
+                environment.Add(value);
+            }
+            else if (args[at] == "--dir" && host is null && value.EndsWith("::/", StringComparison.Ordinal))
+            {
+                host = value[..^3];
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        return at == args.Count || args[at].StartsWith("--", StringComparison.Ordinal) ? null : (environment, host, at);
     }
 
     private static async Task<int> FailAsync(Stream stderr, string message, int code)

@@ -39,7 +39,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
 
         Assert.Equal([Format(init.Pid), Format(child.Pid)], processes.Select(entry => entry.Name));
         Assert.Equal(directory, processes[1].Handle);
-        Assert.Equal(["args", "fd", "note", "noteid", "notepg"], files.Select(entry => entry.Name));
+        Assert.Equal(["args", "ctl", "fd", "note", "noteid", "notepg"], files.Select(entry => entry.Name));
         foreach (ResourceDirectoryEntry file in files)
         {
             Assert.Equal(await proc.WalkAsync(directory, file.Name, default), file.Handle);
@@ -56,10 +56,34 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal(("#p", Directory), Describe(await proc.StatAsync(ProcDevice.Root, default)));
         Assert.Equal((Format(child.Pid), Directory), Describe(await proc.StatAsync(directory, default)));
         Assert.Equal(("args", 0b110_110_000u), Describe(await StatAsync(child.Pid, "args")));
+        Assert.Equal(("ctl", 0b110_100_000u), Describe(await StatAsync(child.Pid, "ctl")));
         Assert.Equal(("fd", 0b100_100_100u), Describe(await StatAsync(child.Pid, "fd")));
         Assert.Equal(("note", 0b110_100_000u), Describe(await StatAsync(child.Pid, "note")));
         Assert.Equal(("noteid", 0b110_110_100u), Describe(await StatAsync(child.Pid, "noteid")));
         Assert.Equal(("notepg", 0b110_100_000u), Describe(await StatAsync(child.Pid, "notepg")));
+    }
+
+    [Fact]
+    public async Task CtlTakesPrivateAndNoswapAndRefusesTheRestAsProcctlreqDoes()
+    {
+        await BootAsync();
+        Agent child = await StartAsync();
+        await WriteAsync(child.Pid, "ctl", "private"u8.ToArray());
+        await WriteAsync(child.Pid, "ctl", "noswap\n"u8.ToArray());
+        Assert.Equal("empty control message", await WriteFailureAsync(child.Pid, "ctl", "\n"u8.ToArray()));
+        Assert.Equal("unknown control message \"frob\"", await WriteFailureAsync(child.Pid, "ctl", "fr'ob'"u8.ToArray()));
+        Assert.Equal("unknown control message \"'it''s'\"", await WriteFailureAsync(child.Pid, "ctl", "'it''s'"u8.ToArray()));
+        Assert.Equal("wrong #args in control message \"private 'a b'\"", await WriteFailureAsync(child.Pid, "ctl", "private 'a b'"u8.ToArray()));
+        Assert.Equal("wrong #args in control message \"close\"", await WriteFailureAsync(child.Pid, "ctl", "close"u8.ToArray()));
+        foreach (string unimplemented in new[]
+        {
+            "close 3", "closefiles", "fixedpri 1", "hang", "nohang", "kill", "pri 1", "profile", "start", "startstop",
+            "startsyscall", "stop", "waitstop", "wired 0", "trace", "trace 1 2", "interrupt", "nointerrupt", "period 1",
+            "deadline 1", "cost 1", "sporadic", "deadlinenotes", "admit", "extra", "expel", "event",
+        })
+        {
+            Assert.Equal("the front fell off", await WriteFailureAsync(child.Pid, "ctl", Encoding.UTF8.GetBytes(unimplemented)));
+        }
     }
 
     [Fact]
@@ -170,7 +194,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
                 "/tmp\n",
                 "  0 rw R    0 (0000000000000008 2 00)     0        5 /tmp/f\n",
                 "  1 r  R    0 (0000000000000005 0 80)     0        0 /tmp\n",
-                "  2 r  p    0 (000000000000000a 0 00)     0      123 /proc/1/fd\n",
+                "  2 r  p    0 (000000000000000b 0 00)     0      123 /proc/1/fd\n",
                 "  3  R    0 (0000000000000009 0 00)     0        0 /tmp/x\n",
                 "  4 rw |    1 (0000000000000000 0 00)     0        0 #|/data\n",
                 "  5 rw |    1 (0000000000000001 0 00)     0        0 #|/data1\n",

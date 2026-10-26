@@ -6,19 +6,27 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-// devcons's bintime, cons, null, pid, ppid, sysname, user and zero; each reads as the calling process
-// sees it. bintime's time is the host's, and is not set through it; sysname is the kernel's, which
-// only the host owner may write. What is written to cons goes to the host's console, as putstrn
-// puts it on the screen; it cannot be read, as the keyboard is kbdfs's.
-internal sealed class ConsDevice(Process caller, string owner, TimeProvider clock, long booted) : IResourceDataOperations
+// devcons's bintime, cons, consctl, hostowner, null, pid, ppid, sysname, user and zero, and devrtc's
+// nvram; each reads as the calling process sees it, and each is the host owner's as it is now.
+// bintime's time is the host's, and is not set through it; sysname is the kernel's, which only the
+// host owner may write. What is written to cons goes to the host's console, as putstrn puts it on the
+// screen, and what is typed there is read from it, cooked or raw as consctl makes it, as drawterm's
+// devcons reads it. The host owner may name another in hostowner, as auth.c's hostownerwrite does.
+internal sealed class ConsDevice(Process caller, TimeProvider clock, long booted) : IResourceDataOperations
 {
     public const string Provider = "cons";
     private const int NumSize = 12;
+
+    // KNAMELEN: a name, with the NUL that ends it.
+    private const int NameLength = 28;
     private static readonly (string Name, uint Permissions)[] Files =
     [
         ("bintime", 0b110_110_100),
         ("cons", 0b110_110_000),
+        ("consctl", 0b010_010_000),
+        ("hostowner", 0b110_110_100),
         ("null", 0b110_110_110),
+        ("nvram", 0b110_110_100),
         ("pid", 0b100_100_100),
         ("ppid", 0b100_100_100),
         ("sysname", 0b110_110_100),
@@ -44,40 +52,45 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
         (string name, uint permissions) = resource.IsDirectory
             ? ("#c", (uint)NinePConstants.FileMode9P.DMDIR | 0b101_101_101)
             : Files[resource.Identity.Path - 1];
+        string owner = caller.Kernel.User;
         return ValueTask.FromResult(new ResourceStat(resource, name, permissions, 0, 0, 0, owner, owner, owner));
     }
 
-    // devpermcheck: the files are the host owner's, so the owner's bits serve it and the others' anyone else.
-    public ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
+    // devpermcheck: the files are the host owner's, so the owner's bits serve it and the others' anyone
+    // else; rtcopen lets only the host owner open nvram. Each open of consctl is counted.
+    public async ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
         uint access = Access[mode & 3];
-        int shift = caller.User == owner ? 0 : 6;
-        if (!resource.IsDirectory && ((Files[resource.Identity.Path - 1].Permissions << shift) & access) != access)
+        bool eve = caller.User == caller.Kernel.User;
+        if (!resource.IsDirectory && ((Files[resource.Identity.Path - 1].Permissions << (eve ? 0 : 6)) & access) != access)
         {
             throw new IOException(Errors.Permission);
         }
 
-        string handle = $"{context.OperationId.SessionId}/{context.OperationId.Sequence}";
-        return ValueTask.FromResult(new ResourceOpenHandle(resource, handle, mode, 0));
-    }
-
-    public ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
-    {
-        ReadOnlyMemory<byte> data = Files[openHandle.Resource.Identity.Path - 1].Name switch
+        string? name = resource.IsDirectory ? null : Files[resource.Identity.Path - 1].Name;
+        if (name == "nvram" && !eve)
         {
-            "bintime" => Bintime(count),
-            "cons" => throw new IOException(Errors.Greg),
-            "null" => ReadOnlyMemory<byte>.Empty,
-            "pid" => Slice(Number(caller.Pid), offset, count),
-            "ppid" => Slice(Number(caller.ParentPid), offset, count),
-            "sysname" => Slice(Encoding.UTF8.GetBytes(caller.Kernel.Sysname), offset, count),
-            "user" => Slice(Encoding.UTF8.GetBytes(caller.User), offset, count),
-            _ => new byte[count],
-        };
-        return ValueTask.FromResult(data);
+            throw new IOException(Errors.Permission);
+        }
+
+        if (name == "consctl")
+        {
+            await caller.Kernel.Keyboard.OpenctlAsync(cancellationToken);
+        }
+
+        string handle = $"{context.OperationId.SessionId}/{context.OperationId.Sequence}";
+        return new ResourceOpenHandle(resource, handle, mode, 0);
     }
 
-    public ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
+    public async ValueTask<ReadOnlyMemory<byte>> ReadAsync(ResourceOpenHandle openHandle, ulong offset, uint count, CancellationToken cancellationToken)
+    {
+        string name = Files[openHandle.Resource.Identity.Path - 1].Name;
+        return name != "cons" ? Read(name, offset, count)
+            : count == 0 ? ReadOnlyMemory<byte>.Empty
+            : await caller.Kernel.Keyboard.ReadAsync((int)count, cancellationToken);
+    }
+
+    public async ValueTask<uint> WriteAsync(ResourceOpenHandle openHandle, ulong offset, ReadOnlyMemory<byte> data, ResourceOperationContext context, CancellationToken cancellationToken)
     {
         // userwrite: a process may only give up its user, becoming none.
         string name = Files[openHandle.Resource.Identity.Path - 1].Name;
@@ -93,6 +106,18 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
         {
             caller.Kernel.Console.Write(data.Span);
         }
+        else if (name == "consctl")
+        {
+            await caller.Kernel.Keyboard.CtlAsync(data, cancellationToken);
+        }
+        else if (name == "hostowner")
+        {
+            Hostownerwrite(data.Span);
+        }
+        else if (name == "nvram")
+        {
+            return (uint)caller.Kernel.Nvram.Write((long)offset, data.Span);
+        }
         else if (name == "sysname")
         {
             // From one write at the start, of less than conswrite's buffer, without a last newline.
@@ -107,11 +132,17 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
             caller.Kernel.Sysname = sysname.EndsWith('\n') ? sysname[..^1] : sysname;
         }
 
-        return ValueTask.FromResult((uint)data.Length);
+        return (uint)data.Length;
     }
 
-    public ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
-        => ValueTask.CompletedTask;
+    // consclose: a close of consctl counted.
+    public async ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
+    {
+        if (!openHandle.Resource.IsDirectory && Files[openHandle.Resource.Identity.Path - 1].Name == "consctl")
+        {
+            await caller.Kernel.Keyboard.ClosectlAsync();
+        }
+    }
 
     public ValueTask<ResourceHandle> CreateAsync(ResourceHandle directory, string name, bool directoryEntry, CancellationToken cancellationToken)
         => throw new IOException(Errors.Permission);
@@ -131,6 +162,54 @@ internal sealed class ConsDevice(Process caller, string owner, TimeProvider cloc
     {
         int start = (int)Math.Min(offset, (ulong)data.Length);
         return data.AsMemory(start, (int)Math.Min(count, (uint)(data.Length - start)));
+    }
+
+    // Each file but cons: the texts read from the offset, bintime's numbers, null's nothing, the
+    // nvram's bytes, and zero's zeros.
+    private ReadOnlyMemory<byte> Read(string name, ulong offset, uint count)
+    {
+        var texts = new Dictionary<string, Func<byte[]>>
+        {
+            ["hostowner"] = () => Encoding.UTF8.GetBytes(caller.Kernel.User),
+            ["pid"] = () => Number(caller.Pid),
+            ["ppid"] = () => Number(caller.ParentPid),
+            ["sysname"] = () => Encoding.UTF8.GetBytes(caller.Kernel.Sysname),
+            ["user"] = () => Encoding.UTF8.GetBytes(caller.User),
+        };
+        return texts.TryGetValue(name, out Func<byte[]>? text) ? Slice(text(), offset, count)
+            : name == "bintime" ? Bintime(count)
+            : name == "null" ? ReadOnlyMemory<byte>.Empty
+            : name == "nvram" ? caller.Kernel.Nvram.Read((long)offset, (int)count)
+            : new byte[count];
+    }
+
+    // hostownerwrite: the host owner's new name, up to a NUL, which every process and #s file of the
+    // old one takes, and the writer with them; a name of nothing is refused.
+    private void Hostownerwrite(ReadOnlySpan<byte> a)
+    {
+        FogKernel kernel = caller.Kernel;
+        if (caller.User != kernel.User)
+        {
+            throw new IOException(Errors.Permission);
+        }
+
+        if (a.Length >= NameLength)
+        {
+            throw new IOException(Errors.TooLong);
+        }
+
+        // Fog's users all have names, so one a NUL ends before it begins is as bad as none.
+        int nul = a.IndexOf((byte)0);
+        string buf = Encoding.UTF8.GetString(nul < 0 ? a : a[..nul]);
+        if (buf.Length == 0)
+        {
+            throw new IOException(Errors.BadArg);
+        }
+
+        kernel.Renameuser(kernel.User, buf);
+        kernel.Srv.Renameuser(kernel.User, buf);
+        kernel.User = buf;
+        caller.User = buf;
     }
 
     // readbintime: as many of the epoch's nanoseconds, the ticks, their frequency and the nanoseconds

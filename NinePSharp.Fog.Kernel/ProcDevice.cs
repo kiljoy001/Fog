@@ -19,16 +19,28 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     private static readonly (string Name, uint Permissions)[] Files =
     [
         ("args", 0b110_110_000),
+        ("ctl", 0),
         ("fd", 0b100_100_100),
         ("note", 0),
         ("noteid", 0b110_110_100),
         ("notepg", 0),
     ];
 
+    // proccmd: devproc's control messages and the fields each takes, any number for 0.
+    private static readonly (string Cmd, int Narg)[] Proccmd =
+    [
+        ("close", 2), ("closefiles", 1), ("fixedpri", 2), ("hang", 1), ("nohang", 1), ("noswap", 1), ("kill", 1),
+        ("pri", 2), ("private", 1), ("profile", 1), ("start", 1), ("startstop", 1), ("startsyscall", 1), ("stop", 1),
+        ("waitstop", 1), ("wired", 2), ("trace", 0), ("interrupt", 1), ("nointerrupt", 1), ("period", 2),
+        ("deadline", 2), ("cost", 2), ("sporadic", 1), ("deadlinenotes", 1), ("admit", 1), ("extra", 1),
+        ("expel", 1), ("event", 1),
+    ];
+
     private enum File
     {
         Directory,
         Args,
+        Ctl,
         Fd,
         Note,
         NoteId,
@@ -192,6 +204,9 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
             case File.NoteId:
                 kernel.ChangeNoteId(kernel.Processes.GetValueOrDefault(context.ProcessId), process, (uint)Libc.Strtol(text, 10, out _));
                 break;
+            case File.Ctl:
+                Procctlreq(text);
+                break;
             default:
                 throw new IOException(Errors.Permission);
         }
@@ -219,6 +234,37 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
             throw new IOException(Errors.Permission);
         }
     }
+
+    // procctlreq: a command of proccmd's, with as many fields as it takes. Fog's processes keep no
+    // memory of their own to make private, nor any to swap, so private and noswap leave them as
+    // they are; the rest act on what they do not have, priorities, profiles, stops, traces and real
+    // time, or are not yet needed, and fail as an unimplemented call does.
+    private static void Procctlreq(string va)
+    {
+        string[] f = [.. Process.Tokenize(va.EndsWith('\n') ? va[..^1] : va, 256)];
+        if (f.Length == 0)
+        {
+            throw new IOException("empty control message");
+        }
+
+        if (Array.Find(Proccmd, ct => ct.Cmd == f[0]) is not { Cmd: not null } command)
+        {
+            throw new IOException(Cmderror(f, "unknown control message"));
+        }
+
+        if (command.Narg != 0 && command.Narg != f.Length)
+        {
+            throw new IOException(Cmderror(f, "wrong #args in control message"));
+        }
+
+        if (command.Cmd is not ("private" or "noswap"))
+        {
+            throw new IOException(Errors.Greg);
+        }
+    }
+
+    // cmderror: the error, then the message's fields quoted.
+    private static string Cmderror(string[] f, string s) => $"{s} \"{string.Join(' ', f.Select(Libc.Quote))}\"";
 
     private static ResourceHandle Handle(ulong path, QidType type) => new(new ResourceIdentity(Provider, "#p", path), type);
 

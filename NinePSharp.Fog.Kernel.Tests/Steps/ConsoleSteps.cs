@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel.Tests.Support;
 using Reqnroll;
@@ -13,6 +14,8 @@ namespace NinePSharp.Fog.Kernel.Tests.Steps;
 public sealed class ConsoleSteps(KernelDriver driver)
 {
     private readonly List<string> childRead = new();
+    private readonly List<int> controls = [];
+    private readonly TaskCompletionSource<Process> waiting = new();
     private long child;
     private string listed = string.Empty;
     private string? failure;
@@ -20,7 +23,43 @@ public sealed class ConsoleSteps(KernelDriver driver)
 
     [Given(@"^a kernel booted for the host owner ""(.*)""$")]
     public async Task GivenKernel(string user)
-        => driver.Init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), user, driver.Clock).BootAsync();
+        => driver.Init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), user, driver.Clock, console: driver.Console, nvram: new HostNvram(driver.Nvram)).BootAsync();
+
+    [Given(@"^the host's console is typed ""([^""]*)""$")]
+    public void GivenTyped(string text) => driver.Console.Type(Unescape(text));
+
+    [Given(@"^the host's console is typed ""([^""]*)"" and then ends$")]
+    public void GivenTypedAndEnded(string text)
+    {
+        driver.Console.Type(Unescape(text));
+        driver.Console.End();
+    }
+
+    [Given(@"^the host's console is typed (\d+) bytes and a newline$")]
+    public void GivenTypedLong(int count) => driver.Console.Type(new string('x', count) + "\n");
+
+    [Given(@"^the host's nvram holds (\d+) bytes ""(.*)""$")]
+    public void GivenNvram(int count, string text) => Encoding.UTF8.GetBytes(text).AsSpan(0, count).CopyTo(driver.Nvram);
+
+    [Given("a child of the host owner that waits")]
+    public async Task GivenWaitingChild()
+    {
+        var release = new TaskCompletionSource();
+        driver.Init.Fork(RforkFlags.Proc, async process =>
+        {
+            waiting.SetResult(process);
+            await release.Task;
+        });
+        await waiting.Task.WaitAsync(KernelDriver.Bound);
+    }
+
+    [Given(@"^the host owner posts ""(.*)""$")]
+    public async Task GivenPosted(string path)
+    {
+        (int first, _) = await driver.Init.PipeAsync();
+        int fd = await driver.Init.CreateAsync(path, NinePConstants.OWRITE, 0b110_000_000);
+        await driver.Init.WriteAsync(fd, Encoding.UTF8.GetBytes(first.ToString(CultureInfo.InvariantCulture)));
+    }
 
     [Given(@"^the clock reads (\d+) seconds since the epoch$")]
     public void GivenClock(long seconds) => driver.Clock.Now = DateTimeOffset.FromUnixTimeSeconds(seconds);
@@ -70,13 +109,33 @@ public sealed class ConsoleSteps(KernelDriver driver)
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OWRITE);
         try
         {
-            await driver.Init.WriteAsync(fd, Encoding.UTF8.GetBytes(text));
+            await driver.Init.WriteAsync(fd, Encoding.UTF8.GetBytes(Unescape(text)));
         }
         catch (SyscallException error)
         {
             failure = error.Message;
         }
     }
+
+    [When(@"^the process writes ""(.*)"" to ""(.*)"" at offset (\d+)$")]
+    public async Task WhenWritesAt(string text, string path, long offset)
+    {
+        int fd = await driver.Init.OpenAsync(path, NinePConstants.OWRITE);
+        await driver.Init.PWriteAsync(fd, Encoding.UTF8.GetBytes(text), offset);
+        await driver.Init.CloseAsync(fd);
+    }
+
+    [When(@"^the process opens ""(.*)"" twice and writes ""(.*)"" to the first$")]
+    public async Task WhenOpensTwice(string path, string text)
+    {
+        controls.Add(await driver.Init.OpenAsync(path, NinePConstants.OWRITE));
+        controls.Add(await driver.Init.OpenAsync(path, NinePConstants.OWRITE));
+        await driver.Init.WriteAsync(controls[0], Encoding.UTF8.GetBytes(text));
+    }
+
+    [When(@"^the process closes the (first|second) ""(.*)""$")]
+    public async Task WhenCloses(string which, string path)
+        => await driver.Init.CloseAsync(controls[which == "first" ? 0 : 1]);
 
     [Given(@"^""(.*)"" belongs to the host owner with the permissions (\d+)$")]
     public async Task GivenOwned(string path, string permissions)
@@ -107,7 +166,48 @@ public sealed class ConsoleSteps(KernelDriver driver)
     public void ThenSees(string names) => Assert.Equal(names, listed);
 
     [Then(@"^reading ""(.*)"" gives ""(.*)""$")]
-    public async Task ThenReadingGives(string path, string text) => Assert.Equal(text, await ReadAsync(driver.Init, path, 100));
+    public async Task ThenReadingGives(string path, string text) => Assert.Equal(Unescape(text), await driver.Bounded(new ValueTask<string>(ReadAsync(driver.Init, path, 100))));
+
+    [Then(@"^reading (\d+) bytes of ""(.*)"" from one descriptor gives ("".*"")$")]
+    public async Task ThenReadingEach(int count, string path, string texts)
+    {
+        string[] expected = [.. Regex.Matches(texts, @"""((?:[^""\\]|\\.)*)""").Select(m => Unescape(m.Groups[1].Value))];
+        int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
+        var read = new List<string>();
+        for (int i = 0; i < expected.Length; i++)
+        {
+            read.Add(Encoding.UTF8.GetString((await driver.Bounded(driver.Init.ReadAsync(fd, count))).Span));
+        }
+
+        Assert.Equal(expected, read);
+    }
+
+    [Then(@"^reading (\d+) bytes of ""(.*)"" from one descriptor gives (\d+) bytes and then (\d+)$")]
+    public async Task ThenReadingLengths(int count, string path, int first, int second)
+    {
+        int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
+        Assert.Equal(first, (await driver.Bounded(driver.Init.ReadAsync(fd, count))).Length);
+        Assert.Equal(second, (await driver.Bounded(driver.Init.ReadAsync(fd, count))).Length);
+    }
+
+    [Then(@"^the host's terminal is (raw|cooked)$")]
+    public void ThenTerminal(string mode) => Assert.Equal(mode == "raw", driver.Console.Raw);
+
+    [Then(@"^the waiting child's user is ""(.*)""$")]
+    public async Task ThenChildUser(string user) => Assert.Equal(user, (await waiting.Task).User);
+
+    [Then(@"^""(.*)"" belongs to ""(.*)""$")]
+    public async Task ThenBelongs(string path, string user) => Assert.Equal(user, (await driver.Init.StatAsync(path)).Uid);
+
+    [Then(@"^the write makes the host owner ""(.*)""$")]
+    public async Task ThenHostOwner(string user)
+    {
+        Assert.Null(failure);
+        Assert.Equal(user, await ReadAsync(driver.Init, "/dev/hostowner", 100));
+    }
+
+    [Then(@"^the host's nvram holds ""(.*)""$")]
+    public void ThenNvram(string text) => Assert.Equal(text, Encoding.UTF8.GetString(driver.Nvram));
 
     [Then(@"^writing ""(.*)"" to ""(.*)"" writes (\d+) bytes$")]
     public async Task ThenWritingWrites(string text, string path, int count)
@@ -160,6 +260,8 @@ public sealed class ConsoleSteps(KernelDriver driver)
 
     [Then(@"^the open fails with ""(.*)""$")]
     public void ThenOpenFails(string message) => Assert.Equal(message, failure);
+
+    private static string Unescape(string text) => Regex.Unescape(text);
 
     private static async Task<string> ReadAsync(Process process, string path, int count)
     {

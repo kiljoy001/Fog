@@ -23,6 +23,11 @@ public sealed class FogKernel
         bind #R /root
         bind -a /root /
 
+        # mount points
+        mount -a /srv/slashn /n
+        mount -a /srv/slashmnt /mnt
+        mount -a /srv/mntexport /mnt/exportfs
+
         # standard bin
         bind -c /root/bin /bin
         bind /root/rc /rc
@@ -42,6 +47,9 @@ public sealed class FogKernel
     private readonly string session = Guid.NewGuid().ToString();
     private readonly object noting = new();
     private readonly TimeProvider clock = TimeProvider.System;
+    private readonly SemaphoreSlim collecting = new(1, 1);
+    private Keyboard? keyboard;
+    private volatile string user;
     private long sequence;
 
     public FogKernel(
@@ -54,14 +62,15 @@ public sealed class FogKernel
         this.programs = programs;
         this.store = store;
         Files = files;
-        User = user;
+        this.user = user;
         Loaders = loaders;
-        Pipes = new PipeDevice(user);
-        Slash = new RootDevice(user);
+        Pipes = new PipeDevice(() => User);
+        Slash = new RootDevice(() => User);
         Procs = new ProcDevice(this);
         Ip = new IpDevice(this);
         Srv = new SrvDevice(this);
         Cap = new CapDevice(this);
+        Mounts.Collect = CollectMountsAsync;
     }
 
     // The host's clock, which #c's bintime reads, and when the kernel was made by it.
@@ -78,8 +87,11 @@ public sealed class FogKernel
     // The host's interfaces and resolver, which the programs that need them ask, as Fog keeps no network of its own.
     public HostNetwork Host { get; init; } = HostNetwork.System;
 
-    // The host's console, which #c/cons writes to.
+    // The host's console, which #c/cons writes to and reads from.
     public HostConsole Console { get; init; } = HostConsole.System;
+
+    // The host's nvram, which #c/nvram reads and writes.
+    public HostNvram Nvram { get; init; } = HostNvram.None;
 
     internal long Booted { get; private set; } = TimeProvider.System.GetTimestamp();
 
@@ -113,7 +125,15 @@ public sealed class FogKernel
     // How many fids a mount holds for files it has only walked to.
     internal int MountFids { get; set; } = 256;
 
-    internal string User { get; }
+    // eve: the host owner, who may name another through #c/hostowner.
+    internal string User
+    {
+        get => user;
+        set => user = value;
+    }
+
+    // The console's input, as drawterm's kbd keeps it.
+    internal Keyboard Keyboard => LazyInitializer.EnsureInitialized(ref keyboard, () => new Keyboard(Console));
 
     internal IReadOnlyList<ExecLoader> Loaders { get; }
 
@@ -127,10 +147,11 @@ public sealed class FogKernel
         TimeProvider? clock = null,
         HostNetwork? host = null,
         HostConsole? console = null,
+        HostNvram? nvram = null,
         params IReadOnlyList<ExecLoader> loaders)
     {
         var files = new RamFs("ram", "#R", user, clock: clock);
-        return new FogKernel(programs, files, files.Root, user, loaders) { Clock = clock ?? TimeProvider.System, Host = host ?? HostNetwork.System, Console = console ?? HostConsole.System };
+        return new FogKernel(programs, files, files.Root, user, loaders) { Clock = clock ?? TimeProvider.System, Host = host ?? HostNetwork.System, Console = console ?? HostConsole.System, Nvram = nvram ?? HostNvram.None };
     }
 
     // The store may hold what an earlier boot left: its directories are kept, and each program's file
@@ -182,12 +203,51 @@ public sealed class FogKernel
         mounts.Mount(IpDevice.Root, RootDevice.MountPoint("net"), MountFlags.After);
         mounts.Mount(SrvDevice.Root, RootDevice.MountPoint("srv"), MountFlags.Replace | MountFlags.Create);
         mounts.Mount(CapDevice.Root, RootDevice.MountPoint("dev"), MountFlags.After);
-        return new Process(this, first, null, environment, "*init*", User, 0);
+        var init = new Process(this, first, null, environment, "*init*", User, 0);
+        await BootrcAsync(init);
+        return init;
     }
 
     internal void Enter(Process process) => Processes[process.Pid] = process;
 
-    internal void Leave(Process process) => Processes.TryRemove(process.Pid, out _);
+    // renameuser: each process of the old user becomes the new.
+    internal void Renameuser(string old, string @new)
+    {
+        foreach (Process p in Processes.Values.Where(p => p.User == old))
+        {
+            p.User = @new;
+        }
+    }
+
+    // A process gone, and with it what it held of any mount.
+    internal void Leave(Process process)
+    {
+        Processes.TryRemove(process.Pid, out _);
+        _ = CollectMountsAsync();
+    }
+
+    // The mounts nothing holds any more let go, as the close of the last chan that refers to a
+    // mount frees its Mnt: none in a live namespace's mount table, at a process's root or dot, or
+    // open; nor one between its attach and its mount.
+    internal async Task CollectMountsAsync()
+    {
+        await collecting.WaitAsync();
+        try
+        {
+            foreach (MountTree tree in Mounts.Trees)
+            {
+                var seen = new HashSet<MountTable>();
+                if (!tree.Pending && !tree.HasOpenFiles && !Processes.Values.Any(p => p.Holds(tree, seen)))
+                {
+                    await Mounts.ReleaseAsync(tree);
+                }
+            }
+        }
+        finally
+        {
+            collecting.Release();
+        }
+    }
 
     // postnotepg: the note to every process of the group but the one posting it.
     internal void PostNoteGroup(long noteId, string note, Process? poster)
@@ -252,4 +312,24 @@ public sealed class FogKernel
 
     private async Task<ResourceHandle> DirectoryAsync(string name)
         => await Files.WalkAsync(store, name, CancellationToken.None) ?? await Files.CreateAsync(store, name, true, CancellationToken.None);
+
+    // bootrc's mount points: mntgen on /n, /mnt and /mnt/exportfs, each posted for others to mount,
+    // when the kernel has mntgen to run.
+    private async Task BootrcAsync(Process init)
+    {
+        if (!programs.ContainsKey("mntgen"))
+        {
+            return;
+        }
+
+        foreach ((string srv, string mtpt) in new[] { ("slashn", "/n"), ("slashmnt", "/mnt"), ("mntexport", "/mnt/exportfs") })
+        {
+            init.Fork(RforkFlags.Proc | RforkFlags.Fdg, child => child.ExecAsync("/bin/mntgen", ["mntgen", "-s", srv, mtpt]));
+            if ((await init.WaitAsync()).Message.Length == 0)
+            {
+                NinePSharp.Messages.Stat d = Process.NullDir;
+                await init.WStatAsync($"/srv/{srv}", new NinePSharp.Messages.Stat(0, d.Type, d.Dev, d.Qid, 0b110_110_110, d.Atime, d.Mtime, d.Length, d.Name, d.Uid, d.Gid, d.Muid));
+            }
+        }
+    }
 }

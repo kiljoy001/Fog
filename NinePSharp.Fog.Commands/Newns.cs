@@ -24,9 +24,11 @@ public static class Newns
     // getuser: the user /dev/user names.
     public static async Task<string> GetuserAsync(Process process)
     {
+        // Stryker disable once Bitwise : it is closed before anything could exec
         int fd = await process.OpenAsync("/dev/user", NinePConstants.OREAD | NinePConstants.OCEXEC);
         try
         {
+            // Stryker disable once Arithmetic : a user's name is never longer than ANAMELEN-1
             return Encoding.UTF8.GetString((await process.ReadAsync(fd, AnameLen - 1)).Span);
         }
         finally
@@ -38,9 +40,12 @@ public static class Newns
     private static async Task BuildAsync(Process process, bool newns, string user, string? file, bool debug)
     {
         var ns = new Builder(process, debug);
+
+        // Stryker disable once Bitwise : nothing is read or written on the rpc, which is closed before anything could exec
         int afd = await ns.TryOpenAsync("/mnt/factotum/rpc", NinePConstants.ORDWR | NinePConstants.OCEXEC);
         try
         {
+            // Stryker disable once Bitwise : Fog's #c has no drivers to open
             ns.Drivers = await ns.TryOpenAsync("#c/drivers", NinePConstants.OWRITE | NinePConstants.OCEXEC);
             byte[] contents;
             try
@@ -55,6 +60,7 @@ public static class Newns
             }
             finally
             {
+                // Stryker disable once Statement : Fog's #c has no drivers, so there is none open to close
                 await CloseAsync(process, ns.Drivers);
             }
 
@@ -246,6 +252,7 @@ public static class Newns
 
     private sealed class Builder(Process process, bool debug)
     {
+        // Stryker disable once Unary : the build sets it before anything reads it
         public int Drivers { get; set; } = -1;
 
         public async Task<int> TryOpenAsync(string name, int mode)
@@ -273,13 +280,14 @@ public static class Newns
                 bool cdroot = false;
                 for (int start = 0, end; (end = Array.IndexOf(contents, (byte)'\n', start)) >= 0; start = end + 1)
                 {
+                    // The line's newline ends its blanks, and is no comment.
                     int cmd = start;
-                    while (cmd < end && contents[cmd] is (byte)' ' or (byte)'\t')
+                    while (contents[cmd] is (byte)' ' or (byte)'\t')
                     {
                         cmd++;
                     }
 
-                    if (cmd < end && contents[cmd] == '#')
+                    if (contents[cmd] == '#')
                     {
                         continue;
                     }
@@ -296,6 +304,25 @@ public static class Newns
             {
                 process.Notify(previous);
             }
+        }
+
+        // bind and mount's flags: -a, -b, -c and -C, and any other as none.
+        private static MountFlags Flagsof(Arguments arguments)
+        {
+            MountFlags flags = MountFlags.Replace;
+            foreach (char c in arguments.Flags())
+            {
+                flags |= c switch
+                {
+                    'a' => MountFlags.After,
+                    'b' => MountFlags.Before,
+                    'c' => MountFlags.Create,
+                    'C' => MountFlags.Cache,
+                    _ => MountFlags.Replace,
+                };
+            }
+
+            return flags;
         }
 
         // splitargs: the tokens, each expanded and unquoted; none if there are too many or one is too long.
@@ -337,7 +364,7 @@ public static class Newns
                 buf.AddRange(arg[at..p]);
                 p++;
                 int end = Array.FindIndex(arg, p, c => c is (byte)'/' or (byte)'.' or (byte)'!' or (byte)'\'' or (byte)'$');
-                at = end < 0 ? arg.Length : end;
+                at = end == -1 ? arg.Length : end;
                 int len = at - p;
                 if (len == 0 || len >= AnameLen)
                 {
@@ -363,6 +390,7 @@ public static class Newns
             int fd;
             try
             {
+                // Stryker disable once Bitwise : it is closed before anything could exec
                 fd = await process.OpenAsync($"#e/{name}", NinePConstants.OREAD | NinePConstants.OCEXEC);
             }
             catch (SyscallException)
@@ -386,57 +414,54 @@ public static class Newns
         private async Task<bool> OpAsync(string fn, List<string> argv)
         {
             await DebugAsync(string.Concat(argv.Select(arg => arg + " ")) + "\n");
-            MountFlags flags = MountFlags.Replace;
             var arguments = new Arguments(argv);
-            foreach (char c in arguments.Flags())
-            {
-                flags |= c switch
-                {
-                    'a' => MountFlags.After,
-                    'b' => MountFlags.Before,
-                    'c' => MountFlags.Create,
-                    'C' => MountFlags.Cache,
-                    _ => MountFlags.Replace,
-                };
-            }
-
+            MountFlags flags = Flagsof(arguments);
             IReadOnlyList<string> args = arguments.Rest();
             switch (argv[0], args.Count)
             {
                 case (".", 1):
-                    byte[] contents;
-                    try
-                    {
-                        contents = await ReadFileAsync(process, args[0]);
-                    }
-                    catch (SyscallException)
-                    {
-                        return false;
-                    }
-
-                    return await FileAsync(fn, contents);
-                case ("clear", 0):
-                    await process.RforkAsync(RforkFlags.Cnameg);
-                    break;
-                case ("bind", 2):
-                    await TryAsync(() => process.BindAsync(args[0], args[1], flags).AsTask(), $"{fn}: bind: {args[0]} {args[1]}");
-                    break;
-                case ("unmount", 1 or 2):
-                    await TryAsync(() => process.UnmountAsync(args.Count == 2 ? args[0] : null, args[^1]).AsTask(), null);
-                    break;
-                case ("mount", _):
-                    await MountAsync(fn, args, flags);
-                    break;
+                    return await IncludeAsync(fn, args[0]);
                 case ("cd", 1):
                     return await TryAsync(() => process.ChdirAsync(args[0]).AsTask(), null) && args[0].StartsWith('/');
-                case ("chdev", _):
-                    // chdev cannot be honoured without #c/drivers, which Fog has not.
-                    await process.WriteAsync(2, Encoding.UTF8.GetBytes($"{process.Text}: chdev requested, but could not open #c/drivers\n"));
-                    process.Exits("chdev requested, but could not open #c/drivers");
-                    break;
+                default:
+                    await ChangeAsync(fn, argv[0], args, flags);
+                    return false;
+            }
+        }
+
+        // . file: the file's lines run as these are, if it can be read.
+        private async Task<bool> IncludeAsync(string fn, string file)
+        {
+            byte[] contents;
+            try
+            {
+                contents = await ReadFileAsync(process, file);
+            }
+            catch (SyscallException)
+            {
+                return false;
             }
 
-            return false;
+            return await FileAsync(fn, contents);
+        }
+
+        // clear, bind, unmount, mount and chdev, each with as many arguments as it takes; any other
+        // command, or one with the wrong number of arguments, is passed over.
+        private Task ChangeAsync(string fn, string command, IReadOnlyList<string> args, MountFlags flags) => (command, args.Count) switch
+        {
+            ("clear", 0) => process.RforkAsync(RforkFlags.Cnameg).AsTask(),
+            ("bind", 2) => TryAsync(() => process.BindAsync(args[0], args[1], flags).AsTask(), $"{fn}: bind: {args[0]} {args[1]}"),
+            ("unmount", 1 or 2) => TryAsync(() => process.UnmountAsync(args.Count == 2 ? args[0] : null, args[^1]).AsTask(), null),
+            ("mount", _) => MountAsync(fn, args, flags),
+            ("chdev", _) => ChdevAsync(),
+            _ => Task.CompletedTask,
+        };
+
+        // chdev cannot be honoured without #c/drivers, which Fog has not.
+        private async Task ChdevAsync()
+        {
+            await process.WriteAsync(2, Encoding.UTF8.GetBytes($"{process.Text}: chdev requested, but could not open #c/drivers\n"));
+            process.Exits("chdev requested, but could not open #c/drivers");
         }
 
         // famount: the file server on the file, mounted without authentication.

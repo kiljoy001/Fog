@@ -288,16 +288,107 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         return scan;
     }
 
+    // A wstat may not change the qid, type or device.
+    private static void WstatQid(ResourceWStat stat)
+    {
+        if (stat.Qid.Path != ulong.MaxValue || stat.Qid.Version != uint.MaxValue || stat.Qid.Type != (QidType)0xff || stat.Type != ushort.MaxValue || stat.Device != uint.MaxValue)
+        {
+            throw Refused("wstat -- attempt to change qid");
+        }
+    }
+
+    // The modification time the wstat gives, in nanoseconds, if another.
+    private static long? WstatMtime(ResourceWStat stat, Dir d)
+        => stat.ModificationTime == uint.MaxValue || stat.ModificationTime * 1_000_000_000L == d.Mtime ? null : stat.ModificationTime * 1_000_000_000L;
+
+    // Whether the wstat asks for nothing, which is a sync.
+    private static bool Unasked(ResourceWStat stat)
+        => stat.Name.Length == 0 && stat.Length == ulong.MaxValue && stat.Mode == uint.MaxValue && stat.ModificationTime == uint.MaxValue && stat.User.Length == 0 && stat.Group.Length == 0;
+
+    // The length the wstat gives a file, if another; a directory has none to give.
+    private static long? WstatLength(ResourceWStat stat, Dir d)
+    {
+        if (stat.Length == ulong.MaxValue)
+        {
+            return null;
+        }
+
+        if (IsDirectory(d) || stat.Length > long.MaxValue)
+        {
+            throw Refused("wstat -- attempt to make length negative");
+        }
+
+        return stat.Length == (ulong)d.Length ? null : (long)stat.Length;
+    }
+
+    // The mode the wstat gives, if another, which may not make or unmake a directory.
+    private static uint? WstatMode(ResourceWStat stat, Dir d)
+    {
+        if (stat.Mode == uint.MaxValue)
+        {
+            return null;
+        }
+
+        if (((stat.Mode ^ d.Mode) & Directory) != 0)
+        {
+            throw Refused("wstat -- attempt to change directory");
+        }
+
+        if ((stat.Mode & ~Settable) != 0)
+        {
+            throw Refused("wstat -- unknown bits in qid.type/mode");
+        }
+
+        return stat.Mode == d.Mode ? null : stat.Mode;
+    }
+
+    // The owner and group the wstat gives, if others; the muid is not to be given.
+    private static (string? Owner, string? Group) WstatOwners(ResourceWStat stat, Dir d)
+    {
+        if (TooLong(stat.User) || TooLong(stat.Group))
+        {
+            throw Refused("name too long");
+        }
+
+        string? owner = stat.User.Length == 0 || stat.User == d.User ? null : stat.User;
+        string? group = stat.Group.Length == 0 || stat.Group == d.Group ? null : stat.Group;
+        if (stat.LastModifier.Length != 0)
+        {
+            throw Refused("wstat -- attempt to change muid");
+        }
+
+        return (owner, group);
+    }
+
     // The wstat's checks and changes, under the writer's lock; whether it named nothing.
     private bool WStat(ResourceHandle resource, ResourceWStat stat, ResourceOperationContext context)
     {
         var (key, d) = Find(tree, Qid(resource));
         string user = context.User;
-        if (stat.Qid.Path != ulong.MaxValue || stat.Qid.Version != uint.MaxValue || stat.Qid.Type != (QidType)0xff || stat.Type != ushort.MaxValue || stat.Device != uint.MaxValue)
+        WstatQid(stat);
+        bool rename = WstatRename(stat, d);
+        long? length = WstatLength(stat, d);
+        uint? mode = WstatMode(stat, d);
+        long? mtime = WstatMtime(stat, d);
+        (string? owner, string? group) = WstatOwners(stat, d);
+        if (Unasked(stat))
         {
-            throw Refused("wstat -- attempt to change qid");
+            return true;
         }
 
+        WstatPermitted(d, user, rename, length is not null, mode is not null || mtime is not null, owner is not null, group);
+        if (ReadOnly)
+        {
+            throw Refused("file system read only");
+        }
+
+        Wstat(key, d, rename ? stat.Name : null, new WstatChange(length, mode, mtime, null, owner, group, user));
+        return false;
+    }
+
+    // Whether the wstat renames the file, to a good name not already in its directory.
+    private bool WstatRename(ResourceWStat stat, Dir d)
+    {
         bool rename = stat.Name.Length != 0 && stat.Name != d.Name;
         if (rename)
         {
@@ -312,104 +403,65 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
             }
         }
 
-        long? length = null;
-        if (stat.Length != ulong.MaxValue)
-        {
-            if (IsDirectory(d) || stat.Length > long.MaxValue)
-            {
-                throw Refused("wstat -- attempt to make length negative");
-            }
+        return rename;
+    }
 
-            length = stat.Length == (ulong)d.Length ? null : (long)stat.Length;
-        }
-
-        uint? mode = null;
-        if (stat.Mode != uint.MaxValue)
-        {
-            if (((stat.Mode ^ d.Mode) & Directory) != 0)
-            {
-                throw Refused("wstat -- attempt to change directory");
-            }
-
-            if ((stat.Mode & ~Settable) != 0)
-            {
-                throw Refused("wstat -- unknown bits in qid.type/mode");
-            }
-
-            mode = stat.Mode == d.Mode ? null : stat.Mode;
-        }
-
-        long? mtime = stat.ModificationTime == uint.MaxValue || stat.ModificationTime * 1_000_000_000L == d.Mtime ? null : stat.ModificationTime * 1_000_000_000L;
-        if (TooLong(stat.User) || TooLong(stat.Group))
-        {
-            throw Refused("name too long");
-        }
-
-        string? owner = stat.User.Length == 0 || stat.User == d.User ? null : stat.User;
-        string? group = stat.Group.Length == 0 || stat.Group == d.Group ? null : stat.Group;
-        if (stat.LastModifier.Length != 0)
-        {
-            throw Refused("wstat -- attempt to change muid");
-        }
-
-        if (stat.Name.Length == 0 && stat.Length == ulong.MaxValue && stat.Mode == uint.MaxValue && stat.ModificationTime == uint.MaxValue && stat.User.Length == 0 && stat.Group.Length == 0)
-        {
-            return true;
-        }
-
+    // Whether the user may make the changes: a rename needs the directory's write, a length the
+    // file's, a mode or time its owner or group leader, an owner adm, and a group membership.
+    private void WstatPermitted(Dir d, string user, bool rename, bool length, bool modeOrTime, bool owner, string? group)
+    {
         bool permitted = inGroup(user, "adm");
         if (rename && !Allowed(Find(tree, Parent(tree, d.Qid.Path)).Dir, user, Write))
         {
             throw Refused("permission denied");
         }
 
-        if (length is not null && !Allowed(d, user, Write))
+        if (length && !Allowed(d, user, Write))
         {
             throw Refused("permission denied");
         }
 
-        if ((mode is not null || mtime is not null) && !permitted && user != d.User && !inGroup(user, d.Group))
+        if (modeOrTime && !permitted && user != d.User && !inGroup(user, d.Group))
         {
             throw Refused("wstat -- not owner or group leader");
         }
 
-        if (owner is not null && !permitted)
+        if (owner && !permitted)
         {
             throw Refused("wstat -- not owner");
         }
 
-        if (group is not null && !permitted && !(user == d.User && inGroup(user, group)) && !(inGroup(user, d.Group) && inGroup(user, group)))
+        if (group is not null && !permitted && !MayRegroup(d, user, group))
         {
             throw Refused("wstat -- not in group");
         }
+    }
 
-        if (ReadOnly)
-        {
-            throw Refused("file system read only");
-        }
+    // A group the user may give the file: one the user is in, as its owner or a member of its group.
+    private bool MayRegroup(Dir d, string user, string group)
+        => inGroup(user, group) && (user == d.User || inGroup(user, d.Group));
 
-        var change = new WstatChange(length, mode, mtime, null, owner, group, user);
-        List<Message> cleared = length is { } l ? Clear(d.Qid.Path, l) : [];
-        if (rename)
-        {
-            Dir n = Dir.Read(key, Messages.Apply(d.Value(), new Message(MessageOp.Wstat, key, change.Pack()))) with { Name = stat.Name };
-            byte[] renamed = n.Key(Parent(tree, d.Qid.Path));
-            cleared.AddRange([
-                new Message(MessageOp.Clobber, key, []),
-                new Message(MessageOp.Insert, renamed, n.Value()),
-                new Message(MessageOp.Insert, Keys.Up(d.Qid.Path), renamed),
-                Touch(Parent(tree, d.Qid.Path))]);
-            foreach (Message[] batch in cleared.Chunk(Batch))
-            {
-                Upsert(batch);
-            }
-        }
-        else
+    // The change made, and the file renamed to the name given, if one is.
+    private void Wstat(byte[] key, Dir d, string? name, WstatChange change)
+    {
+        List<Message> cleared = change.Length is { } l ? Clear(d.Qid.Path, l) : [];
+        if (name is null)
         {
             Change(key, cleared, change);
+            return;
         }
 
-        return false;
+        Dir n = Dir.Read(key, Messages.Apply(d.Value(), new Message(MessageOp.Wstat, key, change.Pack()))) with { Name = name };
+        byte[] renamed = n.Key(Parent(tree, d.Qid.Path));
+        cleared.AddRange([
+            new Message(MessageOp.Clobber, key, []),
+            new Message(MessageOp.Insert, renamed, n.Value()),
+            new Message(MessageOp.Insert, Keys.Up(d.Qid.Path), renamed),
+            Touch(Parent(tree, d.Qid.Path))]);
+        foreach (Message[] batch in cleared.Chunk(Batch))
+        {
+            Upsert(batch);
+        }
     }
 
     // fsopen's checks: an exclusive file locked, then a directory opened to write, removing on close,

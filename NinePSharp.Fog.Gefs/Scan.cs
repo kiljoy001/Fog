@@ -56,74 +56,20 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
     {
         while (path.Length > 0 && !done)
         {
-            // Drop the levels with nothing left; the level above moves to its next child.
-            int start = path.Length;
-            for (int i = path.Length - 1; path[i].B is not { } b || (path[i].Vi >= b.ValueCount && path[i].Bi >= b.MessageCount); i--)
+            if (Climb() is not int start)
             {
-                if (i == 0)
-                {
-                    done = true;
-                    return false;
-                }
-
-                path[i] = new Level(null);
-                path[i - 1].Vi++;
-                start = i;
+                done = true;
+                return false;
             }
 
-            Level above = path[start - 1];
-            bool leaf = above.Vi < above.B!.ValueCount;
-            Message m;
-            if (leaf)
-            {
-                for (int i = start; i < path.Length; i++)
-                {
-                    path[i].B = store!.Get(Blk.GetPointer(path[i - 1].B!.GetValue(path[i - 1].Vi).Value).Pointer);
-                }
-
-                var (key, value) = path[^1].B!.GetValue(path[^1].Vi);
-                m = new Message(MessageOp.Insert, key, value);
-            }
-            else
-            {
-                m = above.B.GetMessage(above.Bi);
-            }
-
-            for (int i = path.Length - 2; i >= 0; i--)
-            {
-                if (path[i].B is { } b && path[i].Bi < b.MessageCount && b.GetMessage(path[i].Bi) is var n && Keys.Compare(n.Key, m.Key) < 0)
-                {
-                    m = n;
-                    leaf = false;
-                }
-            }
-
+            (Message m, bool leaf) = Least(start);
             if (!m.Key.AsSpan().StartsWith(prefix))
             {
                 done = true;
                 return false;
             }
 
-            byte[]? found = null;
-            if (leaf)
-            {
-                found = m.Value;
-                path[^1].Vi++;
-            }
-            else if (m.Op is not (MessageOp.Insert or MessageOp.ClearBlock or MessageOp.Clobber))
-            {
-                throw Tree.Broken();
-            }
-
-            // Every message buffered for the key, from the deepest buffer up.
-            for (int i = path.Length - 2; i >= 0; i--)
-            {
-                for (Level l = path[i]; l.B is { } b && l.Bi < b.MessageCount && Keys.Compare(m.Key, b.GetMessage(l.Bi).Key) == 0; l.Bi++)
-                {
-                    found = Tree.Apply(found, b.GetMessage(l.Bi));
-                }
-            }
-
+            byte[]? found = Gather(m, leaf);
             Key = m.Key;
             if (found is not null)
             {
@@ -137,6 +83,86 @@ internal sealed class Scan(ReadOnlySpan<byte> prefix)
 
     // btexit
     public void Exit() => path = [];
+
+    // The levels with nothing left dropped, the level above each moving to its next child; the
+    // first level dropped, or null once the root has nothing left.
+    private int? Climb()
+    {
+        int start = path.Length;
+        for (int i = path.Length - 1; path[i].B is not { } b || (path[i].Vi >= b.ValueCount && path[i].Bi >= b.MessageCount); i--)
+        {
+            if (i == 0)
+            {
+                return null;
+            }
+
+            path[i] = new Level(null);
+            path[i - 1].Vi++;
+            start = i;
+        }
+
+        return start;
+    }
+
+    // The least of the leaf's next value, the levels below start read anew to reach it, and each
+    // pivot's next message; and whether it is the leaf's.
+    private (Message M, bool Leaf) Least(int start)
+    {
+        Level above = path[start - 1];
+        bool leaf = above.Vi < above.B!.ValueCount;
+        Message m;
+        if (leaf)
+        {
+            for (int i = start; i < path.Length; i++)
+            {
+                path[i].B = store!.Get(Blk.GetPointer(path[i - 1].B!.GetValue(path[i - 1].Vi).Value).Pointer);
+            }
+
+            var (key, value) = path[^1].B!.GetValue(path[^1].Vi);
+            m = new Message(MessageOp.Insert, key, value);
+        }
+        else
+        {
+            m = above.B.GetMessage(above.Bi);
+        }
+
+        for (int i = path.Length - 2; i >= 0; i--)
+        {
+            if (path[i].B is { } b && path[i].Bi < b.MessageCount && b.GetMessage(path[i].Bi) is var n && Keys.Compare(n.Key, m.Key) < 0)
+            {
+                m = n;
+                leaf = false;
+            }
+        }
+
+        return (m, leaf);
+    }
+
+    // The key's value: the leaf's, or what a message that begins one makes, with every message
+    // buffered for the key applied from the deepest buffer up.
+    private byte[]? Gather(Message m, bool leaf)
+    {
+        byte[]? found = null;
+        if (leaf)
+        {
+            found = m.Value;
+            path[^1].Vi++;
+        }
+        else if (m.Op is not (MessageOp.Insert or MessageOp.ClearBlock or MessageOp.Clobber))
+        {
+            throw Tree.Broken();
+        }
+
+        for (int i = path.Length - 2; i >= 0; i--)
+        {
+            for (Level l = path[i]; l.B is { } b && l.Bi < b.MessageCount && Keys.Compare(m.Key, b.GetMessage(l.Bi).Key) == 0; l.Bi++)
+            {
+                found = Tree.Apply(found, b.GetMessage(l.Bi));
+            }
+        }
+
+        return found;
+    }
 
     private sealed class Level(Blk? b)
     {

@@ -51,6 +51,29 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         }
     }
 
+    // srvrenameuser: each board and file of the old user becomes the new user's.
+    public void Renameuser(string old, string @new)
+    {
+        void Rename(Link l) => l.Owner = l.Owner == old ? @new : l.Owner;
+        void RenameBoard(Board b)
+        {
+            Rename(b);
+            foreach (Srv sp in b.Srv)
+            {
+                Rename(sp);
+            }
+        }
+
+        lock (gate)
+        {
+            RenameBoard(root);
+            foreach (Board b in boards.Values)
+            {
+                RenameBoard(b);
+            }
+        }
+    }
+
     // A board reached by a walk alone that has gone since is shut down.
     public ValueTask<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
     {
@@ -311,6 +334,22 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
         }
     }
 
+    // A new name, which must fit genbuf and be none of clone, a file or a board where it is.
+    private static string Rename(string name, Board scope)
+    {
+        if (Encoding.UTF8.GetByteCount(name) >= GenbufSize)
+        {
+            throw new ResourceWStatRejectedException(Errors.TooLong);
+        }
+
+        if (name == Clone || scope.Srv.Exists(sp => sp.Name == name) || scope.Child.Exists(ch => ch.Name == name))
+        {
+            throw new ResourceWStatRejectedException(Errors.Exist);
+        }
+
+        return name;
+    }
+
     private static ResourceHandle Handle(ulong path, int type, QidType qid) => new(new ResourceIdentity(Provider, "#s", (path << 2) | (uint)type), qid);
 
     private static int Type(ResourceHandle resource) => (int)(resource.Identity.Path & 3);
@@ -356,18 +395,7 @@ internal sealed class SrvDevice(FogKernel kernel) : IResourceDataOperations, IRe
 
         if (stat.Name.Length != 0 && stat.Name != lp.Name)
         {
-            if (Encoding.UTF8.GetByteCount(stat.Name) >= GenbufSize)
-            {
-                throw new ResourceWStatRejectedException(Errors.TooLong);
-            }
-
-            Board scope = resource.IsDirectory ? b.Parent! : b;
-            if (stat.Name == Clone || scope.Srv.Exists(sp => sp.Name == stat.Name) || scope.Child.Exists(ch => ch.Name == stat.Name))
-            {
-                throw new ResourceWStatRejectedException(Errors.Exist);
-            }
-
-            lp.Name = stat.Name;
+            lp.Name = Rename(stat.Name, resource.IsDirectory ? b.Parent! : b);
         }
 
         if (stat.User.Length != 0)

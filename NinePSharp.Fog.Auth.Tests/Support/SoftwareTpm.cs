@@ -96,9 +96,10 @@ internal sealed class SoftwareTpm : IDisposable
         return new Tpm2(device);
     }
 
+    // Up to 30 seconds, as a loaded CI runner may take more than a few to start swtpm.
     private void WaitUntilListening()
     {
-        for (int attempt = 0; attempt < 100; attempt++)
+        for (int attempt = 0; attempt < 600; attempt++)
         {
             try
             {

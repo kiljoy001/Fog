@@ -7,6 +7,7 @@ public static class Commands
 {
     public static IReadOnlyDictionary<string, ProgramMain> All { get; } = new Dictionary<string, ProgramMain>
     {
+        ["auth/factotum"] = Factotum.MainAsync,
         ["auth/newns"] = AuthNewns.MainAsync,
         ["aux/listen"] = Listen.MainAsync,
         ["aux/listen1"] = Listen1.MainAsync,
@@ -15,6 +16,7 @@ public static class Commands
         ["cat"] = Cat.MainAsync,
         ["echo"] = Echo.MainAsync,
         ["mkdir"] = Mkdir.MainAsync,
+        ["mntgen"] = Mntgen.MainAsync,
         ["mount"] = Mount.MainAsync,
         ["ndb/cs"] = Cs.MainAsync,
         ["ndb/csquery"] = Csquery.MainAsync,

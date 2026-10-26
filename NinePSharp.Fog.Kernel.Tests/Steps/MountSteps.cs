@@ -16,11 +16,13 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     private static readonly TimeSpan Bound = KernelDriver.Bound;
     private readonly FileServerHarness server = new();
     private readonly CancellationTokenSource cancel = new();
+    private readonly TaskCompletionSource childGone = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int serverEnd;
     private string? failure;
     private Task<ReadOnlyMemory<byte>>? read;
     private string[] childReads = [];
     private byte[] written = [];
+    private int kept = -1;
     private int fidsBefore;
     private int walksBefore;
     private string deepest = string.Empty;
@@ -65,6 +67,9 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     [When(@"^the process mounts descriptor (\d+) on ""(.*)""$")]
     public Task WhenMounts(int fd, string old) => Init.MountAsync(fd, -1, old, MountFlags.Replace, string.Empty).AsTask().WaitAsync(Bound);
 
+    [When(@"^the process mounts descriptor (\d+) after ""(.*)""$")]
+    public Task WhenMountsAfter(int fd, string path) => Init.MountAsync(fd, -1, path, MountFlags.After, string.Empty).AsTask().WaitAsync(Bound);
+
     [When(@"^the process mounts descriptor (\d+) on ""(.*)"" with creation$")]
     public Task WhenMountsCreating(int fd, string old)
         => Init.MountAsync(fd, -1, old, MountFlags.Replace | MountFlags.Create, string.Empty).AsTask().WaitAsync(Bound);
@@ -83,6 +88,39 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
         {
             failure = error.Message;
         }
+    }
+
+    [When(@"^the process opens ""(.*)"" and keeps it open$")]
+    public async Task WhenKeepsOpen(string path) => kept = await Init.OpenAsync(path, NinePConstants.OREAD).AsTask().WaitAsync(Bound);
+
+    [When("the process closes what it kept open")]
+    public Task WhenClosesKept() => Init.CloseAsync(kept).AsTask();
+
+    [When("a child of the process copies its namespace and waits")]
+    public async Task WhenChildCopies()
+    {
+        var copied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Init.Fork(RforkFlags.Nameg, async child =>
+        {
+            copied.SetResult();
+            await childGone.Task;
+        });
+        await copied.Task.WaitAsync(Bound);
+    }
+
+    [When("that child exits")]
+    public async Task WhenChildExits()
+    {
+        childGone.TrySetResult();
+        await Init.WaitAsync().WaitAsync(Bound);
+    }
+
+    [When(@"^a child of the process copies its namespace, mounts descriptor (\d+) on ""(.*)"" and exits$")]
+    public async Task WhenChildMounts(int fd, string path)
+    {
+        Init.Fork(RforkFlags.Nameg | RforkFlags.Fdg, child => child.MountAsync(fd, -1, path, MountFlags.Replace, string.Empty).AsTask());
+        await Init.CloseAsync(fd);
+        await Init.WaitAsync().WaitAsync(Bound);
     }
 
     [When(@"^the process opens ""(.*)"" for reading as descriptor 0$")]
@@ -382,6 +420,16 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     {
         await Init.StatAsync(path).AsTask().WaitAsync(Bound);
         Assert.Equal(walksBefore, server.Walks.Count);
+    }
+
+    [Then("the server sees the end of the connection")]
+    public Task ThenEnded() => server.Ended.WaitAsync(Bound);
+
+    [Then("the server is still connected")]
+    public async Task ThenConnected()
+    {
+        await Task.Delay(100);
+        Assert.False(server.Ended.IsCompleted);
     }
 
     [Then(@"^descriptor (\d+) can be closed$")]

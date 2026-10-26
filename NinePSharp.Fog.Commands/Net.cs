@@ -7,11 +7,25 @@ namespace NinePSharp.Fog.Commands;
 
 // libc's dial(2) and its companions, as 9front's dial.c and announce.c: each fails as they do, with
 // the error they leave in errstr. Only what Fog's programs call is here: dial without a local
-// address, which cs never gives either, and no reject, netmkaddr or getnetconninfo.
+// address, which cs never gives either, and no reject or getnetconninfo.
 public static class Net
 {
     private const int Maxstring = 128;
     private const string Interrupted = "interrupted";
+
+    // netmkaddr: the address with the network and service given for what it lacks.
+    public static string Netmkaddr(string addr, string? defnet, string? defsrv)
+    {
+        int cp = addr.IndexOf('!', StringComparison.Ordinal);
+        if (cp < 0)
+        {
+            string net = defnet ?? "net";
+            return defsrv is null ? $"{net}!{addr}" : $"{net}!{addr}!{defsrv}";
+        }
+
+        // Stryker disable once Equality : a second bang is after the first, never at the start
+        return addr.IndexOf('!', cp + 1) >= 0 || defsrv is null ? addr : $"{addr}!{defsrv}";
+    }
 
     // dial without a ctl: the call's data, its ctl closed.
     public static async Task<int> DialAsync(Process process, string dest)

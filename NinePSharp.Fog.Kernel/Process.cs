@@ -28,8 +28,8 @@ public sealed partial class Process
         this.process = process;
         this.parent = parent;
         Environment = environment;
-        Dup = new DupDevice(process, kernel.User);
-        Cons = new ConsDevice(this, kernel.User, kernel.Clock, kernel.Booted);
+        Dup = new DupDevice(process, () => kernel.User);
+        Cons = new ConsDevice(this, kernel.Clock, kernel.Booted);
         Text = text;
         User = user;
         devices = new ProcessDevices(this, kernel.Files, kernel.Pipes, kernel.Slash, kernel.Mounts, kernel.Procs, kernel.Ip, kernel.Srv, kernel.Cap);
@@ -377,6 +377,9 @@ public sealed partial class Process
         }
 
         process.ChangeDirectory(directory);
+
+        // The old dot let go, which may have been what held a mount.
+        await kernel.CollectMountsAsync();
     }
 
     public async ValueTask RemoveAsync(string path)
@@ -457,21 +460,32 @@ public sealed partial class Process
             throw new SyscallException(Errors.BadUseFd);
         }
 
+        // The server's version is waited for only until a note interrupts it, as mntversion's read is;
+        // an attach interrupted is flushed and waited for still, as mountio does.
         MountTree tree;
-        try
+        using (Interruption interruptible = Interruptible(CancellationToken.None))
         {
-            MountConnection connection = await kernel.Mounts.ConnectAsync(transport, devices.Device(transport.Handle.Resource), () => kernel.Context(Pid, User));
-            tree = await kernel.Mounts.AttachAsync(connection, User, aname, kernel.MountFids);
-        }
-        catch (IOException error)
-        {
-            throw new SyscallException(error.Message);
+            try
+            {
+                MountConnection connection = await kernel.Mounts.ConnectAsync(transport, devices.Device(transport.Handle.Resource), () => kernel.Context(Pid, User), interruptible.Token);
+                tree = await kernel.Mounts.AttachAsync(connection, User, aname, kernel.MountFids);
+            }
+            catch (IOException error)
+            {
+                throw new SyscallException(error.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new SyscallException(Errors.Interrupted);
+            }
         }
 
         var source = new NamespaceMountSource(NamespaceChannel.Restore([new ChannelFrame("/", tree.Root)]), NinePConstants.ORDWR, aname, closeAsync: () => CloseAsync(fd));
+        bool mounted = false;
         try
         {
             await new NamespaceSyscalls(devices, Attach).MountAsync(process, source, old, flags);
+            mounted = true;
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -480,6 +494,15 @@ public sealed partial class Process
         catch (NamespaceException error) when (error.Error is NamespaceError.MountTypeMismatch or NamespaceError.MountTargetMustBeDirectory)
         {
             throw new SyscallException(Errors.Mount);
+        }
+        finally
+        {
+            // A mount that failed lets its attach go, as cclose of the attached chan does.
+            tree.Pending = false;
+            if (!mounted)
+            {
+                await kernel.Mounts.ReleaseAsync(tree);
+            }
         }
     }
 
@@ -506,6 +529,8 @@ public sealed partial class Process
             {
                 await UnmountTreeAsync(old, trees);
             }
+
+            await kernel.CollectMountsAsync();
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotFound)
         {
@@ -774,6 +799,20 @@ public sealed partial class Process
     // Rendezvous does not exist yet, so its group needs nothing.
     // What a pipe end has queued and whether it has hung up, for a program that waits on readiness;
     // null for a descriptor that is not a pipe's end.
+    // Whether the process holds the tree: by its root or dot, or, unless that table has been looked
+    // at already, by its namespace's mount table, which a live process's is never closed.
+    internal bool Holds(MountTree tree, HashSet<MountTable> seen)
+    {
+        bool In(ResourceHandle handle) => handle.Identity.Provider == MountDevice.Provider && handle.Identity.Device == tree.Device;
+        if (process.Root.Frames.Concat(process.CurrentDirectory.Frames).Any(frame => In(frame.Handle)))
+        {
+            return true;
+        }
+
+        MountTable table = process.ProcessGroup.MountTable;
+        return seen.Add(table) && table.Snapshot().MountHeads.Any(head => In(head.From) || head.Mounts.Any(mount => In(mount.Target)));
+    }
+
     internal async ValueTask<(long Queued, bool HungUp)?> PipeReadinessAsync(int fd)
     {
         ResourceHandle end = (await HandleAsync(fd) ?? throw new SyscallException(Errors.BadFd)).Resource;
@@ -999,19 +1038,19 @@ public sealed partial class Process
 
     private ResourceHandle Attach(string device)
     {
-        ResourceHandle root = device switch
+        var roots = new Dictionary<string, ResourceHandle>
         {
-            "c" => ConsDevice.Root,
-            "d" => DupDevice.Root,
-            "e" => Environment.Root,
-            "p" => ProcDevice.Root,
-            "I" => IpDevice.Root,
-            "/" => RootDevice.Root,
-            "R" => kernel.Store,
-            "s" => SrvDevice.Root,
-            "¤" => CapDevice.Root,
-            _ => throw new IOException(Errors.BadSharp),
+            ["c"] = ConsDevice.Root,
+            ["d"] = DupDevice.Root,
+            ["e"] = Environment.Root,
+            ["p"] = ProcDevice.Root,
+            ["I"] = IpDevice.Root,
+            ["/"] = RootDevice.Root,
+            ["R"] = kernel.Store,
+            ["s"] = SrvDevice.Root,
+            ["¤"] = CapDevice.Root,
         };
+        ResourceHandle root = roots.TryGetValue(device, out ResourceHandle? found) ? found : throw new IOException(Errors.BadSharp);
         if (process.ProcessGroup.MountTable.MountsDisabled && !"|decp".Contains(device, StringComparison.Ordinal))
         {
             throw new IOException(Errors.NoAttach);

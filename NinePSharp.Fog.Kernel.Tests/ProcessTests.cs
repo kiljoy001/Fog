@@ -5,6 +5,33 @@ namespace NinePSharp.Fog.Kernel.Tests;
 
 public sealed class ProcessTests
 {
+    // bootrc's lines: mntgen run for /n, /mnt and /mnt/exportfs in turn, and the service each posts
+    // made writable by all, unless it failed.
+    [Fact]
+    public async Task BootRunsMntgenForEachMountPointAndOpensWhatEachPosts()
+    {
+        var runs = new List<string>();
+        var programs = new Dictionary<string, ProgramMain>
+        {
+            ["mntgen"] = async (process, argv) =>
+            {
+                runs.Add(string.Join(' ', argv));
+
+                // What it leaves open, as a server does, is in its own descriptors, not init's.
+                await process.CreateAsync($"/srv/{argv[2]}", NinePSharp.Constants.NinePConstants.OWRITE, 0b110_000_000);
+                process.Exits(argv[2] == "slashmnt" ? "failed" : null);
+            },
+        };
+        Process init = await FogKernel.InMemory(programs, "glenda").BootAsync();
+        Assert.Equal(["mntgen -s slashn /n", "mntgen -s slashmnt /mnt", "mntgen -s mntexport /mnt/exportfs"], runs);
+        Assert.Equal(0b110_110_110u, (await init.StatAsync("/srv/slashn")).Mode & 0b111_111_111);
+        Assert.Equal(0b110_000_000u, (await init.StatAsync("/srv/slashmnt")).Mode & 0b111_111_111);
+        Assert.Equal(0b110_110_110u, (await init.StatAsync("/srv/mntexport")).Mode & 0b111_111_111);
+        Assert.Equal("glenda", (await init.StatAsync("/srv/slashn")).Uid);
+        Assert.Equal(0, await init.OpenAsync("/dev/null", NinePSharp.Constants.NinePConstants.OREAD));
+        await Assert.ThrowsAsync<SyscallException>(() => init.WaitAsync());
+    }
+
     [Fact]
     public async Task ExecWithoutArgumentsIsABadArgument()
     {

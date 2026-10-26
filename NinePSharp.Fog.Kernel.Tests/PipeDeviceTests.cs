@@ -11,7 +11,7 @@ public sealed class PipeDeviceTests
     [Fact]
     public async Task APipeIsReleasedWhenBothEndsAreClosed()
     {
-        var device = new PipeDevice("none");
+        var device = new PipeDevice(() => "none");
         var (first, second) = device.Create();
         ResourceOpenHandle a = await device.OpenAsync(first, 2, Context, default);
         ResourceOpenHandle duplicate = await device.OpenAsync(first, 2, Context, default);
@@ -27,7 +27,7 @@ public sealed class PipeDeviceTests
     [Fact]
     public void APipeHasNoPathsToWalkCreateOrRemove()
     {
-        var device = new PipeDevice("none");
+        var device = new PipeDevice(() => "none");
         ResourceHandle end = device.Create().First;
         Assert.Throws<NotSupportedException>(() => device.WalkAsync(end, "data", default));
         Assert.Throws<NotSupportedException>(() => device.ReadDirectoryAsync(end, default));
@@ -39,7 +39,7 @@ public sealed class PipeDeviceTests
     [Fact]
     public async Task AnEndIsReadyWithWhatIsQueuedForItAndHungUpOnceTheOtherEndIsClosed()
     {
-        var device = new PipeDevice("none");
+        var device = new PipeDevice(() => "none");
         var (first, second) = device.Create();
         ResourceOpenHandle a = await device.OpenAsync(first, 2, Context, default);
         ResourceOpenHandle b = await device.OpenAsync(second, 2, Context, default);

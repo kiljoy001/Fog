@@ -5,6 +5,21 @@ namespace NinePSharp.Fog.Kernel;
 internal sealed class ProcessDevices(Process caller, IResourceDataOperations files, PipeDevice pipes, RootDevice slash, MountDevice mounts, ProcDevice procs, IpDevice ip, SrvDevice srv, CapDevice cap)
     : IResourceDataOperations, IResourceOpenStatOperations, IResourceWStatOperations
 {
+    // Each kernel device by its provider, found the first time one is asked for, when the process's
+    // own devices are made.
+    private readonly Lazy<Dictionary<string, IResourceDataOperations>> byProvider = new(() => new()
+    {
+        [PipeDevice.Provider] = pipes,
+        [RootDevice.Provider] = slash,
+        [MountDevice.Provider] = mounts,
+        [ProcDevice.Provider] = procs,
+        [IpDevice.Provider] = ip,
+        [SrvDevice.Provider] = srv,
+        [CapDevice.Provider] = cap,
+        [DupDevice.Provider] = caller.Dup,
+        [ConsDevice.Provider] = caller.Cons,
+    });
+
     public async ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
         => await Device(directory).WalkAsync(directory, name, cancellationToken);
 
@@ -47,20 +62,11 @@ internal sealed class ProcessDevices(Process caller, IResourceDataOperations fil
     public async ValueTask<uint> WStatOpenAsync(ResourceOpenHandle handle, ResourceWStat stat, ResourceOperationContext context, CancellationToken cancellationToken)
         => await Updates(handle.Resource).WStatOpenAsync(handle, stat, context, cancellationToken);
 
-    internal IResourceDataOperations Device(ResourceHandle handle) => handle.Identity.Provider switch
-    {
-        PipeDevice.Provider => pipes,
-        RootDevice.Provider => slash,
-        MountDevice.Provider => mounts,
-        ProcDevice.Provider => procs,
-        IpDevice.Provider => ip,
-        SrvDevice.Provider => srv,
-        CapDevice.Provider => cap,
-        DupDevice.Provider => caller.Dup,
-        ConsDevice.Provider => caller.Cons,
-        _ when handle.Identity.Provider == caller.Environment.Provider => caller.Environment,
-        _ => files,
-    };
+    // The kernel's device of the provider, the process's environment, or else the store's files.
+    internal IResourceDataOperations Device(ResourceHandle handle)
+        => byProvider.Value.TryGetValue(handle.Identity.Provider, out IResourceDataOperations? device) ? device
+        : handle.Identity.Provider == caller.Environment.Provider ? caller.Environment
+        : files;
 
     // devwstat: a device that does not change entries refuses with Eperm.
     private IResourceWStatOperations Updates(ResourceHandle resource)

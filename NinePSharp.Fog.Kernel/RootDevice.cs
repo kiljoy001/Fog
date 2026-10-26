@@ -5,7 +5,7 @@ namespace NinePSharp.Fog.Kernel;
 
 // devroot: #/, the mount points the namespace is built on. Its #/boot, which holds 9front's boot
 // programs, is left out.
-internal sealed class RootDevice(string owner) : IResourceDataOperations
+internal sealed class RootDevice(Func<string> owner) : IResourceDataOperations
 {
     public const string Provider = "root";
     private const uint Mode = (uint)NinePConstants.FileMode9P.DMDIR | 0b101_101_101;
@@ -30,7 +30,7 @@ internal sealed class RootDevice(string owner) : IResourceDataOperations
     public ValueTask<ResourceStat> StatAsync(ResourceHandle resource, CancellationToken cancellationToken)
     {
         string name = resource.Identity.Path == 0 ? "#/" : MountPoints[resource.Identity.Path - 1];
-        return ValueTask.FromResult(new ResourceStat(resource, name, Mode, 0, 0, 0, owner, owner, owner));
+        return ValueTask.FromResult(new ResourceStat(resource, name, Mode, 0, 0, 0, owner(), owner(), owner()));
     }
 
     // devopen: a directory opens for reading only.

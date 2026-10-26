@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; slices 1 to 5, the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, and `#I` with tcp, `ndb/cs` and `aux/listen`, are built.
+Status: design; slices 1 to 6, the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, and `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, are built.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -214,7 +214,8 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   libndb leaves in the error string.
 - `#I` has no ether devices, so cs's `ipid` does not look for a sys by an ethernet address, and
   `cs -d` logs what cs does but not each 9P message, as Fog has no `fcallfmt` to print them.
-- Factotum's `-S` reads the host owner's key from the host's sealed key store, not NVRAM.
+- Factotum's `-S` reads the host owner's key from the host's sealed key store, through
+  `#c/nvram`, and adds only its dp9ik key, as p9sk1 is left out.
 - The root is one host's gefs store until it is replicated, as the architecture describes.
 - Fog has no `$cputype`: in place of `bind /$cputype/bin /bin`, the store's `/bin` is bound on
   `/bin` with creation, so a program copied there is kept. `#/` has no `boot` directory.
@@ -236,7 +237,12 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - `mount -N` becomes none through `/dev/user`, as Fog names no device by `#`.
 - `#c/bintime` reads the host's clock, and its time cannot be set through it.
 - `#c/cons` writes to the host's console, its standard error, as devcons's writes go to the
-  screen; like devcons's it cannot be read, and there is no keyboard until kbdfs is ported.
+  screen, and reads what is typed there, on its standard input, as drawterm's devcons reads it
+  when it has no screen: cooked a line at a time, or raw once `#c/consctl` is written `rawon`,
+  which makes the host's terminal raw too. There is no `/dev/kbd` until kbdfs is ported.
+- `#c/hostowner` refuses a name a NUL ends before it begins, as Fog's users all have names.
+- The host's nvram is `#c/nvram`, kept in the host's sealed key store, which readnvram finds
+  there or at `$nvram`, as Fog has no `$cputype` to look it up by.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.

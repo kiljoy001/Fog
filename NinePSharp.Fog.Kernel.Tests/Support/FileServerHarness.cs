@@ -75,6 +75,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     // An open of this file is refused with this error.
     public (string File, string Error)? Refusal { get; set; }
 
+    // Done once the connection has ended, as the server sees its end of file.
+    public Task Ended => serving;
+
     public void Serve(Process process, int fd)
     {
         stream = new DescriptorStream(process, fd);

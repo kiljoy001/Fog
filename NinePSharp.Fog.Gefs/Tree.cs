@@ -61,30 +61,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
             throw new GefsException("snap -- is read only");
         }
 
-        Message[] msg = [.. messages.OrderBy(m => m.Key, KeyOrder)];
-        int sz = 0;
-        foreach (Message m in msg)
-        {
-            if (m.Key.Length > Format.MaxEntry)
-            {
-                throw new GefsException("key too large");
-            }
-
-            if (m.Value.Length > Format.MaxInline)
-            {
-                throw new GefsException("value too large");
-            }
-
-            sz += MessageSize(m);
-        }
-
-        // A batch that would not fit an empty buffer could split a leaf root, merge it back and go
-        // round forever.
-        if ((2 * msg.Length) + sz > Blk.BufferSpace)
-        {
-            throw new GefsException("upsert too large");
-        }
-
+        (Message[] msg, int sz) = Sorted(messages);
         int npull = 0;
         bool degen;
         do
@@ -117,23 +94,7 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
 
             path[npath++] = new Path { B = b };
             Path rp = Flush(path, npath);
-            if (rp.Left is { } rb)
-            {
-                int dh = path[0].Left is not null ? 1 : path[1].Left is not null ? 0 : -1;
-                SetRoot(rb.Pointer, h + dh);
-
-                // A merged root with messages still in its buffer has one child; go round again to
-                // pull them down.
-                degen = rb.Type == BlockType.Pivot && rb.ValueCount == 1;
-            }
-            else
-            {
-                // gefs never empties a tree; here a tree whose every entry is gone is an empty leaf again.
-                Blk empty = store.New(BlockType.Leaf, Gen);
-                store.Enqueue(empty);
-                SetRoot(empty.Pointer, 1);
-                degen = false;
-            }
+            degen = Reroot(rp, path, h);
 
             npull += rp.Npull;
             FreePath(path, npath);
@@ -217,6 +178,36 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         {
             return (root, height);
         }
+    }
+
+    // The batch in key order, each key and value no bigger than a block takes, and the size of its
+    // messages; a batch that would not fit an empty buffer could split a leaf root, merge it back
+    // and go round for ever.
+    private static (Message[] Msg, int Sz) Sorted(Message[] messages)
+    {
+        Message[] msg = [.. messages.OrderBy(m => m.Key, KeyOrder)];
+        int sz = 0;
+        foreach (Message m in msg)
+        {
+            if (m.Key.Length > Format.MaxEntry)
+            {
+                throw new GefsException("key too large");
+            }
+
+            if (m.Value.Length > Format.MaxInline)
+            {
+                throw new GefsException("value too large");
+            }
+
+            sz += MessageSize(m);
+        }
+
+        if ((2 * msg.Length) + sz > Blk.BufferSpace)
+        {
+            throw new GefsException("upsert too large");
+        }
+
+        return (msg, sz);
     }
 
     private static int MessageSize(Message m) => 2 + 1 + 2 + m.Key.Length + 2 + m.Value.Length;
@@ -320,6 +311,24 @@ internal sealed class Tree(BlockStore store, Bptr root, int height)
         => [.. Enumerable.Range(0, b.MessageCount).Where(k => k < p.Lo || k >= p.Lo + (pp?.Npull ?? 0)).Select(b.GetMessage)];
 
     private static bool IsData(byte[] key) => key.Length > 0 && key[0] == (byte)KeyType.Data;
+
+    // The root the flush left, a level higher or lower as it split or merged; whether it is a merged
+    // root with messages still in its buffer, and one child, to go round again for.
+    private bool Reroot(Path rp, Path[] path, int h)
+    {
+        if (rp.Left is { } rb)
+        {
+            int dh = path[0].Left is not null ? 1 : path[1].Left is not null ? 0 : -1;
+            SetRoot(rb.Pointer, h + dh);
+            return rb.Type == BlockType.Pivot && rb.ValueCount == 1;
+        }
+
+        // gefs never empties a tree; here a tree whose every entry is gone is an empty leaf again.
+        Blk empty = store.New(BlockType.Leaf, Gen);
+        store.Enqueue(empty);
+        SetRoot(empty.Pointer, 1);
+        return false;
+    }
 
     private void SetRoot(Bptr bp, int h)
     {

@@ -7,7 +7,7 @@ namespace NinePSharp.Fog.Kernel.Tests;
 public sealed class RootDeviceTests
 {
     private static readonly ResourceOperationContext Context = new(new ResourceOperationId("test", 1), 1, "glenda");
-    private readonly RootDevice root = new("glenda");
+    private readonly RootDevice root = new(() => "glenda");
 
     [Fact]
     public async Task TheDirectoryIsHashSlashAndEachMountPointIsNamedForItself()

@@ -476,6 +476,200 @@ Feature: rc runs scripts as 9front rc does
       /tmp/s:9: <> can't open: /proc: permission denied: '/proc'
       """
 
+  @FOG_RC_RUN_237
+  Scenario: auth/factotum keeps keys in its ctl, shows their secrets by name only, and runs pass for a client
+    When rc runs the script
+      """
+      mkdir -p /tmp/factotum
+      auth/factotum -n -m /tmp/factotum
+      cd /tmp/factotum/factotum
+      echo 'key proto=pass server=x user=u !password=p' >ctl
+      echo 'key proto=pass server=y user=''it''''s me'' !password=''p q''' >ctl
+      cat ctl
+      {
+          echo -n 'start proto=pass server=y role=client' >[1=3]
+          cat <[0=3]; echo
+          echo -n read >[1=3]
+          cat <[0=3]; echo
+      } <>[3]rpc
+      echo 'delkey server=x' >ctl
+      cat ctl
+      cd /
+      unmount /tmp/factotum
+      """
+    Then it prints
+      """
+      key proto=pass server=x user=u !password?
+      key proto=pass server=y user='it''s me' !password?
+      okcat: error reading <stdin>: no rpc pending
+
+      ok 'it''s me' 'p q'cat: error reading <stdin>: no rpc pending
+
+      key proto=pass server=y user='it''s me' !password?
+      """
+
+  @FOG_RC_RUN_237
+  Scenario: factotum's ctl refuses what is not a key, a delkey, or debug, and ignores a comment
+    When rc runs the script
+      """
+      mkdir -p /tmp/factotum
+      auth/factotum -n -m /tmp/factotum
+      cd /tmp/factotum/factotum
+      echo frob >ctl
+      echo >ctl
+      echo -n '# a comment' >ctl
+      echo -n >ctl
+      echo 'key user=u' >ctl
+      echo 'key proto=nonesuch user=u' >ctl
+      echo 'key proto=pass user=u
+      more' >ctl
+      echo 'key proto=pass server=x user=u !password=p' >ctl
+      echo 'delkey server=nonesuch' >ctl
+      echo 'delkey !password=p' >ctl
+      echo 'delkey !password?' >ctl
+      echo debug >ctl
+      cat ctl
+      cd /
+      unmount /tmp/factotum
+      """
+    Then it prints
+      """
+      echo: write error: unknown verb
+      echo: write error: unknown verb
+      echo: write error: key without protos
+      echo: write error: unknown proto nonesuch
+      echo: write error: multiline write not allowed
+      echo: write error: found no keys to delete
+      echo: write error: only !private? patterns are allowed for private fields
+      0: no key matches    
+      0: failure no key matches  
+      """
+
+  @FOG_RC_RUN_237
+  Scenario: factotum's rpc answers each verb, and asks for a key it does not have
+    When rc runs the script
+      """
+      mkdir -p /tmp/factotum
+      auth/factotum -n -m /tmp/factotum
+      cd /tmp/factotum/factotum
+      echo 'key proto=pass server=x user=u !password=p' >ctl
+      fn rpc {
+          echo -n $* >[1=3]
+          cat <[0=3] >[2]/dev/null
+          echo
+      }
+      {
+          rpc read
+          rpc start
+          rpc start 'proto=nonesuch'
+          rpc frob
+          rpc start 'proto=pass server=z role=client'
+          rpc start 'proto=pass server=x role=client'
+          rpc attr
+          rpc write x
+          rpc authinfo
+          rpc read x
+          echo -n start >[1=3]
+          echo -n start >[1=3]
+          read -c 10 <[0=3]
+      } <>[3]rpc
+      cd /
+      unmount /tmp/factotum
+      """
+    Then it prints
+      """
+      error no current protocol
+      error did not specify proto
+      error unknown protocol nonesuch
+      error unknown verb
+      needkey !password? proto=pass server=z user?
+      ok
+      ok proto=pass server=x role=client user=u
+      phase protocol phase error: write in state 0
+      error authentication unfinished
+      error read needs no parameters
+      echo: write error: rpc already pending; read to clear
+      read: error reading <stdin>: rpc read too small
+      """
+
+  @FOG_RC_RUN_237
+  Scenario: factotum's log, needkey and confirm open once at a time
+    When rc runs the script
+      """
+      mkdir -p /tmp/factotum
+      auth/factotum -n -m /tmp/factotum
+      cd /tmp/factotum/factotum
+      for(f in log needkey confirm)
+          @{ echo -n >[1=3] } <>[3]$f <>[4]$f
+      @{ echo -n >[1=3] } <>[3]ctl <>[4]ctl && echo ctl twice
+      cd /
+      unmount /tmp/factotum
+      """
+    Then it prints
+      """
+      /tmp/s:5: <> can't open: log: permission denied: 'log'
+      /tmp/s:5: <> can't open: needkey: file in use: 'needkey'
+      /tmp/s:5: <> can't open: confirm: file in use: 'confirm'
+      ctl twice
+      """
+
+  @FOG_RC_RUN_237
+  Scenario: factotum's proto lists the protocols Fog's factotum speaks, one a line
+    Given 9front's factotum speaks protocols Fog's does not, so this runs on Fog alone
+    When rc runs the script
+      """
+      mkdir -p /tmp/factotum
+      auth/factotum -n -m /tmp/factotum
+      cat /tmp/factotum/factotum/proto
+      unmount /tmp/factotum
+      """
+    Then it prints
+      """
+      p9any
+      dp9ik
+      pass
+      """
+
+  @FOG_RC_RUN_238
+  Scenario: mntgen makes any name walked to in its directory a directory, as boot's do on /n and /mnt
+    When rc runs the script
+      """
+      test -d /n/anything && echo /n makes what is asked of it
+      test -d /mnt/factotum && echo /mnt has factotum
+      test -f /n/anything || echo not as a file
+      mkdir -p /tmp/gen
+      mntgen /tmp/gen
+      test -d /tmp/gen/x/.. && echo and so does a mntgen of its own
+      test -d /tmp/gen/x/y || echo with nothing in what it makes
+      unmount /tmp/gen
+      mntgen -x
+      ~ $status *usage && echo usage
+      """
+    Then it prints
+      """
+      /n makes what is asked of it
+      /mnt has factotum
+      not as a file
+      and so does a mntgen of its own
+      with nothing in what it makes
+      mntgen [-s srvname] [mtpt]
+      usage
+      """
+
+  @FOG_RC_RUN_237
+  Scenario: auth/factotum mounts itself on /mnt/factotum unless given a mount point
+    When rc runs the script
+      """
+      auth/factotum -n
+      echo 'key proto=pass server=x user=u !password=p' >/mnt/factotum/ctl
+      cat /mnt/factotum/ctl
+      unmount /mnt/factotum
+      """
+    Then it prints
+      """
+      key proto=pass server=x user=u !password?
+      """
+
   @FOG_RC_RUN_025
   Scenario: if not must follow an if
     When rc runs the script
@@ -5696,6 +5890,7 @@ Feature: rc runs scripts as 9front rc does
       mount >[2=1]; ~ $status *usage && echo usage
       mount -ab /x /y >[2=1]; ~ $status *usage && echo usage again
       mount -k >[2=1]; ~ $status *usage && echo usage once more
+      mount -z /x /y >[2=1]; ~ $status *usage && echo usage for -z
       mount /dev/nonesuch /n/x >[2=1]; ~ $status *open && echo open
       mount -q /dev/nonesuch /n/x; ~ $status '' && echo quiet
       """
@@ -5707,6 +5902,8 @@ Feature: rc runs scripts as 9front rc does
       usage again
       usage: mount [-a|-b] [-cCnNq] [-k keypattern] /srv/service dir [spec]
       usage once more
+      usage: mount [-a|-b] [-cCnNq] [-k keypattern] /srv/service dir [spec]
+      usage for -z
       mount: can't open /dev/nonesuch: file does not exist: '/dev/nonesuch'
       open
       quiet
@@ -5736,11 +5933,15 @@ Feature: rc runs scripts as 9front rc does
       mount -N /fd/3 /tmp/fs work
       cat /tmp/fs/notes
       cat /dev/user; echo
+      mkdir /tmp/nodev
+      @{rfork n; bind /tmp/nodev /dev; mount -N /fd/3 /tmp/fs >[2=1]; ~ $status *becomenone && echo not none}
       """
     Then it prints
       """
       hello
       glenda
+      mount: can't become none: file does not exist: '/dev/user'
+      not none
       """
     And the file server was attached as "none" to "work"
 
@@ -5749,16 +5950,19 @@ Feature: rc runs scripts as 9front rc does
     Given a file server holding "notes" with "hello", on descriptor 3
     When rc runs the script
       """
-      mkdir /tmp/fs
+      mkdir /tmp/fs /tmp/fs2
       mount -nc /fd/3 /tmp/fs
       echo made >/tmp/fs/new && cat /tmp/fs/new
+      mount -ncc /fd/3 /tmp/fs2
+      echo twice >/tmp/fs2/twice && cat /tmp/fs2/twice
       mount -n /fd/3 /tmp/fs
       echo lost >/tmp/fs/other >[2=1]
       """
     Then it prints
       """
       made
-      /tmp/s:5: > can't create: /tmp/fs/other: mounted directory forbids creation: '/tmp/fs/other'
+      twice
+      /tmp/s:7: > can't create: /tmp/fs/other: mounted directory forbids creation: '/tmp/fs/other'
       """
 
   @FOG_RC_RUN_226
@@ -5769,11 +5973,22 @@ Feature: rc runs scripts as 9front rc does
       mkdir /tmp/u; echo local >/tmp/u/notes
       mount -na /fd/3 /tmp/u; cat /tmp/u/notes
       mount -nb /fd/3 /tmp/u; cat /tmp/u/notes
+      mkdir /tmp/v; echo local >/tmp/v/notes; echo mine >/tmp/v/mine
+      mount -naa /fd/3 /tmp/v; cat /tmp/v/notes
+      mount -nbb /fd/3 /tmp/v; cat /tmp/v/notes /tmp/v/mine
+      mkdir /tmp/k /tmp/c; echo local >/tmp/c/notes
+      mount -n -k 'proto=p9any' /fd/3 /tmp/k; cat /tmp/k/notes
+      mount -naC /fd/3 /tmp/c; cat /tmp/c/notes
       """
     Then it prints
       """
       local
       hello
+      local
+      hello
+      mine
+      hello
+      local
       """
 
   @FOG_RC_RUN_226
@@ -5880,7 +6095,7 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
-      open /mnt/factotum/rpc: file does not exist: '/mnt/factotum'
+      open /mnt/factotum/rpc: file does not exist: '/mnt/factotum/rpc'
       open #c/drivers: file does not exist: '#c/drivers'
       bind /dev/zz /tmp 
       addns: bind: /dev/zz /tmp: file does not exist: '/dev/zz'
@@ -6232,7 +6447,7 @@ Feature: rc runs scripts as 9front rc does
       """
       short
       clean
-      1 unnamed
+      4 unnamed
       hung up
       """
 
@@ -6397,7 +6612,7 @@ Feature: rc runs scripts as 9front rc does
       """
       aux/listen1 -1tq 'tcp!127.0.0.1!17125' /bin/rc -c 'echo quick; sleep 3' >/dev/null >[2=1] &
       sleep 1
-      {sleep 3} | aux/trampoline -t 1000 'tcp!127.0.0.1!17125'; ~ $status *': timeout' && echo timeout
+      {sleep 3} | aux/trampoline -t 500 'tcp!127.0.0.1!17125'; ~ $status *': timeout' && echo timeout
       aux/trampoline 'tcp!127.0.0.1!1' >[2]/dev/null; ~ $status *': dial tcp!127.0.0.1!1: connection refused' && echo refused
       aux/trampoline >[2]/dev/null; ~ $status *': usage' && echo usage
       aux/trampoline -z x >[2]/dev/null; ~ $status *': usage' && echo usage
@@ -6963,12 +7178,12 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       /tmp
-        0 r  c    0 (0000000000000003 0 00)     0        0 /dev/null
-        1 rw |    1 (0000000000000001 0 00)     0       68 #|/data1
-        2 rw |    1 (0000000000000001 0 00)     0      130 #|/data1
-        3 r  R    0 (000000000000001e 2 00)     0      130 /tmp/s
-        4 r  R    0 (000000000000001f 2 00)     0        2 /tmp/f
-        5 w  c    0 (0000000000000003 0 00)     0        0 /dev/null
+        0 r  c    0 (0000000000000005 0 00)     0        0 /dev/null
+        1 rw |    4 (0000000000000001 0 00)     0       68 #|/data1
+        2 rw |    4 (0000000000000001 0 00)     0      130 #|/data1
+        3 r  R    0 (0000000000000020 2 00)     0      130 /tmp/s
+        4 r  R    0 (0000000000000021 2 00)     0        2 /tmp/f
+        5 w  c    0 (0000000000000005 0 00)     0        0 /dev/null
         6 rw I    0 (0000000000000006 0 00)     0        0 /net/tcp/clone
       """
 
@@ -7019,13 +7234,13 @@ Feature: rc runs scripts as 9front rc does
       /
         0 rw I    0 (0000000000000027 0 00)     0        2 /net/tcp/2/data
         1 rw I    0 (0000000000000027 0 00)     0       71 /net/tcp/2/data
-        2 w  c    0 (0000000000000003 0 00)     0      100 /dev/null
-        3 r  p    0 (000000000000007a 0 00)     0      203 /proc/15/fd
+        2 w  c    0 (0000000000000005 0 00)     0      100 /dev/null
+        3 r  p    0 (00000000000000ab 0 00)     0      203 /proc/21/fd
       /
         0 rw I    0 (0000000000000027 0 00)     0        2 /net/tcp/2/data
         1 rw I    0 (0000000000000027 0 00)     0       71 /net/tcp/2/data
-        2 w  c    0 (0000000000000003 0 00)     0        0 /dev/null
-        3 r  p    0 (00000000000000a2 0 00)     0      203 /proc/20/fd
+        2 w  c    0 (0000000000000005 0 00)     0        0 /dev/null
+        3 r  p    0 (00000000000000d3 0 00)     0      203 /proc/26/fd
       /
       0 r c
       1 rw |

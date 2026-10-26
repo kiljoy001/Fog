@@ -133,6 +133,36 @@ public sealed class Cs(string argv0)
         return fields;
     }
 
+    // getenv: the variable as /env holds it, without its NULs at the end, or null.
+    internal static async Task<string?> GetenvAsync(Process process, string name)
+    {
+        string? value = null;
+        try
+        {
+            int fd = await process.OpenAsync($"/env/{name}", NinePConstants.OREAD);
+            try
+            {
+                var all = new List<byte>();
+                for (ReadOnlyMemory<byte> block; !(block = await process.ReadAsync(fd, 8192)).IsEmpty;)
+                {
+                    all.AddRange(block.Span);
+                }
+
+                value = Encoding.UTF8.GetString([.. all]).TrimEnd('\0');
+            }
+            finally
+            {
+                await process.CloseAsync(fd);
+            }
+        }
+        catch (SyscallException)
+        {
+            // getenv gives nil for a variable that is not there.
+        }
+
+        return value;
+    }
+
     // setext: the mount point with '_'s for '/'s.
     private static string Setext(string p) => p.Replace('/', '_');
 
@@ -216,96 +246,6 @@ public sealed class Cs(string argv0)
         }
     }
 
-    private static async Task<string?> GetenvAsync(Process process, string name)
-    {
-        string? value = null;
-        try
-        {
-            int fd = await process.OpenAsync($"/env/{name}", NinePConstants.OREAD);
-            try
-            {
-                var all = new List<byte>();
-                for (ReadOnlyMemory<byte> block; !(block = await process.ReadAsync(fd, 8192)).IsEmpty;)
-                {
-                    all.AddRange(block.Span);
-                }
-
-                value = Encoding.UTF8.GetString([.. all]).TrimEnd('\0');
-            }
-            finally
-            {
-                await process.CloseAsync(fd);
-            }
-        }
-        catch (SyscallException)
-        {
-            // getenv gives nil for a variable that is not there.
-        }
-
-        return value;
-    }
-
-    // readn: n bytes, or fewer at the end.
-    private static async Task<byte[]> ReadnAsync(Process process, int fd, int n)
-    {
-        var all = new List<byte>();
-        for (ReadOnlyMemory<byte> more; all.Count < n && !(more = await process.ReadAsync(fd, n - all.Count)).IsEmpty;)
-        {
-            all.AddRange(more.Span);
-        }
-
-        return [.. all];
-    }
-
-    // read9pmsg: one whole message, or none at the end; a length that cannot be a message's is an error.
-    private static async Task<byte[]> Read9pmsgAsync(Process process, int fd, int max)
-    {
-        byte[] count = await ReadnAsync(process, fd, 4);
-        if (!BinaryPrimitives.TryReadUInt32LittleEndian(count, out uint len))
-        {
-            return [];
-        }
-
-        if (len <= 4 || len > max)
-        {
-            throw new SyscallException("bad length in 9P2000 message header");
-        }
-
-        byte[] rest = await ReadnAsync(process, fd, (int)len - 4);
-        return rest.Length < len - 4 ? [] : [.. count, .. rest];
-    }
-
-    // convM2S: the request, or null for one cs cannot read.
-    private static ISerializable? ConvM2S(byte[] m)
-    {
-        try
-        {
-            return (MessageTypes)m[4] switch
-            {
-                MessageTypes.Tversion => new Tversion(m),
-                MessageTypes.Tauth => new Tauth(m),
-                MessageTypes.Tflush => new Tflush(m),
-                MessageTypes.Tattach => new Tattach(m),
-                MessageTypes.Twalk => new Twalk(m),
-                MessageTypes.Topen => new Topen(m),
-                MessageTypes.Tcreate => new Tcreate(m),
-                MessageTypes.Tread => new Tread(m),
-                MessageTypes.Twrite => new Twrite(m),
-                MessageTypes.Tclunk => new Tclunk(m),
-                MessageTypes.Tremove => new Tremove(m),
-                MessageTypes.Tstat => new Tstat(m),
-                MessageTypes.Twstat => new Twstat(m),
-                _ => null,
-            };
-        }
-        catch (Exception error) when (error is not OutOfMemoryException)
-        {
-            // A message too short for its type.
-        }
-
-        return null;
-    }
-
     private static uint FidOf(ISerializable request) => request switch
     {
         Tattach r => r.Fid,
@@ -336,13 +276,6 @@ public sealed class Cs(string argv0)
         }
 
         return -1;
-    }
-
-    private static byte[] ConvS2M(ISerializable message)
-    {
-        byte[] bytes = new byte[message.Size];
-        message.WriteTo(bytes);
-        return bytes;
     }
 
     // setnetmtpt: the mount point, /net by default; one not rooted is a suffix of /net.
@@ -554,7 +487,7 @@ public sealed class Cs(string argv0)
             byte[] mdata;
             try
             {
-                mdata = await Read9pmsgAsync(master.Process, mfd, Iohdrsz + Maxfdata);
+                mdata = await Fcall.Read9pmsgAsync(master.Process, mfd, Iohdrsz + Maxfdata);
             }
             catch (SyscallException error)
             {
@@ -567,7 +500,7 @@ public sealed class Cs(string argv0)
                 break;
             }
 
-            if (ConvM2S(mdata) is not { } request)
+            if (Fcall.ConvM2S(mdata) is not { } request)
             {
                 await Syslog.WriteAsync(master.Process, true, Logfile, string.Create(CultureInfo.InvariantCulture, $"format error {mdata[0]:x} {mdata[1]:x} {mdata[2]:x} {mdata[3]:x} {mdata[4]:x}"));
                 break;
@@ -594,51 +527,7 @@ public sealed class Cs(string argv0)
         try
         {
             Mfile mf = Newfid(FidOf(job.Request));
-
-            switch (job.Request)
-            {
-                case Tversion r:
-                    await RversionAsync(ctx, job, r);
-                    break;
-                case Tauth:
-                    await SendmsgAsync(ctx, job, "authentication not required");
-                    break;
-                case Tflush r:
-                    await FlushjobAsync(r.OldTag);
-                    await SendmsgAsync(ctx, job, null, new Rflush(r.Tag));
-                    break;
-                case Tattach r:
-                    await RattachAsync(ctx, job, mf, r);
-                    break;
-                case Twalk r:
-                    await RwalkAsync(ctx, job, mf, r);
-                    break;
-                case Topen r:
-                    await SendmsgAsync(ctx, job, (mf.Qid.Type & QidType.QTDIR) != 0 && r.Mode != 0 ? "permission denied" : null, new Ropen(r.Tag, mf.Qid, 0));
-                    break;
-                case Tcreate:
-                    await SendmsgAsync(ctx, job, "creation permission denied");
-                    break;
-                case Tread r:
-                    await RreadAsync(ctx, job, mf, r);
-                    break;
-                case Twrite r:
-                    await RwriteAsync(ctx, job, mf, r);
-                    break;
-                case Tclunk r:
-                    mf.Busy = false;
-                    await SendmsgAsync(ctx, job, null, new Rclunk(r.Tag));
-                    break;
-                case Tremove:
-                    await SendmsgAsync(ctx, job, "remove permission denied");
-                    break;
-                case Tstat r:
-                    await RstatAsync(ctx, job, mf, r);
-                    break;
-                case Twstat:
-                    await SendmsgAsync(ctx, job, "wstat permission denied");
-                    break;
-            }
+            await DispatchAsync(ctx, job, mf);
 
             // Slave processes die after replying.
             if (ctx.IsSlave)
@@ -659,6 +548,43 @@ public sealed class Cs(string argv0)
             // A slave killed by a note dies of it, as cs.c's does, with nothing more done.
             ctx.Done!.SetException(error);
         }
+    }
+
+    // Each request answered as cs.c's fcall table answers it.
+    private Task DispatchAsync(Proc ctx, Job job, Mfile mf) => job.Request switch
+    {
+        Tversion r => RversionAsync(ctx, job, r),
+        Tauth => SendmsgAsync(ctx, job, "authentication not required"),
+        Tflush r => RflushAsync(ctx, job, r),
+        Tcreate => SendmsgAsync(ctx, job, "creation permission denied"),
+        Tremove => SendmsgAsync(ctx, job, "remove permission denied"),
+        Twstat => SendmsgAsync(ctx, job, "wstat permission denied"),
+        _ => FileAsync(ctx, job, mf),
+    };
+
+    // The requests of a file.
+    private Task FileAsync(Proc ctx, Job job, Mfile mf) => job.Request switch
+    {
+        Tattach r => RattachAsync(ctx, job, mf, r),
+        Twalk r => RwalkAsync(ctx, job, mf, r),
+        Topen r => SendmsgAsync(ctx, job, (mf.Qid.Type & QidType.QTDIR) != 0 && r.Mode != 0 ? "permission denied" : null, new Ropen(r.Tag, mf.Qid, 0)),
+        Tread r => RreadAsync(ctx, job, mf, r),
+        Twrite r => RwriteAsync(ctx, job, mf, r),
+        Tclunk r => RclunkAsync(ctx, job, mf, r),
+        Tstat r => RstatAsync(ctx, job, mf, r),
+        _ => Task.CompletedTask,
+    };
+
+    private async Task RflushAsync(Proc ctx, Job job, Tflush r)
+    {
+        await FlushjobAsync(r.OldTag);
+        await SendmsgAsync(ctx, job, null, new Rflush(r.Tag));
+    }
+
+    private Task RclunkAsync(Proc ctx, Job job, Mfile mf, Tclunk r)
+    {
+        mf.Busy = false;
+        return SendmsgAsync(ctx, job, null, new Rclunk(r.Tag));
     }
 
     private Task RversionAsync(Proc ctx, Job job, Tversion r)
@@ -916,7 +842,7 @@ public sealed class Cs(string argv0)
     private async Task SendmsgAsync(Proc ctx, Job job, string? err, ISerializable? reply = null)
     {
         ISerializable message = err is not null || reply is null ? new Rerror(job.Request.Tag, Nstrcpy($"cs: {err}", Errmax)) : reply;
-        byte[] mdata = ConvS2M(message);
+        byte[] mdata = Fcall.ConvS2M(message);
 
         // cs.c's error("mount write") is not reached here, nor there: a write on the pipe fails only
         // once its reader has gone, and the note that failure posts kills the writer first.
@@ -1142,32 +1068,9 @@ public sealed class Cs(string argv0)
             return false;
         }
 
-        bool rv = false;
         if (mf.Net == "net")
         {
-            // Go through the set of default nets.
-            Network? np;
-            for (np = mf.Nextnet; np is not null && !rv; np = np.Next)
-            {
-                if (await NpLookupAsync(ctx, np, mf.Host!, mf.Serv) is not { } nt)
-                {
-                    continue;
-                }
-
-                bool fasttimeout = np.Fasttimeout && !Lookforproto(nt, np.Net);
-                for (NdbTuple? t = nt; mf.Reply.Count < Nreply && t is not null; t = t.Entry)
-                {
-                    // Avoid duplicates.
-                    if (await NpTransAsync(ctx, t, np, mf.Serv, mf.Rem, fasttimeout) is { } cp && !mf.Reply.Any(r => r.AsSpan().SequenceEqual(Encoding.UTF8.GetBytes(cp))))
-                    {
-                        mf.Reply.Add(Encoding.UTF8.GetBytes(cp));
-                        rv = true;
-                    }
-                }
-            }
-
-            mf.Nextnet = np;
-            return rv;
+            return await DefaultNetsAsync(ctx, mf);
         }
 
         // Not /net: we only get one lookup.
@@ -1179,6 +1082,7 @@ public sealed class Cs(string argv0)
         // Look for a specific network.
         if (network.FirstOrDefault(n => !n.Fasttimeout && n.Net == mf.Net) is { } known)
         {
+            bool rv = false;
             NdbTuple? nt = await NpLookupAsync(ctx, known, mf.Host!, mf.Serv);
             for (NdbTuple? t = nt; mf.Reply.Count < Nreply && t is not null; t = t.Entry)
             {
@@ -1196,6 +1100,34 @@ public sealed class Cs(string argv0)
         string r = mf.Serv is not null ? $"{mntpt}/{mf.Net}/clone {mf.Host}!{mf.Serv}" : $"{mntpt}/{mf.Net}/clone {mf.Host}";
         mf.Reply.Add(Encoding.UTF8.GetBytes(Nstrcpy(r, Maxreply)));
         return true;
+    }
+
+    // net: through the default nets from the next, until one gives replies, each new one kept.
+    private async Task<bool> DefaultNetsAsync(Proc ctx, Mfile mf)
+    {
+        bool rv = false;
+        Network? np;
+        for (np = mf.Nextnet; np is not null && !rv; np = np.Next)
+        {
+            if (await NpLookupAsync(ctx, np, mf.Host!, mf.Serv) is not { } nt)
+            {
+                continue;
+            }
+
+            bool fasttimeout = np.Fasttimeout && !Lookforproto(nt, np.Net);
+            for (NdbTuple? t = nt; mf.Reply.Count < Nreply && t is not null; t = t.Entry)
+            {
+                // Avoid duplicates.
+                if (await NpTransAsync(ctx, t, np, mf.Serv, mf.Rem, fasttimeout) is { } cp && !mf.Reply.Any(r => r.AsSpan().SequenceEqual(Encoding.UTF8.GetBytes(cp))))
+                {
+                    mf.Reply.Add(Encoding.UTF8.GetBytes(cp));
+                    rv = true;
+                }
+            }
+        }
+
+        mf.Nextnet = np;
+        return rv;
     }
 
     private Task<NdbTuple?> NpLookupAsync(Proc ctx, Network np, string host, string? serv)

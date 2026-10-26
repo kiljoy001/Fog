@@ -28,6 +28,7 @@ internal sealed class MountConnection
     private Rpc? rip;
     private Task<byte[]>? reading;
     private bool broken;
+    private int released;
     private ushort nextTag;
     private uint nextFid;
 
@@ -59,11 +60,19 @@ internal sealed class MountConnection
         }
     }
 
-    // mntversion: not multiplexed, sent once before anything else on the connection.
-    public async Task VersionAsync()
+    // mntfree: once no mount uses the connection, its channel is closed, and with it the server's
+    // end of the conversation, if nothing else holds it. Nothing is asked of it then, as nothing of
+    // it is open.
+    public Task CloseAsync() => ReleaseAsync();
+
+    // mntversion: not multiplexed, sent once before anything else on the connection, and waited for
+    // only until the caller is interrupted, its read left to a connection then let go.
+    public async Task VersionAsync(CancellationToken cancellationToken = default)
     {
         await WriteAsync(Encode(new Tversion(NoTag, MaxRpc, "9P2000")));
-        byte[] reply = await ReadFrameAsync();
+        Task<byte[]> frame = ReadFrameAsync();
+        await Waiting.UntilAsync(frame, cancellationToken);
+        byte[] reply = await frame;
         if ((MessageTypes)reply[4] != MessageTypes.Rversion)
         {
             throw new IOException((MessageTypes)reply[4] == MessageTypes.Rerror ? new Rerror(reply).Ename : "unexpected reply type in fversion");
@@ -310,7 +319,15 @@ internal sealed class MountConnection
             }
         }
 
-        _ = lease.DisposeAsync().AsTask();
+        _ = ReleaseAsync();
+    }
+
+    private async Task ReleaseAsync()
+    {
+        if (Interlocked.Exchange(ref released, 1) == 0)
+        {
+            await lease.DisposeAsync();
+        }
     }
 
     private void Remove(Rpc r)

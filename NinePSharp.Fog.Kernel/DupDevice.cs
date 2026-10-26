@@ -5,7 +5,7 @@ using NinePSharp.Namespaces;
 namespace NinePSharp.Fog.Kernel;
 
 // devdup: descriptor N is file N at path 2N+1, and its ctl file Nctl is at 2N+2.
-internal sealed class DupDevice(VProcess process, string owner) : IResourceDataOperations
+internal sealed class DupDevice(VProcess process, Func<string> owner) : IResourceDataOperations
 {
     public const string Provider = "dup";
     private static readonly uint[] Permissions = [0b100_000_000, 0b010_000_000, 0b110_000_000];
@@ -25,7 +25,7 @@ internal sealed class DupDevice(VProcess process, string owner) : IResourceDataO
     {
         if (resource.IsDirectory)
         {
-            return ValueTask.FromResult(new ResourceStat(resource, ".", (uint)NinePConstants.FileMode9P.DMDIR | 0b101_101_101, 0, 0, 0, owner, owner, owner));
+            return ValueTask.FromResult(new ResourceStat(resource, ".", (uint)NinePConstants.FileMode9P.DMDIR | 0b101_101_101, 0, 0, 0, owner(), owner(), owner()));
         }
 
         ulong twice = resource.Identity.Path - 1;
@@ -33,7 +33,7 @@ internal sealed class DupDevice(VProcess process, string owner) : IResourceDataO
         bool ctl = (twice & 1) != 0;
         uint mode = ctl ? 0b100_000_000 : Permissions[OpenMode(Slot(fd).Handle.Mode)];
         string name = fd.ToString(CultureInfo.InvariantCulture) + (ctl ? "ctl" : string.Empty);
-        return ValueTask.FromResult(new ResourceStat(resource, name, mode, 0, 0, 0, owner, owner, owner));
+        return ValueTask.FromResult(new ResourceStat(resource, name, mode, 0, 0, 0, owner(), owner(), owner()));
     }
 
     public ValueTask<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)

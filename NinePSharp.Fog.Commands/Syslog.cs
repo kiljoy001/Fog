@@ -31,6 +31,24 @@ public static class Syslog
         }
     }
 
+    // time: nsec's read of /dev/bintime, in seconds, or 0 when it cannot be opened.
+    internal static async Task<long> TimeAsync(Process process)
+    {
+        int fd;
+        try
+        {
+            fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD);
+        }
+        catch (SyscallException)
+        {
+            return 0;
+        }
+
+        long nanoseconds = BinaryPrimitives.ReadInt64BigEndian((await process.PReadAsync(fd, 8, 0)).Span);
+        await process.CloseAsync(fd);
+        return nanoseconds / 1_000_000_000;
+    }
+
     // ctime(t)+4, 15 places: the month, the day in two places, and the time of day.
     private static string Ctime(long seconds)
     {
@@ -57,24 +75,6 @@ public static class Syslog
         {
             return string.Empty;
         }
-    }
-
-    // time: nsec's read of /dev/bintime, in seconds, or 0 when it cannot be opened.
-    private static async Task<long> TimeAsync(Process process)
-    {
-        int fd;
-        try
-        {
-            fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD);
-        }
-        catch (SyscallException)
-        {
-            return 0;
-        }
-
-        long nanoseconds = BinaryPrimitives.ReadInt64BigEndian((await process.PReadAsync(fd, 8, 0)).Span);
-        await process.CloseAsync(fd);
-        return nanoseconds / 1_000_000_000;
     }
 
     private static async Task<int> TryOpenAsync(Process process, string name)

@@ -268,3 +268,95 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     When the process tries to mount descriptor 3 on "/n"
     Then the call fails with "no versions here"
     And descriptor 3 can be closed
+
+  @FOG_KERNEL_051
+  Scenario: Unmounting the last mount on a connection clunks its fids and lets the connection go, and the server sees its end
+    When the process mounts descriptor 3 on "/n"
+    And the process stats "/n/notes"
+    And the process unmounts everything from "/n"
+    Then the server holds exactly 0 fids
+    And the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: Another mount on the connection keeps it until that one goes too
+    When the process duplicates descriptor 3 as descriptor 4
+    And the process mounts descriptor 3 on "/n"
+    And the process mounts descriptor 4 on "/tmp"
+    And the process unmounts everything from "/n"
+    Then the server holds exactly 1 fids
+    And the server is still connected
+    And reading "/tmp/notes" gives "hello"
+    When the process unmounts everything from "/tmp"
+    Then the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A file of the mount still open keeps it until it is closed
+    When the process mounts descriptor 3 on "/n"
+    And the process opens "/n/notes" and keeps it open
+    And the process unmounts everything from "/n"
+    Then the server is still connected
+    When the process closes what it kept open
+    Then the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A namespace that still holds the mount keeps it until the last process in it exits
+    When the process mounts descriptor 3 on "/n"
+    And a child of the process copies its namespace and waits
+    And the process unmounts everything from "/n"
+    Then the server is still connected
+    When that child exits
+    Then the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A process whose dot is in the mount keeps it until it changes elsewhere
+    When the process mounts descriptor 3 on "/n"
+    And the process changes to "/n/docs"
+    And the process unmounts everything from "/n"
+    Then the server is still connected
+    When the process changes to "/"
+    Then the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A mount that fails lets its attach go, and the connection goes once its descriptor is closed
+    When the process tries to mount descriptor 3 on "/nonesuch"
+    Then the call fails with "file does not exist: '/nonesuch'"
+    And the server holds exactly 0 fids
+    And the server is still connected
+    And descriptor 3 can be closed
+    And the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A mount made only in a namespace that ends goes with it
+    When a child of the process copies its namespace, mounts descriptor 3 on "/n" and exits
+    Then the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A mount after a directory in a union is held as the union's member
+    When the process mounts descriptor 3 after "/tmp"
+    And the process changes to "/"
+    Then the server is still connected
+    And reading "/tmp/notes" gives "hello"
+
+  @FOG_KERNEL_051
+  Scenario: The fids of a mount let go are those its driver still holds, and the attach's
+    Given the server's tree holds the files "f1" to "f4"
+    And the mount driver holds at most 2 fids for walked files
+    When the process mounts descriptor 3 on "/n"
+    And the process stats "/n/f1" to "/n/f4"
+    And the process unmounts everything from "/n"
+    Then the server holds exactly 0 fids
+    And the server sees the end of the connection
+
+  @FOG_KERNEL_051
+  Scenario: A mount whose server has hung up is unmounted all the same
+    When the process mounts descriptor 3 on "/n"
+    And the server hangs up
+    And the process unmounts everything from "/n"
+    Then the names in "/n" are ""
+
+  Scenario: A connection let go is not used again by a later mount of the same channel
+    When the process duplicates descriptor 3 as descriptor 4
+    And the process mounts descriptor 3 on "/n"
+    And the process unmounts everything from "/n"
+    And the process mounts descriptor 4 on "/n"
+    Then reading "/n/notes" gives "hello"

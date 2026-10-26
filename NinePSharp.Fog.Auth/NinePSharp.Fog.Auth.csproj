@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="NinePSharp.Fog.Auth.Tests" />
+    <InternalsVisibleTo Include="NinePSharp.Fog.Rc.Tests" />
   </ItemGroup>
 
 </Project>

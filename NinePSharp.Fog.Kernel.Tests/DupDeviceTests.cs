@@ -38,7 +38,7 @@ public sealed class DupDeviceTests
         VProcess process = table.CreateInitial(new NamespaceNavigator(new MountTable(), files).Attach(files.Root));
         ResourceOpenHandle opened = await files.CreateAndOpenAsync(files.Root, "f", 0b110_110_110, 1, Context, default);
         process.Descriptors.Install(opened, () => ValueTask.CompletedTask);
-        var device = new DupDevice(process, "glenda");
+        var device = new DupDevice(process, () => "glenda");
         ResourceHandle file = (await device.WalkAsync(DupDevice.Root, "0", default))!;
         ResourceHandle ctl = (await device.WalkAsync(DupDevice.Root, "0ctl", default))!;
         Assert.Equal(("0", 0b010_000_000u), ((await device.StatAsync(file, default)).Name, (await device.StatAsync(file, default)).Mode));
@@ -48,5 +48,5 @@ public sealed class DupDeviceTests
     }
 
     private static DupDevice NewDevice()
-        => new DupDevice(new VProcessTable().CreateInitial(new NamespaceNavigator(new MountTable(), new RamFs("ram", "#R", "glenda")).Attach(DupDevice.Root)), "glenda");
+        => new DupDevice(new VProcessTable().CreateInitial(new NamespaceNavigator(new MountTable(), new RamFs("ram", "#R", "glenda")).Attach(DupDevice.Root)), () => "glenda");
 }

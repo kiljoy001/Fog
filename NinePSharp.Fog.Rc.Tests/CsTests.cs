@@ -1017,7 +1017,7 @@ public sealed class CsTests : IAsyncLifetime
 
         // Its slaves and its refresh share its descriptors, and what it opened before it forked was copied.
         string fds = Regex.Replace(await ReadFileAsync($"/proc/{server}/fd"), @"\)\s+(\d+)\s+\d+ ", ") $1 _ ");
-        Assert.Equal("/\n  0 rw |    1 (0000000000000000 0 00) 0 _ #|/data\n  2 w  s    0 (0000000000000004 0 00) 0 _ /srv/cs\n", fds);
+        Assert.Equal("/\n  0 rw |    4 (0000000000000000 0 00) 0 _ #|/data\n  2 w  s    0 (0000000000000010 0 00) 0 _ /srv/cs\n", fds);
     }
 
     private static byte[] Encode(ISerializable message)

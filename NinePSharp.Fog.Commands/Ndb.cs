@@ -413,15 +413,20 @@ public sealed class Ndb
 
     // csgetvalue: the value of rattr in what cs gives for the entries holding attr=val, or null.
     public static async Task<string?> CsGetValueAsync(Process process, string netroot, string attr, string val, string rattr)
+        => (await CsGetValuesAsync(process, netroot, attr, val, rattr)).Value;
+
+    // csgetvalue with its tuples: the first value of rattr, and every tuple of every line cs gave,
+    // joined as one entry.
+    public static async Task<(string? Value, NdbTuple? Tuples)> CsGetValuesAsync(Process process, string? netroot, string attr, string val, string rattr)
     {
         int fd;
         try
         {
-            fd = await process.OpenAsync($"{netroot}/cs", NinePConstants.ORDWR);
+            fd = await process.OpenAsync(netroot is null ? "/net/cs" : $"{netroot}/cs", NinePConstants.ORDWR | NinePConstants.OCEXEC);
         }
         catch (SyscallException)
         {
-            return null;
+            return (null, null);
         }
 
         try
@@ -432,19 +437,36 @@ public sealed class Ndb
             }
             catch (SyscallException)
             {
-                return null;
+                return (null, null);
             }
 
             await process.SeekAsync(fd, 0, 0);
+            string? rv = null;
+            NdbTuple? first = null, last = null;
             for (ReadOnlyMemory<byte> line; !(line = await process.ReadAsync(fd, 1022)).IsEmpty;)
             {
-                if (ParseLine(Encoding.UTF8.GetString(line.Span) + "\n")?.Entries().FirstOrDefault(t => t.Attr == rattr) is { } found)
+                if (ParseLine(Encoding.UTF8.GetString(line.Span) + "\n") is not { } t)
                 {
-                    return found.Val;
+                    continue;
+                }
+
+                if (last is null)
+                {
+                    first = t;
+                }
+                else
+                {
+                    last.Entry = t;
+                }
+
+                foreach (NdbTuple e in t.Entries())
+                {
+                    last = e;
+                    rv ??= e.Attr == rattr ? e.Val : null;
                 }
             }
 
-            return null;
+            return (rv, first);
         }
         finally
         {
@@ -627,33 +649,46 @@ public sealed class Ndb
         if (line[cp] == '=')
         {
             cp++;
-            if (line[cp] == '"')
-            {
-                p = ++cp;
-                while (line[cp] is not ('\n' or '"'))
-                {
-                    cp++;
-                }
-
-                t.Val = line[p..cp];
-                if (line[cp] == '"')
-                {
-                    cp++;
-                }
-            }
-            else if (line[cp] != '#')
-            {
-                p = cp;
-                while (line[cp] != '\n' && !IsWhite(line[cp]))
-                {
-                    cp++;
-                }
-
-                t.Val = line[p..cp];
-            }
+            t.Val = ParseValue(line, ref cp);
         }
 
         return t;
+    }
+
+    // A tuple's value after its =: in quotes, to the closing one, or to white space; none at a
+    // comment.
+    private static string ParseValue(string line, ref int cp)
+    {
+        int p;
+        if (line[cp] == '"')
+        {
+            p = ++cp;
+            while (line[cp] is not ('\n' or '"'))
+            {
+                cp++;
+            }
+
+            string quoted = line[p..cp];
+            if (line[cp] == '"')
+            {
+                cp++;
+            }
+
+            return quoted;
+        }
+
+        if (line[cp] == '#')
+        {
+            return string.Empty;
+        }
+
+        p = cp;
+        while (line[cp] != '\n' && !IsWhite(line[cp]))
+        {
+            cp++;
+        }
+
+        return line[p..cp];
     }
 
     // filter: only the tuples the filter wants.

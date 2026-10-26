@@ -464,19 +464,19 @@
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
-    "line": "degen = rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "line": "return rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
     "reason": "every round is taken for a degenerate root, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
-    "line": "degen = rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "line": "return rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
     "reason": "every round is taken for a degenerate root, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Boolean mutation",
-    "line": "degen = false;",
+    "line": "return false;",
     "reason": "an emptied tree counts as degenerate, so the upsert retries forever"
   },
   {
@@ -878,7 +878,283 @@
   {
     "file": "ConsDevice.cs",
     "mutator": "String mutation",
-    "line": "\"pid\" => Slice(Number(caller.Pid), offset, count),",
+    "line": "[\"pid\"] = () => Number(caller.Pid),",
     "reason": "pid reads as zeros, so a reader reading to the end never finishes"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+    "line": "t += 2;",
+    "reason": "tokenize steps back over the doubled quote it reads, and so reads it forever"
+  },
+  {
+    "file": "Attr.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (a is not null && a.Type == AttrType.Query && Find(all, a.Name) is not null) {",
+    "reason": "the loop dropping leading queries no longer moves past them"
+  },
+  {
+    "file": "Attr.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (l.Next.Type == AttrType.Query && Find(all, l.Next.Name) is not null) {",
+    "reason": "the loop dropping later queries no longer moves past them"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Conditional (false) mutation",
+    "line": "Srv.Dirread(r, n => n > 0 ? null : factotum);",
+    "reason": "the root's listing gives factotum at every offset, so a read to its end never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Equality mutation",
+    "line": "Srv.Dirread(r, n => n > 0 ? null : factotum);",
+    "reason": "the root's listing gives factotum at every offset, so a read to its end never ends"
+  },
+  {
+    "file": "Fcall.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "byte[] rest = await ReadnAsync(process, fd, (int)len - 4);",
+    "reason": "read9pmsg waits for 8 bytes more than the message holds"
+  },
+  {
+    "file": "Mntgen.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.WalkAndCloneAsync(r, Fswalk1, Fsclone);",
+    "reason": "a walk is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "Up.Fork(Srvforker | flags, async child =>",
+    "reason": "the work forked is never run, so its request is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await fn();",
+    "reason": "the work forked is never run, so its request is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Conditional (true) mutation",
+    "line": "int start = r.Offset == 0 ? 0 : r.Fid!.Dirindex;",
+    "reason": "each read of a directory starts it again, so a read to its end never ends"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await Forker(",
+    "reason": "the server is never started, so nothing is answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "started.SetResult();",
+    "reason": "postsrv waits for a start that is never signalled"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Negate expression",
+    "line": "if (r.Type == MessageTypes.Tflush && !Rflush(r))",
+    "reason": "every reply but a flush's is dropped"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await Up.WriteAsync(Outfd, Fcall.ConvS2M(reply));",
+    "reason": "no reply is written"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "wlock.Release();",
+    "reason": "the write lock is never let go, so the second reply waits forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await RespondAsync(r, e);",
+    "reason": "a request in error is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "rlock.Release();",
+    "reason": "the read lock is never let go, so the second request waits forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await DispatchAsync(r);",
+    "reason": "no request is dispatched, so none is answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "slock.Release();",
+    "reason": "the server lock is never let go, so the second request waits forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await RespondAsync(r, null);",
+    "reason": "a version is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await (Attach?.Invoke(r) ?? RespondAsync(r, null));",
+    "reason": "an attach is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await Walk!(r);",
+    "reason": "a walk is never answered"
+  },
+  {
+    "file": "FogKernel.cs",
+    "mutator": "Statement mutation",
+    "line": "collecting.Release();",
+    "reason": "the next collection waits forever for the one before to let go"
+  },
+  {
+    "file": "MountTree.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "reason": "a directory read at its end is read again forever"
+  },
+  {
+    "file": "MountTree.cs",
+    "mutator": "Statement mutation",
+    "line": "records.AddRange(read.Data.Span);",
+    "reason": "the offset never moves, so the directory is read from its start forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Equality mutation",
+    "line": "int start = r.Offset == 0 ? 0 : r.Fid!.Dirindex;",
+    "reason": "each read after the first starts the directory again, so a read to its end never ends"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "for (NinePSharp.Messages.Stat? d; (d = gen(start)) is { } entry; start++)",
+    "reason": "the entries before the first are asked for, and the server dies of it unanswered"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Boolean mutation",
+    "line": "bool eol = true;",
+    "reason": "once the input has ended, a cooked read that never ends its line reads nothing for ever"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Statement mutation",
+    "line": "lk.Release();",
+    "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Conditional (false) mutation",
+    "line": "a = space < 0 ? -1 : a + space + 1;",
+    "reason": "consctl's words are never got past, so its write never ends"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Equality mutation",
+    "line": "a = space < 0 ? -1 : a + space + 1;",
+    "reason": "consctl's words are never got past, so its write never ends"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
+    "line": "a = space < 0 ? -1 : a + space + 1;",
+    "reason": "consctl's words are never got past, so its write never ends"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "a = space < 0 ? -1 : a + space + 1;",
+    "reason": "consctl's words are never got past, so its write never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.ReleaseAsync();",
+    "reason": "a confirm's writer that keeps the server while it runs the rpc it answered takes the server again, which it already holds"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Equality mutation",
+    "line": "if (nmatch++ < ki.Skip)",
+    "reason": "each key of the listing is the first, so ctl's listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await RpcwriteAsync(r);",
+    "reason": "an rpc write left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, Readlist(s!, (i, n) => Keylist(s!, i, n), r));",
+    "reason": "a read of ctl left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await FsrpcioAsync(r);",
+    "reason": "an rpc read left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, Errstr);",
+    "reason": "a write of ctl left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Logical mutation",
+    "line": "if (lb.Wait.Count == 0 || lb.Rp == lb.Wp)",
+    "reason": "a log read is answered with a message there is not, and the read that logged waits for ever"
+  },
+  {
+    "file": "Authsrv.cs",
+    "mutator": "Statement mutation",
+    "line": "await up.WriteAsync(fd, ConvTR2M(tr));",
+    "reason": "the auth server waits for ever for a request never sent"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "fss.Lock.Release();",
+    "reason": "a conversation's lock never let go leaves its next rpc waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Conditional (false) mutation",
+    "line": "int sp = Array.IndexOf(buf, (byte)' ', 0, nul < 0 ? buf.Length : nul);",
+    "reason": "An rpc written without a NUL is searched for its space over a count of -1, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes."
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Conditional (true) mutation",
+    "line": "fss.Verb = Encoding.UTF8.GetString(buf, 0, sp >= 0 ? sp : nul >= 0 ? nul : buf.Length);",
+    "reason": "A verb without a space, as read is, is taken over a count of -1, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes."
   }
 ]

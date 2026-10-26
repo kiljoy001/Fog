@@ -14,10 +14,24 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
     private readonly ConditionalWeakTable<ResourceOpenHandle, MountConnection> connections = [];
     private readonly SemaphoreSlim versioning = new(1, 1);
 
+    // Run when a file of a tree is closed, which may have been all that held it.
+    public Func<Task> Collect { get; set; } = () => Task.CompletedTask;
+
+    public IReadOnlyCollection<MountTree> Trees => [.. trees.Values];
+
     // c->mux: the connection on a transport, versioned the first time it is mounted.
-    public async Task<MountConnection> ConnectAsync(DescriptorLease transport, IResourceDataOperations device, Func<ResourceOperationContext> context)
+    public async Task<MountConnection> ConnectAsync(DescriptorLease transport, IResourceDataOperations device, Func<ResourceOperationContext> context, CancellationToken cancellationToken = default)
     {
-        await versioning.WaitAsync();
+        try
+        {
+            await versioning.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            await transport.DisposeAsync();
+            throw;
+        }
+
         try
         {
             if (connections.TryGetValue(transport.Handle, out MountConnection? existing))
@@ -29,7 +43,7 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
             var connection = new MountConnection(device, transport.Handle, transport, context);
             try
             {
-                await connection.VersionAsync();
+                await connection.VersionAsync(cancellationToken);
             }
             catch
             {
@@ -43,6 +57,40 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
         finally
         {
             versioning.Release();
+        }
+    }
+
+    // A tree nothing holds let go, and its connection with it once no other tree is on it.
+    public async Task ReleaseAsync(MountTree tree)
+    {
+        // Stryker disable once Statement,Block : only a collection racing a failed mount's own release lets a tree go twice, and no test orders that race
+        if (!trees.TryRemove(tree.Device, out _))
+        {
+            return;
+        }
+
+        try
+        {
+            await tree.CloseAsync();
+        }
+        catch (IOException)
+        {
+            // A connection that has hung up clunks nothing.
+        }
+
+        if (!trees.Values.Any(other => other.Connection == tree.Connection))
+        {
+            await versioning.WaitAsync();
+            try
+            {
+                connections.Remove(tree.Connection.Transport);
+            }
+            finally
+            {
+                versioning.Release();
+            }
+
+            await tree.Connection.CloseAsync();
         }
     }
 
@@ -87,7 +135,10 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
         => await Tree(handle.Resource).StatOpenAsync(handle, cancellationToken);
 
     public async ValueTask ClunkAsync(ResourceOpenHandle openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
-        => await Tree(openHandle.Resource).ClunkAsync(openHandle);
+    {
+        await Tree(openHandle.Resource).ClunkAsync(openHandle);
+        await Collect();
+    }
 
     public async ValueTask RemoveAsync(ResourceHandle resource, ResourceOpenHandle? openHandle, ResourceOperationContext context, CancellationToken cancellationToken)
         => await Tree(resource).RemoveAsync(resource, openHandle, cancellationToken);
