@@ -21,7 +21,7 @@ public static class Password
         }
 
         byte[] bytes = Encoding.UTF8.GetBytes(f);
-        if (f == ".." || bytes.Length >= 250 || bytes.Any(b => b < 040 || b >= 0x80 || b == '/'))
+        if (f == ".." || bytes.Length >= 250 || bytes.Any(b => b < (byte)' ' || b >= 0x80 || b == (byte)'/'))
         {
             await Syslog.WriteAsync(process, false, Log, $"illegal name: {f}");
             return null;

@@ -128,25 +128,7 @@ public sealed class Secuser(Process process, string argv0)
     // when none is typed.
     private async Task PasswordAsync(Pw pw, string id, bool isnew)
     {
-        string pass;
-        while (true)
-        {
-            string prompt = isnew ? $"{id} password" : $"{id} password [default = don't change]";
-            pass = await Authsrv.ReadconsAsync(process, prompt, null, true) ?? await SysfatalAsync("password input aborted");
-            int len = Encoding.UTF8.GetByteCount(pass);
-            if (verbose)
-            {
-                await OutAsync($"{len} characters\n");
-            }
-
-            if ((len == 0 && !isnew) || len >= 7)
-            {
-                break;
-            }
-
-            await OutAsync("password must be at least 7 characters\n");
-        }
-
+        string pass = await AskAsync(id, isnew);
         if (pass.Length == 0)
         {
             return;
@@ -164,6 +146,29 @@ public sealed class Secuser(Process process, string argv0)
         }
 
         pw.Hi = Pak.Hi(id, pass).Hi;
+    }
+
+    // The password typed, asked for again until it is seven bytes, or for an account that has
+    // one, empty.
+    private async Task<string> AskAsync(string id, bool isnew)
+    {
+        while (true)
+        {
+            string prompt = isnew ? $"{id} password" : $"{id} password [default = don't change]";
+            string pass = await Authsrv.ReadconsAsync(process, prompt, null, true) ?? await SysfatalAsync("password input aborted");
+            int len = Encoding.UTF8.GetByteCount(pass);
+            if (verbose)
+            {
+                await OutAsync($"{len} characters\n");
+            }
+
+            if ((len == 0 && !isnew) || len >= 7)
+            {
+                return pass;
+            }
+
+            await OutAsync("password must be at least 7 characters\n");
+        }
     }
 
     // The expiration time: midnight of the date given, as DDMMYYYY, or expsecs for none.

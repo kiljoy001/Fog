@@ -230,6 +230,11 @@ Feature: stat, seek and bind act on files and the namespace as 9front's do
     When the process creates "/tmp/f/x" holding "y"
     Then the call fails with "create in non-directory: '/tmp/f/x'"
 
+  @FOG_KERNEL_018
+  Scenario: Creating a directory that is there fails as opening it for writing does, as namec opens it
+    When the process creates "/tmp" holding "y"
+    Then the call fails with "permission denied: '/tmp'"
+
   @FOG_KERNEL_032
   Scenario: fd2path gives the rooted name a descriptor was opened by, to every copy of it
     Given "/tmp/d/f" holds "x" in a new directory

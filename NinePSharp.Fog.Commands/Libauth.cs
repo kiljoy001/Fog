@@ -324,7 +324,7 @@ public static class Libauth
         private static string Badkey(string arg)
         {
             int nl = arg.IndexOf('\n', StringComparison.Ordinal);
-            return nl < 0 ? arg : arg[(nl + 1)..].Split('\n')[0];
+            return arg[(nl + 1)..].Split('\n')[0];
         }
 
         private Ar Classify(byte[] buf)

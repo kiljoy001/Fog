@@ -523,10 +523,13 @@ public sealed class Secstore(Process process, string argv0)
             string[] lines = Encoding.UTF8.GetString(list!).Split('\n');
             foreach (string line in lines.Take(lines.Length - 1))
             {
-                if (Process.Tokenize(line, 8) is not [string f0, ..])
+                string[] f = [.. Process.Tokenize(line, 8)];
+                if (f.Length < 1)
                 {
                     break;
                 }
+
+                string f0 = f[0];
 
                 await PrintAsync($"secstore: reencrypting '{f0}'\n");
                 (rc, byte[]? memfile) = await GetfileAsync(c.Conn, f0, true, c.Pass);
@@ -596,8 +599,8 @@ public sealed class Secstore(Process process, string argv0)
         }
 
         int d = 0, ntry = 0;
-        SConn conn;
-        string? server;
+        SConn? conn = null;
+        string? server = null;
         while (true)
         {
             int fd;
@@ -679,7 +682,7 @@ public sealed class Secstore(Process process, string argv0)
         }
 
         await PrintAsync($"{server}\n");
-        (int n, string reply) = await conn.ReadstrAsync();
+        (int n, string reply) = await conn!.ReadstrAsync();
         if (n < 0)
         {
             await conn.FreeAsync();

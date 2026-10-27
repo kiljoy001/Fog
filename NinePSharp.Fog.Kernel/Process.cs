@@ -140,9 +140,7 @@ public sealed partial class Process
         }
         catch (NamespaceFidException)
         {
-            // devopen: a directory opens only for reading, unless its device says otherwise.
-            NamespaceChannel directory = await ResolveAsync(path);
-            throw new SyscallException(Named(path, devices.Device(directory.Current) is IDirectoryOpenRefusal device ? device.Refusal((byte)mode) : Errors.Permission));
+            throw await DirectoryOpenRefusedAsync(path, mode);
         }
         catch (DupOpenException dup)
         {
@@ -177,6 +175,11 @@ public sealed partial class Process
         catch (DupOpenException dup)
         {
             return await OpenDescriptorAsync(dup.Descriptor, mode, path);
+        }
+        catch (NamespaceFidException)
+        {
+            // namec: a file that is there already is opened for truncation, as open opens it.
+            throw await DirectoryOpenRefusedAsync(path, mode);
         }
         catch (NamespaceException error) when (error.Error == NamespaceError.CreateNotPermitted)
         {
@@ -1197,6 +1200,13 @@ public sealed partial class Process
         (NamespaceChannel start, string[] names) = Begin(path);
         NamespaceWalkResult walked = await plane.WalkAsync(start, names, CancellationToken.None);
         return walked.Complete(names.Length) ? walked.Channel : throw NameError(path, walked);
+    }
+
+    // devopen: a directory opens only for reading, unless its device says otherwise.
+    private async Task<SyscallException> DirectoryOpenRefusedAsync(string path, int mode)
+    {
+        NamespaceChannel directory = await ResolveAsync(path);
+        return new SyscallException(Named(path, devices.Device(directory.Current) is IDirectoryOpenRefusal device ? device.Refusal((byte)mode) : Errors.Permission));
     }
 
     private async Task<SyscallException> NotFoundAsync(string path)

@@ -277,6 +277,7 @@ internal sealed partial class RcShell
     {
         for (RcRedir? rp = runq!.Redir; rp != runq.StartRedir; rp = rp.Next)
         {
+            // Stryker disable once Logical,Statement : at its input's end a dot's thread holds only the close execdot pushed, each command's own redirections popped, even one an error stopped
             if (rp!.Type == RcRedir.Close && rp.To == fd)
             {
                 rp.Type = 0;

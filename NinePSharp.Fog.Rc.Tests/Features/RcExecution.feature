@@ -7612,3 +7612,20 @@ Feature: rc runs scripts as 9front rc does
       usage: secuser [-v] <user>
       usage
       """
+
+  @FOG_RC_RUN_251
+  Scenario: An interactive dot closes its input at its end, after a command an error stopped with its redirections
+    When rc runs the script
+      """
+      echo '{shift 9} >[4=]' >/tmp/d1
+      echo '{shift 9} >[4]/tmp/o' >/tmp/d2
+      . -i /tmp/d1 >[2]/dev/null
+      echo /fd/*
+      . -i /tmp/d2 >[2]/dev/null
+      echo /fd/*
+      """
+    Then it prints
+      """
+      % % /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
+      % % /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
+      """

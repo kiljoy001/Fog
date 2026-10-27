@@ -146,7 +146,9 @@ public static class Tlssrv
     {
         await relay.CloseAsync(p1);
         transport.Reader = relay;
-        relay.Fork(RforkFlags.Proc | RforkFlags.Fdg, async back =>
+
+        // The two share the relay's descriptors, neither closing one before both are done.
+        relay.Fork(RforkFlags.Proc, async back =>
         {
             transport.Writer = back;
             await ToClientAsync(back, tls, p0);
@@ -166,7 +168,7 @@ public static class Tlssrv
                 await process.WriteAsync(fd, buf.AsMemory(0, n));
             }
         }
-        catch (Exception error) when (error is IOException or SyscallException or Org.BouncyCastle.Tls.TlsException)
+        catch (Exception error) when (error is IOException or SyscallException)
         {
             // The client hung up, or the command did.
         }
@@ -185,7 +187,7 @@ public static class Tlssrv
 
             await Task.Run(tls.Close);
         }
-        catch (Exception error) when (error is IOException or SyscallException or Org.BouncyCastle.Tls.TlsException)
+        catch (Exception error) when (error is IOException or SyscallException)
         {
             // The client hung up.
         }

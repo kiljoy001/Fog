@@ -183,6 +183,15 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.StartsWith("auth_proxy write fd: ", (await Assert.ThrowsAsync<SyscallException>(() => proxied)).Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AuthinfoMayEndWithAnEmptySecret()
+    {
+        (AuthRpc rpc, int far) = await RpcAsync();
+        await init.WriteAsync(far, Encoding.Latin1.GetBytes("ok " + Authinfo("a", "b", "c", [])));
+        AuthInfo ai = await AuthGetinfoAsync(rpc);
+        Assert.Equal(("a", "b", "c", 0), (ai.Cuid, ai.Suid, ai.Cap, ai.Secret.Length));
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]

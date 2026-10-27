@@ -50,14 +50,24 @@ public sealed class SConn(Process process, int fd)
         if (alg)
         {
             len -= Sha1dlen;
-            byte[] digest;
-            if (len <= 0 || (digest = await ReadnAsync(Sha1dlen)).Length != Sha1dlen)
+            if (len <= 0)
             {
                 return Fail(buf, n, "!SC_read missing sha1");
             }
 
-            byte[] data;
-            if (len > n || (data = await ReadnAsync(len)).Length != len)
+            byte[] digest = await ReadnAsync(Sha1dlen);
+            if (digest.Length != Sha1dlen)
+            {
+                return Fail(buf, n, "!SC_read missing sha1");
+            }
+
+            if (len > n)
+            {
+                return Fail(buf, n, "!SC_read missing data");
+            }
+
+            byte[] data = await ReadnAsync(len);
+            if (data.Length != len)
             {
                 return Fail(buf, n, "!SC_read missing data");
             }

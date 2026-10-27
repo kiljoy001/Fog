@@ -105,6 +105,71 @@ public sealed class TlssrvTests : IAsyncLifetime
         await SendScriptAsync(tls, "echo hi");
         Assert.Equal("hi", await ReadAllAsync(tls));
         Assert.EndsWith(" far tls reports open\n", await WaitForTextAsync("/sys/log/tls"), StringComparison.Ordinal);
+        Assert.DoesNotContain("tls reports", console.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AClientThatHangsUpEndsTheCommandsInput()
+    {
+        await HostAsync();
+        Process client = await ClientAsync("bob", "bobpassw");
+        (Stream tls, _, _) = await ConnectWithCallAsync(client);
+        await SendScriptAsync(tls, "cat");
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == "cat"));
+        await Task.Run(tls.Dispose);
+        await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "cat" or "rc" or "tlssrv"));
+    }
+
+    [Fact]
+    public async Task AClientThatSendsARecordThatFailsItsCheckEndsTheCommandsInput()
+    {
+        await HostAsync();
+        Process client = await ClientAsync("bob", "bobpassw");
+        (Stream tls, _, int data) = await ConnectWithCallAsync(client);
+        await SendScriptAsync(tls, "cat");
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == "cat"));
+        await client.WriteAsync(data, (byte[])[0x17, 0x03, 0x03, 0x00, 0x30, .. new byte[0x30]]);
+        await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "cat" or "rc" or "tlssrv"));
+    }
+
+    [Fact]
+    public async Task ACommandThatEndsClosesTlsAndEndsTheRelaysThoughTheClientStays()
+    {
+        await HostAsync();
+        Process client = await ClientAsync("bob", "bobpassw");
+        (Stream tls, _, _) = await ConnectWithCallAsync(client);
+        await SendScriptAsync(tls, "echo done");
+        var all = new List<byte>();
+        byte[] buf = new byte[100];
+        for (int n; (n = await Task.Run(() => tls.Read(buf, 0, buf.Length)).WaitAsync(TimeSpan.FromSeconds(10))) > 0;)
+        {
+            all.AddRange(buf.AsSpan(0, n));
+        }
+
+        Assert.Equal("done\n", Encoding.UTF8.GetString([.. all]));
+        await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "rc" or "tlssrv"));
+    }
+
+    [Fact]
+    public async Task ACommandThatEndsEndsTheRelaysThoughTheClientNeitherReadsNorHangsUp()
+    {
+        await HostAsync();
+        Process client = await ClientAsync("bob", "bobpassw");
+        (Stream tls, _, _) = await ConnectWithCallAsync(client);
+        await SendScriptAsync(tls, "echo done");
+        await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "rc" or "tlssrv"));
+    }
+
+    [Fact]
+    public async Task ARelayEndsWithAnEmptyStatusForTheCommandToWaitFor()
+    {
+        await ServiceAsync("exec tlssrv -a /bin/rc -c 'wait; echo -n s$status >/tmp/st'");
+        await HostAsync();
+        Process client = await ClientAsync("bob", "bobpassw");
+        (Stream tls, _, _) = await ConnectWithCallAsync(client);
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == "rc"));
+        await Task.Run(tls.Dispose);
+        Assert.Equal("s", await WaitForTextAsync("/tmp/st"));
     }
 
     [Fact]
@@ -201,6 +266,16 @@ public sealed class TlssrvTests : IAsyncLifetime
         await p.CloseAsync(ctl);
     }
 
+    private async Task UntilAsync(Func<bool> done)
+    {
+        for (int i = 0; i < 200 && !done(); i++)
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.True(done(), string.Join(" | ", kernel.Processes.Values.Select(p => $"{p.Pid}:{p.Text}:{p.User}")));
+    }
+
     // The service's script, with its last line in place of tcp17019's.
     private Task ServiceAsync(string exec)
         => WriteAsync($"/tmp/svc/tcp{Port}", Services.Tcp17019.Replace("exec tlssrv -a /bin/rc -c server", exec, StringComparison.Ordinal));
@@ -285,10 +360,17 @@ public sealed class TlssrvTests : IAsyncLifetime
     // The call, p9any as the client, and TLS keyed by the secret.
     private async Task<(Stream Tls, AuthInfo Ai)> ConnectAsync(Process client)
     {
+        (Stream tls, AuthInfo ai, _) = await ConnectWithCallAsync(client);
+        return (tls, ai);
+    }
+
+    // As ConnectAsync, with the call's data descriptor under TLS.
+    private async Task<(Stream Tls, AuthInfo Ai, int Data)> ConnectWithCallAsync(Process client)
+    {
         int data = await DialAsync(client);
         AuthInfo ai = await Libauth.AuthProxyAsync(client, data, null, "proto=p9any role=client").WaitAsync(TimeSpan.FromSeconds(10));
         Stream tls = await P9PskTls.ConnectAsync(new Fdstream(client, data), ai.Secret, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
-        return (tls, ai);
+        return (tls, ai, data);
     }
 
     private async Task<bool> AnsweredAsync()
