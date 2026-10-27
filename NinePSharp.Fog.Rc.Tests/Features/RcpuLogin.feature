@@ -66,3 +66,22 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
     When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'sleep 100'" in the background
     And 9front hangs up the client's call
     Then every process of the session's note group on Fog has exited
+
+  @FOG_LOGIN_009
+  Scenario: 9front's secstore client gets a file from Fog's secstored
+    Given glenda's secstore on Fog holds the file "notes" with "kept"
+    When 9front runs "auth/secstore -s tcp!fog!5356 -u glenda -G notes" and gives glenda's secstore password
+    Then it prints "kept"
+
+  @FOG_LOGIN_009
+  Scenario: 9front's secstore client puts a file in Fog's secstored, which Fog's client gets
+    Given glenda has a secstore account on Fog
+    When 9front runs "cd /tmp; echo put by 9front >fromnine; auth/secstore -s tcp!fog!5356 -u glenda -p fromnine" and gives glenda's secstore password
+    And Fog runs "auth/secstore -i -s tcp!fog!5356 -u glenda -G fromnine" with glenda's secstore password
+    Then it prints "put by 9front"
+
+  @FOG_LOGIN_009
+  Scenario: Fog's secstore client gets a file from 9front's secstored
+    Given glenda's secstore on 9front holds the file "notes" with "kept on 9front"
+    When Fog runs "auth/secstore -i -s tcp!9front!5356 -u glenda -G notes" with glenda's secstore password
+    Then it prints "kept on 9front"

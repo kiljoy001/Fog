@@ -248,6 +248,10 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   each way; when either way ends, both do. `tlssrv -c` is refused, as Fog has no certificates, and
   `-D` reports only the handshake's end, not each message. `#I` has no wstat, so the call is not
   given to the user `tlssrv -a` becomes.
+- `secstored` has no RADIUS client, as `#I` has no udp: `secureidcheck` refuses every response, as
+  9front's does when ndb holds no RADIUS secret, so an account that needs STA, or any under
+  `secstored -R`, cannot log in. `putPW` writes an account when it is changed, where 9front's
+  leaves it in a Biobuf that libbio flushes as the process exits.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.

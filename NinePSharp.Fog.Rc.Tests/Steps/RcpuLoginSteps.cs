@@ -21,8 +21,14 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
 
     // rc's prompt on Fog, as rcmain sets it when the profile sets none.
     private const string FogPrompt = "% ";
+
+    // secstored's port on Fog, and the host's port forwarded to 9front's 5356.
+    private const int FogSecstore = 17356;
+    private const int NineFrontSecstore = 17358;
+    private const string SecstorePassword = "secstorepw";
     private static readonly SemaphoreSlim Booting = new(1, 1);
     private static NineFrontTerminal? terminal;
+    private static bool nineFrontSecstored;
     private readonly FakeHostNetwork host = new();
     private readonly FakeHostConsole console = new();
     private readonly Dictionary<string, string> passwords = new(StringComparer.Ordinal);
@@ -127,12 +133,80 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
             throw new TimeoutException($"{fds}\n{Failure()}", error);
         }
 
-        int e = all.LastIndexOf("#errors\n", StringComparison.Ordinal);
-        int s = all.LastIndexOf("#status", StringComparison.Ordinal);
-        Assert.True(e >= 0 && s > e, all);
-        printed = all[..e];
-        errors = all[(e + "#errors\n".Length)..s];
-        status = all[(s + "#status".Length)..].Trim();
+        Collect(all);
+    }
+
+    // The command's output, in a terminal it asks for glenda's secstore password, as readcons
+    // asks, typed after its prompt and not echoed.
+    [When(@"^9front runs ""(.*)"" and gives glenda's secstore password$")]
+    public async Task WhenNineFrontRunsWithSecstorePasswordAsync(string command)
+    {
+        NineFrontTerminal t = await TerminalAsync();
+        string line = command.Replace("tcp!fog!5356", $"tcp!10.0.2.2!{host.HostPort(FogSecstore)}", StringComparison.Ordinal);
+        await t.SendLineAsync($"@{{{line}}} >/tmp/rout >[2]/tmp/rerr; st=$status; cat /tmp/rout; echo '#errors'; cat /tmp/rerr; echo '#status' $st");
+        await t.ExpectAsync("secstore password: ", TimeSpan.FromSeconds(60));
+        await t.SendLineAsync(SecstorePassword);
+        Collect((await t.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(60))).TrimStart('\n'));
+    }
+
+    [When(@"^Fog runs ""(.*)"" with glenda's secstore password$")]
+    public async Task WhenFogRunsWithSecstorePasswordAsync(string command)
+    {
+        string line = command
+            .Replace("tcp!fog!5356", $"tcp!127.0.0.1!{FogSecstore}", StringComparison.Ordinal)
+            .Replace("tcp!9front!5356", $"tcp!127.0.0.1!{NineFrontSecstore}", StringComparison.Ordinal);
+        Collect(await RunOnFogAsync($"@{{echo {SecstorePassword} | {line}}} >/tmp/rout >[2]/tmp/rerr; st=$status; cat /tmp/rout; echo '#errors'; cat /tmp/rerr; echo '#status' $st"));
+    }
+
+    // secuser's account for glenda on Fog, and secstored serving it.
+    [Given(@"^glenda has a secstore account on Fog$")]
+    public async Task GivenFogSecstoreAsync()
+    {
+        console.Type($"{SecstorePassword}\n{SecstorePassword}\n\n\n\n\n");
+        string ready = await RunOnFogAsync(
+            $"auth/secuser glenda </dev/cons >/dev/null; auth/secstored -s tcp!127.0.0.1!{FogSecstore} >/dev/null >[2=1]; " +
+            $"while(! ~ `{{cat /net/tcp/*/local >[2]/dev/null}} *!{FogSecstore}*) sleep 0.1; echo ready");
+        Assert.True(ready.TrimEnd('\n') == "ready", ready);
+    }
+
+    [Given(@"^glenda's secstore on Fog holds the file ""(.*)"" with ""(.*)""$")]
+    public async Task GivenFogSecstoreFileAsync(string file, string text)
+    {
+        await GivenFogSecstoreAsync();
+        string saved = await RunOnFogAsync($"cd /tmp; echo '{text}' >{file}; echo {SecstorePassword} | auth/secstore -i -s tcp!127.0.0.1!{FogSecstore} -u glenda -p {file}");
+        Assert.Contains("secstore: saved", saved, StringComparison.Ordinal);
+    }
+
+    // On 9front, secuser makes glenda's account, answering its prompts, and secstored serves it,
+    // once for the run; then 9front's own client stores the file.
+    [Given(@"^glenda's secstore on 9front holds the file ""(.*)"" with ""(.*)""$")]
+    public async Task GivenNineFrontSecstoreFileAsync(string file, string text)
+    {
+        NineFrontTerminal t = await TerminalAsync();
+        if (!nineFrontSecstored)
+        {
+            // The live CD's /adm is the CD's; secuser makes the store in a directory before it.
+            await t.RunAsync("mkdir -p /tmp/adm; bind -bc /tmp/adm /adm");
+            await t.SendLineAsync("auth/secuser glenda");
+            foreach (string prompt in new[] { "glenda password: ", "retype password: " })
+            {
+                await t.ExpectAsync(prompt, TimeSpan.FromSeconds(30));
+                await t.SendLineAsync(SecstorePassword);
+            }
+
+            foreach (string prompt in new[] { "]: ", "]: ", "]: ", "]: " })
+            {
+                await t.ExpectAsync(prompt, TimeSpan.FromSeconds(30));
+                await t.SendLineAsync(string.Empty);
+            }
+
+            Assert.Contains("change written", await t.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(30)), StringComparison.Ordinal);
+            await t.RunAsync("auth/secstored");
+            nineFrontSecstored = true;
+        }
+
+        string saved = await t.RunAsync($"@{{cd /tmp; echo '{text}' >{file}; echo {SecstorePassword} | auth/secstore -i -s tcp!10.0.2.15!5356 -u glenda -p {file}}} >[2=1]");
+        Assert.True(saved.Contains("secstore: saved", StringComparison.Ordinal), saved);
     }
 
     [When(@"^9front runs rcpu as ""(.*)"" with the password ""(.*)""$")]
@@ -296,6 +370,45 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
 
+    // What the command left after #errors and #status, split.
+    private void Collect(string all)
+    {
+        int e = all.LastIndexOf("#errors\n", StringComparison.Ordinal);
+        int s = all.LastIndexOf("#status", StringComparison.Ordinal);
+        Assert.True(e >= 0 && s > e, all);
+        printed = all[..e];
+        errors = all[(e + "#errors\n".Length)..s];
+        status = all[(s + "#status".Length)..].Trim();
+    }
+
+    // rc on the Fog host runs the script, and what it prints, to standard output and error both,
+    // is given back once it is done.
+    private async Task<string> RunOnFogAsync(string script)
+    {
+        var (read, write) = await init.PipeAsync();
+        long pid = init.Fork(RforkFlags.Proc | RforkFlags.Fdg, async child =>
+        {
+            await child.DupAsync(write, 1);
+            await child.DupAsync(write, 2);
+            await child.CloseAsync(read);
+            await child.CloseAsync(write);
+            await child.ExecAsync("/bin/rc", ["rc", "-c", script]);
+        });
+        await init.CloseAsync(write);
+        var bytes = new List<byte>();
+        for (ReadOnlyMemory<byte> b; !(b = await init.ReadAsync(read, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(60))).IsEmpty;)
+        {
+            bytes.AddRange(b.Span);
+        }
+
+        await init.CloseAsync(read);
+        while ((await init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(10))).Pid != pid)
+        {
+        }
+
+        return Encoding.UTF8.GetString([.. bytes]);
+    }
+
     private string Dialed(string command) => command.Replace("tcp!fog!17019", $"tcp!10.0.2.2!{Port}", StringComparison.Ordinal);
 
     private async Task UntilAsync(Func<bool> done, string why)
@@ -336,7 +449,7 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
         {
             if (terminal is null)
             {
-                NineFrontTerminal t = await NineFrontTerminal.BootAsync();
+                NineFrontTerminal t = await NineFrontTerminal.BootAsync((host.HostPort(NineFrontSecstore), 5356));
                 await t.RunAsync("ip/ipconfig");
                 await t.RunAsync("cp /lib/ndb/local /tmp/ndblocal");
                 await t.RunAsync($"echo 'authdom={Domain} auth=tcp!10.0.2.2!{host.HostPort(567)}' >>/tmp/ndblocal");

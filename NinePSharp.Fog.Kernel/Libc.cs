@@ -34,6 +34,13 @@ public static class Libc
         }
     }
 
+    // ctime: asctime's "WW MMM _D hh:mm:ss ZZZ YYYY\n" for the time, in GMT, Fog's only zone.
+    public static string Ctime(long seconds)
+    {
+        DateTime t = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{t:ddd MMM} {t.Day,2} {t:HH:mm:ss} GMT {t.Year}\n");
+    }
+
     public static int Strtol(string s, int radix, out int end) => Signed<int>(s, radix, out end);
 
     public static long Strtoll(string s, int radix, out int end) => Signed<long>(s, radix, out end);

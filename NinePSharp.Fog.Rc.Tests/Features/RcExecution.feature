@@ -7212,8 +7212,8 @@ Feature: rc runs scripts as 9front rc does
         0 r  c    0 (0000000000000005 0 00)     0        0 /dev/null
         1 rw |    4 (0000000000000001 0 00)     0       68 #|/data1
         2 rw |    4 (0000000000000001 0 00)     0      130 #|/data1
-        3 r  R    0 (0000000000000022 2 00)     0      130 /tmp/s
-        4 r  R    0 (0000000000000023 2 00)     0        2 /tmp/f
+        3 r  R    0 (0000000000000026 2 00)     0      130 /tmp/s
+        4 r  R    0 (0000000000000027 2 00)     0        2 /tmp/f
         5 w  c    0 (0000000000000005 0 00)     0        0 /dev/null
         6 rw I    0 (0000000000000006 0 00)     0        0 /net/tcp/clone
       """
@@ -7362,4 +7362,253 @@ Feature: rc runs scripts as 9front rc does
       """
       /tmp
       /
+      """
+
+  @FOG_RC_RUN_241
+  Scenario: secuser makes an account, keeping H(password)^-1 mod p for PAK and an expiry a year on
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons
+      cat /adm/secstore/who/glenda
+      test -d /adm/secstore/store/glenda && echo its store is made
+      """
+    Then it prints
+      """
+      new account (because /adm/secstore/glenda accounts glenda and FICTITIOUS do not exist)
+      expires [DDMMYYYY, default = 13112024]: Enabled or Disabled [default Enabled]: require STA? [default no]: comments [default = ]: change written
+      exp	1731536000
+      PAK-Hi	hOaEPUy9zkWLWGWGLvdWIueeQw49POlvKUdOe4LlGVdNwwcdCh3LdRnAMnUf4y+FOosIGyfTSjJpJCTQOQVfsSgNWkXXGlChgCakzJPctlRDjOCjB1RKvkeRZfwqMxMjlrRX2g41QGl6wR2C1EiaGgBqgJ8TORplC1GsLnyJi6E=
+      its store is made
+      """
+
+  @FOG_RC_RUN_242
+  Scenario: secuser edits an account, asking again for a date it cannot take and an answer it does not know
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n\n1234\n32012030\n01132030\n01011960\n01012030\nx\nD\ny\nhi\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secuser glenda </dev/cons
+      cat /adm/secstore/who/glenda
+      """
+    Then it prints
+      """
+      expires [DDMMYYYY, default = 13112024]: !bad date format: 1234
+      expires [DDMMYYYY, default = 13112024]: !bad day of month: 32
+      expires [DDMMYYYY, default = 13112024]: !bad month: 13
+      expires [DDMMYYYY, default = 13112024]: !bad year: 1960
+      expires [DDMMYYYY, default = 13112024]: Enabled or Disabled [default Enabled]: Enabled or Disabled [default Enabled]: require STA? [default no]: comments [default = ]: change written
+      exp	1893542399
+      DISABLED
+      STA
+      other	hi
+      PAK-Hi	hOaEPUy9zkWLWGWGLvdWIueeQw49POlvKUdOe4LlGVdNwwcdCh3LdRnAMnUf4y+FOosIGyfTSjJpJCTQOQVfsSgNWkXXGlChgCakzJPctlRDjOCjB1RKvkeRZfwqMxMjlrRX2g41QGl6wR2C1EiaGgBqgJ8TORplC1GsLnyJi6E=
+      """
+
+  @FOG_RC_RUN_243
+  Scenario: secstore puts a file in secstored's store and gets it back, logging in with PAK
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -s tcp!127.0.0.1!17356 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17356*) sleep 0.1
+      cd /tmp; echo hello there >notes
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17356 -u glenda -p notes
+      rm notes
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17356 -u glenda -g notes; cat notes
+      echo secretpw | auth/secstore -iv -s tcp!127.0.0.1!17356 -u glenda -G notes
+      x=`{echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17356 -u glenda -g . >[2]/dev/null}
+      echo $x(1-7) and $#x words
+      """
+    Then it prints
+      """
+      secstore
+      secstore: saved 12 bytes
+      secstore
+      hello there
+      dialing tcp!127.0.0.1!17356
+      foxtrot
+      secstore
+      get notes
+      hello there
+      notes 44 Nov 14 22:13:20 GMT 2023 and 8 words
+      """
+
+  @FOG_RC_RUN_244
+  Scenario: secstore is refused a wrong password, which secstored counts against the account, and a user with no account
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -s tcp!127.0.0.1!17357 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17357*) sleep 0.1
+      echo wrongpw | auth/secstore -i -s tcp!127.0.0.1!17357 -u glenda -G notes
+      ~ $status *'invalid password on standard input' && echo refused
+      while(! ~ `{cat /adm/secstore/who/glenda} *failed*) sleep 0.1
+      cat /adm/secstore/who/glenda
+      echo anything | auth/secstore -i -s tcp!127.0.0.1!17357 -u nobody -G notes
+      ~ $status *'invalid password on standard input' && echo refused
+      """
+    Then it prints
+      """
+      refused
+      exp	1731536000
+      failed	1
+      PAK-Hi	hOaEPUy9zkWLWGWGLvdWIueeQw49POlvKUdOe4LlGVdNwwcdCh3LdRnAMnUf4y+FOosIGyfTSjJpJCTQOQVfsSgNWkXXGlChgCakzJPctlRDjOCjB1RKvkeRZfwqMxMjlrRX2g41QGl6wR2C1EiaGgBqgJ8TORplC1GsLnyJi6E=
+      auth/secstore: error: accounts nobody and FICTITIOUS do not exist
+      refused
+      """
+
+  @FOG_RC_RUN_245
+  Scenario: secstore removes a file, and fails a file the store does not have and a name with a slash
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -s tcp!127.0.0.1!17358 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17358*) sleep 0.1
+      cd /tmp; echo hello there >notes
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -p notes >[2]/dev/null
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -r notes
+      while(test -e /adm/secstore/store/glenda/notes) sleep 0.1
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -G notes
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -r a/b
+      """
+    Then it prints
+      """
+      secstore
+      secstore
+      secstore: remote file notes does not exist
+      auth/secstore: cmd failed
+      secstore
+      secstore: simple filenames, not paths like a/b
+      auth/secstore: cmd failed
+      """
+
+  @FOG_RC_RUN_246
+  Scenario: aescbc encrypts and decrypts its own format, and decrypts a file secstore stored
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -s tcp!127.0.0.1!17359 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17359*) sleep 0.1
+      cd /tmp; echo hello there >clear
+      echo key |[3=1] auth/aescbc -i -e <clear >c.aes
+      echo key |[3=1] auth/aescbc -i -d <c.aes
+      echo wrongkey |[3=1] auth/aescbc -i -d <c.aes >/dev/null
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17359 -u glenda -p clear >[2]/dev/null
+      echo secretpw |[3=1] auth/aescbc -i -d </adm/secstore/store/glenda/clear
+      auth/aescbc -x x
+      """
+    Then it prints
+      """
+      hello there
+      auth/aescbc: decrypted file failed to authenticate
+      hello there
+      usage: auth/aescbc -d < cipher.aes > clear.txt
+         or: auth/aescbc -e < clear.txt > cipher.aes
+      """
+
+  @FOG_RC_RUN_247
+  Scenario: secstored refuses a disabled account and an expired one
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -s tcp!127.0.0.1!17360 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17360*) sleep 0.1
+      echo DISABLED >>/adm/secstore/who/glenda
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17360 -u glenda -G notes
+      echo 'exp 1700000000' >/adm/secstore/who/glenda
+      echo 'PAK-Hi hOaEPUy9zkWLWGWGLvdWIueeQw49POlvKUdOe4LlGVdNwwcdCh3LdRnAMnUf4y+FOosIGyfTSjJpJCTQOQVfsSgNWkXXGlChgCakzJPctlRDjOCjB1RKvkeRZfwqMxMjlrRX2g41QGl6wR2C1EiaGgBqgJ8TORplC1GsLnyJi6E=' >>/adm/secstore/who/glenda
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17360 -u glenda -G notes
+      """
+    Then it prints
+      """
+      auth/secstore: error: account glenda disabled
+      auth/secstore: error: account glenda expired at Tue Nov 14 22:13:20 GMT 2023
+      """
+
+  @FOG_RC_RUN_248
+  Scenario: secstore -c changes the password, encrypting each stored file again under the new one
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\nsecretpw\nshort\nnewsecretpw\nnewsecretpw\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -s tcp!127.0.0.1!17361 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17361*) sleep 0.1
+      cd /tmp; echo hello there >notes
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17361 -u glenda -p notes >[2]/dev/null
+      auth/secstore -c -s tcp!127.0.0.1!17361 -u glenda
+      echo newsecretpw | auth/secstore -i -s tcp!127.0.0.1!17361 -u glenda -G notes
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17361 -u glenda -G notes
+      ~ $status *'invalid password on standard input' && echo the old one is refused
+      while(! ~ `{cat /adm/secstore/who/glenda} *failed*) sleep 0.1
+      cat /adm/secstore/who/glenda
+      """
+    Then it prints
+      """
+      secstore
+      !password must be at least 7 characters
+      secstore: reencrypting 'notes'
+      secstore: saved 12 bytes
+      secstore
+      hello there
+      the old one is refused
+      exp	1731536000
+      failed	1
+      PAK-Hi	n7W0PNsELxoAiQZEU0eD6niuklDDg5Z5u996M6ZCBFpcDet/i/d49YXTyWe71ZPLphJdQfmZfmQPN5gX7fYcXIx4Bf94/8x78Kp/k7ejzb6+GqdEeoP98RHm4DgLJciQ01bXLeGAF29cmOR2rmlG3gpOK5dHdELEiv+xkdYVirc=
+      """
+
+  @FOG_RC_RUN_249
+  Scenario: secstored -R asks for a SecurID step, which with no RADIUS server to ask it refuses
+    Given the clock reads 1700000000
+    And the console is typed "secretpw\nsecretpw\n\n\n\n\n"
+    When rc runs the script
+      """
+      auth/secuser glenda </dev/cons >/dev/null
+      auth/secstored -R -s tcp!127.0.0.1!17362 >/dev/null >[2=1]
+      while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17362*) sleep 0.1
+      {echo secretpw; echo 1234567890} | auth/secstore -i -s tcp!127.0.0.1!17362 -u glenda -G notes
+      echo -n secretpw | auth/secstore -i -s tcp!127.0.0.1!17362 -u glenda -G notes
+      ~ $status *'missing PIN+SecureID on standard input' && echo no PIN
+      """
+    Then it prints
+      """
+      secstore
+      secstore: connection read error
+      auth/secstore: authentication failed
+      secstore
+      no PIN
+      """
+
+  @FOG_RC_RUN_250
+  Scenario: secstore, secstored and secuser print their usage, and secstore takes no files with -c
+    When rc runs the script
+      """
+      auth/secstore x; ~ $status *usage && echo usage
+      auth/secstore -c -G x; ~ $status *usage && echo usage
+      auth/secstored -z; ~ $status *usage && echo usage
+      auth/secuser; ~ $status *usage && echo usage
+      """
+    Then it prints
+      """
+      usage: secstore [-cinv] [-[gG] getfile] [-p putfile] [-r rmfile] [-s tcp!server!5356] [-u user]
+      usage
+      secstore: Get, put, and remove invalid with password change.
+      usage
+      usage: secstored [-R] [-S servername] [-s tcp!*!5356] [-v] [-x netmtpt]
+      usage
+      usage: secuser [-v] <user>
+      usage
       """

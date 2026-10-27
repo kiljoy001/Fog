@@ -7,8 +7,12 @@ public static class Commands
 {
     public static IReadOnlyDictionary<string, ProgramMain> All { get; } = new Dictionary<string, ProgramMain>
     {
+        ["auth/aescbc"] = Aescbc.MainAsync,
         ["auth/factotum"] = Factotum.MainAsync,
         ["auth/newns"] = AuthNewns.MainAsync,
+        ["auth/secstore"] = Secstore.MainAsync,
+        ["auth/secstored"] = Secstored.MainAsync,
+        ["auth/secuser"] = Secuser.MainAsync,
         ["aux/listen"] = Listen.MainAsync,
         ["aux/listen1"] = Listen1.MainAsync,
         ["aux/trampoline"] = Trampoline.MainAsync,

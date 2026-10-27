@@ -59,7 +59,8 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
         Directory.Delete(directory, recursive: true);
     }
 
-    internal static async Task<NineFrontTerminal> BootAsync()
+    // With each forward, a port of the host's loopback reaches the port of 9front's given with it.
+    internal static async Task<NineFrontTerminal> BootAsync(params (int Host, int Guest)[] forwards)
     {
         string directory = Directory.CreateTempSubdirectory("9front-").FullName;
         string iso = Path.Combine(directory, "9front.iso");
@@ -75,7 +76,7 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
         string socket = Path.Combine(directory, "console");
         string accel = File.Exists("/dev/kvm") ? "-accel kvm -accel tcg" : "-accel tcg";
         string qemu = $"qemu-system-x86_64 {accel} -m 1024 -smp 2 -display none -monitor none -cdrom {iso} -boot d " +
-            $"-nic user,model=e1000 -chardev socket,id=console,path={socket},server=on,wait=on -serial chardev:console";
+            $"-nic user,model=e1000{string.Concat(forwards.Select(f => $",hostfwd=tcp:127.0.0.1:{f.Host}-:{f.Guest}"))} -chardev socket,id=console,path={socket},server=on,wait=on -serial chardev:console";
         var start = new ProcessStartInfo("sh")
         {
             ArgumentList = { "-c", $"{qemu} & vm=$!; read -r _; kill $vm; wait $vm" },

@@ -163,6 +163,18 @@ public sealed class RcExecutionSteps
     [Then(@"^the file server was attached as ""(.*)"" to ""(.*)""$")]
     public void ThenAttached(string user, string tree) => Assert.Contains((user, tree), server!.Attaches);
 
+    // 9front's clock cannot be set, so this runs on Fog alone.
+    [Given(@"^the clock reads (\d+)$")]
+    public void GivenClockReads(long seconds) => (clock.Now, fogOnly) = (DateTimeOffset.FromUnixTimeSeconds(seconds), true);
+
+    // 9front's console cannot be typed ahead, so this runs on Fog alone.
+    [Given(@"^the console is typed ""(.*)""$")]
+    public void GivenTyped(string text)
+    {
+        console.Type(text.Replace("\\n", "\n", StringComparison.Ordinal));
+        fogOnly = true;
+    }
+
     [Given("rc starts with all of its 5000 descriptors in use")]
     public void GivenAllDescriptorsInUse() => (lastBusy, fogOnly) = (4999, true);
 
