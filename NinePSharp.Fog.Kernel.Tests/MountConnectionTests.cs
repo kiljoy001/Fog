@@ -64,7 +64,9 @@ public sealed class MountConnectionTests
     public async Task TagsCountUpFromOnePassingOverZeroNoTagAndATagStillInUse()
     {
         (MountConnection connection, ScriptedPeer peer) = await ConnectAsync();
-        Task<byte[]> held = StatAsync(connection, 1);
+
+        // Held for the whole count, which can outlast the bound each call is given.
+        Task<byte[]> held = connection.RpcAsync(tag => new Tstat(tag, 1), MessageTypes.Rstat, CancellationToken.None);
         Assert.Equal(1, ScriptedPeer.Tag(await peer.RequestAsync(0)));
 
         var seen = new HashSet<ushort>();
