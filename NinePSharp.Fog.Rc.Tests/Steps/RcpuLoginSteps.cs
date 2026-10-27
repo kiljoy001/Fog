@@ -18,12 +18,16 @@ namespace NinePSharp.Fog.Rc.Tests.Steps;
 public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
 {
     private const string Domain = "fog";
+
+    // rc's prompt on Fog, as rcmain sets it when the profile sets none.
+    private const string FogPrompt = "% ";
     private static readonly SemaphoreSlim Booting = new(1, 1);
     private static NineFrontTerminal? terminal;
     private readonly FakeHostNetwork host = new();
     private readonly FakeHostConsole console = new();
     private readonly Dictionary<string, string> passwords = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource stopping = new();
+    private readonly HashSet<long> session = [];
     private FogKernel kernel = null!;
     private Process init = null!;
     private TcpListener? authsrv;
@@ -31,6 +35,7 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
     private string errors = string.Empty;
     private string status = string.Empty;
     private string closed = string.Empty;
+    private bool interactive;
 
     private int Port => host.HostPort(17019);
 
@@ -92,7 +97,7 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
     {
         NineFrontTerminal t = await TerminalAsync();
         await KeyAsync(t, "glenda", passwords["glenda"]);
-        string line = command.Replace("tcp!fog!17019", $"tcp!10.0.2.2!{Port}", StringComparison.Ordinal);
+        string line = Dialed(command);
         string all;
         try
         {
@@ -138,6 +143,56 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
         await t.SendLineAsync($"rcpu -h tcp!10.0.2.2!{Port} -u {user} -c 'echo in'");
         printed = await t.ExpectAsync("!Adding key: ", TimeSpan.FromSeconds(60));
     }
+
+    [When(@"^9front runs ""(.*)"" interactively$")]
+    public async Task WhenNineFrontRunsInteractivelyAsync(string command)
+    {
+        NineFrontTerminal t = await TerminalAsync();
+        await KeyAsync(t, "glenda", passwords["glenda"]);
+        await t.SendLineAsync(Dialed(command));
+        interactive = true;
+        printed = await t.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(60));
+    }
+
+    // Del once the command is running on Fog, as kbdfs reads it from the serial console.
+    [When(@"^it types ""(.*)"" and then Del$")]
+    public async Task WhenTypesThenDelAsync(string line)
+    {
+        await terminal!.SendLineAsync(line);
+        string name = line.Split(' ')[0];
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == name), $"{name} did not start on Fog");
+        await terminal.TypeAsync("\x7f");
+    }
+
+    [When(@"^9front runs ""(.*)"" in the background$")]
+    public async Task WhenNineFrontRunsInBackgroundAsync(string command)
+    {
+        NineFrontTerminal t = await TerminalAsync();
+        await KeyAsync(t, "glenda", passwords["glenda"]);
+        await t.RunAsync($"{Dialed(command)} >/tmp/rout >[2]/tmp/rerr &");
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == "sleep"), "sleep did not start on Fog");
+        string group = await ReadFileAsync($"/proc/{kernel.Processes.Values.First(p => p.Text == "sleep").Pid}/noteid");
+        foreach (Process p in kernel.Processes.Values)
+        {
+            try
+            {
+                if (await ReadFileAsync($"/proc/{p.Pid}/noteid") == group)
+                {
+                    session.Add(p.Pid);
+                }
+            }
+            catch (SyscallException)
+            {
+                // It exited as the group was read.
+            }
+        }
+    }
+
+    // tcp(3)'s hangup of the call to Fog, as the call ends when its client is killed: tlsclient and
+    // exportfs each make a note group of their own, so no one note reaches all of the client.
+    [When(@"^9front hangs up the client's call$")]
+    public Task WhenCallHungUpAsync() => terminal!.RunAsync(
+        $"for(c in /net/tcp/[0-9]*) if(~ `{{cat $c/remote}} 10.0.2.2!{Port}) echo hangup >$c/ctl");
 
     [When(@"^a client connects to 17019 and sends ""(.*)""$")]
     public async Task WhenClientSendsAsync(string text)
@@ -190,14 +245,45 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
         Assert.Contains("in", await terminal.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(60)), StringComparison.Ordinal);
     }
 
+    [Then(@"^rc on Fog is interrupted and prompts again$")]
+    public async Task ThenPromptsAgainAsync()
+    {
+        printed = await terminal!.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(30));
+        await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text == "sleep"), "sleep was not interrupted");
+    }
+
+    // What the line prints after its echo.
+    [Then(@"^typing ""(.*)"" prints ""(.*)""$")]
+    public async Task ThenTypingPrintsAsync(string line, string text)
+    {
+        await terminal!.SendLineAsync(line);
+        printed = await terminal.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(30));
+        Assert.True(printed[(printed.IndexOf('\n', StringComparison.Ordinal) + 1)..].TrimEnd('\n') == Unescape(text), Failure());
+    }
+
+    [Then(@"^every process of the session's note group on Fog has exited$")]
+    public async Task ThenSessionExitedAsync()
+    {
+        Assert.NotEmpty(session);
+        await UntilAsync(() => !kernel.Processes.Values.Any(p => session.Contains(p.Pid)), "the session's processes are still running");
+    }
+
+    // The host's processes killed, which hangs up any session still open, as after Del, where
+    // rcpu's note copier holds the mount of the client's files open, as 9front's does; the
+    // terminal is waited for until its rcpu has ended.
     [AfterScenario]
-    public void CleanUp()
+    public async Task CleanUpAsync()
     {
         stopping.Cancel();
         authsrv?.Stop();
         foreach (Process process in kernel?.Processes.Values ?? [])
         {
             process.PostNote("kill");
+        }
+
+        if (interactive)
+        {
+            await terminal!.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(30));
         }
     }
 
@@ -209,6 +295,31 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
     }
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
+
+    private string Dialed(string command) => command.Replace("tcp!fog!17019", $"tcp!10.0.2.2!{Port}", StringComparison.Ordinal);
+
+    private async Task UntilAsync(Func<bool> done, string why)
+    {
+        for (int i = 0; i < 300 && !done(); i++)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.True(done(), $"{why}\n{Failure()}");
+    }
+
+    private async Task<string> ReadFileAsync(string path)
+    {
+        int f = await init.OpenAsync(path, NinePConstants.OREAD);
+        try
+        {
+            return Encoding.UTF8.GetString((await init.ReadAsync(f, 8192)).Span);
+        }
+        finally
+        {
+            await init.CloseAsync(f);
+        }
+    }
 
     // The terminal, booted once for the run and put in Fog's auth domain: the live CD does not
     // configure its interface and its /lib/ndb is read-only, and cs and factotum are started again

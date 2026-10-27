@@ -57,10 +57,13 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     When it types "sleep 100" and then Del
     Then rc on Fog is interrupted and prompts again
 
+  # After Del, rcpu's note copier, which posted the interrupt and so was not sent it, holds the
+  # client's files open, so the session ends when the client's call does, as 9front's does.
+
   @FOG_LOGIN_003
   Scenario: Closing the client hangs up the session's processes
     Given 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'sleep 100'"
-    When the rcpu client is killed
+    When the client's call is hung up, as killing the client hangs it up
     Then every process of the session's note group on Fog has exited
 
   @FOG_LOGIN_004

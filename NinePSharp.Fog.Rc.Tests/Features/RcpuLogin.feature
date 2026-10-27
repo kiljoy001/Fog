@@ -50,3 +50,19 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
     When a client connects to 17019 and sends "nonsense\0"
     Then the host closes the call
     And no process is started for the call
+
+  # After Del, rcpu's note copier, which posted the interrupt and so was not sent it, holds the
+  # client's files open, so the session ends when the client's call does, as 9front's does.
+
+  @FOG_LOGIN_003
+  Scenario: Del interrupts the command and the session goes on
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda" interactively
+    And it types "sleep 100" and then Del
+    Then rc on Fog is interrupted and prompts again
+    And typing "echo still here" prints "still here"
+
+  @FOG_LOGIN_003
+  Scenario: Closing the client hangs up the session's processes
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'sleep 100'" in the background
+    And 9front hangs up the client's call
+    Then every process of the session's note group on Fog has exited

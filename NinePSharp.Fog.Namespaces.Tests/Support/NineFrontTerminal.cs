@@ -114,6 +114,9 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
         }
     }
 
+    // Keys typed as they are, with no newline and no wait for an echo, as Del is.
+    internal async Task TypeAsync(string keys) => await console.SendAsync(Encoding.UTF8.GetBytes(keys));
+
     // Waits for text the console has not yet shown past, and returns everything before it.
     internal async Task<string> ExpectAsync(string text, TimeSpan timeout)
     {
