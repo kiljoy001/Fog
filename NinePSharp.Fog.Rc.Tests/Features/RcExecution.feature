@@ -128,6 +128,7 @@ Feature: rc runs scripts as 9front rc does
       fn f {
       	echo $#* $1 $2
       }
+      f: not found
       """
 
   @FOG_RC_RUN_007
@@ -3022,6 +3023,7 @@ Feature: rc runs scripts as 9front rc does
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 15 Xword ()
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 17 Xword (x)
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 19 Xsimple (whatis x)
+      x: not found
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 20 Xwastrue
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 21 Xreturn
       *rdcmds* pid N cycle C 3 Xreturn
@@ -3101,14 +3103,14 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_075
-  Scenario: A variable's name is cut to fit rc's 128-byte environment path
+  Scenario: A variable's /env file keeps 127 bytes of a longer name, as rc's strncat does
     When rc runs the script
       """
-      a=aaaaaaaaaa; n=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a; m=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^aa; $n=v; rc -c 'whatis '^$m
+      a=aaaaaaaaaa; n=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a; m=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^aaaaaaa; $n=v; rc -c 'whatis '^$m
       """
     Then it prints
       """
-      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=v
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=v
       """
 
   @FOG_RC_RUN_076
@@ -3418,6 +3420,7 @@ Feature: rc runs scripts as 9front rc does
       builtin cd
 
       no match
+      nonesuch: not found
       not found
       x=1
 
@@ -3848,7 +3851,7 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_121
-  Scenario: A file opened on a descriptor a dup will clobber is moved off it
+  Scenario: A file and dups onto other descriptors all reach the file
     When rc runs the script
       """
       echo hi >[5=1] >/tmp/cl1; cat /tmp/cl1
@@ -3960,7 +3963,9 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
+      zz: not found
       0
+      fn#ff: not found
       not found
       """
 
@@ -4103,6 +4108,7 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
+      ne: not found
       not found
       """
 
@@ -4346,18 +4352,26 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_154
-  Scenario: rfork F forgets the redirections waiting for a command
+  Scenario: rfork F before redirections sends the output where 9front does
     When rc runs the script
       """
       @{rfork F; echo hi >/tmp/rf1 >[2]/tmp/rf2 >[3]/tmp/rf3 >[4]/tmp/rf4 >[5]/tmp/rf5}
-      cat /tmp/rf1
+      for(f in /tmp/rf?) echo $f `{cat $f}
       @{rfork F; echo ho >[5]/tmp/rg5 >[4]/tmp/rg4 >[3]/tmp/rg3 >[2]/tmp/rg2 >/tmp/rg1}
-      cat /tmp/rg1
+      for(f in /tmp/rg?) echo $f `{cat $f}
       """
     Then it prints
       """
-      hi
-      ho
+      /tmp/rf1
+      /tmp/rf2
+      /tmp/rf3
+      /tmp/rf4
+      /tmp/rf5
+      /tmp/rg1
+      /tmp/rg2
+      /tmp/rg3
+      /tmp/rg4 ho
+      /tmp/rg5
       """
 
   @FOG_RC_RUN_155
@@ -4621,20 +4635,22 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_169
-  Scenario: A variable's /env file is named within rc's 128-byte buffer
+  Scenario: A variable's /env file keeps a name of 127 bytes whole and cuts one of 128
     When rc runs the script
       """
-      qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq=1
-      rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr=2
+      qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq=1
+      rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr=2
       cat /dev/null
       x=(/env/q*); echo $#x
-      ~ $x /env/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq && echo 122
-      y=(/env/r*); ~ $y /env/rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr && echo 122 too
+      ~ $x /env/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq && echo 127
+      for(i in /env/r*) echo $i
       """
     Then it prints
       """
       1
-      122
+      127
+      /env/rcname
+      /env/rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
       """
 
   @FOG_RC_RUN_170
@@ -4761,7 +4777,7 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_179
-  Scenario: A file moved off a clobbered descriptor is not left open
+  Scenario: A dup onto a descriptor no file is opened on leaves the file open on 1
     When rc runs the script
       """
       rc -c 'echo /fd/*' >[5=1] >/tmp/cl4; cat /tmp/cl4
@@ -4796,16 +4812,26 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_185
-  Scenario: rfork F leaves a command only the descriptors redirected for it
+  Scenario: rfork F leaves a command the descriptors its redirections leave, as in 9front
     When rc runs the script
       """
-      @{rfork F; rc -c 'echo /fd/*' >/tmp/rh1 >[2]/tmp/rh2 >[3]/tmp/rh3 >[4]/tmp/rh4 >[5]/tmp/rh5}; cat /tmp/rh1
-      @{rfork F; rc -c 'echo /fd/*' >[5]/tmp/ri5 >[4]/tmp/ri4 >[3]/tmp/ri3 >[2]/tmp/ri2 >/tmp/ri1}; cat /tmp/ri1
+      @{rfork F; rc -c 'echo /fd/*' >/tmp/rh1 >[2]/tmp/rh2 >[3]/tmp/rh3 >[4]/tmp/rh4 >[5]/tmp/rh5}
+      for(f in /tmp/rh?) echo $f `{cat $f}
+      @{rfork F; rc -c 'echo /fd/*' >[5]/tmp/ri5 >[4]/tmp/ri4 >[3]/tmp/ri3 >[2]/tmp/ri2 >/tmp/ri1}
+      for(f in /tmp/ri?) echo $f `{cat $f}
       """
     Then it prints
       """
-      /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl /fd/5 /fd/5ctl
-      /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl /fd/5 /fd/5ctl
+      /tmp/rh1
+      /tmp/rh2
+      /tmp/rh3
+      /tmp/rh4
+      /tmp/rh5
+      /tmp/ri1
+      /tmp/ri2
+      /tmp/ri3
+      /tmp/ri4 /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/5 /fd/5ctl
+      /tmp/ri5
       """
 
   @FOG_RC_RUN_186
@@ -5021,16 +5047,18 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       status=''
+      x: not found
       """
 
   @FOG_RC_RUN_205
-  Scenario: A file moved off a clobbered descriptor is closed in the shell too
+  Scenario: A dup onto the descriptor a file was opened on clobbers the file, as in 9front
     When rc runs the script
       """
       rc -c 'echo /fd/*' >[4=1] >/tmp/cl6; echo /fd/*
       """
     Then it prints
       """
+      /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl
       /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
       """
 
@@ -7181,8 +7209,8 @@ Feature: rc runs scripts as 9front rc does
         0 r  c    0 (0000000000000005 0 00)     0        0 /dev/null
         1 rw |    4 (0000000000000001 0 00)     0       68 #|/data1
         2 rw |    4 (0000000000000001 0 00)     0      130 #|/data1
-        3 r  R    0 (0000000000000020 2 00)     0      130 /tmp/s
-        4 r  R    0 (0000000000000021 2 00)     0        2 /tmp/f
+        3 r  R    0 (0000000000000022 2 00)     0      130 /tmp/s
+        4 r  R    0 (0000000000000023 2 00)     0        2 /tmp/f
         5 w  c    0 (0000000000000005 0 00)     0        0 /dev/null
         6 rw I    0 (0000000000000006 0 00)     0        0 /net/tcp/clone
       """
@@ -7303,4 +7331,32 @@ Feature: rc runs scripts as 9front rc does
       usage: ndb/csquery [/net/cs [addr...]]
       usage
       ndb/csquery: cannot open #I/nothing: file does not exist: '#I/nothing'
+      """
+
+  @FOG_RC_RUN_239
+  Scenario: . reads a script from <{} in the shell itself, after the input it was started from is read
+    When rc runs the script
+      """
+      . <{echo 'x=(from a pipe)'}
+      echo $x
+      rc -c '. <{echo echo read by -c}; read <{echo and by a redirection}'
+      """
+    Then it prints
+      """
+      from a pipe
+      read by -c
+      and by a redirection
+      """
+
+  @FOG_RC_RUN_240
+  Scenario: pwd prints the name of the working directory
+    When rc runs the script
+      """
+      cd /tmp; pwd
+      cd /; pwd
+      """
+    Then it prints
+      """
+      /tmp
+      /
       """

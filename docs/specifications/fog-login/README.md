@@ -243,6 +243,11 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - `#c/hostowner` refuses a name a NUL ends before it begins, as Fog's users all have names.
 - The host's nvram is `#c/nvram`, kept in the host's sealed key store, which readnvram finds
   there or at `$nvram`, as Fog has no `$cputype` to look it up by.
+- Fog has no devtls: `tlssrv`'s TLS is `Dp9ik.Tls`'s, and two processes of `tlssrv`'s, in a note
+  group of their own, relay between the call and a pipe whose other end the command holds, one
+  each way; when either way ends, both do. `tlssrv -c` is refused, as Fog has no certificates, and
+  `-D` reports only the handshake's end, not each message. `#I` has no wstat, so the call is not
+  given to the user `tlssrv -a` becomes.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.

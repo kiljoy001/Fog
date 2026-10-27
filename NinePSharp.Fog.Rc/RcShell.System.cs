@@ -17,12 +17,10 @@ internal sealed partial class RcShell
     // getflags.c's reason for a usage message.
     private string? usageReason;
 
-    // Env: /env/name, or /env/fn#name, in rc's buffer of 128 bytes.
+    // Env: /env/name, or /env/fn#name, with as much of name as strncat appends to rc's 128-byte
+    // buffer, sizeof buf - 1 bytes whatever the buffer holds already.
     private static string Env(string name, bool fn)
-    {
-        string path = "/env/" + (fn ? "fn#" : string.Empty) + name;
-        return path.Length < EnvName ? path : path[..(EnvName - 1)];
-    }
+        => "/env/" + (fn ? "fn#" : string.Empty) + (name.Length < EnvName ? name : name[..(EnvName - 1)]);
 
     // scanflag: how many arguments rc's flag c takes, or -1 when rc has no such flag.
     private static int Scanflag(char c) => c is 'c' or 'm' ? 1 : Plainflags.Contains(c) ? 0 : -1;
@@ -407,10 +405,13 @@ internal sealed partial class RcShell
             return;
         }
 
-        // rc's dontclose here keeps the input's own close from closing a file opened later on the same
-        // descriptor; pushredir moves such a file off the descriptor, so that cannot happen.
         if (lex.Eof)
         {
+            if (p.Lex.Input.Fd is { } fd)
+            {
+                Dontclose(fd);
+            }
+
             await p.Lex.Input.CloseAsync(process);
             p.Lex = null;
         }

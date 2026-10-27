@@ -1,9 +1,10 @@
 using System.Numerics;
+using NinePSharp.Constants;
 
 namespace NinePSharp.Fog.Kernel;
 
 // Plan 9 libc's strtol, strtoll and strtoul, whose longs are 32 bits: the number at the start of s,
-// and in end where it stops, or 0 when no digit was read; and %q as quotefmtinstall gives it.
+// and in end where it stops, or 0 when no digit was read; %q as quotefmtinstall gives it; and getwd.
 public static class Libc
 {
     private const string RcSpecial = "`^#*[]=|\\?${}()'<>&;";
@@ -17,6 +18,20 @@ public static class Libc
         return s.Length == 0 || s.Any(c => c <= ' ' || RcSpecial.Contains(c, StringComparison.Ordinal))
             ? $"'{s.Replace("'", "''", StringComparison.Ordinal)}'"
             : s;
+    }
+
+    // getwd: the name of dot, as fd2path gives it.
+    public static async Task<string> GetwdAsync(Process process)
+    {
+        int fd = await process.OpenAsync(".", NinePConstants.OREAD | NinePConstants.OCEXEC);
+        try
+        {
+            return await process.Fd2PathAsync(fd);
+        }
+        finally
+        {
+            await process.CloseAsync(fd);
+        }
     }
 
     public static int Strtol(string s, int radix, out int end) => Signed<int>(s, radix, out end);

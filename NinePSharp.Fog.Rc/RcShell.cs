@@ -42,19 +42,6 @@ internal sealed partial class RcShell
         return new RcShell(process, args[0]).MainAsync(args);
     }
 
-    private static bool Clobbers(RcRedir? rp, int fd)
-    {
-        for (; rp is not null; rp = rp.Next)
-        {
-            if (rp.To == fd)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     // Get the flags, read the environment, set $pid, $cflag and $rcname, and run
     // *=(argv); . -bq /rc/lib/rcmain $*
     private async Task MainAsync(List<string> argv)
@@ -280,20 +267,23 @@ internal sealed partial class RcShell
         return p.Words;
     }
 
-    // pushredir; a file redirection does not let a dup clobber the descriptor it is opened on.
-    private async ValueTask PushredirAsync(int type, int from, int to)
+    private void Pushredir(int type, int from, int to) => runq!.Redir = new RcRedir(type, from, to, runq.Redir);
+
+    private void Pushclose(int fd) => Pushredir(RcRedir.Close, Closed, fd);
+
+    // dontclose: the thread's close of fd undone, as the input it was for is closed already, and fd
+    // may be opened again for another file.
+    private void Dontclose(int fd)
     {
-        if (type == RcRedir.Open && Clobbers(runq!.Redir, from))
+        for (RcRedir? rp = runq!.Redir; rp != runq.StartRedir; rp = rp.Next)
         {
-            await PushredirAsync(type, await Dup1Async(from) ?? Closed, to);
-            await CloseAsync(from);
-            return;
+            if (rp!.Type == RcRedir.Close && rp.To == fd)
+            {
+                rp.Type = 0;
+                break;
+            }
         }
-
-        runq!.Redir = new RcRedir(type, from, to, runq.Redir);
     }
-
-    private ValueTask PushcloseAsync(int fd) => PushredirAsync(RcRedir.Close, Closed, fd);
 
     // turfstack: a thread that exits on return is about to start, so the stack goes, keeping the
     // redirections. rc also keeps the locals the new thread refers to from being freed, which

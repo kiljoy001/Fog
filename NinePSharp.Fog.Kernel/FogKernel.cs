@@ -28,6 +28,10 @@ public sealed class FogKernel
         mount -a /srv/slashmnt /mnt
         mount -a /srv/mntexport /mnt/exportfs
 
+        # authentication
+        mount /srv/factotum /mnt/factotum factotum
+        bind -q /mnt/factotum/factotum /mnt/factotum
+
         # standard bin
         bind -c /root/bin /bin
         bind /root/rc /rc

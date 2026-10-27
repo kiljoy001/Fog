@@ -15,12 +15,12 @@ internal sealed partial class RcShell
         [RcOp.Backq] = s => s.XbackqAsync(),
         [RcOp.Bang] = s => s.Done(() => s.Setstatus(s.Truestatus() ? "false" : string.Empty)),
         [RcOp.Case] = s => s.Done(s.Xcase),
-        [RcOp.Close] = s => s.PushcloseAsync(s.Inline()),
+        [RcOp.Close] = s => s.Done(() => s.Pushclose(s.Inline())),
         [RcOp.Conc] = s => s.XconcAsync(),
         [RcOp.Count] = s => s.XcountAsync(),
         [RcOp.Delfn] = s => s.Done(s.Xdelfn),
         [RcOp.Dol] = s => s.XdolAsync(),
-        [RcOp.Dup] = s => s.PushredirAsync(RcRedir.Dup, s.Inline(), s.Inline()),
+        [RcOp.Dup] = s => s.Done(() => s.Pushredir(RcRedir.Dup, s.Inline(), s.Inline())),
         [RcOp.Eflag] = s => s.Truestatus() ? ValueTask.CompletedTask : s.XexitAsync(),
         [RcOp.Exit] = s => s.XexitAsync(),
         [RcOp.False] = s => s.Done(() => s.Branch(!s.Truestatus())),
@@ -224,7 +224,7 @@ internal sealed partial class RcShell
             await SeekAsync(fd.Value, 0, 2);
         }
 
-        await PushredirAsync(RcRedir.Open, fd.Value, Inline());
+        Pushredir(RcRedir.Open, fd.Value, Inline());
         Poplist();
     }
 
@@ -325,7 +325,7 @@ internal sealed partial class RcShell
         await io.CloseAsync(process);
 
         // The file was just made, so opening it again does not fail.
-        await PushredirAsync(RcRedir.Open, (await OpenAsync(file, 3))!.Value, Inline());
+        Pushredir(RcRedir.Open, (await OpenAsync(file, 3))!.Value, Inline());
     }
 
     // psubst: $name, $n and $$ in a here document. After a byte from 0xA0 to 0xF5 the next byte is

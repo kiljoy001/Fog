@@ -20,10 +20,12 @@ public static class Commands
         ["mount"] = Mount.MainAsync,
         ["ndb/cs"] = Cs.MainAsync,
         ["ndb/csquery"] = Csquery.MainAsync,
+        ["pwd"] = Pwd.MainAsync,
         ["read"] = Read.MainAsync,
         ["rm"] = Rm.MainAsync,
         ["sleep"] = Sleep.MainAsync,
         ["test"] = Test.MainAsync,
+        ["tlssrv"] = Tlssrv.MainAsync,
         ["unmount"] = Unmount.MainAsync,
     };
 }

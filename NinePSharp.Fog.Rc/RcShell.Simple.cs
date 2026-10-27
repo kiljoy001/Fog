@@ -386,12 +386,12 @@ internal sealed partial class RcShell
         return ValueTask.CompletedTask;
     }
 
-    // mapfd: the descriptor that fd is redirected from.
+    // mapfd: the descriptor that fd is redirected from; a close dontclose has undone is passed over.
     private int Mapfd(int fd)
     {
         for (RcRedir? rp = runq!.Redir; rp is not null; rp = rp.Next)
         {
-            if (rp.To == fd)
+            if (rp.Type != 0 && rp.To == fd)
             {
                 fd = rp.From;
             }
@@ -515,7 +515,7 @@ internal sealed partial class RcShell
         }
 
         await ExeccmdsAsync(RcIo.OpenFd(opened.Value), file!, null, runq.Redir);
-        await PushcloseAsync(opened.Value);
+        Pushclose(opened.Value);
         runq.Lex!.Lexer.Quiet = qflag;
         runq.IFlag = iflag;
         if (iflag || (!bflag && flag['b'] is null))
@@ -584,6 +584,7 @@ internal sealed partial class RcShell
             }
             else if (!found)
             {
+                err.Pstr($"{a.Text}: not found\n");
                 Setstatus("not found");
             }
 

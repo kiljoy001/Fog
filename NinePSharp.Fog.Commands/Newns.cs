@@ -78,7 +78,7 @@ public static class Newns
             {
                 try
                 {
-                    await process.ChdirAsync(await GetwdAsync(process));
+                    await process.ChdirAsync(await Libc.GetwdAsync(process));
                 }
                 catch (SyscallException)
                 {
@@ -114,19 +114,6 @@ public static class Newns
             }
 
             return [.. all];
-        }
-        finally
-        {
-            await process.CloseAsync(fd);
-        }
-    }
-
-    private static async Task<string> GetwdAsync(Process process)
-    {
-        int fd = await process.OpenAsync(".", NinePConstants.OREAD);
-        try
-        {
-            return await process.Fd2PathAsync(fd);
         }
         finally
         {
