@@ -7418,6 +7418,7 @@ Feature: rc runs scripts as 9front rc does
       while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17356*) sleep 0.1
       cd /tmp; echo hello there >notes
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17356 -u glenda -p notes
+      while(! test -s /adm/secstore/store/glenda/notes) sleep 0.1
       rm notes
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17356 -u glenda -g notes; cat notes
       echo secretpw | auth/secstore -iv -s tcp!127.0.0.1!17356 -u glenda -G notes
@@ -7474,7 +7475,8 @@ Feature: rc runs scripts as 9front rc does
       auth/secstored -s tcp!127.0.0.1!17358 >/dev/null >[2=1]
       while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17358*) sleep 0.1
       cd /tmp; echo hello there >notes
-      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -p notes >[2]/dev/null
+      echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -p notes
+      while(! test -s /adm/secstore/store/glenda/notes) sleep 0.1
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -r notes
       while(test -e /adm/secstore/store/glenda/notes) sleep 0.1
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17358 -u glenda -G notes
@@ -7482,6 +7484,8 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
+      secstore
+      secstore: saved 12 bytes
       secstore
       secstore
       secstore: remote file notes does not exist
@@ -7505,6 +7509,7 @@ Feature: rc runs scripts as 9front rc does
       echo key |[3=1] auth/aescbc -i -d <c.aes
       echo wrongkey |[3=1] auth/aescbc -i -d <c.aes >/dev/null
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17359 -u glenda -p clear >[2]/dev/null
+      while(! test -s /adm/secstore/store/glenda/clear) sleep 0.1
       echo secretpw |[3=1] auth/aescbc -i -d </adm/secstore/store/glenda/clear
       auth/aescbc -x x
       """
@@ -7549,6 +7554,7 @@ Feature: rc runs scripts as 9front rc does
       while(! ~ `{cat /net/tcp/*/local >[2]/dev/null} *!17361*) sleep 0.1
       cd /tmp; echo hello there >notes
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17361 -u glenda -p notes >[2]/dev/null
+      while(! test -s /adm/secstore/store/glenda/notes) sleep 0.1
       auth/secstore -c -s tcp!127.0.0.1!17361 -u glenda
       echo newsecretpw | auth/secstore -i -s tcp!127.0.0.1!17361 -u glenda -G notes
       echo secretpw | auth/secstore -i -s tcp!127.0.0.1!17361 -u glenda -G notes

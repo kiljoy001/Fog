@@ -23,8 +23,8 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
     private const string FogPrompt = "% ";
 
     // secstored's port on Fog, and the host's port forwarded to 9front's 5356.
-    private const int FogSecstore = 17356;
-    private const int NineFrontSecstore = 17358;
+    private const int FogSecstore = 17380;
+    private const int NineFrontSecstore = 17381;
     private const string SecstorePassword = "secstorepw";
     private static readonly SemaphoreSlim Booting = new(1, 1);
     private static NineFrontTerminal? terminal;
@@ -149,6 +149,11 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
         Collect((await t.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(60))).TrimStart('\n'));
     }
 
+    // secstore's client does not wait for its put to be stored.
+    [When(@"^glenda's secstore on Fog holds ""(.*)""$")]
+    public async Task WhenFogSecstoreHoldsAsync(string file)
+        => Assert.Equal("held", (await RunOnFogAsync($"while(! test -s /adm/secstore/store/glenda/{file}) sleep 0.1; echo held")).TrimEnd('\n'));
+
     [When(@"^Fog runs ""(.*)"" with glenda's secstore password$")]
     public async Task WhenFogRunsWithSecstorePasswordAsync(string command)
     {
@@ -173,7 +178,7 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
     public async Task GivenFogSecstoreFileAsync(string file, string text)
     {
         await GivenFogSecstoreAsync();
-        string saved = await RunOnFogAsync($"cd /tmp; echo '{text}' >{file}; echo {SecstorePassword} | auth/secstore -i -s tcp!127.0.0.1!{FogSecstore} -u glenda -p {file}");
+        string saved = await RunOnFogAsync($"cd /tmp; echo '{text}' >{file}; echo {SecstorePassword} | auth/secstore -i -s tcp!127.0.0.1!{FogSecstore} -u glenda -p {file}; while(! test -s /adm/secstore/store/glenda/{file}) sleep 0.1");
         Assert.Contains("secstore: saved", saved, StringComparison.Ordinal);
     }
 
@@ -205,7 +210,7 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
             nineFrontSecstored = true;
         }
 
-        string saved = await t.RunAsync($"@{{cd /tmp; echo '{text}' >{file}; echo {SecstorePassword} | auth/secstore -i -s tcp!10.0.2.15!5356 -u glenda -p {file}}} >[2=1]");
+        string saved = await t.RunAsync($"@{{cd /tmp; echo '{text}' >{file}; echo {SecstorePassword} | auth/secstore -i -s tcp!10.0.2.15!5356 -u glenda -p {file}; while(! test -s /adm/secstore/store/glenda/{file}) sleep 0.1}} >[2=1]");
         Assert.True(saved.Contains("secstore: saved", StringComparison.Ordinal), saved);
     }
 

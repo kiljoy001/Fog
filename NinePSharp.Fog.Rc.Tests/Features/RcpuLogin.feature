@@ -77,6 +77,7 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
   Scenario: 9front's secstore client puts a file in Fog's secstored, which Fog's client gets
     Given glenda has a secstore account on Fog
     When 9front runs "cd /tmp; echo put by 9front >fromnine; auth/secstore -s tcp!fog!5356 -u glenda -p fromnine" and gives glenda's secstore password
+    And glenda's secstore on Fog holds "fromnine"
     And Fog runs "auth/secstore -i -s tcp!fog!5356 -u glenda -G fromnine" with glenda's secstore password
     Then it prints "put by 9front"
 
