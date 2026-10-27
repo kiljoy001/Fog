@@ -207,3 +207,26 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
   Scenario: cs translates an address for dial
     When glenda's session runs "ndb/csquery /net/cs tcp!127.0.0.1!17019"
     Then it prints "/net/tcp/clone 127.0.0.1!17019"
+
+  @FOG_LOGIN_011
+  Scenario: An account that needs STA logs in with its authenticator's code
+    Given glenda's secstore account needs STA
+    And Keycloak's realm has the user "glenda" with a TOTP authenticator
+    When 9front runs "auth/secstore -s tcp!fog!5356 -u glenda -G notes"
+    And it gives glenda's secstore password
+    And it gives the authenticator's current code at "STA PIN+SecureID"
+    Then it prints what glenda's secstore holds in "notes"
+
+  @FOG_LOGIN_011
+  Scenario: A code Keycloak refuses ends the login
+    Given glenda's secstore account needs STA
+    When glenda logs in to secstore with glenda's password and the code "000000"
+    Then the login fails "authentication failed"
+    And secstored logs "secureidcheck denied glenda"
+
+  @FOG_LOGIN_011
+  Scenario: A user disabled in Keycloak cannot log in with a good code
+    Given glenda's secstore account needs STA
+    And Keycloak's user "glenda" is disabled
+    When glenda logs in to secstore with glenda's password and the authenticator's current code
+    Then the login fails "authentication failed"

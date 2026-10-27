@@ -114,6 +114,32 @@ program. As on a 9front CPU server:
 Factotum's protocols are ported as they are needed: `p9any`, `dp9ik` (from `p9sk1.c`) and `pass`
 first. `p9sk1` is left out, since Fog's auth server speaks only dp9ik.
 
+## A second factor
+
+9front's secstored can ask an account for a second factor, STA: after PAK the server sends
+`STA`, and the client answers `STA` followed by what the user types at its `STA PIN+SecureID`
+prompt. 9front checks the answer with `secureidcheck`, a RADIUS client written for SecurID
+tokens, whose MD5-hidden password and unsigned replies RADIUS deployments have since had to
+move away from (Blast-RADIUS, CVE-2024-3596).
+
+Fog keeps the exchange and checks the answer with Keycloak instead:
+
+- An account needs the step when `secuser` marks it STA, or for every account under
+  `secstored -R`, as on 9front.
+- The answer is the code of the user's authenticator (TOTP, RFC 6238). secstored checks it with
+  Keycloak's direct grant, the Plan 9 user name as Keycloak's user, through a client whose
+  direct-grant flow validates the user name and the one-time code and asks no password: the
+  password was PAK's, and Keycloak never holds it.
+- Keycloak's address, realm, client and client secret are in the host's configuration, the
+  secret in the host's sealed key store, as the nvram is.
+- An account disabled in Keycloak, or a code it refuses, is refused as `secureidcheck`'s
+  refusals are, and logged as they are.
+- Stock 9front clients take part unchanged: the code is typed where a SecurID's would be.
+
+The device authorization grant (RFC 8628), which would let a user approve a login with
+whatever Keycloak enforces, passkeys among them, needs the server to show the user a URL,
+which 9front's clients have no place for; it is left for Fog's own client.
+
 ## The network device
 
 Fog's `/net` is ip(3)'s file interface over the host's sockets, as drawterm's is: drawterm
@@ -248,10 +274,10 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   each way; when either way ends, both do. `tlssrv -c` is refused, as Fog has no certificates, and
   `-D` reports only the handshake's end, not each message. `#I` has no wstat, so the call is not
   given to the user `tlssrv -a` becomes.
-- `secstored` has no RADIUS client, as `#I` has no udp: `secureidcheck` refuses every response, as
-  9front's does when ndb holds no RADIUS secret, so an account that needs STA, or any under
-  `secstored -R`, cannot log in. `putPW` writes an account when it is changed, where 9front's
-  leaves it in a Biobuf that libbio flushes as the process exits.
+- STA's answer is checked with Keycloak, not RADIUS (see A second factor). Until slice 12,
+  `secureidcheck` refuses every answer, as 9front's does when ndb holds no RADIUS secret.
+- `putPW` writes an account when it is changed, where 9front's leaves it in a Biobuf that libbio
+  flushes as the process exits.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
 - drawterm with its keyboard (`/dev/kbd`) runs `aux/kbdfs` on the server, which Fog does not
   have yet: drawterm works with `-B`, and until kbdfs is ported Del does not interrupt from it.
@@ -272,6 +298,8 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 11. A first session that makes sense: the user's `$home` exists, `lib/profile` is `newuser`'s,
     with the user's factotum loaded from secstore, and `ls /bin` shows the installed
     applications.
+12. A second factor: secstored's STA answer checked with Keycloak's direct grant, against a
+    Keycloak realm whose direct-grant flow takes a user name and a one-time code.
 
 Each slice follows the usual gate: features, then failing tests, then code, with mutation, and
 Coyote for the concurrency of the mount driver, `#I`, notes and factotum's processes.
