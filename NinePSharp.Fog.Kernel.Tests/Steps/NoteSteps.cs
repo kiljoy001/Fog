@@ -187,6 +187,39 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         alarms.Add(await forked.Do(p => p.AlarmAsync(0).AsTask()));
     }
 
+    [When(@"^the child, having set alarms of (\d+), (\d+) and (\d+) milliseconds, reads an empty pipe$")]
+    public async Task WhenAlarmsThenRead(long first, long second, long third)
+    {
+        int read = await PipeAsync();
+        foreach (long milliseconds in new[] { first, second, third })
+        {
+            await child!.Do(p => p.AlarmAsync(milliseconds).AsTask());
+        }
+
+        blocked = await child!.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
+    }
+
+    // A note interrupting the sleep is seen by the handler, which the rule after it counts.
+    [When(@"^the child sleeps (\d+) milliseconds$")]
+    public Task WhenSleeps(long milliseconds) => child!.Do(async p =>
+    {
+        try
+        {
+            await p.SleepAsync(milliseconds);
+        }
+        catch (SyscallException)
+        {
+        }
+    });
+
+    [When(@"^the child sets an alarm of (\d+) milliseconds and exits$")]
+    public async Task WhenAlarmExits(long milliseconds)
+    {
+        await child!.Do(p => p.AlarmAsync(milliseconds).AsTask());
+        child.Stop();
+        await Bounded(Init.WaitAsync());
+    }
+
     [When("the child writes to the pipe")]
     public void WhenChildWrites() => childCall = child!.Do(p => p.WriteAsync(pipes[^1], "x"u8.ToArray()).AsTask());
 
@@ -247,6 +280,15 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
 
     [Then(@"^the child's handler saw ""(.*)""$")]
     public Task ThenSaw(string note) => child!.SawAsync(note);
+
+    [Then(@"^the child's handler saw ""(.*)"" once$")]
+    public void ThenSawOnce(string note) => Assert.Single(child!.Seen, note);
+
+    [Then("the child's handler saw no note")]
+    public void ThenSawNone() => Assert.Empty(child!.Seen);
+
+    [Then("no alarm's timer is running")]
+    public void ThenNoTimer() => Assert.Equal(0, driver.Clock.Timers);
 
     [Then(@"^each child's handler saw ""(.*)""$")]
     public async Task ThenEachSaw(string note)

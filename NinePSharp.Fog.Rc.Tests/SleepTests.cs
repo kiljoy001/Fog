@@ -23,10 +23,12 @@ public sealed class SleepTests
     [InlineData(".5", new long[] { 500 })]
     [InlineData("0.05", new long[] { 50 })]
     [InlineData("1.0", new long[] { 1000 })]
+    [InlineData("1.x", new long[] { 1000 })]
     [InlineData("1.-5", new long[] { 1000 })]
     [InlineData("1. 5", new long[] { 1050 })]
     [InlineData("1.  1234", new long[] { 1001 })]
     [InlineData("4294966", new long[] { 2147482000, 2147482000, 2000 })]
+    [InlineData("2147482.5", new long[] { 2147482500 })]
     public void SleepSleepsAsSleepCReadsItsArgument(string argument, long[] sleeps)
     {
         Assert.Equal(sleeps, Sleep.Sleeps(argument));

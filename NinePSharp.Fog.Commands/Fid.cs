@@ -11,6 +11,7 @@ public sealed class Fid(uint number)
 
     public Qid Qid { get; set; }
 
+    // Stryker disable once String : srv asks a fid for its user only once attach or a walk's clone has given it one
     public string Uid { get; set; } = string.Empty;
 
     public object? Aux { get; set; }

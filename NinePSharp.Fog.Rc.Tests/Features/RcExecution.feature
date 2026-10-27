@@ -6059,9 +6059,9 @@ Feature: rc runs scripts as 9front rc does
       bind /tmp/ua /tmp/um; bind -a /tmp/ub /tmp/um
       unmount /tmp/ua /tmp/um
       cat /tmp/um/b; test -e /tmp/um/a || echo a is gone
-      unmount /tmp/um
+      unmount /tmp/um && echo unmounted
       test -e /tmp/um/b || echo b is gone
-      unmount /tmp/um >[2=1]
+      unmount /tmp/um >[2=1]; ~ $status *'/tmp/um: not mounted' && echo its status says so
       bind /tmp/ua /tmp/um; unmount /tmp/ub /tmp/um >[2=1]
       unmount /dev/none /tmp/um >[2=1]
       unmount >[2=1]; ~ $status *usage && echo usage
@@ -6070,8 +6070,10 @@ Feature: rc runs scripts as 9front rc does
       """
       b
       a is gone
+      unmounted
       b is gone
       unmount: /tmp/um: not mounted
+      its status says so
       unmount: /tmp/um: not in union
       unmount: /tmp/um: file does not exist: '/dev/none'
       usage: unmount mountpoint
@@ -6099,7 +6101,7 @@ Feature: rc runs scripts as 9front rc does
       echo -n bind /tmp/na /tmp/nd >/tmp/ns4
       auth/newns -a -n /tmp/ns4 cat /tmp/nd/h
       auth/newns -a -n /tmp/nonesuch rc -c 'echo ran without the namespace'
-      auth/newns -x >[2=1]
+      auth/newns -x >[2=1]; ~ $status *usage && echo usage
       """
     Then it prints
       """
@@ -6110,6 +6112,7 @@ Feature: rc runs scripts as 9front rc does
       d
       ran without the namespace
       usage: auth/newns [-ad] [-n namespace] [cmd [args...]]
+      usage
       """
 
   @FOG_RC_RUN_229

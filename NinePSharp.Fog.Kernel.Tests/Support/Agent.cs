@@ -16,6 +16,17 @@ internal sealed class Agent(Process parent, bool? continues, RforkFlags flags = 
 
     public long Pid { get; private set; }
 
+    public IReadOnlyList<string> Seen
+    {
+        get
+        {
+            lock (seen)
+            {
+                return [.. seen];
+            }
+        }
+    }
+
     public Process Process => started.Task.Result;
 
     public async Task StartAsync()

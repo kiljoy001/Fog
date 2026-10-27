@@ -50,6 +50,7 @@ public sealed class Req(Srv srv, ISerializable ifcall, MessageTypes type)
 
     internal uint Rmsize { get; set; }
 
+    // Stryker disable once String : only Tversion is answered with it, and its handling sets it first
     internal string Rversion { get; set; } = string.Empty;
 
     internal bool Responded { get; set; }

@@ -206,15 +206,9 @@ public sealed partial class Process
     {
         using (ringing)
         {
-            try
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, ringing.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
+            // An alarm cancelled for another is no longer the process's, and one cancelled as the
+            // process exits is refused by postnote, so a cancelled delay ends as one that ran out.
+            await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), kernel.Clock, ringing.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             lock (debug)
             {
                 if (alarm != ringing)

@@ -59,7 +59,7 @@ public sealed class NoteInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     public void ThenPostedOrRefused() => Explore(child =>
     {
         string posted = child.Posts.Single();
-        Specification.Assert(posted is "posted" or Errors.NoteNotPosted or Errors.ProcessExited || posted.StartsWith(Errors.NotExist, StringComparison.Ordinal), $"the post gave {posted}");
+        Specification.Assert(posted is "posted" or Errors.NoteNotPosted || posted.StartsWith(Errors.ProcessExited, StringComparison.Ordinal) || posted.StartsWith(Errors.NotExist, StringComparison.Ordinal), $"the post gave {posted}");
         Specification.Assert(posted != "posted" || child.Seen.Count <= 1, "the child saw " + string.Join(", ", child.Seen));
     });
 

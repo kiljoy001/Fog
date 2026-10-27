@@ -6,19 +6,22 @@ internal sealed class ProcessDevices(Process caller, IResourceDataOperations fil
     : IResourceDataOperations, IResourceOpenStatOperations, IResourceWStatOperations
 {
     // Each kernel device by its provider, found the first time one is asked for, when the process's
-    // own devices are made.
-    private readonly Lazy<Dictionary<string, IResourceDataOperations>> byProvider = new(() => new()
-    {
-        [PipeDevice.Provider] = pipes,
-        [RootDevice.Provider] = slash,
-        [MountDevice.Provider] = mounts,
-        [ProcDevice.Provider] = procs,
-        [IpDevice.Provider] = ip,
-        [SrvDevice.Provider] = srv,
-        [CapDevice.Provider] = cap,
-        [DupDevice.Provider] = caller.Dup,
-        [ConsDevice.Provider] = caller.Cons,
-    });
+    // own devices are made. Calls racing to make it each may, and one's is kept: no lock is held
+    // while it is made, as one a task waits on there would stall every task waiting behind it.
+    private readonly Lazy<Dictionary<string, IResourceDataOperations>> byProvider = new(
+        () => new()
+        {
+            [PipeDevice.Provider] = pipes,
+            [RootDevice.Provider] = slash,
+            [MountDevice.Provider] = mounts,
+            [ProcDevice.Provider] = procs,
+            [IpDevice.Provider] = ip,
+            [SrvDevice.Provider] = srv,
+            [CapDevice.Provider] = cap,
+            [DupDevice.Provider] = caller.Dup,
+            [ConsDevice.Provider] = caller.Cons,
+        },
+        LazyThreadSafetyMode.PublicationOnly);
 
     public async ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
         => await Device(directory).WalkAsync(directory, name, cancellationToken);

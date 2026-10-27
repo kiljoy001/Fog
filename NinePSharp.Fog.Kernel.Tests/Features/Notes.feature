@@ -189,6 +189,22 @@ Feature: Notes interrupt processes, and /proc posts them, as 9front's postnote a
     Given a child that continues after every note, held before its next call
     When the child sets alarms of 60000, 0 and 0 milliseconds
     Then the alarms gave 0, nearly 60000 and 0 milliseconds
+    And no alarm's timer is running
+    And the child's handler saw no note
+
+  @FOG_KERNEL_072
+  Scenario: Only the alarm last set rings; those cancelled or set anew post nothing
+    Given a child that continues after every note, held before its next call
+    When the child, having set alarms of 60000, 0 and 30 milliseconds, reads an empty pipe
+    Then the child's read fails with "interrupted"
+    When the child sleeps 100 milliseconds
+    Then the child's handler saw "alarm" once
+
+  @FOG_KERNEL_072
+  Scenario: A process's alarm is let go when it exits, as pexit clears it
+    Given a child that continues after every note, held before its next call
+    When the child sets an alarm of 60000 milliseconds and exits
+    Then no alarm's timer is running
 
   @FOG_KERNEL_072
   Scenario: A process forked from one whose alarm is set has none of its own

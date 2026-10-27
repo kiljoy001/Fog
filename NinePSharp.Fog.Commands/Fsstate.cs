@@ -18,6 +18,7 @@ public sealed class Fsstate
     public bool Pending { get; set; }
 
     // The rpc written: its verb, which of them it is, and its argument.
+    // Stryker disable once String : the verb is read only as the write that names it is answered
     public string Verb { get; set; } = string.Empty;
 
     public int Iverb { get; set; }
@@ -26,8 +27,10 @@ public sealed class Fsstate
 
     public int Nwant { get; set; }
 
+    // Stryker disable once String : a failure says why as it is made, and no protocol of factotum's breaks its conversation, which would show the default
     public string Err { get; set; } = "factotum/fs.c no error";
 
+    // Stryker disable once String : each needkey a protocol returns names its key, as findkey or the protocol sets it
     public string Keyinfo { get; set; } = string.Empty;
 
     public string[] Phasename { get; set; } = [];

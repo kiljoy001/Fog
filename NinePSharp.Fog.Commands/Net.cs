@@ -144,9 +144,9 @@ public static class Net
     // accept: the call's data, after telling a network that wants it; most do not, so the answer is ignored.
     public static async Task<int> AcceptAsync(Process process, int ctl, string dir)
     {
+        // Stryker disable once Block,Statement,Arithmetic,String : no network Fog serves needs an accept, and #I refuses every one, as devip does
         try
         {
-            // Stryker disable once Statement,Arithmetic,String : no network Fog serves needs an accept, and #I refuses every one, as devip does
             await process.WriteAsync(ctl, Encoding.UTF8.GetBytes($"accept {dir[(dir.LastIndexOf('/') + 1)..]}"));
         }
         catch (SyscallException)
