@@ -43,10 +43,10 @@ Feature: A configured fog starts without an authentication or membership cycle
 
   @FOG_B04
   Scenario: Authentication readiness is separate from workload readiness
-    Given the user authentication listener is ready but Orleans job services are unavailable
+    Given the user authentication listener is ready but Orleans namespace services are unavailable
     When an enrolled user completes authentication and attempts the fog data attach
     Then verification can complete without invoking a grain
-    And data attachment returns not-ready without admitting a job
+    And data attachment returns not-ready
     And no anonymous or alternate-protocol fallback is exposed
 
   @FOG_B05 @wire

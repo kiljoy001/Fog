@@ -1,7 +1,6 @@
 # Initial runtime profiles
 
-Status: proposed version-one behavior behind the existing `IWorkloadProvider` and
-LibTab job interface. These choices do not install or certify a runtime.
+Status: proposed version-one behavior. These choices do not install or certify a runtime.
 
 | runtime | Profile / ABI / meter | Selected engine and useful boundary |
 | --- | --- | --- |

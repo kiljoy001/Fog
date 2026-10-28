@@ -9,8 +9,7 @@ acceptance tests. They add no production dependency and change no running servic
 ## Scope and decisions
 
 This is the security and host-control foundation for the existing
-[9P transport](../swarm-9p-transport/README.md) and
-[provider interface](../workload-providers/README.md).
+[9P transport](../swarm-9p-transport/README.md).
 Workloads remain application-neutral. Games, identity federation, and application
 economies have no special cases in this layer.
 
