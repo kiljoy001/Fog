@@ -128,7 +128,6 @@ Feature: rc runs scripts as 9front rc does
       fn f {
       	echo $#* $1 $2
       }
-      f: not found
       """
 
   @FOG_RC_RUN_007
@@ -3023,7 +3022,6 @@ Feature: rc runs scripts as 9front rc does
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 15 Xword ()
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 17 Xword (x)
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 19 Xsimple (whatis x)
-      x: not found
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 20 Xwastrue
       /rc/lib/rcmain:24 *eval*:2 pid N cycle C 21 Xreturn
       *rdcmds* pid N cycle C 3 Xreturn
@@ -3103,14 +3101,14 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_075
-  Scenario: A variable's /env file keeps 127 bytes of a longer name, as rc's strncat does
+  Scenario: A variable's /env file keeps no more of a long name than fits in 127 bytes with /env/
     When rc runs the script
       """
-      a=aaaaaaaaaa; n=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a; m=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^aaaaaaa; $n=v; rc -c 'whatis '^$m
+      a=aaaaaaaaaa; n=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a; m=$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^$a^aa; $n=v; rc -c 'whatis '^$m
       """
     Then it prints
       """
-      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=v
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=v
       """
 
   @FOG_RC_RUN_076
@@ -3420,7 +3418,6 @@ Feature: rc runs scripts as 9front rc does
       builtin cd
 
       no match
-      nonesuch: not found
       not found
       x=1
 
@@ -3963,9 +3960,7 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
-      zz: not found
       0
-      fn#ff: not found
       not found
       """
 
@@ -4108,7 +4103,6 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
-      ne: not found
       not found
       """
 
@@ -4362,15 +4356,15 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
-      /tmp/rf1
+      /tmp/rf1 hi
       /tmp/rf2
       /tmp/rf3
       /tmp/rf4
       /tmp/rf5
-      /tmp/rg1
+      /tmp/rg1 ho
       /tmp/rg2
       /tmp/rg3
-      /tmp/rg4 ho
+      /tmp/rg4
       /tmp/rg5
       """
 
@@ -4635,22 +4629,22 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_169
-  Scenario: A variable's /env file keeps a name of 127 bytes whole and cuts one of 128
+  Scenario: A variable's /env file keeps a name that fits in 127 bytes with /env/ whole and cuts a longer one
     When rc runs the script
       """
-      qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq=1
-      rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr=2
+      qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq=1
+      rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr=2
       cat /dev/null
       x=(/env/q*); echo $#x
-      ~ $x /env/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq && echo 127
+      ~ $x /env/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq && echo whole
       for(i in /env/r*) echo $i
       """
     Then it prints
       """
       1
-      127
+      whole
       /env/rcname
-      /env/rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
+      /env/rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
       """
 
   @FOG_RC_RUN_170
@@ -4822,15 +4816,15 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints
       """
-      /tmp/rh1
+      /tmp/rh1 /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl /fd/5 /fd/5ctl
       /tmp/rh2
       /tmp/rh3
       /tmp/rh4
       /tmp/rh5
-      /tmp/ri1
+      /tmp/ri1 /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl /fd/5 /fd/5ctl
       /tmp/ri2
       /tmp/ri3
-      /tmp/ri4 /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/5 /fd/5ctl
+      /tmp/ri4
       /tmp/ri5
       """
 
@@ -5047,18 +5041,17 @@ Feature: rc runs scripts as 9front rc does
     Then it prints
       """
       status=''
-      x: not found
       """
 
   @FOG_RC_RUN_205
-  Scenario: A dup onto the descriptor a file was opened on clobbers the file, as in 9front
+  Scenario: A dup onto the descriptor rc opened a file on leaves the file alone, as in 9front
     When rc runs the script
       """
-      rc -c 'echo /fd/*' >[4=1] >/tmp/cl6; echo /fd/*
+      rc -c 'echo /fd/*' >[4=1] >/tmp/cl6; echo /fd/*; cat /tmp/cl6
       """
     Then it prints
       """
-      /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl
+      /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
       /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
       """
 

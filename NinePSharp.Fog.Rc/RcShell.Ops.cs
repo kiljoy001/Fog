@@ -224,7 +224,7 @@ internal sealed partial class RcShell
             await SeekAsync(fd.Value, 0, 2);
         }
 
-        Pushredir(RcRedir.Open, fd.Value, Inline());
+        await PushopenAsync(fd.Value, Inline());
         Poplist();
     }
 
@@ -325,7 +325,7 @@ internal sealed partial class RcShell
         await io.CloseAsync(process);
 
         // The file was just made, so opening it again does not fail.
-        Pushredir(RcRedir.Open, (await OpenAsync(file, 3))!.Value, Inline());
+        await PushopenAsync((await OpenAsync(file, 3))!.Value, Inline());
     }
 
     // psubst: $name, $n and $$ in a here document. After a byte from 0xA0 to 0xF5 the next byte is

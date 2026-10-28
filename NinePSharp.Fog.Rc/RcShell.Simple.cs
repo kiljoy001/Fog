@@ -386,12 +386,12 @@ internal sealed partial class RcShell
         return ValueTask.CompletedTask;
     }
 
-    // mapfd: the descriptor that fd is redirected from; a close dontclose has undone is passed over.
+    // mapfd: the descriptor that fd is redirected from.
     private int Mapfd(int fd)
     {
         for (RcRedir? rp = runq!.Redir; rp is not null; rp = rp.Next)
         {
-            if (rp.Type != 0 && rp.To == fd)
+            if (rp.To == fd)
             {
                 fd = rp.From;
             }
@@ -584,7 +584,6 @@ internal sealed partial class RcShell
             }
             else if (!found)
             {
-                err.Pstr($"{a.Text}: not found\n");
                 Setstatus("not found");
             }
 

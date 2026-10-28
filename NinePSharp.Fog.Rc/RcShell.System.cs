@@ -17,10 +17,12 @@ internal sealed partial class RcShell
     // getflags.c's reason for a usage message.
     private string? usageReason;
 
-    // Env: /env/name, or /env/fn#name, with as much of name as strncat appends to rc's 128-byte
-    // buffer, sizeof buf - 1 bytes whatever the buffer holds already.
+    // Env: /env/name, or /env/fn#name, as much of it as snprint puts in rc's 128-byte buffer.
     private static string Env(string name, bool fn)
-        => "/env/" + (fn ? "fn#" : string.Empty) + (name.Length < EnvName ? name : name[..(EnvName - 1)]);
+    {
+        string env = "/env/" + (fn ? "fn#" : string.Empty) + name;
+        return env.Length < EnvName ? env : env[..(EnvName - 1)];
+    }
 
     // scanflag: how many arguments rc's flag c takes, or -1 when rc has no such flag.
     private static int Scanflag(char c) => c is 'c' or 'm' ? 1 : Plainflags.Contains(c) ? 0 : -1;

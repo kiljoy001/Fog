@@ -271,6 +271,34 @@ internal sealed partial class RcShell
 
     private void Pushclose(int fd) => Pushredir(RcRedir.Close, Closed, fd);
 
+    // pushredir(ROPEN, from, to): a file's descriptor that a dup waiting to run would clobber is
+    // moved to one that none will, as rc keeps dups from clobbering the from of a file redirect.
+    private async ValueTask PushopenAsync(int from, int to)
+    {
+        if (Clobbersfd(from))
+        {
+            await PushopenAsync(await Dup1Async(from) ?? Closed, to);
+            await CloseAsync(from);
+            return;
+        }
+
+        Pushredir(RcRedir.Open, from, to);
+    }
+
+    // clobbersfd: whether a redirection waiting to run sets fd.
+    private bool Clobbersfd(int fd)
+    {
+        for (RcRedir? rp = runq!.Redir; rp is not null; rp = rp.Next)
+        {
+            if (rp.To == fd)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // dontclose: the thread's close of fd undone, as the input it was for is closed already, and fd
     // may be opened again for another file.
     private void Dontclose(int fd)
@@ -280,6 +308,7 @@ internal sealed partial class RcShell
             // Stryker disable once Logical,Statement : at its input's end a dot's thread holds only the close execdot pushed, each command's own redirections popped, even one an error stopped
             if (rp!.Type == RcRedir.Close && rp.To == fd)
             {
+                rp.To = Closed;
                 rp.Type = 0;
                 break;
             }

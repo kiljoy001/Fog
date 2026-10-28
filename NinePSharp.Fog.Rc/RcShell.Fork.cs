@@ -59,12 +59,12 @@ internal sealed partial class RcShell
             await child.CloseAsync(pfd[Prd]);
             child.Start(child.runq!.Code, pc + 2, child.runq.Local, child.runq.Redir);
             child.runq!.Ret = null;
-            child.Pushredir(RcRedir.Open, pfd[Pwr], lfd);
+            await child.PushopenAsync(pfd[Pwr], lfd);
         });
 
         await CloseAsync(pfd[Pwr]);
         Start(p.Code, p.Code[pc].I, runq!.Local, runq.Redir);
-        Pushredir(RcRedir.Open, pfd[Prd], rfd);
+        await PushopenAsync(pfd[Prd], rfd);
         p.Pc = p.Code[pc + 1].I;
         p.Pid = pid;
     }
@@ -83,7 +83,7 @@ internal sealed partial class RcShell
         {
             await child.CloseAsync(pfd[Prd]);
             child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);
-            child.Pushredir(RcRedir.Open, pfd[Pwr], 1);
+            await child.PushopenAsync(pfd[Pwr], 1);
         });
 
         await CloseAsync(pfd[Pwr]);
@@ -128,12 +128,12 @@ internal sealed partial class RcShell
         {
             await child.CloseAsync(mainfd);
             child.Start(child.runq!.Code, pc + 2, child.runq.Local, child.runq.Redir);
-            child.Pushredir(RcRedir.Open, sidefd, read ? 1 : 0);
+            await child.PushopenAsync(sidefd, read ? 1 : 0);
             child.runq!.Ret = null;
         });
 
         await CloseAsync(sidefd);
-        Pushredir(RcRedir.Open, mainfd, mainfd);
+        await PushopenAsync(mainfd, mainfd);
         Shuffleredir();
         Pushword(Fdprefix + mainfd.ToString(CultureInfo.InvariantCulture));
         p.Pc = p.Code[pc + 1].I;
