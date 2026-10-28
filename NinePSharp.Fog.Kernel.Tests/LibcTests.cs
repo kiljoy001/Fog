@@ -1,3 +1,4 @@
+using NinePSharp.Constants;
 using Xunit;
 
 namespace NinePSharp.Fog.Kernel.Tests;
@@ -16,6 +17,17 @@ public sealed class LibcTests
     [InlineData("\0", "''")]
     [InlineData("~/a.b-c_d!", "~/a.b-c_d!")]
     public void QuoteQuotesAsRcNeedsIt(string s, string quoted) => Assert.Equal(quoted, Libc.Quote(s));
+
+    [Fact]
+    public async Task GetwdNamesDotAndClosesWhatItOpened()
+    {
+        FogKernel kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(), "eve");
+        Process init = await kernel.BootAsync();
+        await init.ChdirAsync("/tmp");
+
+        Assert.Equal("/tmp", await Libc.GetwdAsync(init));
+        Assert.Equal(0, await init.OpenAsync("/dev/null", NinePConstants.OREAD));
+    }
 
     [Theory]
     [InlineData('`')]

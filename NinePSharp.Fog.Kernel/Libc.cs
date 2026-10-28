@@ -23,6 +23,7 @@ public static class Libc
     // getwd: the name of dot, as fd2path gives it.
     public static async Task<string> GetwdAsync(Process process)
     {
+        // Stryker disable once Bitwise : the descriptor is closed before getwd returns, so no exec sees it
         int fd = await process.OpenAsync(".", NinePConstants.OREAD | NinePConstants.OCEXEC);
         try
         {
