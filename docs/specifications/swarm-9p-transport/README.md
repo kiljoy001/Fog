@@ -23,9 +23,6 @@ identity and user-side factotum authentication separately from transport framing
 Its user-proof listener is a distinct TLS profile; internal node channels retain
 explicit mutual authentication and grain-independent setup.
 
-The workload-facing text interface is separately specified in the
-[LibTab compute-job contract](../libtab-compute-jobs/README.md).
-
 [Built-in AAN](Aan.md) adds the required resumable-session design: a temporary
 physical break may preserve a live logical 9P session, while terminal loss still
 requires a fresh session. Its lifecycle and safety requirements are specified;

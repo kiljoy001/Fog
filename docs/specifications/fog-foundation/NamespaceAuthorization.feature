@@ -55,24 +55,9 @@ Feature: Authenticated namespaces carry bounded resource authority
     Then the handle can still read only its originally authorized object
     And it cannot be converted into a grant over the new parent or siblings
 
-  @FOG_N07
-  Scenario: A job freezes and attenuates its submitting namespace
-    Given an admitted job with pinned source and a read-only artifact grant
-    When the submitting client's mount table changes
-    Then the executing job retains its admitted namespace and artifact identities
-    And it cannot obtain a newly mounted resource or writable input handle
-    And preparing the job cannot perform externally visible namespace writes
-
-  @FOG_N08
-  Scenario: Provider permission is separate from control-file access
-    Given an owner who can write its staging job ctl but cannot execute the selected provider
-    When it writes start
-    Then admission fails without starting that provider
-    And neither a known provider version nor a guessed job ID grants the missing right
-
   @FOG_N09
   Scenario Outline: A guest never inherits host infrastructure authority
-    Given a sandboxed job with permission for its input and bounded result only
+    Given a sandboxed guest application with permission for its own files only
     When it attempts to use <resource>
     Then the host boundary denies access without an external effect
 
@@ -83,15 +68,6 @@ Feature: Authenticated namespaces carry bounded resource authority
       | /transport/orleans         |
       | /control                   |
       | /admin/ctl                 |
-      | /compute/clone             |
-      | another owner's retained result |
-
-  @FOG_N10 @cluster
-  Scenario: A remote resource validates scope rather than trusting node reachability
-    Given a job assigned to one enrolled worker with a registered scope
-    When an internal request names the wrong job, worker incarnation or expired scope
-    Then the resource host rejects it even though the node TLS channel is authenticated
-    And accepting a valid request never reveals a reusable user login proof
 
   @FOG_N11 @property
   Scenario: Revocation and resource acceptance have an explicit winner

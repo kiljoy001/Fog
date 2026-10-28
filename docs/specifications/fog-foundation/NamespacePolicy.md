@@ -8,9 +8,8 @@ a new identity provider or a universal distributed capability-token format.
 An authenticated attach selects its principal's configured namespace profile.
 Build it using the existing process-group/mount-table machinery; clients cannot
 supply a process ID, group ID, privileged root or replacement profile as authority.
-Each new user attach owns an independent group. A job receives a frozen, separately
-owned namespace derived from that view, never a reference to a live mutable mount
-table shared with another principal. No remote mount/bind administration is in v1.
+Each new user attach owns an independent group, never a reference to a live mutable
+mount table shared with another principal. No remote mount/bind administration is in v1.
 
 Start from an empty namespace. Add only configured export roots and granted mounts.
 Clamp `..` at the exported root. A mount entry identifies a resource by its stable
@@ -24,7 +23,6 @@ Authorization is the intersection of:
 2. Explicit user/group resource grants.
 3. Server-enforced owner/group/other permissions and a valid open mode.
 4. The export/mount's restrictions and the operation's application invariants.
-5. For jobs, the admitted job scope and remaining limits/lease.
 
 An allow at one layer does not override another layer's denial. Group membership
 follows 9front gefs and hjfs `ingroup`: a user is a member of the group with the
@@ -67,39 +65,6 @@ native code are trusted installed host code. Untrusted WASM and other guests
 require a verified runtime or isolated process with no ambient filesystem, process,
 socket, inherited credential, or service-container escape. If that containment
 cannot be established, registration/admission fails before guest execution.
-
-## Job authority
-
-Only the authenticated owner may stage, start, inspect, cancel or release a job in
-v1. Job sharing and remote operator impersonation are not implicit features. Clone
-allocation charges the owner's staging quota, and no client-supplied `user` field
-changes ownership. Provider execution permission is an additional check at start;
-write access to `ctl` does not grant every installed provider.
-
-Admission computes and freezes the job scope from the submitting principal's
-current grants, namespace profile, selected provider/version, artifact identities
-and limits. Changes after admission never widen that scope. Source, artifacts and input
-handles are read-only; result staging is bounded and private. Extra namespace IO
-requires an explicit grant. Preparation cannot perform externally visible writes.
-
-The control node registers a host-owned scope ID associated with the admitted job,
-assigned worker incarnation, policy epoch and lease. Internal operation contexts
-carry that reference plus operation identity. Resource hosts accept them only over
-an enrolled internal-node channel and validate the registration and its scope;
-unknown scope references, changed users, wrong worker/job or expired authority fail
-closed. Guests cannot construct or export those contexts. The node's internal
-certificate is not itself permission to spend arbitrary user quotas.
-
-The concrete scope package, lease exchange and `scope:<id>` internal 9P attach are
-specified in [WorkerControl.md](../fog-v1-profiles/WorkerControl.md). A scope attach
-is a node-only export exception, not permission to supply arbitrary attach authority.
-The initial process boundary is [linux-process-v1](../fog-v1-profiles/Isolation.md).
-
-This is a trusted single-operator mechanism, not a credential users can hand to
-third-party machines. No user login proof, private key or general-purpose bearer
-token travels with the job. Guest attempts to access `/transport`, `/control`,
-policy administration, factotum, or `/compute/clone` are denied. Nested jobs are
-explicitly unsupported in v1, even if the submitter can create ordinary jobs.
 
 ## LibTab configuration bundle
 

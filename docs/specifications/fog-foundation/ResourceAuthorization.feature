@@ -6,7 +6,7 @@ Feature: An authorization layer bounds every resource operation in a principal's
   the 9front sources: gefs fsaccess, ingroup and mode2bits (sys/src/cmd/gefs/fs.c) for
   mode checks, group membership, open bits, walk, create masking and remove; hjfs
   (sys/src/cmd/hjfs/fs2.c) for the remove-on-close parent check, which gefs omits but
-  open(5) requires. Job scope (FOG_N07) is out of scope for this layer's first slice.
+  open(5) requires.
   These scenarios require executable bindings before they count as implemented.
 
   @NS_AUTHZ_001 @FOG_N02

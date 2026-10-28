@@ -9,8 +9,7 @@ acceptance tests. They add no production dependency and change no running servic
 ## Scope and decisions
 
 This is the security and host-control foundation for the existing
-[9P transport](../swarm-9p-transport/README.md),
-[LibTab jobs](../libtab-compute-jobs/README.md), and
+[9P transport](../swarm-9p-transport/README.md) and
 [provider interface](../workload-providers/README.md).
 Workloads remain application-neutral. Games, identity federation, and application
 economies have no special cases in this layer.
@@ -31,14 +30,14 @@ Version one has:
 - Operator-controlled LibTab configuration, per-principal exported namespaces,
   resource-side authorization, and aggregate admission limits.
 - Disposable execution with bounded retained outcomes. No automatic failover,
-  transparent job retry, or durable exactly-once effects.
+  transparent retry, or durable exactly-once effects.
 - [Built-in AAN](../swarm-9p-transport/Aan.md) for bounded continuity of live
   logical sessions across temporary link failures. Stock AAN beneath 9P is selected;
   its [secure session contract](../fog-v1-profiles/AanSession.md) defines bootstrap
-  and resumption. AAN does not extend authority or job leases.
+  and resumption. AAN does not extend authority or leases.
 
 No federation, Emercoin, public worker enrollment, arbitrary plug-in downloads,
-recursive jobs, remote administration API, or general distributed transaction
+remote administration API, or general distributed transaction
 service is introduced. Nodes and their host administrators are trusted; uploaded
 guest programs and network clients are not. A signature is not remote attestation.
 
@@ -50,13 +49,13 @@ guest programs and network clients are not. A signature is not remote attestatio
 | Fog auth server | keyfs, the ticket service and password changes for the auth domain |
 | Local 9P host | Listeners, authentication fids, principal binding, bootstrap node admission, connection limits |
 | Client and host AAN transport | Bounded replay state, physical reconnect and same-session continuity, independent of grains |
-| Control node | Active policy, membership provider, admission reservations, job records, scheduling |
+| Control node | Active policy, membership provider, admission reservations, scheduling |
 | Resource host | Enforce effective resource grants, handle lifetime, current execution lease |
 | Orleans | Grain identity, placement and lifecycle within the configured cluster |
 | Execution worker | Run a pinned provider in an enforceable containment boundary |
 
 The control-node services needed to form the cluster are ordinary host services,
-not grains. Once the runtime is available, resource and job coordinators may be
+not grains. Once the runtime is available, resource coordinators may be
 grains. There is no dependency from opening an Orleans transport channel back to
 Orleans activation.
 
@@ -142,7 +141,6 @@ that review.
    beneath 9P, then verify live file-session recovery.
 4. Start one node using local configuration; introduce the second over 9P.
 5. Bind the selected Orleans version's membership API to the host-level 9P store.
-6. After namespace compatibility, prove a bounded WASM job through the same path.
 
 The [concrete v1 profiles](../fog-v1-profiles/README.md) now specify the six previously
 open contracts: AAN establishment, Orleans membership records, the three runtime
