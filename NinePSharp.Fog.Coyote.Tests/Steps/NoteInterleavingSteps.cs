@@ -5,13 +5,12 @@ using NinePSharp.Constants;
 using NinePSharp.Fog.Coyote.Tests.Support;
 using NinePSharp.Fog.Kernel;
 using Reqnroll;
-using Reqnroll.UnitTestProvider;
 
 namespace NinePSharp.Fog.Coyote.Tests.Steps;
 
 [Binding]
 [Scope(Feature = "Notes reach a process once in every interleaving Coyote explores")]
-public sealed class NoteInterleavingSteps(IUnitTestRuntimeProvider runtime, IReqnrollOutputHelper output)
+public sealed class NoteInterleavingSteps(IReqnrollOutputHelper output)
 {
     private Func<Child, Task>? race;
 
@@ -20,7 +19,7 @@ public sealed class NoteInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(FogKernel).Assembly))
         {
-            runtime.TestIgnore("the Fog assemblies were not rewritten with coyote rewrite");
+            throw new InvalidOperationException("the Fog assemblies were not rewritten with coyote rewrite; build NinePSharp.Fog.Coyote.Tests, which rewrites them");
         }
     }
 

@@ -10,13 +10,12 @@ using NinePSharp.Fog.Server.Tests;
 using NinePSharp.Messages;
 using NinePSharp.Parser;
 using Reqnroll;
-using Reqnroll.UnitTestProvider;
 using Xunit;
 
 namespace NinePSharp.Fog.Coyote.Tests.Steps;
 
 [Binding]
-public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime, IReqnrollOutputHelper output) : IDisposable
+public sealed class DispatcherInterleavingSteps(IReqnrollOutputHelper output) : IDisposable
 {
     private const string Session = "node";
     private ControlFixture? fixture;
@@ -38,7 +37,7 @@ public sealed class DispatcherInterleavingSteps(IUnitTestRuntimeProvider runtime
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(FogNinePDispatcher).Assembly))
         {
-            runtime.TestIgnore("the Fog assemblies were not rewritten with coyote rewrite");
+            throw new InvalidOperationException("the Fog assemblies were not rewritten with coyote rewrite; build NinePSharp.Fog.Coyote.Tests, which rewrites them");
         }
 
         fixture = new ControlFixture();

@@ -28,4 +28,25 @@
     <Compile Include="../NinePSharp.Fog.Gefs.Tests/Support/MemoryDevice.cs" Link="Support/MemoryDevice.cs" />
     <Compile Include="../NinePSharp.Fog.Gefs.Tests/Support/Bounded.cs" Link="Support/GefsBounded.cs" />
   </ItemGroup>
+  <!--
+    Coyote explores interleavings only in assemblies rewritten to hand it their tasks, locks and awaits,
+    so every build rewrites its output: the code under test, NinePSharp's connection processor that the
+    listeners hand each connection to, and this assembly, whose awaits would otherwise run outside
+    Coyote's control. Fog's assemblies are rewritten to check data races too, which also gives Coyote
+    their collection and memory accesses to switch at; this assembly is rewritten without it, as its
+    memory accesses rewritten that way do not run.
+  -->
+  <Target Name="CoyoteRewrite" AfterTargets="Build">
+    <PropertyGroup>
+      <CoyoteDotnet Condition="'$(DOTNET_HOST_PATH)' != ''">"$(DOTNET_HOST_PATH)"</CoyoteDotnet>
+      <CoyoteDotnet Condition="'$(DOTNET_HOST_PATH)' == ''">dotnet</CoyoteDotnet>
+      <CoyoteOutput>$([System.IO.Path]::GetFullPath('$(OutDir)'))</CoyoteOutput>
+      <CoyoteOutputJson>$(CoyoteOutput.Replace('\', '/'))</CoyoteOutputJson>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(CoyoteOutput)rewrite.coyote.json" Overwrite="true" Lines="{ &quot;AssembliesPath&quot;: &quot;$(CoyoteOutputJson)&quot;, &quot;Assemblies&quot;: [&quot;NinePSharp.Fog.Server.dll&quot;, &quot;NinePSharp.Fog.dll&quot;, &quot;NinePSharp.Fog.Thread.dll&quot;, &quot;NinePSharp.Fog.Gefs.dll&quot;, &quot;NinePSharp.Fog.Kernel.dll&quot;, &quot;NinePSharp.Namespaces.dll&quot;, &quot;NinePSharp.Server.dll&quot;], &quot;IsDataRaceCheckingEnabled&quot;: true }" />
+    <WriteLinesToFile File="$(CoyoteOutput)rewrite-tests.coyote.json" Overwrite="true" Lines="{ &quot;AssembliesPath&quot;: &quot;$(CoyoteOutputJson)&quot;, &quot;Assemblies&quot;: [&quot;$(TargetFileName)&quot;] }" />
+    <Exec Command="$(CoyoteDotnet) tool restore" WorkingDirectory="$(MSBuildThisFileDirectory)" StandardOutputImportance="low" />
+    <Exec Command="$(CoyoteDotnet) tool run coyote rewrite &quot;$(CoyoteOutput)rewrite.coyote.json&quot;" WorkingDirectory="$(MSBuildThisFileDirectory)" StandardOutputImportance="low" />
+    <Exec Command="$(CoyoteDotnet) tool run coyote rewrite &quot;$(CoyoteOutput)rewrite-tests.coyote.json&quot;" WorkingDirectory="$(MSBuildThisFileDirectory)" StandardOutputImportance="low" />
+  </Target>
 </Project>

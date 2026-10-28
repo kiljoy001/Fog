@@ -3,13 +3,12 @@ using Microsoft.Coyote.Specifications;
 using NinePSharp.Fog.Coyote.Tests.Support;
 using NinePSharp.Fog.Thread;
 using Reqnroll;
-using Reqnroll.UnitTestProvider;
 
 namespace NinePSharp.Fog.Coyote.Tests.Steps;
 
 [Binding]
 [Scope(Feature = "libthread's channels keep their promises in every interleaving Coyote explores")]
-public sealed class LibthreadInterleavingSteps(IUnitTestRuntimeProvider runtime, IReqnrollOutputHelper output)
+public sealed class LibthreadInterleavingSteps(IReqnrollOutputHelper output)
 {
     private int size;
     private Func<Task>? race;
@@ -133,7 +132,7 @@ public sealed class LibthreadInterleavingSteps(IUnitTestRuntimeProvider runtime,
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(Channel).Assembly))
         {
-            runtime.TestIgnore("the Fog assemblies were not rewritten with coyote rewrite");
+            throw new InvalidOperationException("the Fog assemblies were not rewritten with coyote rewrite; build NinePSharp.Fog.Coyote.Tests, which rewrites them");
         }
     }
 }

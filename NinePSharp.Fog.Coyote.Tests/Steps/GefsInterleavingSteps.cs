@@ -8,13 +8,12 @@ using NinePSharp.Fog.Gefs;
 using NinePSharp.Fog.Gefs.Tests.Support;
 using NinePSharp.Namespaces;
 using Reqnroll;
-using Reqnroll.UnitTestProvider;
 
 namespace NinePSharp.Fog.Coyote.Tests.Steps;
 
 [Binding]
 [Scope(Feature = "A gefs store's one writer keeps its trees whole in every interleaving Coyote explores")]
-public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReqnrollOutputHelper output)
+public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
 {
     private Func<Task>? race;
     private ulong sequence;
@@ -28,7 +27,7 @@ public sealed class GefsInterleavingSteps(IUnitTestRuntimeProvider runtime, IReq
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(GefsServer).Assembly))
         {
-            runtime.TestIgnore("the Fog assemblies were not rewritten with coyote rewrite");
+            throw new InvalidOperationException("the Fog assemblies were not rewritten with coyote rewrite; build NinePSharp.Fog.Coyote.Tests, which rewrites them");
         }
     }
 

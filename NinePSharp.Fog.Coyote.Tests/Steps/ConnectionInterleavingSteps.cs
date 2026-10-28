@@ -13,12 +13,11 @@ using NinePSharp.Messages;
 using NinePSharp.Parser;
 using NinePSharp.Server;
 using Reqnroll;
-using Reqnroll.UnitTestProvider;
 
 namespace NinePSharp.Fog.Coyote.Tests.Steps;
 
 [Binding]
-public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime, IReqnrollOutputHelper output) : IDisposable
+public sealed class ConnectionInterleavingSteps(IReqnrollOutputHelper output) : IDisposable
 {
     private ControlFixture? fixture;
     private TimeSpan drain;
@@ -33,7 +32,7 @@ public sealed class ConnectionInterleavingSteps(IUnitTestRuntimeProvider runtime
         if (!RewritingEngine.IsAssemblyRewritten(typeof(FogNinePDispatcher).Assembly) ||
             !RewritingEngine.IsAssemblyRewritten(typeof(NinePConnectionProcessor).Assembly))
         {
-            runtime.TestIgnore("the Fog and NinePSharp.Server assemblies were not rewritten with coyote rewrite");
+            throw new InvalidOperationException("the Fog and NinePSharp.Server assemblies were not rewritten with coyote rewrite; build NinePSharp.Fog.Coyote.Tests, which rewrites them");
         }
 
         fixture = new ControlFixture();

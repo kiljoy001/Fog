@@ -8,13 +8,12 @@ using NinePSharp.Interfaces;
 using NinePSharp.Messages;
 using NinePSharp.Namespaces;
 using Reqnroll;
-using Reqnroll.UnitTestProvider;
 
 namespace NinePSharp.Fog.Coyote.Tests.Steps;
 
 [Binding]
 [Scope(Feature = "A mount's connection hands every reply to its caller in every interleaving Coyote explores")]
-public sealed class MountInterleavingSteps(IUnitTestRuntimeProvider runtime, IReqnrollOutputHelper output)
+public sealed class MountInterleavingSteps(IReqnrollOutputHelper output)
 {
     private const string RpcError = "mount rpc error";
     private Func<Mount, Task<Dictionary<string, string>>>? race;
@@ -24,7 +23,7 @@ public sealed class MountInterleavingSteps(IUnitTestRuntimeProvider runtime, IRe
     {
         if (!RewritingEngine.IsAssemblyRewritten(typeof(FogKernel).Assembly))
         {
-            runtime.TestIgnore("the Fog assemblies were not rewritten with coyote rewrite");
+            throw new InvalidOperationException("the Fog assemblies were not rewritten with coyote rewrite; build NinePSharp.Fog.Coyote.Tests, which rewrites them");
         }
     }
 
