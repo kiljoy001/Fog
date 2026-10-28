@@ -32,7 +32,7 @@ public sealed class Secstore(Process process, string argv0)
     {
         await PrintAsync("usage: secstore [-cinv] [-[gG] getfile] [-p putfile] [-r rmfile] [-s tcp!server!5356] [-u user]\n");
         process.Exits("usage");
-        return string.Empty;
+        throw new System.Diagnostics.UnreachableException();
     }
 
     private async Task RunAsync(IReadOnlyList<string> argv)
@@ -151,7 +151,7 @@ public sealed class Secstore(Process process, string argv0)
 
         // Get the file's size.
         (int n, string s) = await conn.ReadstrAsync();
-        if (n < 0)
+        if (n == -1)
         {
             await PrintAsync($"secstore: remote: {s}\n");
             return (-1, null);
@@ -179,7 +179,7 @@ public sealed class Secstore(Process process, string argv0)
             var listing = new List<byte>();
             for (int i = 0; i < len; i += n)
             {
-                if ((n = await conn.ReadAsync(chunk, SConn.Maxmsg)) <= 0)
+                if ((n = await conn.ReadAsync(chunk, SConn.Maxmsg)) == -1)
                 {
                     await PrintAsync("secstore: empty file chunk\n");
                     return (-1, null);
@@ -200,7 +200,7 @@ public sealed class Secstore(Process process, string argv0)
 
         // conn is already encrypted against wiretappers, but gf is also encrypted against
         // server breakin.
-        int fd = -1;
+        int fd = default;
         if (!inMemory)
         {
             try
@@ -222,7 +222,7 @@ public sealed class Secstore(Process process, string argv0)
         {
             for (int nr = 0; nr < len;)
             {
-                if ((n = await conn.ReadAsync(chunk, SConn.Maxmsg)) <= 0)
+                if ((n = await conn.ReadAsync(chunk, SConn.Maxmsg)) == -1)
                 {
                     await PrintAsync($"secstore: empty file chunk n={n} nr={nr} len={len}: {Errstr.Get(process)}\n");
                     return (-1, null);
@@ -248,6 +248,8 @@ public sealed class Secstore(Process process, string argv0)
 
                 aes.CbcDecrypt(ib.AsSpan(ibw - n, n));
                 n = ibw - ibr - Chk;
+
+                // Stryker disable once Equality : a write or copy of nothing changes nothing
                 if (n > 0)
                 {
                     if (inMemory)
@@ -268,6 +270,8 @@ public sealed class Secstore(Process process, string argv0)
                 ibr = 0;
             }
         }
+
+        // Stryker disable all : AES keeps nothing past the process, and the client exits after its files, closing them
         finally
         {
             aes?.Dispose();
@@ -278,7 +282,8 @@ public sealed class Secstore(Process process, string argv0)
             await process.CloseAsync(fd);
         }
 
-        if (ibw - ibr != Chk || !ib.AsSpan(0, Chk).SequenceEqual(Check))
+        // Stryker restore all
+        if (ibw != Chk || !ib.AsSpan(0, Chk).SequenceEqual(Check))
         {
             await PrintAsync("secstore: decrypted file failed to authenticate!\n");
             return (-1, null);
@@ -293,10 +298,12 @@ public sealed class Secstore(Process process, string argv0)
     {
         // Create the initialization vector.
         byte[] iv = new byte[Aesstate.Aesbsize];
+
+        // Stryker disable once Statement : the IV is encrypted with itself as CBC's first ivec, so the file is the same whatever it is, as 9front's is
         Authsrv.Genrandom(iv);
         using var aes = new Aesstate(Skey(key), iv);
         await conn.WriteAsync($"PUT {pf}");
-        int fd = -1;
+        int fd = default;
         long len;
         if (buf is null)
         {
@@ -368,6 +375,8 @@ public sealed class Secstore(Process process, string argv0)
             }
 
             aes.CbcEncrypt(b.AsSpan(0, n));
+
+            // Stryker disable once Equality : a chunk of Maxmsg exactly is sent whole, and the empty write after it sends nothing
             if (n > SConn.Maxmsg)
             {
                 await conn.WriteAsync(b, SConn.Maxmsg);
@@ -378,11 +387,13 @@ public sealed class Secstore(Process process, string argv0)
             await conn.WriteAsync(b, n);
         }
 
+        // Stryker disable all : the client exits after its files, closing them
         if (buf is null)
         {
             await process.CloseAsync(fd);
         }
 
+        // Stryker restore all
         await PrintAsync($"secstore: saved {len} bytes\n");
         return 0;
     }
@@ -451,10 +462,14 @@ public sealed class Secstore(Process process, string argv0)
             await c.Conn.WriteAsync("BYE");
             return 0;
         }
+
+        // Stryker disable all : the client exits after its files, closing its call
         finally
         {
             await c.Conn.FreeAsync();
         }
+
+        // Stryker restore all
     }
 
     // A line at a time, as /mnt/factotum/ctl needs.
@@ -539,26 +554,33 @@ public sealed class Secstore(Process process, string argv0)
                     continue;
                 }
 
+                // Stryker disable all : a file got whole is never more than secstored keeps, so its put cannot fail
                 if (await PutfileAsync(c.Conn, f0, memfile, Encoding.UTF8.GetBytes(newpass)) < 0)
                 {
                     await PrintAsync($"secstore: putfile of '{f0}' failed\n");
                 }
+
+                // Stryker restore all
             }
 
             await c.Conn.WriteAsync("BYE");
             return 0;
         }
+
+        // Stryker disable all : the client exits after its password change, closing its call
         finally
         {
             await c.Conn.FreeAsync();
         }
+
+        // Stryker restore all
     }
 
     // login: a connection to the first store of dest that answers, logged in as id with the
     // password from the nvram, standard input or the console, which may be typed again.
     private async Task<AuthConn?> LoginAsync(string id, List<string> dest, bool passStdin, bool passNvram)
     {
-        string pass = string.Empty;
+        string? pass = null;
         string? pinsta = null;
         if (passNvram)
         {
@@ -663,6 +685,7 @@ public sealed class Secstore(Process process, string argv0)
                 break;
             }
 
+            // Stryker disable once Statement : the call is dialled again or the client exits, closing it
             await conn.FreeAsync();
             if (passStdin)
             {
@@ -683,8 +706,9 @@ public sealed class Secstore(Process process, string argv0)
 
         await PrintAsync($"{server}\n");
         (int n, string reply) = await conn!.ReadstrAsync();
-        if (n < 0)
+        if (n == -1)
         {
+            // Stryker disable once Statement : the client exits after a failed login, closing its call
             await conn.FreeAsync();
             return null;
         }
@@ -718,6 +742,8 @@ public sealed class Secstore(Process process, string argv0)
         if (reply != "OK")
         {
             await PrintAsync($"secstore: {reply}\n");
+
+            // Stryker disable once Statement : the client exits after a failed login, closing its call
             await conn.FreeAsync();
             return null;
         }

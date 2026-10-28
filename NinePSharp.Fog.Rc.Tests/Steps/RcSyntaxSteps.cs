@@ -1,4 +1,5 @@
 using System.Text;
+using NinePSharp.Fog.Namespaces.Tests.Support;
 using NinePSharp.Fog.Rc.Tests.Support;
 using Reqnroll;
 using Xunit;
@@ -91,11 +92,7 @@ public sealed class RcSyntaxSteps
     // 9front's rc, given the same script, prints the same text. A null text is made by setup.
     private async Task AgreeWithNineFront(string? text, string expected)
     {
-        if (await NineFrontOracle.TerminalAsync() is not { } nineFront)
-        {
-            return;
-        }
-
+        NineFrontTerminal nineFront = await NineFrontOracle.TerminalAsync();
         await nineFront.RunAsync(text is null ? setup! : "cat >" + File + " <<'EOF9'\n" + text + "\nEOF9");
         Assert.Equal(expected + "\n", await nineFront.RunAsync("@{rfork e; rc " + File + " >[2=1] </dev/null}"));
     }

@@ -22,7 +22,7 @@ namespace NinePSharp.Fog.Namespaces.Tests.Steps;
 
 [Binding]
 [Scope(Feature = "A stock 9front terminal logs in to Fog and mounts its namespace")]
-public sealed class NineFrontInteropSteps(IUnitTestRuntimeProvider runtime)
+public sealed class NineFrontInteropSteps
 {
     private readonly IGrainFactory grains = FogNamespaceCluster.Cluster.GrainFactory;
     private readonly Dictionary<string, string> devices = new(StringComparer.Ordinal);
@@ -45,7 +45,7 @@ public sealed class NineFrontInteropSteps(IUnitTestRuntimeProvider runtime)
     {
         if (NineFrontTerminal.Unavailable is string reason)
         {
-            runtime.TestIgnore(reason);
+            throw new InvalidOperationException(reason);
         }
 
         identity = new AuthFidOptions { AuthId = authId, AuthDomain = authDomain };

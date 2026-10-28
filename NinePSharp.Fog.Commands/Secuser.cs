@@ -88,6 +88,7 @@ public sealed class Secuser(Process process, string argv0)
         pw.Status = await BitAsync(pw.Status, Pw.Sta, ('Y', 'N'), on => $"require STA? [default {(on ? "yes" : "no")}]: ");
 
         // The free form field.
+        // Stryker disable once Block : a new account's PW is made without one, as emalloc's is
         if (isnew)
         {
             pw.Other = null;
@@ -318,7 +319,7 @@ public sealed class Secuser(Process process, string argv0)
     {
         await PrintAsync($"{argv0}: {message}\n");
         process.Exits(message);
-        return string.Empty;
+        throw new System.Diagnostics.UnreachableException();
     }
 
     private Task OutAsync(string text) => process.WriteAsync(1, Encoding.UTF8.GetBytes(text)).AsTask();

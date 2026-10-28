@@ -15,7 +15,7 @@ namespace NinePSharp.Fog.Rc.Tests.Steps;
 
 [Binding]
 [Scope(Feature = "Stock 9front rcpu runs rc on Fog through tcp17019")]
-public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
+public sealed class RcpuLoginSteps
 {
     private const string Domain = "fog";
 
@@ -446,7 +446,7 @@ public sealed class RcpuLoginSteps(IUnitTestRuntimeProvider runtime)
     {
         if (NineFrontTerminal.Unavailable is string reason)
         {
-            runtime.TestIgnore(reason);
+            throw new InvalidOperationException(reason);
         }
 
         await Booting.WaitAsync();

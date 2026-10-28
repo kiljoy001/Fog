@@ -84,6 +84,13 @@ public sealed class SecstoreClientTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AStoreNamedWithoutNetworkOrServiceIsDialledOnTcpAt5356()
+    {
+        (string output, string status) = await h.RunAsync("secretpw\n", "auth/secstore", "-iv", "-s", "127.0.0.1", "-G", "f");
+        Assert.Equal(("dialing 127.0.0.1\nsecstore: can't dial 127.0.0.1: connection refused\n", "dial failed"), (output, status));
+    }
+
+    [Fact]
     public async Task ADialThatFailsQuietlyWithoutV()
         => Assert.Equal((string.Empty, "dial failed"), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!1", "-G", "f"));
 
@@ -418,12 +425,215 @@ public sealed class SecstoreClientTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task APasswordOfSixtyFourBytesIsCutToSixtyThree()
+    {
+        await h.AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{Pak.Hi("glenda", new string('p', 63)).HexHi}\n");
+        await h.SecstoredAsync(17477);
+        Assert.Equal(("secstore\n", string.Empty), await h.RunAsync(new string('p', 64), "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17477"));
+    }
+
+    [Fact]
+    public async Task AListingOfAnAccountWithNoFilesIsEmpty()
+    {
+        await h.GlendaAsync();
+        await h.SecstoredAsync(17478);
+        Assert.Equal(("secstore\n", string.Empty), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17478", "-g", "."));
+    }
+
+    [Fact]
+    public async Task AFileEncryptedUnderAnotherPasswordFailsItsCheck()
+    {
+        await h.GlendaAsync();
+        await h.WriteFileAsync("/adm/secstore/store/glenda/f", await EncryptedAsync("kept\n", "otherpw"));
+        await h.SecstoredAsync(17479);
+        Assert.Equal(("secstore\nsecstore: decrypted file failed to authenticate!\nauth/secstore: cmd failed\n", "cmd failed"), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17479", "-G", "f"));
+    }
+
+    [Fact]
+    public async Task AFileIsStoredAsItsIvAndTheIvTheFileAndItsCheckEncrypted()
+    {
+        await h.GlendaAsync();
+        await h.SecstoredAsync(17480);
+        await h.WriteFileAsync("/tmp/f", "hello there\n"u8.ToArray());
+        Authsrv.Random.Value = b => b.Fill(7);
+        try
+        {
+            await h.RunInAsync("/tmp", "secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17480", "-p", "f");
+        }
+        finally
+        {
+            Authsrv.Random.Value = null;
+        }
+
+        byte[] iv = Enumerable.Repeat((byte)7, 16).ToArray();
+        byte[] expected = [.. iv, .. "hello there\n"u8, .. System.Text.Encoding.ASCII.GetBytes(new string('X', 16))];
+        using (var aes = new Aesstate(SHA1.HashData([.. "aescbc file"u8, .. "secretpw"u8])[..16], iv))
+        {
+            aes.CbcEncrypt(expected);
+        }
+
+        await WaitForAsync(async () => await h.ExistsAsync("/adm/secstore/store/glenda/f") && (await h.BytesAsync("/adm/secstore/store/glenda/f")).Length == expected.Length);
+        Assert.Equal(expected, await h.BytesAsync("/adm/secstore/store/glenda/f"));
+    }
+
+    [Fact]
+    public async Task TheClientSaysGoodbye()
+    {
+        await StoreAsync(17482, "f", "kept\n");
+        await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17482", "-G", "f");
+        await WaitForAsync(async () => (await h.LogsAsync()).Contains("[glenda] BYE", StringComparison.Ordinal));
+        Assert.DoesNotContain("without saying goodbye", await h.LogsAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GWritesTheFileALineAtATime()
+    {
+        await StoreAsync(17483, "f", "\none\ntwo\nthree");
+        (int r, int w) = await h.Init.PipeAsync();
+        (int inr, int inw) = await h.Init.PipeAsync();
+        h.Init.Fork(RforkFlags.Proc | RforkFlags.Fdg, async child =>
+        {
+            await child.DupAsync(inr, 0);
+            await child.DupAsync(w, 1);
+            foreach (int fd in new[] { r, w, inr, inw })
+            {
+                await child.CloseAsync(fd);
+            }
+
+            await child.ExecAsync("/bin/auth/secstore", ["auth/secstore", "-i", "-s", "tcp!127.0.0.1!17483", "-G", "f"]);
+        });
+        await h.Init.CloseAsync(w);
+        await h.Init.CloseAsync(inr);
+        await h.Init.WriteAsync(inw, "secretpw\n"u8.ToArray());
+        await h.Init.CloseAsync(inw);
+        var writes = new List<string>();
+        for (ReadOnlyMemory<byte> b; !(b = await h.Init.ReadAsync(r, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(30))).IsEmpty;)
+        {
+            writes.Add(System.Text.Encoding.UTF8.GetString(b.Span));
+        }
+
+        Assert.Equal(["\n", "one\n", "two\n", "three"], writes);
+    }
+
+    [Theory]
+    [InlineData(4080)]
+    [InlineData(8170)]
+    [InlineData(9000)]
+    public async Task APasswordChangeEncryptsAFileOfAnySizeAgain(int size)
+    {
+        await h.GlendaAsync();
+        await h.SecstoredAsync(17484);
+        byte[] data = RandomNumberGenerator.GetBytes(size);
+        await h.WriteFileAsync("/tmp/f", data);
+        await h.RunInAsync("/tmp", "secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17484", "-p", "f");
+        await WaitForAsync(async () => await h.ExistsAsync("/adm/secstore/store/glenda/f") && (await h.BytesAsync("/adm/secstore/store/glenda/f")).Length == size + 32);
+        h.Console.Type("secretpw\nseven77\nseven77\n");
+        Assert.Equal(($"secstore\nsecstore: reencrypting 'f'\nsecstore: saved {size} bytes\n", string.Empty), await h.RunAsync(string.Empty, "auth/secstore", "-c", "-s", "tcp!127.0.0.1!17484"));
+        Assert.Equal("secstore password: \nnew password for glenda: \nretype password: \n", h.Console.Text);
+        await WaitForAsync(async () => (await h.FileAsync("/adm/secstore/who/glenda")).Contains(Pak.Hi("glenda", "seven77").HexHi, StringComparison.Ordinal));
+        await h.Init.RemoveAsync("/tmp/f");
+        await WaitForAsync(async () => (await h.LogsAsync()).Split("[glenda] BYE").Length == 3);
+        Assert.Equal(("secstore\n", string.Empty), await h.RunInAsync("/tmp", "seven77\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17484", "-g", "f"));
+        Assert.Equal(data, await h.BytesAsync("/tmp/f"));
+    }
+
+    [Fact]
+    public async Task APasswordChangeTakesALineOfOneFieldAndNoneWithoutItsNewline()
+    {
+        var got = new List<string>();
+        Task store = await FakeStoreAsync(17485, async c =>
+        {
+            await c.WriteAsync("OK");
+            await c.ReadstrAsync();
+            await c.ReadstrAsync();
+            await c.ReadstrAsync();
+            string listing = "one\nlast\t1 x";
+            await c.WriteAsync(listing.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            await c.WriteAsync(listing);
+            for ((int n, string s) = await c.ReadstrAsync(); n > 0 && s != "BYE"; (n, s) = await c.ReadstrAsync())
+            {
+                got.Add(s);
+                if (s.StartsWith("GET", StringComparison.Ordinal))
+                {
+                    await c.WriteAsync("-1");
+                }
+            }
+        });
+        h.Console.Type("secretpw\nseven77\nseven77\n");
+        Assert.Equal(("secstore\nsecstore: reencrypting 'one'\nsecstore: remote file one does not exist\nsecstore: getfile of 'one' failed\n", string.Empty), await h.RunAsync(string.Empty, "auth/secstore", "-c", "-s", "tcp!127.0.0.1!17485"));
+        await store;
+        Assert.Equal(["GET one"], got);
+    }
+
+    [Theory]
+    [InlineData("secretpw\n\nmore", "STA")]
+    [InlineData("secretpw\n12\n34", "STA12")]
+    public async Task ThePinIsTheSecondLineOfStandardInput(string stdin, string sent)
+    {
+        var got = new TaskCompletionSource<string>();
+        Task store = await FakeStoreAsync(17486, async c =>
+        {
+            await c.WriteAsync("STA");
+            got.SetResult((await c.ReadstrAsync()).S);
+            await c.WriteAsync("OK");
+            await c.ReadstrAsync();
+        });
+        Assert.Equal(string.Empty, (await h.RunAsync(stdin, "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17486")).Status);
+        Assert.Equal(sent, await got.Task);
+        await store;
+    }
+
+    [Fact]
+    public async Task StandardInputIsReadToMaxmsgLessTwo()
+    {
+        var got = new TaskCompletionSource<string>();
+        Task store = await FakeStoreAsync(17487, async c =>
+        {
+            await c.WriteAsync("STA");
+            got.SetResult((await c.ReadstrAsync()).S);
+            await c.WriteAsync("OK");
+            await c.ReadstrAsync();
+        });
+        await h.RunAsync($"secretpw\n{new string('x', 5000)}", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17487");
+        Assert.Equal($"STA{new string('x', SConn.Maxmsg - 2 - 9)}", await got.Task);
+        await store;
+    }
+
+    [Fact]
+    public async Task APinNotTypedIsSentEmpty()
+    {
+        var got = new TaskCompletionSource<string>();
+        Task store = await FakeStoreAsync(17488, async c =>
+        {
+            await c.WriteAsync("STA");
+            got.SetResult((await c.ReadstrAsync()).S);
+            await c.WriteAsync("OK");
+            await c.ReadstrAsync();
+        });
+        h.Console.Type("secretpw\n");
+        Assert.Equal(string.Empty, (await h.RunAsync(string.Empty, "auth/secstore", "-s", "tcp!127.0.0.1!17488")).Status);
+        Assert.Equal("STA", await got.Task);
+        Assert.Equal("secstore password: \nSTA PIN+SecureID: \n", h.Console.Text);
+        await store;
+    }
+
+    [Fact]
     public async Task UNamesTheUser()
     {
         await h.AccountAsync("other", $"exp\t0\nPAK-Hi\t{Pak.Hi("other", "otherpass").HexHi}\n");
         await h.SecstoredAsync(17475);
         Assert.Equal(("secstore\n", string.Empty), await h.RunAsync("otherpass\n", "auth/secstore", "-i", "-u", "other", "-s", "tcp!127.0.0.1!17475"));
         Assert.Equal(("auth/secstore: error: accounts glenda and FICTITIOUS do not exist\n", "invalid password on standard input"), await h.RunAsync("otherpass\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17475"));
+    }
+
+    private static async Task WaitForAsync(Func<Task<bool>> done)
+    {
+        for (int i = 0; i < 300 && !await done(); i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(await done());
     }
 
     // secstore's encryption of a file: an IV, then AES-CBC of it and the file and its check.

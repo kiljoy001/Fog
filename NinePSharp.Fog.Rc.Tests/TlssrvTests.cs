@@ -93,6 +93,18 @@ public sealed class TlssrvTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AUserItCannotBecomeIsFatalAndNothingRuns()
+    {
+        await ServiceAsync("bind /tmp/svc /dev; exec tlssrv -a /bin/rc -c server >[2]/tmp/err");
+        await HostAsync();
+        Process client = await ClientAsync("bob", "bobpassw");
+        int data = await DialAsync(client);
+        await Libauth.AuthProxyAsync(client, data, null, "proto=p9any role=client").WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.StartsWith("tlssrv: auth_chuid: opening /dev/capuse: ", await WaitForTextAsync("/tmp/err"), StringComparison.Ordinal);
+        Assert.DoesNotContain(kernel.Processes.Values, p => p.Text == "rc" && p.User == "bob");
+    }
+
+    [Fact]
     public async Task WithMinusDTheHandshakeIsReportedToTheLogOrStandardError()
     {
         await MkdirAsync("#R/sys");

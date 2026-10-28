@@ -179,8 +179,9 @@ Executable scenarios:
 | `NinePSharp.Fog.Server.Tests/Features/Draining.feature` (`@FOG_DRAIN_`) | Bounded drains and unknown outcomes |
 | `NinePSharp.Fog.Namespaces.Tests/Features/NineFrontInterop.feature` (`@FOG_INTEROP_`) | A stock 9front terminal in QEMU: `srv` and mount with dp9ik, grants, writes, a wrong password retried through factotum, `passwd` |
 
-The interoperability scenarios run when `FOG_9FRONT_ISO` names a 9front amd64 ISO and
-`qemu-system-x86_64` is installed. The ISO is changed only by rewriting `plan9.ini` for a
+The interoperability scenarios boot the 9front amd64 ISO that `FOG_9FRONT_ISO` names, or
+`~/9front/current.iso`, in `qemu-system-x86_64`; a run without either fails rather than
+skipping them. The ISO is changed only by rewriting `plan9.ini` for a
 serial console.
 
 Each auth project has a 100% Stryker mutation gate (`stryker-config-fog-auth.json`, and

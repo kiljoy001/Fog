@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Time.Testing;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Commands;
 using NinePSharp.Fog.Kernel;
@@ -28,8 +29,8 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("GET nonesuch");
         Assert.Equal((2, "-1"), await c.ReadstrAsync());
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("can't open /adm/secstore/store/glenda/nonesuch: ", h.Console.Text, StringComparison.Ordinal);
-        Assert.Contains("[glenda] GET nonesuch", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("can't open /adm/secstore/store/glenda/nonesuch: ", await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.Contains("[glenda] GET nonesuch", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -40,7 +41,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         SConn c = await LoggedInAsync(17401);
         await c.WriteAsync("GET sub");
         Assert.Equal((2, "-1"), await c.ReadstrAsync());
-        Assert.Contains("/adm/secstore/store/glenda/sub should be a plain file, not a directory", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("/adm/secstore/store/glenda/sub should be a plain file, not a directory", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         SConn c = await LoggedInAsync(17402);
         await c.WriteAsync("GET big");
         Assert.Equal((2, "-3"), await c.ReadstrAsync());
-        Assert.Contains("implausible filesize 10485761 for big", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("implausible filesize 10485761 for big", await h.LogsAsync(), StringComparison.Ordinal);
         c = await LoggedInAsync(17402);
         await c.WriteAsync("GET most");
         Assert.Equal((8, "10485760"), await c.ReadstrAsync());
@@ -123,6 +124,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("GET .");
         Assert.Equal((1, "0"), await c.ReadstrAsync());
         await c.WriteAsync("BYE");
+        Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
     }
 
     [Fact]
@@ -190,9 +192,68 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("PUT f");
         await c.WriteAsync(size);
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains(why, h.Console.Text, StringComparison.Ordinal);
-        Assert.Contains("failed PUT glenda/f", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains(why, await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.Contains("failed PUT glenda/f", await h.LogsAsync(), StringComparison.Ordinal);
         Assert.False(await h.ExistsAsync("/adm/secstore/store/glenda/f"));
+    }
+
+    [Theory]
+    [InlineData("0", 17490)]
+    [InlineData("10485760", 17491)]
+    public async Task APutOfNothingOrOfTheMostItTakesIsTaken(string size, int port)
+    {
+        SConn c = await LoggedInAsync(port);
+        await c.WriteAsync("PUT f");
+        await c.WriteAsync(size);
+        await c.WriteAsync("BYE");
+        await WaitAsync(async () => await h.ExistsAsync("/adm/secstore/store/glenda/f"));
+        Assert.DoesNotContain("implausible", await h.LogsAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AMessageItTakesIsOnlyItsFirstLine()
+    {
+        SConn c = await LoggedInAsync(17492);
+        await c.WriteAsync("\nBYE");
+        Assert.Equal((-1, "unrecognized operation"), await c.ReadstrAsync());
+        Assert.DoesNotContain("BYE", await h.LogsAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACallIsHungUpAfterThirtyMinutes()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeSeconds(1700000000));
+        await using SecstoreHarness timed = await StartAsync(clock: clock);
+        await timed.GlendaAsync();
+        await timed.SecstoredAsync(17493);
+        SConn c = await timed.LoginAsync(17493);
+        Assert.Equal("OK", (await c.ReadstrAsync()).S);
+        clock.Advance(TimeSpan.FromMinutes(30));
+        Assert.Equal((-1, "connection read error"), await c.ReadstrAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task TheDaemonIsInANoteGroupOfItsOwnAndListensOn5356()
+    {
+        await h.StartDaemonAsync("auth/secstored");
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("ANNOUNCE /net/tcp!*!5356", StringComparison.Ordinal));
+        long daemon = h.Kernel.Processes.Values.Single(p => p.Text == "secstored").Pid;
+        Assert.NotEqual(await h.FileAsync($"/proc/{h.Init.Pid}/noteid"), await h.FileAsync($"/proc/{daemon}/noteid"));
+    }
+
+    [Fact]
+    public async Task APutTheStoreTakesOnlyPartOfFails()
+    {
+        SConn c = await LoggedInAsync(17494);
+        await using var server = new FileServerHarness { WriteLimit = 2 };
+        (int client, int served) = await h.Init.PipeAsync();
+        server.Serve(h.Init, served);
+        await h.Init.MountAsync(client, -1, "/adm/secstore/store/glenda", MountFlags.Replace | MountFlags.Create, string.Empty);
+        await c.WriteAsync("PUT f");
+        await c.WriteAsync("5");
+        await c.WriteAsync("hello");
+        Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
+        Assert.Contains("write error on f: short write", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -202,7 +263,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("PUT f");
         await c.WriterrAsync("no file");
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("remote: no file: ", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("remote: no file: ", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,8 +272,9 @@ public sealed class SecstoredTests : IAsyncLifetime
         SConn c = await LoggedInAsync(17409);
         await c.WriteAsync("PUT a/b");
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("illegal name: a/b", h.Console.Text, StringComparison.Ordinal);
-        Assert.Contains("failed PUT glenda/<nil>", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("illegal name: a/b", await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("illegal name", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("failed PUT glenda/<nil>", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -225,7 +287,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("PUT f");
         await c.WriteAsync("5");
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("can't open /adm/secstore/store/glenda/f: ", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("can't open /adm/secstore/store/glenda/f: ", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -236,8 +298,8 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("100");
         await c.WriteAsync("abc");
         await c.FreeAsync();
-        await WaitAsync(() => Task.FromResult(h.Console.Text.Contains("empty file chunk", StringComparison.Ordinal)));
-        Assert.Contains("failed PUT glenda/f", h.Console.Text, StringComparison.Ordinal);
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("empty file chunk", StringComparison.Ordinal));
+        Assert.Contains("failed PUT glenda/f", await h.LogsAsync(), StringComparison.Ordinal);
         Assert.Equal("abc", await h.FileAsync("/adm/secstore/store/glenda/f"));
     }
 
@@ -256,7 +318,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("5");
         await c.WriteAsync("abcde");
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("write error on f: ", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("write error on f: ", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -274,7 +336,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("GET f");
         Assert.Equal((1, "5"), await c.ReadstrAsync());
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("read error on f: disk on fire", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("read error on f: disk on fire", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -300,7 +362,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync(op);
         Assert.StartsWith(why, (await c.ReadstrAsync()).S, StringComparison.Ordinal);
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains($"failed RM glenda/{op[3..]}", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains($"failed RM glenda/{op[3..]}", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -309,7 +371,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         SConn c = await LoggedInAsync(17416);
         await c.WriteAsync("RM ..");
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
-        Assert.Contains("failed RM glenda/<nil>", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("failed RM glenda/<nil>", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -330,7 +392,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.ReadstrAsync();
         await c.WriteAsync("GET f\nmore");
         Assert.Equal((1, "1"), await c.ReadstrAsync());
-        Assert.Contains("[glenda] GET f\n", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("[glenda] GET f\n", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -342,6 +404,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("BYE");
         await WaitAsync(async () => (await h.FileAsync("/adm/secstore/who/glenda")).Contains(Pak.Hi("glenda", "newsecretpw").HexHi, StringComparison.Ordinal));
         Assert.Equal("OK", (await (await h.LoginAsync(17419, "glenda", "newsecretpw")).ReadstrAsync()).S);
+        Assert.Contains(" AUTH glenda\n", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -351,7 +414,8 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("CHPASS");
         await c.WriterrAsync("gone");
         Assert.Equal((-1, "protocol botch while setting PAK"), await c.ReadstrAsync());
-        Assert.Contains("protocol botch CHPASS for glenda", h.Console.Text, StringComparison.Ordinal);
+        Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
+        Assert.Contains("protocol botch CHPASS for glenda", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -365,7 +429,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
         for (int i = 0; i < 4; i++)
         {
-            Assert.Contains($"password change failed for glenda ({i}): can't open PW file for glenda", h.Console.Text, StringComparison.Ordinal);
+            Assert.Contains($"password change failed for glenda ({i}): can't open PW file for glenda", await h.LogsAsync(), StringComparison.Ordinal);
         }
     }
 
@@ -376,7 +440,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("LIST");
         Assert.Equal((-1, "unrecognized operation"), await c.ReadstrAsync());
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
-        Assert.DoesNotContain("closed connection without saying goodbye", h.Console.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("closed connection without saying goodbye", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -384,7 +448,7 @@ public sealed class SecstoredTests : IAsyncLifetime
     {
         SConn c = await LoggedInAsync(17423);
         await c.FreeAsync();
-        await WaitAsync(() => Task.FromResult(h.Console.Text.Contains("glenda closed connection without saying goodbye", StringComparison.Ordinal)));
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("glenda closed connection without saying goodbye", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -394,7 +458,23 @@ public sealed class SecstoredTests : IAsyncLifetime
         await h.SecstoredAsync(17424);
         int fd = await Net.DialAsync(h.Init, "tcp!127.0.0.1!17424");
         await h.Init.WriteAsync(fd, new byte[] { 0, 0 });
+        var c = new SConn(h.Init, fd);
+        Assert.Equal((-1, "can't read your first message"), await c.ReadstrAsync());
+        Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
+    }
+
+    [Fact]
+    public async Task AFirstMessageItCannotReadIsReportedOnStandardError()
+    {
+        await h.GlendaAsync();
+        int err = await h.Init.CreateAsync("/tmp/err", NinePConstants.OWRITE, 0b110_110_110);
+        await h.Init.DupAsync(err, 2);
+        await h.Init.CloseAsync(err);
+        await h.SecstoredAsync(17489);
+        int fd = await Net.DialAsync(h.Init, "tcp!127.0.0.1!17489");
+        await h.Init.WriteAsync(fd, new byte[] { 0, 0 });
         Assert.Equal((-1, "can't read your first message"), await new SConn(h.Init, fd).ReadstrAsync());
+        Assert.StartsWith("secstored: remote: ", await h.FileAsync("/tmp/err"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -404,15 +484,21 @@ public sealed class SecstoredTests : IAsyncLifetime
         await h.SecstoredAsync(17425);
         var c = new SConn(h.Init, await Net.DialAsync(h.Init, "tcp!127.0.0.1!17425"));
         Assert.Equal(-1, (await Pak.ClientAsync(h.Init, "secstore", false, c, "glenda", "wrongpw")).Rc);
-        await WaitAsync(() => Task.FromResult(h.Console.Text.Contains("secstore denied for glenda", StringComparison.Ordinal)));
-        Assert.Contains("secstore from 127.0.0.1!", h.Console.Text, StringComparison.Ordinal);
-        Assert.Contains("ANNOUNCE /net/tcp!127.0.0.1!17425", h.Console.Text, StringComparison.Ordinal);
+        Assert.Equal((-1, "couldn't read verifier"), await c.ReadstrAsync());
+        Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("secstore denied for glenda", StringComparison.Ordinal));
+        Assert.DoesNotContain("AUTH", await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("\n\n", await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.Equal(string.Empty, h.Console.Text);
+        Assert.Contains("secstore from 127.0.0.1!", await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.Contains("ANNOUNCE /net/tcp!127.0.0.1!17425", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("STA12345", "no STA from glenda")]
     [InlineData("STB1234567", "no STA from glenda")]
     [InlineData("STA123456789a", "secureidcheck denied glenda because authentication failed")]
+    [InlineData("STAa234567", "secureidcheck denied glenda because authentication failed")]
     [InlineData("STA1234567", "secureidcheck: nil radius secret: no radius secret")]
     public async Task AnAccountNeedingStaIsAskedForItAndRefusedWithoutRadius(string response, string why)
     {
@@ -422,7 +508,18 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((3, "STA"), await c.ReadstrAsync());
         await c.WriteAsync(response);
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
-        await WaitAsync(() => Task.FromResult(h.Console.Text.Contains(why, StringComparison.Ordinal)));
+        await WaitAsync(async () => (await h.LogsAsync()).Contains(why, StringComparison.Ordinal));
+
+        // A response refused for its form is not taken on to the RADIUS check.
+        string logs = await h.LogsAsync() + await h.FileAsync("/sys/log/auth");
+        if (why.StartsWith("no STA", StringComparison.Ordinal))
+        {
+            Assert.DoesNotContain("secureidcheck", logs, StringComparison.Ordinal);
+        }
+        else if (why.EndsWith("because authentication failed", StringComparison.Ordinal))
+        {
+            Assert.DoesNotContain("radius", logs, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -436,9 +533,9 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((3, "STA"), await c.ReadstrAsync());
         await c.WriteAsync("STA1234567890");
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
-        await WaitAsync(() => Task.FromResult(h.Console.Text.Contains("secureidcheck: no RADIUS for glenda", StringComparison.Ordinal)));
-        Assert.Contains("no /lib/ndb/auth", h.Console.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("no /lib/ndb/local", h.Console.Text, StringComparison.Ordinal);
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("secureidcheck: no RADIUS for glenda", StringComparison.Ordinal));
+        Assert.Contains("no /lib/ndb/auth", await h.LogsAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("no /lib/ndb/local", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -451,8 +548,8 @@ public sealed class SecstoredTests : IAsyncLifetime
         SConn c = await h.LoginAsync(17428);
         await c.ReadstrAsync();
         await c.WriteAsync("STA1234567890");
-        await WaitAsync(() => Task.FromResult(h.Console.Text.Contains("secureidcheck: no RADIUS for glenda", StringComparison.Ordinal)));
-        Assert.Contains("no /lib/ndb/local", h.Console.Text, StringComparison.Ordinal);
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("secureidcheck: no RADIUS for glenda", StringComparison.Ordinal));
+        Assert.Contains("no /lib/ndb/local", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
     [Fact]

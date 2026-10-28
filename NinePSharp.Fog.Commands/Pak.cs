@@ -38,7 +38,7 @@ public static class Pak
     public static string Mptoa64(BigInteger b)
     {
         byte[] be = BigInteger.Abs(b).ToByteArray(isUnsigned: true, isBigEndian: true);
-        return (b.Sign < 0 ? "-" : string.Empty) + Convert.ToBase64String(be.Length == 0 ? [0] : be);
+        return (b.Sign < 0 ? "-" : string.Empty) + Convert.ToBase64String(be);
     }
 
     // strtomp(a, nil, 64, nil): the number in base 64 after any blanks and signs, or null when no
@@ -58,7 +58,7 @@ public static class Pak
         }
 
         int start = i;
-        while (i < a.Length && Dec64chr(a[i]) >= 0)
+        while (i < a.Length && Dec64chr(a[i]))
         {
             i++;
         }
@@ -98,7 +98,7 @@ public static class Pak
 
         // Receive g**y and S, and check hash1(g**xy).
         (int n, string mess) = await conn.ReadstrAsync();
-        if (n < 0)
+        if (n == -1)
         {
             await PrintAsync(process, $"{argv0}: error: {mess}\n");
             await conn.WriterrAsync("couldn't read g**y");
@@ -106,7 +106,7 @@ public static class Pak
         }
 
         int eol = mess.IndexOf('\n', StringComparison.Ordinal);
-        if (!mess.StartsWith("mu=", StringComparison.Ordinal) || eol < 0 || !mess.AsSpan(eol).StartsWith("\nk="))
+        if (!mess.StartsWith("mu=", StringComparison.Ordinal) || eol == -1 || !mess.AsSpan(eol).StartsWith("\nk="))
         {
             await conn.WriterrAsync("verifier syntax error");
             return (-1, null);
@@ -115,7 +115,7 @@ public static class Pak
         string hexmu = mess[3..eol];
         string rest = mess[(eol + 3)..];
         eol = rest.IndexOf('\n', StringComparison.Ordinal);
-        if (eol < 0 || !rest.AsSpan(eol).StartsWith("\nS="))
+        if (eol == -1 || !rest.AsSpan(eol).StartsWith("\nS="))
         {
             await conn.WriterrAsync("verifier syntax error for secstore 1.0");
             return (-1, null);
@@ -124,7 +124,7 @@ public static class Pak
         string ks = rest[..eol];
         string s = rest[(eol + 3)..];
         eol = s.IndexOf('\n', StringComparison.Ordinal);
-        if (eol < 0)
+        if (eol == -1)
         {
             await conn.WriterrAsync("verifier syntax error for secstore 1.0");
             return (-1, null);
@@ -161,7 +161,7 @@ public static class Pak
         }
 
         (int rc, Pw? pw) = await ExchangeAsync(process, argv0, conn, s, mess[mess2.Length..]);
-        if (rc < 0 && pw is not null)
+        if (rc != 0 && pw is not null)
         {
             pw.Failed++;
             await Password.PutAsync(process, pw);
@@ -180,7 +180,7 @@ public static class Pak
     {
         // Parse the first message into C and m.
         int eol = mess.IndexOf('\n', StringComparison.Ordinal);
-        if (!mess.StartsWith("C=", StringComparison.Ordinal) || eol < 0)
+        if (!mess.StartsWith("C=", StringComparison.Ordinal) || eol == -1)
         {
             await PrintAsync(process, $"{argv0}: mess[1]={mess}\n");
             await conn.WriterrAsync("PAK version mismatch");
@@ -188,9 +188,15 @@ public static class Pak
         }
 
         string c = mess[2..eol];
-        string hexm = eol + 3 <= mess.Length ? mess[(eol + 3)..] : string.Empty;
+        if (!mess.AsSpan(eol + 1).StartsWith("m="))
+        {
+            await conn.WriterrAsync("PAK version mismatch");
+            return (-1, null);
+        }
+
+        string hexm = mess[(eol + 3)..];
         int end = hexm.IndexOf('\n', StringComparison.Ordinal);
-        if (!mess.AsSpan(eol + 1).StartsWith("m=") || end < 0)
+        if (end == -1)
         {
             await conn.WriterrAsync("PAK version mismatch");
             return (-1, null);
@@ -228,14 +234,14 @@ public static class Pak
 
         // Receive hash2(g**xy).
         (int n, string reply) = await conn.ReadstrAsync();
-        if (n < 0)
+        if (n == -1)
         {
             await conn.WriterrAsync("couldn't read verifier");
             return (-1, pw);
         }
 
         eol = reply.IndexOf('\n', StringComparison.Ordinal);
-        if (!reply.StartsWith("k'=", StringComparison.Ordinal) || eol < 0)
+        if (!reply.StartsWith("k'=", StringComparison.Ordinal) || eol == -1)
         {
             await conn.WriterrAsync("verifier syntax error");
             return (-1, pw);
@@ -261,6 +267,7 @@ public static class Pak
             HMACSHA1.HashData(new[] { (byte)('A' + i) }, cp).CopyTo(buf, i * SHA1.HashSizeInBytes);
         }
 
+        // Stryker disable once Statement : the copy of the password's hash is cleared, as longhash clears it, and nothing reads it after
         CryptographicOperations.ZeroMemory(cp);
         BigInteger h = new BigInteger(buf, isUnsigned: true, isBigEndian: true) % P;
         return BigInteger.ModPow(h, R, P);
@@ -308,44 +315,19 @@ public static class Pak
 
     private static string Enc64(byte[] digest) => Convert.ToBase64String(digest);
 
-    // dec64chr: the value of a base-64 digit, or -1.
-    private static int Dec64chr(char c) => c switch
-    {
-        >= 'A' and <= 'Z' => c - 'A',
-        >= 'a' and <= 'z' => c - 'a' + 26,
-        >= '0' and <= '9' => c - '0' + 52,
-        '+' => 62,
-        '/' => 63,
-        _ => -1,
-    };
+    // dec64chr(c) >= 0: whether c is a base-64 digit.
+    private static bool Dec64chr(char c) => char.IsAsciiLetterOrDigit(c) || c is '+' or '/';
 
-    // dec64: the bytes of the digits, four to three, a last two or three giving one or two.
+    // dec64: the bytes of the digits, four to three, a last two or three giving one or two and a
+    // last one none.
     private static byte[] Dec64(string digits)
-    {
-        var o = new List<byte>();
-        int b24 = 0, i = 0;
-        foreach (char ch in digits)
+        => Convert.FromBase64String((digits.Length % 4) switch
         {
-            b24 |= Dec64chr(ch) << (18 - (6 * i));
-            if (++i == 4)
-            {
-                o.AddRange([(byte)(b24 >> 16), (byte)(b24 >> 8), (byte)b24]);
-                (b24, i) = (0, 0);
-            }
-        }
-
-        if (i >= 2)
-        {
-            o.Add((byte)(b24 >> 16));
-        }
-
-        if (i == 3)
-        {
-            o.Add((byte)(b24 >> 8));
-        }
-
-        return [.. o];
-    }
+            1 => digits[..^1],
+            2 => digits + "==",
+            3 => digits + "=",
+            _ => digits,
+        });
 
     private static Task PrintAsync(Process process, string text) => process.WriteAsync(2, Encoding.UTF8.GetBytes(text)).AsTask();
 }

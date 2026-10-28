@@ -42,6 +42,15 @@ public sealed class SecuserTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AChangeIsLoggedToSecstoresLog()
+    {
+        h.Console.Type("secretpw\nsecretpw\n\n\n\n\n");
+        Assert.Equal(string.Empty, (await RunWithConsoleAsync("glenda")).Status);
+        Assert.EndsWith(" CHANGELOGIN for 'glenda'\n", await h.FileAsync("/sys/log/secstore"), StringComparison.Ordinal);
+        Assert.DoesNotContain("CHANGELOGIN", h.Console.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnAccountsAnswersAreReadFromStandardInputLineByLine()
     {
         h.Console.Type("secretpw\nsecretpw\n");
@@ -116,7 +125,7 @@ public sealed class SecuserTests : IAsyncLifetime
         Assert.Equal(string.Empty, status);
         Assert.Equal("expires [DDMMYYYY, default = 15012027]: clearing 4 failed login attempts\nEnabled or Disabled [default Disabled]: require STA? [default yes]: comments [default = sponsor]: change written\n", output);
         Assert.Equal($"exp\t1800000000\nDISABLED\nSTA\nother\tsponsor\nPAK-Hi\t{GlendaHi}\n", await h.FileAsync("/adm/secstore/who/glenda"));
-        Assert.Contains("glenda password [default = don't change]: ", h.Console.Text, StringComparison.Ordinal);
+        Assert.Equal("glenda password [default = don't change]: \n", h.Console.Text);
     }
 
     [Fact]
@@ -126,6 +135,15 @@ public sealed class SecuserTests : IAsyncLifetime
         h.Console.Type("newsecretpw\nnewsecretpw\n\n\n\n\n");
         Assert.Equal(string.Empty, (await RunWithConsoleAsync("glenda")).Status);
         Assert.Contains(Pak.Hi("glenda", "newsecretpw").HexHi, await h.FileAsync("/adm/secstore/who/glenda"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ANewAccountsPasswordIsAskedForTwiceRawOnTheConsole()
+    {
+        h.Console.Type("seven77\nseven77\n\n\n\n\n");
+        Assert.Equal(string.Empty, (await RunWithConsoleAsync("glenda")).Status);
+        Assert.Equal("glenda password: \nretype password: \n", h.Console.Text);
+        Assert.Contains(Pak.Hi("glenda", "seven77").HexHi, await h.FileAsync("/adm/secstore/who/glenda"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -251,7 +269,7 @@ public sealed class SecuserTests : IAsyncLifetime
         Assert.Equal(string.Empty, (await AescbcAsync(null, "-e", "/tmp/clear", "/tmp/c.aes")).Status);
         Assert.Equal(string.Empty, (await AescbcAsync(null, "-d", "/tmp/c.aes", "/tmp/back")).Status);
         Assert.Equal("hello\n", await h.FileAsync("/tmp/back"));
-        Assert.Contains("aescbc key: ", h.Console.Text, StringComparison.Ordinal);
+        Assert.Contains("aescbc key: \naescbc key: \n", h.Console.Text, StringComparison.Ordinal);
         Assert.Equal("key input aborted", (await AescbcAsync(null, "-e", "/tmp/clear", "/tmp/c.aes")).Status);
         h.Console.Type($"{new string('k', 4096)}\n");
         Assert.Equal("key too long", (await AescbcAsync(null, "-e", "/tmp/clear", "/tmp/c.aes")).Status);
@@ -273,6 +291,80 @@ public sealed class SecuserTests : IAsyncLifetime
         await h.WriteFileAsync("/tmp/clear", "hello\n"u8.ToArray());
         Assert.Equal(("auth/aescbc: usage: echo password |[3=1] auth/aescbc -i ...\n", "usage: echo password |[3=1] auth/aescbc -i ..."), await AescbcAsync(string.Empty, "-e", "/tmp/clear", "/tmp/c.aes"));
         Assert.Equal(("auth/aescbc: no key\n", "no key"), await AescbcAsync("\n\n", "-e", "/tmp/clear", "/tmp/c.aes"));
+    }
+
+    [Fact]
+    public async Task AescbcReadsAKeyOfAtMost4115BytesFromDescriptorThree()
+    {
+        await h.WriteFileAsync("/tmp/clear", "hello\n"u8.ToArray());
+        Assert.Equal(string.Empty, (await AescbcAsync(new string('a', 4116), "-e", "/tmp/clear", "/tmp/c.aes")).Status);
+        Assert.Equal(string.Empty, (await AescbcAsync(new string('a', 4115), "-d", "/tmp/c.aes", "/tmp/back")).Status);
+        Assert.Equal("decrypted file failed to authenticate", (await AescbcAsync(new string('a', 4114), "-d", "/tmp/c.aes", "/tmp/back")).Status);
+        Assert.Equal(string.Empty, (await AescbcAsync("k", "-e", "/tmp/clear", "/tmp/c.aes")).Status);
+        Assert.Equal(string.Empty, (await AescbcAsync("k\n", "-d", "/tmp/c.aes", "/tmp/back")).Status);
+    }
+
+    [Fact]
+    public async Task AescbcEncryptsTheSameFileDifferentlyEachTime()
+    {
+        await h.WriteFileAsync("/tmp/clear", "hello\n"u8.ToArray());
+        await AescbcAsync("key", "-e", "/tmp/clear", "/tmp/c1");
+        await AescbcAsync("key", "-e", "/tmp/clear", "/tmp/c2");
+        Assert.NotEqual((await h.BytesAsync("/tmp/c1"))[16..32], (await h.BytesAsync("/tmp/c2"))[16..32]);
+    }
+
+    [Fact]
+    public async Task AescbcWritesEachBlockOfItsInputAsItComes()
+    {
+        (int inr, int inw) = await h.Init.PipeAsync();
+        (int outr, int outw) = await h.Init.PipeAsync();
+        (int kr, int kw) = await h.Init.PipeAsync();
+        h.Init.Fork(RforkFlags.Proc | RforkFlags.Fdg, async child =>
+        {
+            // The key is kept clear of the pipes' descriptors until they are closed.
+            await child.DupAsync(inr, 0);
+            await child.DupAsync(outw, 1);
+            await child.DupAsync(kr, 20);
+            foreach (int fd in new[] { inr, inw, outr, outw, kr, kw })
+            {
+                await child.CloseAsync(fd);
+            }
+
+            await child.DupAsync(20, 3);
+            await child.CloseAsync(20);
+            await child.ExecAsync("/bin/auth/aescbc", ["auth/aescbc", "-i", "-e"]);
+        });
+        foreach (int fd in new[] { inr, outw, kr })
+        {
+            await h.Init.CloseAsync(fd);
+        }
+
+        await h.Init.WriteAsync(kw, "key"u8.ToArray());
+        await h.Init.CloseAsync(kw);
+        await h.Init.WriteAsync(inw, new byte[4096]);
+        int got = 0;
+        while (got < 16 + 32 + 4096)
+        {
+            got += (await h.Init.ReadAsync(outr, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(10))).Length;
+        }
+
+        await h.Init.CloseAsync(inw);
+    }
+
+    [Fact]
+    public async Task AescbcThatCannotReadItsInputOrWriteItsOutputFails()
+    {
+        await using var server = new Kernel.Tests.Support.FileServerHarness { ReadRefusal = "disk on fire", WriteRefusal = "disk full" };
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("in", "x"u8.ToArray()));
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("out", []));
+        (int client, int served) = await h.Init.PipeAsync();
+        server.Serve(h.Init, served);
+        await h.MkdirAsync("/n");
+        await h.Init.MountAsync(client, -1, "/n", NinePSharp.Namespaces.MountFlags.Replace, string.Empty);
+        Assert.Equal(("auth/aescbc: read error\n", "read error"), await AescbcAsync("key", "-d", "/n/in", "/tmp/back"));
+        Assert.Equal(("auth/aescbc: read error\n", "read error"), await AescbcAsync("key", "-e", "/n/in", "/tmp/cipher"));
+        await h.WriteFileAsync("/tmp/clear", "hello\n"u8.ToArray());
+        Assert.Equal(("auth/aescbc: write error\n", "write error"), await AescbcAsync("key", "-e", "/tmp/clear", "/n/out"));
     }
 
     [Fact]

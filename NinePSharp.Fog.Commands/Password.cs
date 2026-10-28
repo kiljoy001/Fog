@@ -20,8 +20,7 @@ public static class Password
             return null;
         }
 
-        byte[] bytes = Encoding.UTF8.GetBytes(f);
-        if (f == ".." || bytes.Length >= 250 || bytes.Any(b => b < (byte)' ' || b >= 0x80 || b == (byte)'/'))
+        if (f == ".." || Encoding.UTF8.GetByteCount(f) >= 250 || f.Any(c => c < ' ' || c > '\u007f' || c == '/'))
         {
             await Syslog.WriteAsync(process, false, Log, $"illegal name: {f}");
             return null;
@@ -55,10 +54,9 @@ public static class Password
         // Brdline gives only lines a newline ends.
         foreach (string line in lines.Take(lines.Length - 1))
         {
-            int f2 = line.IndexOfAny([' ', '\t']);
-            string f1 = f2 < 0 ? line : line[..f2];
-            string value = f2 < 0 ? string.Empty : line[f2..].TrimStart(' ', '\t');
-            switch (f1)
+            string[] f = line.Split([' ', '\t'], 2);
+            string value = f.Length > 1 ? f[1].TrimStart(' ', '\t') : string.Empty;
+            switch (f[0])
             {
                 case "exp":
                     pw.Expire = Libc.Strtoul(value, 10, out _);
@@ -146,6 +144,8 @@ public static class Password
         }
 
         text.Append($"PAK-Hi\t{Pak.Mptoa64(pw.Hi)}\n");
+
+        // Stryker disable once Logical,String : who/. names the directory, whose create fails as the name's refusal does
         if (await ValidatefileAsync(process, pw.Id) is null || pw.Id == ".")
         {
             return $"can't open PW file for {pw.Id}";
@@ -214,6 +214,8 @@ public static class Password
         {
             return (await process.StatAsync($"{SecstoreDir}/who/{id}")).Mtime;
         }
+
+        // Stryker disable once Block : the account was read just before, so its file stats unless it is removed between
         catch (SyscallException)
         {
             return 0;

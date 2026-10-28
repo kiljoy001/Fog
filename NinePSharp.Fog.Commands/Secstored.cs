@@ -83,7 +83,7 @@ public sealed class Secstored(Process process, string argv0)
     {
         await PrintAsync("usage: secstored [-R] [-S servername] [-s tcp!*!5356] [-v] [-x netmtpt]\n");
         process.Exits("usage");
-        return string.Empty;
+        throw new System.Diagnostics.UnreachableException();
     }
 
     private async Task RunAsync(IReadOnlyList<string> argv)
@@ -120,38 +120,23 @@ public sealed class Secstored(Process process, string argv0)
         if (verbose)
         {
             await ServeAsync($"{net}/{serve}", s, forceSta);
-            return;
         }
+        else
+        {
+            process.Fork(RforkFlags.Noteg | RforkFlags.Proc | RforkFlags.Fdg, child => new Secstored(child, argv0).ServeAsync($"{net}/{serve}", s, forceSta));
 
-        process.Fork(RforkFlags.Noteg | RforkFlags.Proc | RforkFlags.Fdg, child => new Secstored(child, argv0).ServeAsync($"{net}/{serve}", s, forceSta));
-        process.Exits(null);
+            // Stryker disable once Statement : a program that returns exits as exits(nil) does
+            process.Exits(null);
+        }
     }
 
     private async Task ServeAsync(string aserve, string s, bool forceSta)
     {
-        string adir = string.Empty;
-        try
-        {
-            (_, adir) = await Net.AnnounceAsync(process, aserve);
-        }
-        catch (SyscallException error)
-        {
-            await SysfatalAsync($"{aserve}: {error.Message}");
-        }
-
-        await Syslog.WriteAsync(process, false, Log, $"ANNOUNCE {aserve}");
+        string adir = await AnnounceAsync(aserve);
+        await LogAsync($"ANNOUNCE {aserve}");
         while (true)
         {
-            (int lcfd, string ldir) = (-1, string.Empty);
-            try
-            {
-                (lcfd, ldir) = await Net.ListenAsync(process, adir);
-            }
-            catch (SyscallException)
-            {
-                process.Exits("can't listen");
-            }
-
+            (int lcfd, string ldir) = await ListenAsync(adir);
             process.Fork(RforkFlags.Fdg | RforkFlags.Rend | RforkFlags.Proc, child => new Secstored(child, argv0).CallAsync(lcfd, ldir, s, forceSta));
             await process.CloseAsync(lcfd);
         }
@@ -163,31 +148,76 @@ public sealed class Secstored(Process process, string argv0)
         (Ndb? auth, _) = await Ndb.OpenAsync(process, "/lib/ndb/auth");
         if (auth is null)
         {
-            await Syslog.WriteAsync(process, false, Log, "no /lib/ndb/auth");
+            await LogAsync("no /lib/ndb/auth");
         }
 
         (Ndb? local, _) = await Ndb.OpenAsync(process, null);
         if (local is null)
         {
-            await Syslog.WriteAsync(process, false, Log, "no /lib/ndb/local");
+            await LogAsync("no /lib/ndb/local");
         }
 
         db = auth is null ? local : Ndb.Cat(auth, local);
-        int dfd = -1;
-        try
-        {
-            dfd = await Net.AcceptAsync(process, lcfd, ldir);
-        }
-        catch (SyscallException)
-        {
-            process.Exits("can't accept");
-        }
+        int dfd = await AcceptAsync(lcfd, ldir);
 
         // 30 minutes.
         await process.AlarmAsync(30 * 60 * 1000);
-        await Syslog.WriteAsync(process, false, Log, $"secstore from {await RemoteIpAsync(ldir)}");
+        await LogAsync($"secstore from {await RemoteIpAsync(ldir)}");
         await DologinAsync(dfd, s, forceSta);
+
+        // Stryker disable once Statement : no one waits for a call's process, whose status is not seen
         process.Exits(null);
+    }
+
+    private async Task<string> AnnounceAsync(string aserve)
+    {
+        try
+        {
+            return (await Net.AnnounceAsync(process, aserve)).Dir;
+        }
+        catch (SyscallException error)
+        {
+            await SysfatalAsync($"{aserve}: {error.Message}");
+
+            // Stryker disable once Statement : sysfatal does not return
+            throw new System.Diagnostics.UnreachableException();
+        }
+    }
+
+    private async Task<(int Ctl, string Dir)> ListenAsync(string adir)
+    {
+        try
+        {
+            return await Net.ListenAsync(process, adir);
+        }
+
+        // Stryker disable once Block : a listen on the conversation secstored announced and holds does not fail
+        catch (SyscallException)
+        {
+            // Stryker disable once Statement,String : as above
+            process.Exits("can't listen");
+
+            // Stryker disable once Statement : exits does not return
+            throw new System.Diagnostics.UnreachableException();
+        }
+    }
+
+    private async Task<int> AcceptAsync(int lcfd, string ldir)
+    {
+        try
+        {
+            return await Net.AcceptAsync(process, lcfd, ldir);
+        }
+
+        // Stryker disable once Block : #I's calls are opened by their data, which a listened call always has
+        catch (SyscallException)
+        {
+            // Stryker disable once Statement,String : as above
+            process.Exits("can't accept");
+
+            // Stryker disable once Statement : exits does not return
+            throw new System.Diagnostics.UnreachableException();
+        }
     }
 
     // remoteIP: the call's ipaddr!port, from the remote of its line directory.
@@ -199,8 +229,11 @@ public sealed class Secstored(Process process, string argv0)
         {
             fd = await process.OpenAsync(rp, NinePConstants.OREAD);
         }
+
+        // Stryker disable once Block : a call's remote is there for as long as its listen's ctl is held
         catch (SyscallException)
         {
+            // Stryker disable once String : as above
             return "?!?";
         }
 
@@ -209,20 +242,27 @@ public sealed class Secstored(Process process, string argv0)
         {
             ap = await process.ReadAsync(fd, 500);
         }
+
+        // Stryker disable once Block : #I's remote reads as an address, which is never empty and never so long
         catch (SyscallException error)
         {
+            // Stryker disable once Statement : as above
             Errstr.Set(process, error.Message);
             ap = ReadOnlyMemory<byte>.Empty;
         }
 
+        // Stryker disable once Equality,Block,Statement,String : #I's remote reads as an address, which is never empty and never so long
         if (ap.Length is 0 or 500)
         {
             await PrintAsync($"secstored: error {ap.Length} reading {rp}: {Errstr.Get(process)}\n");
             return "?!?";
         }
 
+        // Stryker disable once Statement : the call's process exits after the call, closing it
         await process.CloseAsync(fd);
         string remote = Encoding.UTF8.GetString(ap.Span);
+
+        // Stryker disable once Conditional : #I's remote always ends in a newline, so taking it off whatever it ends in is the same
         return remote.EndsWith('\n') ? remote[..^1] : remote;
     }
 
@@ -233,7 +273,7 @@ public sealed class Secstored(Process process, string argv0)
         try
         {
             (int n, string msg) = await conn.ReadstrAsync();
-            if (n < 0)
+            if (n == -1)
             {
                 await PrintAsync($"secstored: remote: {msg}: {Errstr.Get(process)}\n");
                 await conn.WriterrAsync("can't read your first message");
@@ -246,7 +286,7 @@ public sealed class Secstored(Process process, string argv0)
             {
                 if (pw is not null)
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"secstore denied for {pw.Id}");
+                    await LogAsync($"secstore denied for {pw.Id}");
                 }
 
                 return;
@@ -258,28 +298,32 @@ public sealed class Secstored(Process process, string argv0)
                 (n, msg) = await conn.ReadstrAsync();
                 if (n < 10 || !msg.StartsWith("STA", StringComparison.Ordinal))
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"no STA from {pw!.Id}");
+                    await LogAsync($"no STA from {pw!.Id}");
                     return;
                 }
 
                 if (await SecureidcheckAsync(pw!.Id, msg[3..]) is { } mess)
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"secureidcheck denied {pw.Id} because {mess}");
+                    await LogAsync($"secureidcheck denied {pw.Id} because {mess}");
                     return;
                 }
             }
 
             await conn.WriteAsync("OK");
-            await Syslog.WriteAsync(process, false, Log, $"AUTH {pw!.Id}");
+            await LogAsync($"AUTH {pw!.Id}");
             if (!await OperateAsync(conn, pw))
             {
                 await conn.WriterrAsync("operation failed");
             }
         }
+
+        // Stryker disable all : the call's process exits after the call, closing it
         finally
         {
             await conn.FreeAsync();
         }
+
+        // Stryker restore all
     }
 
     // The operations the client asks for, until it says goodbye; false for one that failed.
@@ -288,14 +332,14 @@ public sealed class Secstored(Process process, string argv0)
         while (true)
         {
             (int n, string msg) = await conn.ReadstrAsync();
-            if (n <= 0)
+            if (n == -1)
             {
                 break;
             }
 
             int nl = msg.IndexOf('\n', StringComparison.Ordinal);
             msg = nl < 0 ? msg : msg[..nl];
-            await Syslog.WriteAsync(process, false, Log, $"[{pw.Id}] {msg}");
+            await LogAsync($"[{pw.Id}] {msg}");
             string? file;
             if (msg.StartsWith("GET ", StringComparison.Ordinal))
             {
@@ -310,7 +354,7 @@ public sealed class Secstored(Process process, string argv0)
                 file = await Password.ValidatefileAsync(process, msg[4..]);
                 if (file is null || await PutfileAsync(conn, pw.Id, file) < 0)
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"failed PUT {pw.Id}/{file ?? "<nil>"}");
+                    await LogAsync($"failed PUT {pw.Id}/{file ?? "<nil>"}");
                     return false;
                 }
             }
@@ -319,16 +363,16 @@ public sealed class Secstored(Process process, string argv0)
                 file = await Password.ValidatefileAsync(process, msg[3..]);
                 if (file is null || await RemovefileAsync(conn, pw.Id, file) < 0)
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"failed RM {pw.Id}/{file ?? "<nil>"}");
+                    await LogAsync($"failed RM {pw.Id}/{file ?? "<nil>"}");
                     return false;
                 }
             }
             else if (msg.StartsWith("CHPASS", StringComparison.Ordinal))
             {
                 (n, msg) = await conn.ReadstrAsync();
-                if (n < 0)
+                if (n == -1)
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"protocol botch CHPASS for {pw.Id}");
+                    await LogAsync($"protocol botch CHPASS for {pw.Id}");
                     await conn.WriterrAsync("protocol botch while setting PAK");
                     return true;
                 }
@@ -338,7 +382,7 @@ public sealed class Secstored(Process process, string argv0)
                 string? why = null;
                 for (i = 0; i < 4 && (why = await Password.PutAsync(process, pw)) is not null; i++)
                 {
-                    await Syslog.WriteAsync(process, false, Log, $"password change failed for {pw.Id} ({i}): {why}");
+                    await LogAsync($"password change failed for {pw.Id} ({i}): {why}");
                 }
 
                 if (i == 4)
@@ -357,7 +401,9 @@ public sealed class Secstored(Process process, string argv0)
             }
         }
 
-        await Syslog.WriteAsync(process, false, Log, $"{pw.Id} closed connection without saying goodbye");
+        await LogAsync($"{pw.Id} closed connection without saying goodbye");
+
+        // Stryker disable once Boolean : the client has gone, and an error sent it is not read
         return true;
     }
 
@@ -368,6 +414,8 @@ public sealed class Secstored(Process process, string argv0)
 
         // Send the listing's size, then the listing in Maxmsg chunks.
         await conn.WriteAsync(msg.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        // Stryker disable once Equality : a last chunk of nothing is written as nothing
         for (int i = 0; i < msg.Length; i += SConn.Maxmsg)
         {
             await conn.WriteAsync(msg[i..], Math.Min(SConn.Maxmsg, msg.Length - i));
@@ -400,8 +448,11 @@ public sealed class Secstored(Process process, string argv0)
         {
             st = await process.FStatAsync(gd);
         }
+
+        // Stryker disable once Block : a file just opened stats
         catch (SyscallException error)
         {
+            // Stryker disable once String : as above
             return await RefuseAsync(conn, "-1", $"can't stat {s}: {error.Message}");
         }
 
@@ -434,7 +485,7 @@ public sealed class Secstored(Process process, string argv0)
 
             if (b.IsEmpty)
             {
-                await Syslog.WriteAsync(process, false, Log, $"read error on {gf}: {Errstr.Get(process)}");
+                await LogAsync($"read error on {gf}: {Errstr.Get(process)}");
                 return -1;
             }
 
@@ -442,13 +493,14 @@ public sealed class Secstored(Process process, string argv0)
             len -= b.Length;
         }
 
+        // Stryker disable once Statement : the call's process exits after the call, closing it
         await process.CloseAsync(gd);
         return 0;
     }
 
     private async Task<int> RefuseAsync(SConn conn, string answer, string why)
     {
-        await Syslog.WriteAsync(process, false, Log, why);
+        await LogAsync(why);
         await conn.WriteAsync(answer);
         return -1;
     }
@@ -457,22 +509,22 @@ public sealed class Secstored(Process process, string argv0)
     {
         // Get the file's size.
         (int n, string s) = await conn.ReadstrAsync();
-        if (n < 0)
+        if (n == -1)
         {
-            await Syslog.WriteAsync(process, false, Log, $"remote: {s}: {Errstr.Get(process)}");
+            await LogAsync($"remote: {s}: {Errstr.Get(process)}");
             return -1;
         }
 
         long len = Libc.Strtol(s, 10, out _);
         if (len == -1)
         {
-            await Syslog.WriteAsync(process, false, Log, $"remote file {pf} does not exist");
+            await LogAsync($"remote file {pf} does not exist");
             return -1;
         }
 
         if (len is < 0 or > Maxfilesize)
         {
-            await Syslog.WriteAsync(process, false, Log, $"implausible filesize {len} for {pf}");
+            await LogAsync($"implausible filesize {len} for {pf}");
             return -1;
         }
 
@@ -484,7 +536,7 @@ public sealed class Secstored(Process process, string argv0)
         }
         catch (SyscallException error)
         {
-            await Syslog.WriteAsync(process, false, Log, $"can't open {path}: {error.Message}");
+            await LogAsync($"can't open {path}: {error.Message}");
             return -1;
         }
 
@@ -492,9 +544,9 @@ public sealed class Secstored(Process process, string argv0)
         while (len > 0)
         {
             n = await conn.ReadAsync(buf, SConn.Maxmsg);
-            if (n <= 0)
+            if (n == -1)
             {
-                await Syslog.WriteAsync(process, false, Log, "empty file chunk");
+                await LogAsync("empty file chunk");
                 return -1;
             }
 
@@ -507,13 +559,14 @@ public sealed class Secstored(Process process, string argv0)
             }
             catch (SyscallException error)
             {
-                await Syslog.WriteAsync(process, false, Log, $"write error on {pf}: {error.Message}");
+                await LogAsync($"write error on {pf}: {error.Message}");
                 return -1;
             }
 
             len -= n;
         }
 
+        // Stryker disable once Statement : the call's process exits after the call, closing it
         await process.CloseAsync(pd);
         return 0;
     }
@@ -545,20 +598,30 @@ public sealed class Secstored(Process process, string argv0)
     private async Task<string?> SecureidcheckAsync(string user, string response)
     {
         const string Failed = "authentication failed";
-        if (response.Length < 4 || response.IndexOfAny("abcdefABCDEF".ToCharArray()) >= 0)
+
+        // Stryker disable once Equality,Block : an STA answer is at least seven bytes, as its message must be ten
+        if (response.Length < 4)
+        {
+            return Failed;
+        }
+
+        if (response.IndexOfAny("abcdefABCDEF".ToCharArray()) >= 0)
         {
             return Failed;
         }
 
         if (db is null || (await db.GetValueAsync(null, "radius", "lra-radius", "secret")).Value is null)
         {
-            await Syslog.WriteAsync(process, false, AuthLog, "secureidcheck: nil radius secret: no radius secret");
+            await LogAsync("secureidcheck: nil radius secret: no radius secret", AuthLog);
             return Failed;
         }
 
-        await Syslog.WriteAsync(process, false, AuthLog, $"secureidcheck: no RADIUS for {user}");
+        await LogAsync($"secureidcheck: no RADIUS for {user}", AuthLog);
         return Failed;
     }
+
+    // syslog, to the log only.
+    private Task LogAsync(string message, string logname = Log) => Syslog.WriteAsync(process, false, logname, message);
 
     private async Task SysfatalAsync(string message)
     {

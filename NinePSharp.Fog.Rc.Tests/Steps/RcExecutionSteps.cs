@@ -4,6 +4,7 @@ using NinePSharp.Constants;
 using NinePSharp.Fog.Commands;
 using NinePSharp.Fog.Kernel;
 using NinePSharp.Fog.Kernel.Tests.Support;
+using NinePSharp.Fog.Namespaces.Tests.Support;
 using NinePSharp.Fog.Rc.Tests.Support;
 using NinePSharp.Namespaces;
 using Reqnroll;
@@ -274,8 +275,9 @@ public sealed class RcExecutionSteps
     {
         mask ??= text => text;
         string? nineFront = null;
-        if (!fogOnly && await NineFrontOracle.TerminalAsync() is { } terminal)
+        if (!fogOnly)
         {
+            NineFrontTerminal terminal = await NineFrontOracle.TerminalAsync();
             await terminal.RunAsync("cat >" + Script + " <<'EOF9'\n" + script + "\nEOF9");
             nineFront = await terminal.RunAsync(oracle);
         }

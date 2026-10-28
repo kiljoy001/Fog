@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using NinePSharp.Fog.Kernel;
@@ -110,7 +111,9 @@ public sealed class SConn(Process process, int fd)
         }
 
         int len = alg ? n + Sha1dlen : n;
-        if (!await SendAsync([(byte)(0x80 | len >> 8), (byte)len]))
+        byte[] count = new byte[2];
+        BinaryPrimitives.WriteUInt16BigEndian(count, (ushort)(0x8000 | len));
+        if (!await SendAsync(count))
         {
             Errstr = "!SC_write invalid count";
             return -1;
@@ -166,7 +169,7 @@ public sealed class SConn(Process process, int fd)
     {
         byte[] buf = new byte[Maxmsg + 1];
         int n = await ReadAsync(buf, Maxmsg);
-        if (n < 0)
+        if (n == -1)
         {
             return (-1, "connection read error");
         }
@@ -181,7 +184,9 @@ public sealed class SConn(Process process, int fd)
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
         sha.AppendData(secret);
         sha.AppendData(data);
-        sha.AppendData([(byte)(seqno >> 24), (byte)(seqno >> 16), (byte)(seqno >> 8), (byte)seqno]);
+        byte[] seq = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(seq, seqno);
+        sha.AppendData(seq);
         return sha.GetHashAndReset();
     }
 

@@ -117,6 +117,7 @@ public sealed class SecstoreTests : IAsyncLifetime
 
     [Theory]
     [InlineData(20, 0, "!SC_read missing sha1")]
+    [InlineData(20, 20, "!SC_read missing sha1")]
     [InlineData(25, 10, "!SC_read missing sha1")]
     [InlineData(25, 22, "!SC_read missing data")]
     public async Task AnEncryptedRecordWithoutItsDigestOrDataIsRefused(int count, int sent, string why)
@@ -190,6 +191,79 @@ public sealed class SecstoreTests : IAsyncLifetime
             return ($"{plain} {why}", $"{encrypted} {a.Errstr}", (await Assert.ThrowsAsync<SyscallException>(() => p.WriteAsync(fa, "x"u8.ToArray()).AsTask())).Message.Length);
         });
         Assert.Equal(("-1 !SC_write invalid count", "-1 !SC_write invalid count", Errors.BadFd.Length), result);
+    }
+
+    [Fact]
+    public async Task NoWriteHasFailedYet()
+    {
+        (SConn a, _, _, _) = await PairAsync();
+        Assert.Equal(string.Empty, a.Errstr);
+    }
+
+    [Fact]
+    public async Task ARecordOfMaxmsgIsReadAsAString()
+    {
+        (SConn a, SConn b, _, _) = await PairAsync();
+        await a.WriteAsync(new string('x', SConn.Maxmsg));
+        Assert.Equal((SConn.Maxmsg, new string('x', SConn.Maxmsg)), await b.ReadstrAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AWriteCutShortAfterItsCountFailsWithWhy(bool encrypted)
+    {
+        await using var server = new FileServerHarness { WriteLimit = 2 };
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("out", []));
+        (int client, int served) = await init.PipeAsync();
+        server.Serve(init, served);
+        await init.MountAsync(client, -1, "/n", NinePSharp.Namespaces.MountFlags.Replace, string.Empty);
+        var c = new SConn(init, await init.OpenAsync("/n/out", NinePConstants.OWRITE));
+        if (encrypted)
+        {
+            c.Secret(new byte[20], 0);
+        }
+
+        Assert.Equal(-1, await c.WriteAsync("hello"));
+        Assert.Equal("!SC_write error on send", c.Errstr);
+    }
+
+    [Fact]
+    public async Task ARecordThatCannotBeReadIsRefused()
+    {
+        await using var server = new FileServerHarness { ReadRefusal = "disk on fire" };
+        server.Root.AddChild(new NinePSharp.Server.FileSystem.NinePFile("in", [0x80, 5]));
+        (int client, int served) = await init.PipeAsync();
+        server.Serve(init, served);
+        await init.MountAsync(client, -1, "/n", NinePSharp.Namespaces.MountFlags.Replace, string.Empty);
+        var c = new SConn(init, await init.OpenAsync("/n/in", NinePConstants.OREAD));
+        Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
+    }
+
+    [Fact]
+    public async Task ARecordWhoseDataTheReadIsInterruptedForIsRefused()
+    {
+        (int fa, int fb) = await init.PipeAsync();
+        await init.WriteAsync(fa, new byte[] { 0x80, 5 });
+        var waiting = new TaskCompletionSource<long>();
+        Func<Process, Task<string>> reader = async p =>
+        {
+            p.Notify(_ => true);
+            waiting.SetResult(p.Pid);
+            byte[] buf = new byte[SConn.Maxmsg + 1];
+            int n = await new SConn(p, fb).ReadAsync(buf, SConn.Maxmsg);
+            return n == -1 ? Cstring(buf) : $"{n}";
+        };
+        Func<Task> interrupt = async () =>
+        {
+            long pid = await waiting.Task;
+            await Task.Delay(100);
+            int note = await init.OpenAsync($"/proc/{pid}/note", NinePConstants.OWRITE);
+            await init.WriteAsync(note, "interrupt"u8.ToArray());
+            await init.CloseAsync(note);
+        };
+        (_, string why) = await StderrAsync(reader, interrupt);
+        Assert.Equal("!SC_read expected 5 bytes, but got 0", why);
     }
 
     [Fact]
@@ -270,6 +344,19 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("glenda", pw!.Id);
         await client.WriteAsync("over the secret");
         Assert.Equal((15, "over the secret"), await server.ReadstrAsync());
+    }
+
+    [Fact]
+    public async Task ALoginWithNoFailuresToClearLeavesTheAccountAsItWas()
+    {
+        string account = $"exp\t0\nkept as written\nPAK-Hi\t{GlendaHi}\n";
+        await AccountAsync("glenda", account);
+        (SConn client, SConn server, _, _) = await PairAsync();
+        Task<(int, string?)> c = Pak.ClientAsync(init, "secstore", false, client, "glenda", "secretpw");
+        (_, string first) = await server.ReadstrAsync();
+        Assert.Equal(0, (await Pak.ServerAsync(init, "secstored", server, "secstore", first)).Rc);
+        Assert.Equal(0, (await c).Item1);
+        Assert.Equal(account, await FileAsync("/adm/secstore/who/glenda"));
     }
 
     [Fact]
@@ -392,6 +479,29 @@ public sealed class SecstoreTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("pw87", "alpha")]
+    [InlineData("pw9", "bravo")]
+    [InlineData("pw7", "charlie")]
+    [InlineData("pw13", "delta")]
+    [InlineData("pw1", "echo")]
+    [InlineData("pw2", "foxtrot")]
+    [InlineData("pw8", "golf")]
+    [InlineData("pw0", "hotel")]
+    public async Task VerboseTheClientNamesAWordForItsHashToCatchATypo(string password, string word)
+    {
+        (SConn client, _, _, int fb) = await PairAsync();
+        (string err, _) = await StderrAsync(async p =>
+        {
+            var server = new SConn(p, fb);
+            Task<(int, string?)> c = Pak.ClientAsync(p, "secstore", true, client, "glenda", password);
+            await server.ReadstrAsync();
+            await server.WriterrAsync("no");
+            return await c;
+        });
+        Assert.StartsWith($"{word}\n", err, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(null, null)]
     [InlineData("", null)]
     [InlineData("glenda", "glenda")]
@@ -421,6 +531,28 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(Pak.Strtomp64(GlendaHi), pw.Hi);
         await Password.PutAsync(init, pw);
         Assert.Equal($"exp\t1800000000\nDISABLED\nSTA\nfailed\t3\nother\tmy  comment\nPAK-Hi\t{GlendaHi}\n", await FileAsync("/adm/secstore/who/glenda"));
+    }
+
+    [Fact]
+    public async Task StaTwiceIsStaAndOtherWithoutAValueIsEmpty()
+    {
+        await AccountAsync("glenda", $"STA\nSTA\nother\nPAK-Hi\t{GlendaHi}\n");
+        Pw pw = (await Password.GetAsync(init, "glenda", true)).Pw!;
+        Assert.Equal(((ushort)(Pw.Enabled | Pw.Sta), string.Empty), (pw.Status, pw.Other));
+    }
+
+    [Fact]
+    public async Task ReadingAndWritingAnAccountLeaveNoDescriptorOpen()
+    {
+        await AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{GlendaHi}\n");
+        int before = await OpenCountAsync();
+        Pw pw = (await Password.GetAsync(init, "glenda", false)).Pw!;
+        await Password.PutAsync(init, pw);
+        Assert.Equal(before, await OpenCountAsync());
+        await init.CloseAsync(await init.CreateAsync("/adm/secstore/store", NinePConstants.OREAD, 0x80000000 | 0b111_111_111));
+        await init.CloseAsync(await init.CreateAsync("/adm/secstore/store/f", NinePConstants.OWRITE, 0b110_110_110));
+        await Secstored.DirlsAsync(init, "/adm/secstore/store");
+        Assert.Equal(before, await OpenCountAsync());
     }
 
     [Fact]
@@ -486,6 +618,27 @@ public sealed class SecstoreTests : IAsyncLifetime
 
     private static string Cstring(byte[] buf) => Encoding.UTF8.GetString(buf, 0, Array.IndexOf(buf, (byte)0));
 
+    // How many descriptors the test's process has open, as its fd file lists them.
+    // The lines of /proc/n/fd, which a read returns one at a time: the directory, then each descriptor.
+    private async Task<int> OpenCountAsync()
+    {
+        int fd = await init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OREAD);
+        try
+        {
+            int lines = 0;
+            while (!(await init.ReadAsync(fd, 8192)).IsEmpty)
+            {
+                lines++;
+            }
+
+            return lines;
+        }
+        finally
+        {
+            await init.CloseAsync(fd);
+        }
+    }
+
     // A connection of two SConns over a pipe, and each one's descriptor.
     private async Task<(SConn A, SConn B, int Fa, int Fb)> PairAsync()
     {
@@ -526,7 +679,7 @@ public sealed class SecstoreTests : IAsyncLifetime
     }
 
     // What the body printed on its standard error, run in a process of its own, and its result.
-    private async Task<(string Err, T Result)> StderrAsync<T>(Func<Process, Task<T>> body)
+    private async Task<(string Err, T Result)> StderrAsync<T>(Func<Process, Task<T>> body, Func<Task>? meanwhile = null)
     {
         (int r, int w) = await init.PipeAsync();
         var result = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -545,6 +698,11 @@ public sealed class SecstoreTests : IAsyncLifetime
             }
         });
         await init.CloseAsync(w);
+        if (meanwhile is not null)
+        {
+            await meanwhile();
+        }
+
         var bytes = new List<byte>();
         for (ReadOnlyMemory<byte> b; !(b = await init.ReadAsync(r, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(10))).IsEmpty;)
         {

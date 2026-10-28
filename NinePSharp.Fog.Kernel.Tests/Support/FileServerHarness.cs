@@ -72,6 +72,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     // Every read is refused with this error.
     public string? ReadRefusal { get; set; }
 
+    // Every write is refused with this error.
+    public string? WriteRefusal { get; set; }
+
     // An open of this file is refused with this error.
     public (string File, string Error)? Refusal { get; set; }
 
@@ -146,6 +149,11 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
                 break;
             case NinePMessage.MsgTwrite write:
                 LargestData = Math.Max(LargestData, (int)write.Item.Count);
+                if (WriteRefusal is { } unwritten)
+                {
+                    return new Rerror(write.Item.Tag, unwritten);
+                }
+
                 if (HoldWrites && await HoldAsync(write.Item.Tag) is { } refused)
                 {
                     return refused;

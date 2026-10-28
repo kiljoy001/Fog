@@ -28,16 +28,22 @@ internal sealed class SecstoreHarness : IAsyncDisposable
 
     public Process Init { get; private set; }
 
-    public static async Task<SecstoreHarness> StartAsync(byte[]? nvram = null)
+    // A kernel on the manual clock, or on the clock given.
+    public static async Task<SecstoreHarness> StartAsync(byte[]? nvram = null, TimeProvider? clock = null)
     {
         var harness = new SecstoreHarness(null!, null!);
-        harness.Kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(Commands.Commands.All), "glenda", harness.Clock, new FakeHostNetwork(), harness.Console, nvram is null ? null : new HostNvram(nvram));
+        harness.Kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(Commands.Commands.All), "glenda", clock ?? harness.Clock, new FakeHostNetwork(), harness.Console, nvram is null ? null : new HostNvram(nvram));
         harness.Init = await harness.Kernel.BootAsync();
         for (int i = 0; i < 3; i++)
         {
             await harness.Init.OpenAsync("/dev/null", NinePConstants.ORDWR);
         }
 
+        // The logs syslog appends to, so that what it logs goes to them alone.
+        await harness.MkdirAsync("#R/sys");
+        await harness.MkdirAsync("#R/sys/log");
+        await harness.WriteFileAsync("/sys/log/secstore", []);
+        await harness.WriteFileAsync("/sys/log/auth", []);
         return harness;
     }
 
@@ -184,6 +190,9 @@ internal sealed class SecstoreHarness : IAsyncDisposable
         await Init.WriteAsync(fd, data);
         await Init.CloseAsync(fd);
     }
+
+    // What secstore and auth have logged.
+    public async Task<string> LogsAsync() => await FileAsync("/sys/log/secstore") + await FileAsync("/sys/log/auth");
 
     public async Task<string> FileAsync(string path) => Encoding.UTF8.GetString(await BytesAsync(path));
 

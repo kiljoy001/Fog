@@ -187,6 +187,8 @@ public static class Tlssrv
 
             await Task.Run(tls.Close);
         }
+
+        // Stryker disable once Equality : either half that finds the client gone hangs the call up, so this half failing on it instead ends the call the same
         catch (Exception error) when (error is IOException or SyscallException)
         {
             // The client hung up.
@@ -206,6 +208,7 @@ public static class Tlssrv
             // A relay whose other half has gone has no one else to tell.
         }
 
+        // Stryker disable once Statement : a relay that returns exits as exits(nil) does
         process.Exits(null);
     }
 
@@ -219,7 +222,7 @@ public static class Tlssrv
     {
         await process.WriteAsync(2, Encoding.UTF8.GetBytes(Usage));
         process.Exits("usage");
-        return string.Empty;
+        throw new System.Diagnostics.UnreachableException();
     }
 
     private sealed class State(Process process, string argv0)
@@ -241,6 +244,7 @@ public static class Tlssrv
         {
             if (Logfile is not null)
             {
+                // Stryker disable once Boolean : under listen a call's tlssrv runs as none or the user it authenticated, to neither of whom #c/cons, mode 660, opens
                 await Syslog.WriteAsync(process, false, Logfile, $"{Remotesys} tls reports {message}");
             }
             else

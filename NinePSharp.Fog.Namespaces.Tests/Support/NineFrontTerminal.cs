@@ -28,14 +28,21 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
         reading = ReadAsync();
     }
 
+    // The 9front amd64 ISO: FOG_9FRONT_ISO, or ~/9front/current.iso, where the gate's
+    // refresh-9front keeps the newest release.
+    internal static string Iso
+        => Environment.GetEnvironmentVariable("FOG_9FRONT_ISO") is { Length: > 0 } iso
+            ? iso
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "9front", "current.iso");
+
+    // Why no 9front terminal can be booted, or null when one can.
     internal static string? Unavailable
     {
         get
         {
-            string? iso = Environment.GetEnvironmentVariable("FOG_9FRONT_ISO");
-            if (string.IsNullOrEmpty(iso) || !File.Exists(iso))
+            if (!File.Exists(Iso))
             {
-                return "FOG_9FRONT_ISO does not name a 9front ISO";
+                return $"no 9front ISO at {Iso}: set FOG_9FRONT_ISO or link ~/9front/current.iso";
             }
 
             return Environment.GetEnvironmentVariable("PATH")!.Split(':').Any(path => File.Exists(Path.Combine(path, "qemu-system-x86_64")))
@@ -64,7 +71,7 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
     {
         string directory = Directory.CreateTempSubdirectory("9front-").FullName;
         string iso = Path.Combine(directory, "9front.iso");
-        byte[] image = await File.ReadAllBytesAsync(Environment.GetEnvironmentVariable("FOG_9FRONT_ISO")!);
+        byte[] image = await File.ReadAllBytesAsync(Iso);
         int at = image.AsSpan().IndexOf(Encoding.ASCII.GetBytes(CdBootIni));
         if (at < 0)
         {
