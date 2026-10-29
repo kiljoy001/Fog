@@ -1,5 +1,4 @@
 using System.Text;
-using NinePSharp.Fog.Namespaces.Tests.Support;
 using NinePSharp.Fog.Rc.Tests.Support;
 using Reqnroll;
 using Xunit;
@@ -24,8 +23,6 @@ public sealed class RcInteractiveSteps
     public async Task ThenPrints(string expected)
     {
         Assert.Equal(expected, reader!.Output);
-        NineFrontTerminal nineFront = await NineFrontOracle.TerminalAsync();
-        await nineFront.RunAsync("cat >/tmp/s <<'EOF9'\n" + script + "\nEOF9");
-        Assert.Equal(expected, await nineFront.RunAsync("@{rfork e; prompt=('%' '+') rc -i </tmp/s >[2=1]}"));
+        Assert.Equal(expected, await NineFrontOracle.AskAsync("cat >/tmp/s <<'EOF9'\n" + script + "\nEOF9", "@{rfork e; prompt=('%' '+') rc -i </tmp/s >[2=1]}"));
     }
 }

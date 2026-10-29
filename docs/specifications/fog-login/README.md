@@ -310,3 +310,10 @@ Coyote for the concurrency of the mount driver, `#I`, notes and factotum's proce
 QEMU harness the namespace interop tests use runs stock `rcpu` against Fog's host, and the bytes
 `fog` sends before it starts serving are compared with the script stock `rcpu` sends for the same
 directory and command.
+
+Every rc scenario also runs its script on 9front's rc and compares the output. 9front's answer
+depends only on the release and the script, so it is kept on disk, under the ISO's name, size and
+time, in `FOG_9FRONT_ANSWERS` or `~/.cache/fog/9front`. A VM boots only for a script 9front has
+not answered yet, so a mutation run compares every mutant against 9front without booting one per
+test process. The rcpu and interop scenarios, in which 9front talks to a running Fog, always run
+against a live VM.
