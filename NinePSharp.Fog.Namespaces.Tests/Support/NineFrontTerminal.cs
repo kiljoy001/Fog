@@ -5,7 +5,8 @@ using System.Text;
 namespace NinePSharp.Fog.Namespaces.Tests.Support;
 
 // A 9front release ISO booted in QEMU with its console on a Unix socket. The only change to the
-// ISO is plan9.ini, rewritten in place at the same length for a serial console and no prompts.
+// ISO is plan9.ini, rewritten in place at the same length for a serial console and no prompts; the
+// changed ISO is kept with the release's answers and shared by every boot, as QEMU only reads it.
 // QEMU runs under a shell that kills it when its standard input closes, so it cannot outlive the
 // test process.
 internal sealed class NineFrontTerminal : IAsyncDisposable
@@ -34,6 +35,27 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
         => Environment.GetEnvironmentVariable("FOG_9FRONT_ISO") is { Length: > 0 } iso
             ? iso
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "9front", "current.iso");
+
+    // Where what is kept of each release is: FOG_9FRONT_ANSWERS, or ~/.cache/fog/9front.
+    internal static string Cache
+        => Environment.GetEnvironmentVariable("FOG_9FRONT_ANSWERS") is { Length: > 0 } cache
+            ? cache
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "fog", "9front");
+
+    // The release of the ISO, by the name, size and time of the file a link leads to.
+    internal static string Release
+    {
+        get
+        {
+            var iso = new FileInfo(Iso);
+            if (iso.ResolveLinkTarget(returnFinalTarget: true) is FileInfo target)
+            {
+                iso = target;
+            }
+
+            return $"{iso.Name}-{iso.Length}-{iso.LastWriteTimeUtc.Ticks}";
+        }
+    }
 
     // Why no 9front terminal can be booted, or null when one can.
     internal static string? Unavailable
@@ -69,17 +91,8 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
     // With each forward, a port of the host's loopback reaches the port of 9front's given with it.
     internal static async Task<NineFrontTerminal> BootAsync(params (int Host, int Guest)[] forwards)
     {
+        string iso = await SerialIsoAsync();
         string directory = Directory.CreateTempSubdirectory("9front-").FullName;
-        string iso = Path.Combine(directory, "9front.iso");
-        byte[] image = await File.ReadAllBytesAsync(Iso);
-        int at = image.AsSpan().IndexOf(Encoding.ASCII.GetBytes(CdBootIni));
-        if (at < 0)
-        {
-            throw new InvalidOperationException("The ISO's /cfg/plan9.ini is not the 9front release one.");
-        }
-
-        Encoding.ASCII.GetBytes(SerialIni).CopyTo(image, at);
-        await File.WriteAllBytesAsync(iso, image);
         string socket = Path.Combine(directory, "console");
         string accel = File.Exists("/dev/kvm") ? "-accel kvm -accel tcg" : "-accel tcg";
         string qemu = $"qemu-system-x86_64 {accel} -m 1024 -smp 2 -display none -monitor none -cdrom {iso} -boot d " +
@@ -92,9 +105,28 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
             RedirectStandardOutput = true,
         };
         Process process = Process.Start(start) ?? throw new InvalidOperationException("qemu did not start");
-        Socket console = await ConnectAsync(socket, process);
-        var terminal = new NineFrontTerminal(process, console, directory);
-        await terminal.ExpectAsync(Prompt, TimeSpan.FromMinutes(3));
+        NineFrontTerminal terminal;
+        try
+        {
+            terminal = new NineFrontTerminal(process, await ConnectAsync(socket, process), directory);
+        }
+        catch
+        {
+            process.Kill(entireProcessTree: true);
+            Directory.Delete(directory, recursive: true);
+            throw;
+        }
+
+        try
+        {
+            await terminal.ExpectAsync(Prompt, TimeSpan.FromMinutes(3));
+        }
+        catch
+        {
+            await terminal.DisposeAsync();
+            throw;
+        }
+
         return terminal;
     }
 
@@ -160,6 +192,30 @@ internal sealed class NineFrontTerminal : IAsyncDisposable
             string all = output.ToString().Replace("\r", string.Empty, StringComparison.Ordinal);
             return all[Math.Max(0, all.Length - length)..];
         }
+    }
+
+    // The release's ISO with plan9.ini set for the serial console, made once per release.
+    private static async Task<string> SerialIsoAsync()
+    {
+        string iso = Path.Combine(Cache, Release, "9front.iso");
+        if (File.Exists(iso))
+        {
+            return iso;
+        }
+
+        byte[] image = await File.ReadAllBytesAsync(Iso);
+        int at = image.AsSpan().IndexOf(Encoding.ASCII.GetBytes(CdBootIni));
+        if (at < 0)
+        {
+            throw new InvalidOperationException("The ISO's /cfg/plan9.ini is not the 9front release one.");
+        }
+
+        Encoding.ASCII.GetBytes(SerialIni).CopyTo(image, at);
+        Directory.CreateDirectory(Path.GetDirectoryName(iso)!);
+        string partial = $"{iso}.{Environment.ProcessId}";
+        await File.WriteAllBytesAsync(partial, image);
+        File.Move(partial, iso, overwrite: true);
+        return iso;
     }
 
     private static async Task<Socket> ConnectAsync(string path, Process process)

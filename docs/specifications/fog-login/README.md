@@ -316,4 +316,5 @@ depends only on the release and the script, so it is kept on disk, under the ISO
 time, in `FOG_9FRONT_ANSWERS` or `~/.cache/fog/9front`. A VM boots only for a script 9front has
 not answered yet, so a mutation run compares every mutant against 9front without booting one per
 test process. The rcpu and interop scenarios, in which 9front talks to a running Fog, always run
-against a live VM.
+against a live VM. Each VM boots from one copy of the ISO set for a serial console, kept with the
+release's answers, so a test process that is killed leaves nothing behind but its console socket.

@@ -12,14 +12,6 @@ internal static class NineFrontOracle
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static NineFrontTerminal? terminal;
 
-    // Where 9front's answers are kept: FOG_9FRONT_ANSWERS, or ~/.cache/fog/9front. An answer
-    // depends only on the release and the commands, so each test process, and each mutant's, reads
-    // it from there instead of booting a VM to ask again.
-    internal static string Answers
-        => Environment.GetEnvironmentVariable("FOG_9FRONT_ANSWERS") is { Length: > 0 } answers
-            ? answers
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "fog", "9front");
-
     // What 9front prints for the last of the commands, run in order on its terminal.
     internal static async Task<string> AskAsync(params string[] commands)
     {
@@ -28,7 +20,9 @@ internal static class NineFrontOracle
             throw new InvalidOperationException(reason);
         }
 
-        string file = Path.Combine(Answers, Release(), Key(commands));
+        // An answer depends only on the release and the commands, so each test process, and each
+        // mutant's, reads it from the release's cache instead of booting a VM to ask again.
+        string file = Path.Combine(NineFrontTerminal.Cache, NineFrontTerminal.Release, Key(commands));
         if (File.Exists(file))
         {
             return await File.ReadAllTextAsync(file);
@@ -67,18 +61,6 @@ internal static class NineFrontOracle
         {
             Gate.Release();
         }
-    }
-
-    // The ISO the answers came from, by the name, size and time of the file a link leads to.
-    private static string Release()
-    {
-        var iso = new FileInfo(NineFrontTerminal.Iso);
-        if (iso.ResolveLinkTarget(returnFinalTarget: true) is FileInfo target)
-        {
-            iso = target;
-        }
-
-        return $"{iso.Name}-{iso.Length}-{iso.LastWriteTimeUtc.Ticks}";
     }
 
     private static string Key(string[] commands)
