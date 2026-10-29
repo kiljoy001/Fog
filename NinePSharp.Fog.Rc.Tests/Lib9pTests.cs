@@ -329,8 +329,9 @@ public sealed class Lib9pTests : IAsyncLifetime
         Assert.All(await RepliesAsync([.. reads]), text => Assert.Equal("parked", text));
         Assert.Equal((byte)MessageTypes.Rstat, (await RpcAsync(t => new Tstat(t, 2)))[4]);
 
-        // srvwork's processes beyond the first leave once more than eight hold the server.
-        await WaitForAsync(() => kernel.Processes.Count == before + 7);
+        // srvwork's processes beyond the first leave once more than eight hold the server, and no more.
+        await WaitForAsync(() => kernel.Processes.Count <= before + 7);
+        Assert.Equal(before + 7, await SettledAsync(() => kernel.Processes.Count));
         Assert.Equal((byte)MessageTypes.Rstat, (await RpcAsync(t => new Tstat(t, 2)))[4]);
     }
 
@@ -558,6 +559,19 @@ public sealed class Lib9pTests : IAsyncLifetime
         }
 
         Assert.True(condition());
+    }
+
+    // The value once it has stayed the same for a quarter of a second.
+    private static async Task<int> SettledAsync(Func<int> value)
+    {
+        int last = value();
+        for (int same = 0; same < 10; same = value() == last ? same + 1 : 0)
+        {
+            last = value();
+            await Task.Delay(25);
+        }
+
+        return last;
     }
 
     private List<uint> Destroyed() => [.. seen.Where(s => s.StartsWith("destroy ", StringComparison.Ordinal)).Select(s => uint.Parse(s[8..], System.Globalization.CultureInfo.InvariantCulture))];

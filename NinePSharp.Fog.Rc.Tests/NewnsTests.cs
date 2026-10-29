@@ -20,7 +20,16 @@ public sealed class NewnsTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(Commands.Commands.All), "glenda", console: console);
+        // rc here only keeps the arguments it was run with, in /tmp/rc.
+        var programs = new Dictionary<string, ProgramMain>(Commands.Commands.All)
+        {
+            ["rc"] = async (p, argv) =>
+            {
+                int f = await p.CreateAsync("/tmp/rc", NinePConstants.OWRITE, 0b110_110_110);
+                await p.WriteAsync(f, Encoding.UTF8.GetBytes(string.Join(' ', argv)));
+            },
+        };
+        kernel = FogKernel.InMemory(programs, "glenda", console: console);
         init = await kernel.BootAsync();
         foreach (string dir in (string[])["/tmp/a", "/tmp/b", "/tmp/c", "/tmp/x", "/tmp/y"])
         {
@@ -57,6 +66,24 @@ public sealed class NewnsTests : IAsyncLifetime
             return $"{await EnvAsync(c, "user")} {await EnvAsync(c, "home")}";
         });
         Assert.Equal("glenda /usr/glenda", r2);
+    }
+
+    [Fact]
+    public async Task AuthNewnsRunsAnInteractiveRcWithoutACommandAndSaysHowItIsUsed()
+    {
+        await InChildAsync(async c =>
+        {
+            await c.ExecAsync("/bin/auth/newns", ["auth/newns"]);
+            return "returned";
+        });
+        Assert.Equal("/bin/rc -i", await ReadAsync("/tmp/rc"));
+        string usage = await InChildAsync(async c =>
+        {
+            await c.ExecAsync("/bin/auth/newns", ["auth/newns", "-x"]);
+            return "returned";
+        });
+        Assert.EndsWith(": usage", usage);
+        Assert.Equal("usage: auth/newns [-ad] [-n namespace] [cmd [args...]]\n", await ReadAsync("/tmp/errors"));
     }
 
     [Fact]

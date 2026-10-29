@@ -158,6 +158,16 @@ public sealed class FactotumTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AProtocolTakesNoKeysAndPromptsForNothingUnlessItSaysSo()
+    {
+        await StartAsync();
+        await AttachAsync(1, "glenda");
+        uint ctl = await OpenFidAsync(1, 10, "ctl", NinePConstants.OWRITE);
+        Assert.Equal("proto p9any doesn't take keys", Error(await RpcAsync(t => new Twrite(t, ctl, 0, "key proto=p9any dom=x"u8.ToArray()))));
+        Assert.Equal((string.Empty, false), (new Probe().Keyprompt, new Probe().TakesKeys));
+    }
+
+    [Fact]
     public async Task ALineOfCtlOrProtoThatDoesNotFitTheReadIsRefused()
     {
         await StartAsync();

@@ -71,6 +71,16 @@ public sealed class TlssrvTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ADescriptorAsAStreamReadsAndWritesButDoesNotSeekAndEndsWhenItsReadFails()
+    {
+        var stream = new Fdstream(init, 99);
+        Assert.Equal((true, false, true), (stream.CanRead, stream.CanSeek, stream.CanWrite));
+        Assert.Equal(0, await stream.ReadAsync(new byte[8]));
+        IOException error = await Assert.ThrowsAsync<IOException>(() => stream.WriteAsync(new byte[1]).AsTask());
+        Assert.IsType<SyscallException>(error.InnerException);
+    }
+
+    [Fact]
     public async Task WithMinusAAuthenticationLeavesTheUserAsItWas()
     {
         await ServiceAsync("exec tlssrv -A /bin/rc -c server");
