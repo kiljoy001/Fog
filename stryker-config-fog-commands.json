@@ -5,7 +5,27 @@
       "NinePSharp.Fog.Rc.Tests.csproj"
     ],
     "mutate": [
-      "**/*.cs"
+      "**/Arguments.cs",
+      "**/Bind.cs",
+      "**/Cat.cs",
+      "**/Commands.cs",
+      "**/Echo.cs",
+      "**/Errstr.cs",
+      "**/Fcall.cs",
+      "**/Fid.cs",
+      "**/Mkdir.cs",
+      "**/Mntgen.cs",
+      "**/Mount.cs",
+      "**/Newns.cs",
+      "**/Pwd.cs",
+      "**/Read.cs",
+      "**/Req.cs",
+      "**/Rm.cs",
+      "**/Sleep.cs",
+      "**/Srv.cs",
+      "**/Syslog.cs",
+      "**/Test.cs",
+      "**/Unmount.cs"
     ],
     "mutation-level": "Standard",
     "additional-timeout": 60000,

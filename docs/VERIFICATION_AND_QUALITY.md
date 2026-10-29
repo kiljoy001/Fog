@@ -71,6 +71,7 @@ Code coverage alone is insufficient: code can be executed without assertions tru
 * **Configurations:** Each subsystem has a dedicated configuration:
   * `stryker-config-fog-kernel.json`
   * `stryker-config-fog-rc.json`
+  * `stryker-config-fog-commands.json`, `-factotum`, `-auth` and `-net`, the four parts of Commands
   * `stryker-config-fog-gefs.json`
   * `stryker-config-fog-thread.json`
   * `stryker-config-fog-server.json`

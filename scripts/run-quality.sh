@@ -96,7 +96,11 @@ scope() {
     # The keyfs tests need swtpm and python3 (for a stale socket); see NinePSharp.Fog.Auth.Tests.
     fog-auth) mutate NinePSharp.Fog.Auth.Tests stryker-config-fog-auth.json stryker-fog-auth ;;
     fog-rc) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-rc.json stryker-fog-rc ;;
+    # Commands is mutated in four parts, each the files of a few of 9front's programs, so they run side by side.
     fog-commands) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-commands.json stryker-fog-commands ;;
+    fog-commands-factotum) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-commands-factotum.json stryker-fog-commands-factotum ;;
+    fog-commands-auth) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-commands-auth.json stryker-fog-commands-auth ;;
+    fog-commands-net) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-commands-net.json stryker-fog-commands-net ;;
     fog-kernel) mutate NinePSharp.Fog.Kernel.Tests stryker-config-fog-kernel.json stryker-fog-kernel ;;
     fog-thread) mutate NinePSharp.Fog.Thread.Tests stryker-config-fog-thread.json stryker-fog-thread ;;
     fog-wasm) mutate NinePSharp.Fog.Wasm.Tests stryker-config-fog-wasm.json stryker-fog-wasm ;;
@@ -149,7 +153,7 @@ case "$MODE" in
   full)
     quality
     step "mutation testing"
-    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-kernel fog-thread fog-wasm fog-gefs fog-host; do
+    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-commands-factotum fog-commands-auth fog-commands-net fog-kernel fog-thread fog-wasm fog-gefs fog-host; do
       scope "$each"
     done
     coyote

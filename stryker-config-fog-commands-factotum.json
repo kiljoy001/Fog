@@ -1,0 +1,37 @@
+{
+  "stryker-config": {
+    "project": "NinePSharp.Fog.Commands.csproj",
+    "test-projects": [
+      "NinePSharp.Fog.Rc.Tests.csproj"
+    ],
+    "mutate": [
+      "**/AttrType.cs",
+      "**/Attr.cs",
+      "**/Authenticator.cs",
+      "**/AuthInfo.cs",
+      "**/Authkey.cs",
+      "**/Conf.cs",
+      "**/Factotum.cs",
+      "**/Fsstate.cs",
+      "**/Key.cs",
+      "**/Keyinfo.cs",
+      "**/Libauth.cs",
+      "**/Logbuf.cs",
+      "**/Nvrsafe.cs",
+      "**/P9any.cs",
+      "**/P9sk.cs",
+      "**/Pass.cs",
+      "**/Proto.cs",
+      "**/Rpc.cs"
+    ],
+    "mutation-level": "Standard",
+    "additional-timeout": 60000,
+    "thresholds": {
+      "high": 100,
+      "low": 100,
+      "break": 100
+    },
+    "concurrency": 4,
+    "coverage-analysis": "perTestInIsolation"
+  }
+}

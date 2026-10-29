@@ -1,0 +1,32 @@
+{
+  "stryker-config": {
+    "project": "NinePSharp.Fog.Commands.csproj",
+    "test-projects": [
+      "NinePSharp.Fog.Rc.Tests.csproj"
+    ],
+    "mutate": [
+      "**/Cs.cs",
+      "**/Csquery.cs",
+      "**/Ip.cs",
+      "**/Ipifc.cs",
+      "**/Iplifc.cs",
+      "**/Listen.cs",
+      "**/Listen1.cs",
+      "**/Ndb.cs",
+      "**/Ndbs.cs",
+      "**/NdbTuple.cs",
+      "**/Net.cs",
+      "**/Services.cs",
+      "**/Trampoline.cs"
+    ],
+    "mutation-level": "Standard",
+    "additional-timeout": 60000,
+    "thresholds": {
+      "high": 100,
+      "low": 100,
+      "break": 100
+    },
+    "concurrency": 4,
+    "coverage-analysis": "perTestInIsolation"
+  }
+}
