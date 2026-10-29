@@ -18,6 +18,11 @@ public sealed class LibcTests
     [InlineData("~/a.b-c_d!", "~/a.b-c_d!")]
     public void QuoteQuotesAsRcNeedsIt(string s, string quoted) => Assert.Equal(quoted, Libc.Quote(s));
 
+    [Theory]
+    [InlineData(0, "Thu Jan  1 00:00:00 GMT 1970\n")]
+    [InlineData(1700000000, "Tue Nov 14 22:13:20 GMT 2023\n")]
+    public void CtimeIsAsctimesLineInGmt(long seconds, string line) => Assert.Equal(line, Libc.Ctime(seconds));
+
     [Fact]
     public async Task GetwdNamesDotAndClosesWhatItOpened()
     {

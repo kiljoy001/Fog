@@ -549,9 +549,10 @@ public sealed class Lib9pTests : IAsyncLifetime
         return text.ToString();
     }
 
+    // Up to 20 seconds: three mutation runs at once on the gate can hold a process's tasks for more than five.
     private static async Task WaitForAsync(Func<bool> condition)
     {
-        for (int i = 0; i < 200 && !condition(); i++)
+        for (int i = 0; i < 800 && !condition(); i++)
         {
             await Task.Delay(25);
         }
