@@ -33,6 +33,8 @@ public sealed class Lib9pTests : IAsyncLifetime
     private Srv srv = null!;
     private int fd = -1;
     private ushort tag;
+    private int acquired;
+    private int answered;
 
     public async Task InitializeAsync()
     {
@@ -658,8 +660,16 @@ public sealed class Lib9pTests : IAsyncLifetime
 
                     if (release)
                     {
+                        // srvwork counts who holds the server once a request is done; each read answered
+                        // has asked for it again by then, as when they all come back at once.
                         await done.Task;
-                        await s!.AcquireAsync();
+                        Task acquire = s!.AcquireAsync();
+                        Interlocked.Increment(ref acquired);
+                        await acquire;
+                        while (Volatile.Read(ref acquired) < Volatile.Read(ref answered))
+                        {
+                            await Task.Delay(5);
+                        }
                     }
                 }
                 else
@@ -709,6 +719,8 @@ public sealed class Lib9pTests : IAsyncLifetime
             waiting = [.. parked];
             parked.Clear();
         }
+
+        Interlocked.Add(ref answered, waiting.Length);
 
         // Each answered as the server's process that took it, through the server's descriptor.
         foreach ((Req r, Process up, TaskCompletionSource done) in waiting)
