@@ -22,7 +22,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await h.DisposeAsync();
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("x")]
     [InlineData("-z")]
     [InlineData("-s")]
@@ -34,7 +34,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
     public async Task AnArgumentAFlagItDoesNotKnowOrOneWithoutItsArgumentIsUsage(string arg)
         => Assert.Equal((Usage, "usage"), await h.RunAsync(string.Empty, "auth/secstore", arg));
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("-g", "too many gfiles")]
     [InlineData("-G", "too many gfiles")]
     [InlineData("-p", "too many pfiles")]
@@ -46,14 +46,14 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.NotEqual(status, (await h.RunAsync(string.Empty, ["auth/secstore", .. argv[1..201], "-s", "tcp!127.0.0.1!1"])).Status);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("-g")]
     [InlineData("-p")]
     [InlineData("-r")]
     public async Task APasswordChangeTakesNoFiles(string flag)
         => Assert.Equal(("secstore: Get, put, and remove invalid with password change.\n", "usage"), await h.RunAsync(string.Empty, "auth/secstore", "-c", flag, "f"));
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithoutSTheStoreIsSecstoresAndWithoutThatAuths()
     {
         (string output, string status) = await h.RunAsync("secretpw\n", "auth/secstore", "-iv", "-G", "f");
@@ -64,7 +64,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\nkept\n", string.Empty), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task SecstoresStoresAreTriedInTurn()
     {
         await StoreAsync(17451, "f", "kept\n");
@@ -72,7 +72,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("dialing tcp!127.0.0.1!1\ndialing tcp!127.0.0.1!17451\nfoxtrot\nsecstore\nget f\nkept\n", string.Empty), await h.RunAsync("secretpw\n", "auth/secstore", "-iv", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task EachStoreGivenIsTriedInTurnAndTheSeventhIsTheLastGiven()
     {
         string[] stores = [.. Enumerable.Range(1, 8).SelectMany(i => new[] { "-s", $"tcp!127.0.0.1!{i}" })];
@@ -83,18 +83,18 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.DoesNotContain("!7", output, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AStoreNamedWithoutNetworkOrServiceIsDialledOnTcpAt5356()
     {
         (string output, string status) = await h.RunAsync("secretpw\n", "auth/secstore", "-iv", "-s", "127.0.0.1", "-G", "f");
         Assert.Equal(("dialing 127.0.0.1\nsecstore: can't dial 127.0.0.1: connection refused\n", "dial failed"), (output, status));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ADialThatFailsQuietlyWithoutV()
         => Assert.Equal((string.Empty, "dial failed"), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!1", "-G", "f"));
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ThePasswordIsAskedForOnTheConsoleWithoutI()
     {
         await StoreAsync(17452, "f", "kept\n");
@@ -103,7 +103,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Contains("secstore password: ", h.Console.Text, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("", "secstore: password input aborted\n", "password input aborted")]
     [InlineData("\n", "secstore: null password, skipping secstore login\n", "no password")]
     public async Task APasswordNotTypedOrEmptyEndsTheLogin(string typed, string output, string status)
@@ -113,7 +113,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal((output, status), await h.RunAsync(string.Empty, "auth/secstore", "-s", "tcp!127.0.0.1!17453", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordOfSixtyFourBytesIsTooLongAndOneOfSixtyThreeIsTried()
     {
         await StoreAsync(17454, "f", "kept\n");
@@ -123,7 +123,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore: password input aborted\n", "password input aborted"), await h.RunAsync(string.Empty, "auth/secstore", "-s", "tcp!127.0.0.1!17454", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AWrongPasswordIsAskedForAgainAndAfterThreeTheWayOutIsSaid()
     {
         await StoreAsync(17455, "f", "kept\n");
@@ -133,11 +133,11 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\nkept\n", string.Empty), await h.RunAsync(string.Empty, "auth/secstore", "-s", "tcp!127.0.0.1!17455", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task IWithNothingOnStandardInputHasNoPassword()
         => Assert.Equal((string.Empty, "no password on standard input"), await h.RunAsync(string.Empty, "auth/secstore", "-i", "-s", "tcp!127.0.0.1!1"));
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task IWithAnEmptyLineHasANullPassword()
     {
         await h.GlendaAsync();
@@ -145,7 +145,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore: null password, skipping secstore login\n", "no password"), await h.RunAsync("\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17456"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordIsCutToSixtyThreeBytes()
     {
         await h.AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{Pak.Hi("glenda", new string('p', 63)).HexHi}\n");
@@ -153,7 +153,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\n", string.Empty), await h.RunAsync(new string('p', 70), "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17457"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task NTakesThePasswordFromTheNvramsConfig()
     {
         await using SecstoreHarness withNvram = await StartAsync(Nvram("secretpw"));
@@ -167,7 +167,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal((string.Empty, "invalid password in nvram"), await wrong.RunAsync(string.Empty, "auth/secstore", "-n", "-s", "tcp!127.0.0.1!17459"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task NWithoutAnNvramFails()
     {
         Assert.Equal((string.Empty, "readnvram failed"), await h.RunAsync(string.Empty, "auth/secstore", "-n", "-s", "tcp!127.0.0.1!1"));
@@ -176,7 +176,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.StartsWith("secstore: readnvram: ", output, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("secretpw\n1234\n", false, "STA1234", "4\n")]
     [InlineData("secretpw\n", false, "STA", "0\n")]
     [InlineData("", true, "STA5678", "4\n")]
@@ -202,7 +202,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("no", "secstore: no\nauth/secstore: authentication failed\n")]
     [InlineData(null, "auth/secstore: authentication failed\n")]
     public async Task AStoreThatDoesNotSayOkFailsTheLogin(string? answer, string output)
@@ -218,7 +218,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("-3", "secstore: implausible filesize for f\n")]
     [InlineData("-2", "secstore: GET refused for f\n")]
     [InlineData("-1", "secstore: remote file f does not exist\n")]
@@ -235,7 +235,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(new[] { 10 }, 26, "secstore: no IV in file\n")]
     [InlineData(new int[0], 50, "secstore: empty file chunk n=-1 nr=0 len=50: \n")]
     [InlineData(new[] { 16, 5 }, 21, "secstore: decrypted file failed to authenticate!\n")]
@@ -255,7 +255,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AListingCutShortFails()
     {
         Task store = await FakeStoreAsync(17464, async c =>
@@ -269,7 +269,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(4079)]
@@ -297,14 +297,14 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(data, await h.BytesAsync("/tmp/f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task GSplitsTheFileIntoLinesAndGWritesItWhole()
     {
         await StoreAsync(17466, "f", "one\ntwo\nthree");
         Assert.Equal(("secstore\none\ntwo\nthree", string.Empty), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17466", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task GOfDotPrintsTheListing()
     {
         await StoreAsync(17467, "f", "kept\n");
@@ -312,7 +312,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Matches(@"^secstore\nf\t37 Nov 14 22:13:20 GMT 2023 [A-Za-z0-9+/]{27}=\n$", output);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFileGotWhereItCannotBeMadeOrWrittenFails()
     {
         await StoreAsync(17468, "f", "kept\n");
@@ -327,7 +327,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\nsecstore: write error on fauth/secstore: cmd failed\n", "cmd failed"), await h.RunInAsync("/n", "secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17468", "-g", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutOfAFileItCannotOpenOrReadOrThatIsTooBigFails()
     {
         await h.GlendaAsync();
@@ -347,7 +347,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\nsecstore: read error on f: disk on fire\nauth/secstore: cmd failed\n", "cmd failed"), (output, status));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task VNamesEachFileGotPutAndRemoved()
     {
         await StoreAsync(17470, "f", "kept\n");
@@ -356,7 +356,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal("kept\n", await h.FileAsync("/tmp/f"));
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("secretpw\n", "", "auth/secstore: cmd failed\n")]
     [InlineData("secretpw\n\n", "!password change aborted\n", "auth/secstore: cmd failed\n")]
     [InlineData("secretpw\nnewsecretpw\n", "secstore: input aborted\n", "auth/secstore: cmd failed\n")]
@@ -369,7 +369,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Contains("new password for glenda: ", h.Console.Text, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordChangeAsksAgainForOneTooShort()
     {
         await StoreAsync(17472, "f", "kept\n");
@@ -378,7 +378,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\nkept\n", string.Empty), await h.RunAsync("newsecretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17472", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordChangeGoesOnPastAFileItCannotGetAndStopsAtABlankLine()
     {
         var put = new TaskCompletionSource<string>();
@@ -408,7 +408,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordChangeWhoseListingFailsFails()
     {
         Task store = await FakeStoreAsync(17474, async c =>
@@ -424,7 +424,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordOfSixtyFourBytesIsCutToSixtyThree()
     {
         await h.AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{Pak.Hi("glenda", new string('p', 63)).HexHi}\n");
@@ -432,7 +432,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\n", string.Empty), await h.RunAsync(new string('p', 64), "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17477"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AListingOfAnAccountWithNoFilesIsEmpty()
     {
         await h.GlendaAsync();
@@ -440,7 +440,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\n", string.Empty), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17478", "-g", "."));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFileEncryptedUnderAnotherPasswordFailsItsCheck()
     {
         await h.GlendaAsync();
@@ -449,7 +449,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(("secstore\nsecstore: decrypted file failed to authenticate!\nauth/secstore: cmd failed\n", "cmd failed"), await h.RunAsync("secretpw\n", "auth/secstore", "-i", "-s", "tcp!127.0.0.1!17479", "-G", "f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFileIsStoredAsItsIvAndTheIvTheFileAndItsCheckEncrypted()
     {
         await h.GlendaAsync();
@@ -476,7 +476,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(expected, await h.BytesAsync("/adm/secstore/store/glenda/f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheClientSaysGoodbye()
     {
         await StoreAsync(17482, "f", "kept\n");
@@ -485,7 +485,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.DoesNotContain("without saying goodbye", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task GWritesTheFileALineAtATime()
     {
         await StoreAsync(17483, "f", "\none\ntwo\nthree");
@@ -515,7 +515,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(["\n", "one\n", "two\n", "three"], writes);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(4080)]
     [InlineData(8170)]
     [InlineData(9000)]
@@ -537,7 +537,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(data, await h.BytesAsync("/tmp/f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APasswordChangeTakesALineOfOneFieldAndNoneWithoutItsNewline()
     {
         var got = new List<string>();
@@ -565,7 +565,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         Assert.Equal(["GET one"], got);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("secretpw\n\nmore", "STA")]
     [InlineData("secretpw\n12\n34", "STA12")]
     public async Task ThePinIsTheSecondLineOfStandardInput(string stdin, string sent)
@@ -583,7 +583,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task StandardInputIsReadToMaxmsgLessTwo()
     {
         var got = new TaskCompletionSource<string>();
@@ -599,7 +599,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APinNotTypedIsSentEmpty()
     {
         var got = new TaskCompletionSource<string>();
@@ -617,7 +617,7 @@ public sealed class SecstoreClientTests : IAsyncLifetime
         await store;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task UNamesTheUser()
     {
         await h.AccountAsync("other", $"exp\t0\nPAK-Hi\t{Pak.Hi("other", "otherpass").HexHi}\n");

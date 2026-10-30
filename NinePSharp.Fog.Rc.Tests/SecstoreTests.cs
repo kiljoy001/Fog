@@ -41,7 +41,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARecordIsCountedAsSslCountsOneAndItsDataGivenBack()
     {
         (SConn a, SConn b, int fa, int fb) = await PairAsync();
@@ -53,7 +53,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((5, "hello"), await b.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task OnceTheSecretIsSetEachRecordIsEncryptedAndAuthenticatedEachWayInTurn()
     {
         (SConn a, SConn b, _, _) = await PairAsync();
@@ -70,7 +70,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnEncryptedRecordIsTwentyBytesOfDigestLongerAndNotTheData()
     {
         (SConn a, _, _, int fb) = await PairAsync();
@@ -82,7 +82,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.False(raw.AsSpan(22).SequenceEqual("hello"u8));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AReplayedOrAlteredRecordFailsItsCheck()
     {
         (SConn a, SConn b, int fa, int fb) = await PairAsync();
@@ -98,7 +98,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("!SC_read integrity check failed", Cstring(buf));
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(new byte[] { 0x00, 5 }, "!SC_read invalid count")]
     [InlineData(new byte[] { 0x80 }, "!SC_read invalid count")]
     [InlineData(new byte[] { 0x80, 0 }, "!SC_read implausible record length")]
@@ -115,7 +115,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((-1, "connection read error"), await b.ReadstrAsync());
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(20, 0, "!SC_read missing sha1")]
     [InlineData(20, 20, "!SC_read missing sha1")]
     [InlineData(25, 10, "!SC_read missing sha1")]
@@ -131,7 +131,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(why, Cstring(buf));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnEncryptedRecordLongerThanTheBufferIsRefusedAsMissingData()
     {
         (SConn a, SConn b, _, _) = await PairAsync();
@@ -143,7 +143,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("!SC_read missing data", Cstring(buf));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnErrorIsCutToTheBufferWithRoomForItsNul()
     {
         (_, SConn b, int fa, _) = await PairAsync();
@@ -153,7 +153,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("!SC_r", Cstring(buf));
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(0, "!SC_write invalid n 0")]
     [InlineData(-1, "!SC_write invalid n -1")]
     [InlineData(SConn.Maxmsg + 2, "!SC_write invalid n 4098")]
@@ -164,7 +164,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(why, a.Errstr);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheLongestRecordIsMaxmsgAndOne()
     {
         (SConn a, SConn b, _, _) = await PairAsync();
@@ -173,7 +173,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(SConn.Maxmsg + 1, await b.ReadAsync(buf, SConn.Maxmsg + 1));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AWriteToAClosedConnectionFailsWithWhy()
     {
         (int fa, int fb) = await init.PipeAsync();
@@ -193,14 +193,14 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(("-1 !SC_write invalid count", "-1 !SC_write invalid count", Errors.BadFd.Length), result);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task NoWriteHasFailedYet()
     {
         (SConn a, _, _, _) = await PairAsync();
         Assert.Equal(string.Empty, a.Errstr);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARecordOfMaxmsgIsReadAsAString()
     {
         (SConn a, SConn b, _, _) = await PairAsync();
@@ -208,7 +208,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((SConn.Maxmsg, new string('x', SConn.Maxmsg)), await b.ReadstrAsync());
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(false)]
     [InlineData(true)]
     public async Task AWriteCutShortAfterItsCountFailsWithWhy(bool encrypted)
@@ -228,7 +228,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("!SC_write error on send", c.Errstr);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARecordThatCannotBeReadIsRefused()
     {
         await using var server = new FileServerHarness { ReadRefusal = "disk on fire" };
@@ -240,7 +240,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARecordWhoseDataTheReadIsInterruptedForIsRefused()
     {
         (int fa, int fb) = await init.PipeAsync();
@@ -266,7 +266,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("!SC_read expected 5 bytes, but got 0", why);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnErrorIsSentInBandAfterABangAndReadBackWithoutIt()
     {
         (SConn a, SConn b, _, _) = await PairAsync();
@@ -329,7 +329,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.NotEqual(Pak.Hi("glendb", "secretpw").HexHi, hexHi);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheClientAndServerAgreeOnTheSessionSecretAndTheServerNamesItself()
     {
         await AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{GlendaHi}\n");
@@ -346,7 +346,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((15, "over the secret"), await server.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ALoginWithNoFailuresToClearLeavesTheAccountAsItWas()
     {
         string account = $"exp\t0\nkept as written\nPAK-Hi\t{GlendaHi}\n";
@@ -359,7 +359,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(account, await FileAsync("/adm/secstore/who/glenda"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AWrongPasswordFailsTheClientsCheckAndIsCountedAgainstTheAccount()
     {
         await AccountAsync("glenda", $"exp\t0\nfailed\t2\nPAK-Hi\t{GlendaHi}\n");
@@ -371,7 +371,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Contains("failed\t3\n", await FileAsync("/adm/secstore/who/glenda"), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ALoginClearsTheFailuresCounted()
     {
         await AccountAsync("glenda", $"exp\t0\nfailed\t4\nPAK-Hi\t{GlendaHi}\n");
@@ -383,7 +383,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal($"exp\t0\nPAK-Hi\t{GlendaHi}\n", await FileAsync("/adm/secstore/who/glenda"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AClientWhoseVerifierIsWrongGivesMinusTwo()
     {
         await AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{GlendaHi}\n");
@@ -396,7 +396,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Contains("failed\t1\n", await FileAsync("/adm/secstore/who/glenda"), StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("secstore\tPAX\nC=glenda\n", "protocol should start with ver alg")]
     [InlineData("secstore\tPAK\nD=glenda\n", "PAK version mismatch")]
     [InlineData("secstore\tPAK\nC=glenda", "PAK version mismatch")]
@@ -419,7 +419,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.DoesNotContain("failed", await FileAsync("/adm/secstore/who/glenda"), StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(null, "couldn't read verifier")]
     [InlineData("k'=x", "verifier syntax error")]
     [InlineData("kk=x\n", "verifier syntax error")]
@@ -443,7 +443,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Contains("failed\t1\n", await FileAsync("/adm/secstore/who/glenda"), StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("mu=AQ==\nk=x", "verifier syntax error for secstore 1.0")]
     [InlineData("mx=AQ==\nk=x\nS=s\n", "verifier syntax error")]
     [InlineData("mu=AQ==", "verifier syntax error")]
@@ -462,7 +462,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((-1, why), await server.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheClientPrintsTheServersErrorAndFeedbackForTyposWhenVerbose()
     {
         (SConn client, SConn server, _, _) = await PairAsync();
@@ -478,7 +478,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((-1, "couldn't read g**y"), await server.ReadstrAsync());
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("pw87", "alpha")]
     [InlineData("pw9", "bravo")]
     [InlineData("pw7", "charlie")]
@@ -501,7 +501,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.StartsWith($"{word}\n", err, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(null, null)]
     [InlineData("", null)]
     [InlineData("glenda", "glenda")]
@@ -515,14 +515,14 @@ public sealed class SecstoreTests : IAsyncLifetime
     public async Task ValidatefileTakesANameWithoutControlCharactersSlashesOrBytesPastAscii(string? name, string? valid)
         => Assert.Equal(valid, await Password.ValidatefileAsync(init, name));
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ValidatefileTakesNamesShorterThan250Bytes()
     {
         Assert.NotNull(await Password.ValidatefileAsync(init, new string('a', 249)));
         Assert.Null(await Password.ValidatefileAsync(init, new string('a', 250)));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAccountIsReadFieldByFieldAsPutPwWritesIt()
     {
         await AccountAsync("glenda", $"exp\t1800000000\nDISABLED\nSTA\nfailed\t3\nother\tmy  comment\nPAK-Hi\t{GlendaHi}\n");
@@ -533,7 +533,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal($"exp\t1800000000\nDISABLED\nSTA\nfailed\t3\nother\tmy  comment\nPAK-Hi\t{GlendaHi}\n", await FileAsync("/adm/secstore/who/glenda"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task StaTwiceIsStaAndOtherWithoutAValueIsEmpty()
     {
         await AccountAsync("glenda", $"STA\nSTA\nother\nPAK-Hi\t{GlendaHi}\n");
@@ -541,7 +541,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(((ushort)(Pw.Enabled | Pw.Sta), string.Empty), (pw.Status, pw.Other));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ReadingAndWritingAnAccountLeaveNoDescriptorOpen()
     {
         await AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{GlendaHi}\n");
@@ -555,7 +555,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal(before, await OpenCountAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task FieldsAreSplitAtBlanksAndALastLineWithoutANewlineIsNotRead()
     {
         await AccountAsync("glenda", $"exp \t 1800000000\nunknown field\nfailed\nPAK-Hi  {GlendaHi}\nDISABLED");
@@ -563,7 +563,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal((1800000000u, (ushort)Pw.Enabled, (ushort)0, null), (pw.Expire, pw.Status, pw.Failed, pw.Other));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAccountWithoutItsHiIsCorruptedAndOneWithNoneIsFictitious()
     {
         await AccountAsync("glenda", "exp\t0\nPAK-Hi\t!\n");
@@ -575,7 +575,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal("FICTITIOUS", (await Password.GetAsync(init, ".", false)).Pw!.Id);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("exp\t1700000000\n", "account glenda expired at Tue Nov 14 22:13:20 GMT 2023")]
     [InlineData("exp\t1699999999\n", "account glenda expired at Tue Nov 14 22:13:19 GMT 2023")]
     [InlineData("DISABLED\n", "account glenda disabled")]
@@ -586,14 +586,14 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.NotNull((await Password.GetAsync(init, "glenda", true)).Pw);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAccountExpiringLaterIsTaken()
     {
         await AccountAsync("glenda", $"exp\t1700000001\nPAK-Hi\t{GlendaHi}\n");
         Assert.NotNull((await Password.GetAsync(init, "glenda", false)).Pw);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TenFailuresRefuseTheAccountForFiveMinutesAfterTheLastThenAreForgotten()
     {
         await AccountAsync("glenda", $"exp\t0\nfailed\t9\nPAK-Hi\t{GlendaHi}\n");
@@ -608,7 +608,7 @@ public sealed class SecstoreTests : IAsyncLifetime
         Assert.Equal($"exp\t0\nPAK-Hi\t{GlendaHi}\n", await FileAsync("/adm/secstore/who/glenda"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAccountCannotBeWrittenForANameValidatefileRefusesOrWithoutItsDirectory()
     {
         Assert.Equal("can't open PW file for a/b", await Password.PutAsync(init, new Pw("a/b")));

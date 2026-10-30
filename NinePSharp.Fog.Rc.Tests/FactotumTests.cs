@@ -56,7 +56,7 @@ public sealed class FactotumTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheOwnerOpensByTheOwnersBitsAndAnyoneElseByTheOthers()
     {
         await StartAsync();
@@ -68,7 +68,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal((byte)MessageTypes.Ropen, (await OpenAsync(2, 20, "ctl", NinePConstants.OWRITE))[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAttachIsOfTheRootOrOfFactotumAndOfNothingElse()
     {
         await StartAsync();
@@ -80,7 +80,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(serving, Serving());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AWalkReachesFactotumAndItsFilesAndTheirDotDots()
     {
         await StartAsync();
@@ -105,7 +105,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("walk in non-directory", Error(await RpcAsync(t => new Twalk(t, 2, 6, ["x"]))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task EachFileStatsWithItsModeAsTheOwnersAtTheTimeItIsAsked()
     {
         await StartAsync();
@@ -123,7 +123,7 @@ public sealed class FactotumTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheDirectoriesListFactotumAndItsFilesInDirtabsOrder()
     {
         await StartAsync();
@@ -141,7 +141,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("is a directory", Error(await RpcAsync(t => new Topen(t, 1, NinePConstants.ORDWR))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnOpenTakesOnlyTheModeAndOtruncAndAnExclusiveFileIsFreeOnceClunked()
     {
         await StartAsync();
@@ -157,7 +157,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("file in use", Error(await OpenAsync(1, 16, "needkey", NinePConstants.ORDWR)));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AProtocolTakesNoKeysAndPromptsForNothingUnlessItSaysSo()
     {
         await StartAsync();
@@ -167,7 +167,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal((string.Empty, false), (new Probe().Keyprompt, new Probe().TakesKeys));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ALineOfCtlOrProtoThatDoesNotFitTheReadIsRefused()
     {
         await StartAsync();
@@ -188,7 +188,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(string.Empty, Text(await RpcAsync(t => new Tread(t, proto, 0, 5))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnRpcIsShorterThan4096BytesAndAnswersAReadThatHasNoRoomWithWhatItWants()
     {
         await StartAsync();
@@ -217,7 +217,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("y=1 x=2 z?", Attr.Format(Attr.Parse("x? y=1 x? x=2 x? z?")));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnRpcWaitsOnNeedkeyForTheKeyItLacks()
     {
         await StartAsync();
@@ -243,7 +243,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(before, Serving());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AKeyThatAsksToBeConfirmedIsUsedOnlyOnceConfirmSaysYes()
     {
         await StartAsync();
@@ -276,7 +276,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(before, Serving());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFlushInterruptsAnRpcOrAReadThatWaits()
     {
         await StartAsync();
@@ -300,7 +300,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(string.Empty, Text(await RpcAsync(t => new Tflush(t, 999))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheLogKeepsWhatDebuggingRecordsAndCutsALineToFitTheRead()
     {
         await StartAsync();
@@ -326,7 +326,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("3: start proto=pass server=y role=client yields phase Notstarted: needkey !password? proto=pass server=y user?\n", Text(await RpcAsync(t => new Tread(t, log, 0, 8192))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task VersionIsAnsweredOnlyAloneAndGivesTheSmallerMsizeOrUnknown()
     {
         await StartAsync();
@@ -343,7 +343,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(["!interrupted", string.Empty], await RepliesAsync(waiting, flush));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthCreateRemoveAndWstatAreRefusedAsLib9pRefusesThemWithoutAHandler()
     {
         await StartAsync();
@@ -359,7 +359,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("unknown fid", Error(await RpcAsync(t => new Tremove(t, 11))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFidMustBeKnownForEachRequestAndNewForThoseThatMakeOne()
     {
         await StartAsync();
@@ -385,7 +385,7 @@ public sealed class FactotumTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AWalkClonesFollowsAsFarAsItCanAndRefusesWhatLib9pDoesNot()
     {
         await StartAsync();
@@ -402,7 +402,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("unknown fid", Error(await RpcAsync(t => new Tstat(t, 5))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AReadOrWriteMustSuitHowItsFidWasOpened()
     {
         await StartAsync();
@@ -426,7 +426,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Empty(new Rread(await RpcAsync(t => new Tread(t, 6, (ulong)first.Length, 8192))).Data.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ATagInUseIsADuplicate()
     {
         await StartAsync();
@@ -437,7 +437,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("!duplicate tag", (await RepliesAsync(waiting))[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ItMountsOnMntFactotumUnlessGivenAMountPointAndMakesItsServiceFileWritableByAll()
     {
         await StartAsync();
@@ -453,7 +453,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(["factotum"], await NamesAsync("/tmp/m"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithoutProcItWarnsItCannotProtectItselfFromDebuggingUnlessPOrDSaysNotTo()
     {
         await init.CloseAsync(await init.CreateAsync("/tmp/noproc", NinePConstants.OREAD, 0x80000000 | 0b111_111_111));
@@ -468,7 +468,7 @@ public sealed class FactotumTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ItWarnsWhenItsServiceCannotBeMadeWritableByAll()
     {
         await init.CloseAsync(await init.CreateAsync("/tmp/srv", NinePConstants.OREAD, 0x80000000 | 0b111_111_111));
@@ -477,7 +477,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.StartsWith("factotum warning: cannot chmod 666 /srv/f: ", await ReadErrorsAsync(errors), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithoutNItAddsTheKeysSecstoreHoldsUnlessItIsAServersWhichAsksForNone()
     {
         // Mounted on /mnt, its ctl takes what secstore -G factotum prints.
@@ -491,7 +491,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.StartsWith("error ", await StartRpcAsync("start proto=pass role=client server=q user?"), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task DStartsItDebugging()
     {
         int errors = await StartWithErrorsAsync("-d");
@@ -503,7 +503,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("1: start proto=pass server=x role=client user=u yields phase 0: ok\n", await ReadErrorsAsync(errors));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnArgumentItDoesNotTakeIsAUsageError()
     {
         foreach (string[] args in new[] { new[] { "-x" }, ["-n", "extra"], ["-g"], ["-m"] })
@@ -521,7 +521,7 @@ public sealed class FactotumTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheServerGoesOnInTheProcessAnRpcLeavesAndInTheOneItForkedHoweverTheRpcEnds()
     {
         await StartAsync();
@@ -540,7 +540,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(before, Serving());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFlushInterruptsAnRpcWaitingForConfirmAndLeavesTheOtherReadsOfTheLogWaiting()
     {
         await StartAsync();
@@ -570,7 +570,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(["ok", "2: start proto=pass server=y role=client user=u yields phase 0: ok\n"], await RepliesAsync(read, second));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ALogLineCutToFitEndsBeforeTheRuneTheCutFallsInAndAReadOfFiveHoldsOnlyTheDots()
     {
         await StartAsync();
@@ -597,7 +597,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(line[..^5] + "...\n", Text(await RpcAsync(t => new Tread(t, log, 0, fits - 1))));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task DebuggingPrintsEachLineLoggedOnceOnTheErrorOutput()
     {
         int errors = await StartWithErrorsAsync();
@@ -618,7 +618,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(expected, text.ToString());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheLogSaysHowAStartFailedWaitedOrWantedMoreRoom()
     {
         await StartAsync();
@@ -660,7 +660,7 @@ public sealed class FactotumTests : IAsyncLifetime
             lines);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AKeyAskedForOnTheConsoleIsAnnouncedWithItsPublicAttributesAndItsQueriesPromptedFor()
     {
         init.Fork(RforkFlags.Proc | RforkFlags.Fdg, async child =>
@@ -702,7 +702,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.EndsWith("\n!Adding key:\n!\n", console.Text, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AReplyOnTheConsoleIsEditedAsItIsTyped()
     {
         await StartAsync();
@@ -722,7 +722,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(["ac"], await PasswordsAsync("server=f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task STakesTheHostOwnersDp9ikKeyFromTheNvramAndNamesTheHostOwnerFromIt()
     {
         var safe = new NinePSharp.Fog.Commands.Nvrsafe();
@@ -740,7 +740,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal(string.Empty, await CtlLineAsync(2));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task SWithAnNvramOfNoAesKeyAddsNoKeyAndWithABadOneAsksOnTheConsole()
     {
         var safe = new NinePSharp.Fog.Commands.Nvrsafe();
@@ -768,7 +768,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("glenda", await ReadTextAsync("/dev/hostowner"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task UAsksForTheHostOwnerWhenUserIsNotSetAndNamesItBeforeAnAt()
     {
         await init.RemoveAsync("/env/user").AsTask().ContinueWith(_ => { });
@@ -783,7 +783,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal((byte)MessageTypes.Ropen, (await OpenAsync(1, 10, "ctl", NinePConstants.OWRITE))[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task UTakesUserFromTheEnvironmentAndSaysWhenTheHostOwnerCannotBeIt()
     {
         await WriteFileAsync("/env/user", "bootes");
@@ -797,7 +797,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("bootes", await ReadTextAsync("/dev/hostowner"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task UWithNoUserAndNoReplyLeavesTheHostOwnerAndOneThatIsNotItCannotWriteIt()
     {
         await init.RemoveAsync("/env/user").AsTask().ContinueWith(_ => { });
@@ -930,7 +930,7 @@ public sealed class FactotumTests : IAsyncLifetime
         Assert.Equal("x=1 disabled=by.factotum", Attr.Format(k.Attr));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task NoCapabilityIsMadeWithoutCaphash()
     {
         // Whatever descriptors the process has.

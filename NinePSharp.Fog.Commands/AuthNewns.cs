@@ -89,6 +89,6 @@ public static class AuthNewns
     {
         await process.WriteAsync(2, Encoding.UTF8.GetBytes($"usage: {argv0} [-ad] [-n namespace] [cmd [args...]]\n"));
         process.Exits("usage");
-        return string.Empty;
+        return default!;
     }
 }

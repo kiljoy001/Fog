@@ -1156,5 +1156,35 @@
     "mutator": "Conditional (true) mutation",
     "line": "fss.Verb = Encoding.UTF8.GetString(buf, 0, sp >= 0 ? sp : nul >= 0 ? nul : buf.Length);",
     "reason": "A verb without a space, as read is, is taken over a count of -1, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes."
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Null coalescing mutation (remove left)",
+    "line": "await PushopenAsync(await Dup1Async(from) ?? Closed, to);",
+    "reason": "the descriptor a waiting dup would clobber is moved to none, which a redirection waiting to run also sets, so pushopen moves it again until the stack overflows"
+  },
+  {
+    "file": "RcShell.System.cs",
+    "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
+    "line": "private ValueTask<int?> Dup1Async(int a) => DupAsync(a, -1);",
+    "reason": "the descriptor a waiting dup would clobber is moved onto 1, which a redirection waiting to run sets, so pushopen moves it again until the stack overflows"
+  },
+  {
+    "file": "Arguments.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "for (; next < argv.Count && argv[next].Length > 1 && argv[next][0] == '-'; next++)",
+    "reason": "after a flag that takes the next argument, the index steps back onto the flag, so mntgen -s, run as the kernel boots, reads it again for ever"
+  },
+  {
+    "file": "Arguments.cs",
+    "mutator": "PreIncrementExpression to PreDecrementExpression mutation",
+    "line": "return next + 1 < argv.Count ? argv[++next] : null;",
+    "reason": "a flag's value is taken from before the flag, and the index stepped back onto the flag reads it again for ever, as mntgen -s does as the kernel boots"
+  },
+  {
+    "file": "Waiting.cs",
+    "mutator": "Statement mutation",
+    "line": "await task;",
+    "reason": "every wait ends at once, so a reader of an empty pipe goes round its loop for ever"
   }
 ]

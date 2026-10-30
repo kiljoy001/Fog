@@ -106,7 +106,7 @@ public sealed class SecstoreKnownAnswerTests : IAsyncLifetime
         Assert.Equal(longer, data);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnSConnRecordIsTheDirectionsRc4OfItsDigestAndDataAfterItsCount()
     {
         (int fa, int fb) = await h.Init.PipeAsync();
@@ -122,7 +122,7 @@ public sealed class SecstoreKnownAnswerTests : IAsyncLifetime
         Assert.Equal("80194e05e525884392d84769488b5972c5fe44e7f6611659c0b640", Convert.ToHexString(await Authsrv.ReadnAsync(h.Init, fa, 27)).ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnSConnReadsTheRecordsOfTheOtherDirection()
     {
         (int fa, int fb) = await h.Init.PipeAsync();
@@ -133,7 +133,7 @@ public sealed class SecstoreKnownAnswerTests : IAsyncLifetime
         Assert.Equal((5, "world"), await b.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ThePakClientSendsMForItsRandomXAndProvesItHoldsTheSessionSecret()
     {
         Authsrv.Random.Value = b => b.Fill(1);
@@ -151,7 +151,7 @@ public sealed class SecstoreKnownAnswerTests : IAsyncLifetime
         Assert.Equal("80153e031efb79debaa39d2c18e6ea1da20b27f8ae9a6a", Convert.ToHexString(await Authsrv.ReadnAsync(h.Init, fb, 23)).ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ThePakServerAnswersMuForItsRandomYAndTheVerifierAndTakesTheClientsProof()
     {
         await h.GlendaAsync();
@@ -169,7 +169,7 @@ public sealed class SecstoreKnownAnswerTests : IAsyncLifetime
         Assert.Equal("801506572a8bfa04bb0cfeb4ec788fc30cef2e54509aed", Convert.ToHexString(await Authsrv.ReadnAsync(h.Init, fa, 23)).ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheRandomXIsReadBigEndian()
     {
         Authsrv.Random.Value = b =>
@@ -185,7 +185,7 @@ public sealed class SecstoreKnownAnswerTests : IAsyncLifetime
         Assert.Equal("secstore\tPAK\nC=glenda\nm=wyV/NvBWZSUsRq9BHq2zkXmmrpYJ1WSsORqq8X2n8wZWYqxoshtZ/yR+AMTsbZD78S0quPGkJAMLMVajWQw5Fr6AYS/q6E8N8k8CxrN7QUo+mU9ER9528pi8GWBRktxFAuRnoL74eXQFP51TVrLZdmgxvMy0w/HQzMD7ExmIpaU=\n", (await new SConn(h.Init, fb).ReadstrAsync()).S);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARandomXOfNothingIsTakenAsOne()
     {
         Authsrv.Random.Value = b => b.Clear();

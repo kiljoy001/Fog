@@ -16,6 +16,11 @@ internal sealed class SecstoreHarness : IAsyncDisposable
     // The standard input that is the console, as typed.
     public const string Cons = "\0cons";
 
+    // How long an auth test may run: one whose server never answers fails, rather than holding up
+    // the rest of the run until mutation testing gives up on it as a timeout. Tests run one at a
+    // time, as xunit needs for a timeout.
+    public const int TestTimeout = 20_000;
+
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
     private SecstoreHarness(FogKernel kernel, Process init) => (Kernel, Init) = (kernel, init);

@@ -60,7 +60,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheScriptACallSendsRunsAsTheUserItAuthenticated()
     {
         await HostAsync();
@@ -70,7 +70,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.Equal("hello\nbob", await ReadAllAsync(tls));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ADescriptorAsAStreamReadsAndWritesButDoesNotSeekAndEndsWhenItsReadFails()
     {
         var stream = new Fdstream(init, 99);
@@ -80,7 +80,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.IsType<SyscallException>(error.InnerException);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithMinusAAuthenticationLeavesTheUserAsItWas()
     {
         await ServiceAsync("exec tlssrv -A /bin/rc -c server");
@@ -91,7 +91,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.Equal("none", await ReadAllAsync(tls));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ACommandThatCannotRunIsReportedAndTheCallHungUp()
     {
         await ServiceAsync("exec tlssrv -a -r far /bin/nonesuch >[2]/tmp/err");
@@ -102,7 +102,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.StartsWith("tlssrv: far tls reports can't exec /bin/nonesuch: ", await WaitForTextAsync("/tmp/err"), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AUserItCannotBecomeIsFatalAndNothingRuns()
     {
         await ServiceAsync("bind /tmp/svc /dev; exec tlssrv -a /bin/rc -c server >[2]/tmp/err");
@@ -114,7 +114,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.DoesNotContain(kernel.Processes.Values, p => p.Text == "rc" && p.User == "bob");
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithMinusDTheHandshakeIsReportedToTheLogOrStandardError()
     {
         await MkdirAsync("#R/sys");
@@ -130,7 +130,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.DoesNotContain("tls reports", console.Text, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AClientThatHangsUpEndsTheCommandsInput()
     {
         await HostAsync();
@@ -142,7 +142,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "cat" or "rc" or "tlssrv"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AClientThatSendsARecordThatFailsItsCheckEndsTheCommandsInput()
     {
         await HostAsync();
@@ -154,7 +154,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "cat" or "rc" or "tlssrv"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ACommandThatEndsClosesTlsAndEndsTheRelaysThoughTheClientStays()
     {
         await HostAsync();
@@ -172,7 +172,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "rc" or "tlssrv"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ACommandThatEndsEndsTheRelaysThoughTheClientNeitherReadsNorHangsUp()
     {
         await HostAsync();
@@ -182,7 +182,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text is "rc" or "tlssrv"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARelayEndsWithAnEmptyStatusForTheCommandToWaitFor()
     {
         await ServiceAsync("exec tlssrv -a /bin/rc -c 'wait; echo -n s$status >/tmp/st'");
@@ -194,7 +194,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.Equal("s", await WaitForTextAsync("/tmp/st"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithMinusDAHandshakeThatFailsIsReportedAndNothingRuns()
     {
         await ServiceAsync("exec tlssrv -D -a /bin/rc -c server >[2]/tmp/err");
@@ -207,7 +207,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.DoesNotContain(kernel.Processes.Values, p => p.Text == "rc");
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(new string[0], "usage", "usage: tlssrv [-D] -[aA] [-k keyspec]] [-c cert] [-l logfile] [-r remotesys] cmd [args...]\n")]
     [InlineData(new[] { "-x", "rc" }, "usage", "usage: tlssrv [-D] -[aA] [-k keyspec]] [-c cert] [-l logfile] [-r remotesys] cmd [args...]\n")]
     [InlineData(new[] { "-k" }, "usage", "usage: tlssrv [-D] -[aA] [-k keyspec]] [-c cert] [-l logfile] [-r remotesys] cmd [args...]\n")]
@@ -230,7 +230,7 @@ public sealed class TlssrvTests : IAsyncLifetime
         Assert.StartsWith(error, await TextAsync("/tmp/err"), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ACallThatDoesNotCompleteP9anyIsClosedWithoutTls()
     {
         await HostAsync();

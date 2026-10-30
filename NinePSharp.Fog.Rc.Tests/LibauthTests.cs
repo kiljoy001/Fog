@@ -41,7 +41,7 @@ public sealed class LibauthTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("ok", Ar.Ok, "", "")]
     [InlineData("ok data", Ar.Ok, "data", "")]
     [InlineData("done", Ar.Done, "", "")]
@@ -65,7 +65,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal("read x y", await ReadAsync(far));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnRpcTooBigIsNotWrittenAndOneThatCannotBeIsAFailure()
     {
         (AuthRpc rpc, int far) = await RpcAsync();
@@ -80,7 +80,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.NotEmpty(closed.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAuthenticationIsRelayedThroughEachPhaseUntilItsAuthinfo()
     {
         (AuthRpc rpc, int far) = await RpcAsync();
@@ -101,7 +101,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal([1, 2, 3], ai.Secret);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AKeyFactotumNeedsIsAskedOfGetkeyUntilItGivesUp()
     {
         (AuthRpc rpc, int far) = await RpcAsync();
@@ -126,7 +126,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal("fauth_proxy start: needkey dom=fog", (await Assert.ThrowsAsync<SyscallException>(() => proxied)).Message);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("error no key", "", "fauth_proxy start: no key")]
     [InlineData("ok", "error gone", "auth_proxy rpc: gone")]
     [InlineData("ok", "toosmall 1", "auth_proxy rpc: ")]
@@ -143,7 +143,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal(error, (await Assert.ThrowsAsync<SyscallException>(() => proxied)).Message);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("toosmall 0", "auth_proxy rpc write: phase error ")]
     [InlineData("toosmall 4097", "auth_proxy rpc write: phase error ")]
     [InlineData("error refused", "auth_proxy rpc write: refused")]
@@ -157,7 +157,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal(error, (await Assert.ThrowsAsync<SyscallException>(() => proxied)).Message);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APeerThatHangsUpOrCannotBeReadOrWrittenEndsTheAuthentication()
     {
         (AuthRpc rpc, int far) = await RpcAsync();
@@ -183,7 +183,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.StartsWith("auth_proxy write fd: ", (await Assert.ThrowsAsync<SyscallException>(() => proxied)).Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthinfoMayEndWithAnEmptySecret()
     {
         (AuthRpc rpc, int far) = await RpcAsync();
@@ -192,7 +192,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal(("a", "b", "c", 0), (ai.Cuid, ai.Suid, ai.Cap, ai.Secret.Length));
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
@@ -212,7 +212,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal("none", (await Assert.ThrowsAsync<SyscallException>(() => AuthGetinfoAsync(rpc))).Message);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthProxyNeedsFactotumsRpcFile()
     {
         string error = (await Assert.ThrowsAsync<SyscallException>(() => AuthProxyAsync(init, 0, null, "proto=p9any role=server"))).Message;
@@ -220,7 +220,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal(3, await init.OpenAsync("/dev/null", NinePConstants.OREAD));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthChuidSpendsTheCapabilityAndBuildsTheUsersNamespace()
     {
         await MkdirAsync("/root/usr/bob");
@@ -232,7 +232,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal("bob", await EnvAsync(p, "user"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthChuidMountsFactotumAgainWhenThereIsOne()
     {
         await MkdirAsync("/root/usr/bob");
@@ -254,7 +254,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal("bob", p.User);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData(null, "no capability")]
     [InlineData("", "no capability")]
     [InlineData("glenda@bob@nokey", "writing glenda@bob@nokey to /dev/capuse: ")]
@@ -266,7 +266,7 @@ public sealed class LibauthTests : IAsyncLifetime
         Assert.Equal("glenda", p.User);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthChuidNeedsCapuse()
     {
         Process p = await ChildAsync(c => c.BindAsync("/tmp", "/dev", MountFlags.Replace).AsTask());

@@ -29,16 +29,19 @@ public sealed class Fdstream(Process process, int fd) : Stream
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
+        // A read that fails is the stream's end.
+        ReadOnlyMemory<byte> read;
         try
         {
-            ReadOnlyMemory<byte> read = await Reader.ReadAsync(fd, buffer.Length, cancellationToken);
-            read.CopyTo(buffer);
-            return read.Length;
+            read = await Reader.ReadAsync(fd, buffer.Length, cancellationToken);
         }
         catch (SyscallException)
         {
-            return 0;
+            read = ReadOnlyMemory<byte>.Empty;
         }
+
+        read.CopyTo(buffer);
+        return read.Length;
     }
 
     public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();

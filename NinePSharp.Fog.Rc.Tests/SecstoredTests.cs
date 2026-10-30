@@ -22,7 +22,7 @@ public sealed class SecstoredTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await h.DisposeAsync();
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetOfAFileTheStoreDoesNotHaveIsMinusOneAndTheOperationFails()
     {
         SConn c = await LoggedInAsync(17400);
@@ -33,7 +33,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("[glenda] GET nonesuch", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetOfADirectoryIsMinusOne()
     {
         await h.GlendaAsync();
@@ -44,7 +44,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("/adm/secstore/store/glenda/sub should be a plain file, not a directory", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetOfAFileOverTenMegabytesIsMinusThreeAndOneOfTenIsSent()
     {
         await h.GlendaAsync();
@@ -68,7 +68,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal(10 * 1024 * 1024, got);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFileIsSentInChunksOfMaxmsgAfterItsSize()
     {
         await h.GlendaAsync();
@@ -88,7 +88,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal(data, got);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetOfDotListsTheAccountsFilesInChunks()
     {
         await h.GlendaAsync();
@@ -114,7 +114,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal(listing, Encoding.UTF8.GetString([.. got]));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetOfDotForAnAccountWithNoStoreIsEmpty()
     {
         await h.AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{GlendaHi}\n", store: false);
@@ -127,7 +127,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task DirlsListsEachFilesSizeDateAndSumInOrderOfNamePaddedToTheLongest()
     {
         await h.GlendaAsync();
@@ -145,7 +145,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.NotEqual(sumNone, sumX);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task DirlsGivesNothingForAFileOrAMissingDirectoryAndNothingListedForAnEmptyOne()
     {
         await h.GlendaAsync();
@@ -156,7 +156,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal(string.Empty, await Secstored.DirlsAsync(h.Init, "/adm/secstore/store/empty"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task DirlsSumsAFileItCannotReadAsAnEmptyOne()
     {
         await h.GlendaAsync();
@@ -169,7 +169,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.EndsWith($" {Convert.ToBase64String(SHA1.HashData([]))}\n", await Secstored.DirlsAsync(h.Init, "/adm/secstore/store/glenda"), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutStoresTheFileGivenInChunksAfterItsSize()
     {
         SConn c = await LoggedInAsync(17406);
@@ -182,7 +182,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal('y', (char)(await h.BytesAsync("/adm/secstore/store/glenda/f"))[^1]);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("-1", "remote file f does not exist")]
     [InlineData("-2", "implausible filesize -2 for f")]
     [InlineData("10485761", "implausible filesize 10485761 for f")]
@@ -197,7 +197,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.False(await h.ExistsAsync("/adm/secstore/store/glenda/f"));
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("0", 17490)]
     [InlineData("10485760", 17491)]
     public async Task APutOfNothingOrOfTheMostItTakesIsTaken(string size, int port)
@@ -210,7 +210,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.DoesNotContain("implausible", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AMessageItTakesIsOnlyItsFirstLine()
     {
         SConn c = await LoggedInAsync(17492);
@@ -219,7 +219,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.DoesNotContain("BYE", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ACallIsHungUpAfterThirtyMinutes()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeSeconds(1700000000));
@@ -232,7 +232,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync().WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheDaemonIsInANoteGroupOfItsOwnAndListensOn5356()
     {
         await h.StartDaemonAsync("auth/secstored");
@@ -241,7 +241,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.NotEqual(await h.FileAsync($"/proc/{h.Init.Pid}/noteid"), await h.FileAsync($"/proc/{daemon}/noteid"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutTheStoreTakesOnlyPartOfFails()
     {
         SConn c = await LoggedInAsync(17494);
@@ -256,7 +256,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("write error on f: short write", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutWhoseSizeIsAnErrorFails()
     {
         SConn c = await LoggedInAsync(17408);
@@ -266,7 +266,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("remote: no file: ", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutOfANameTheStoreRefusesFailsWithoutAName()
     {
         SConn c = await LoggedInAsync(17409);
@@ -277,7 +277,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("failed PUT glenda/<nil>", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutForAnAccountWithNoStoreCannotMakeItsFile()
     {
         await h.AccountAsync("glenda", $"exp\t0\nPAK-Hi\t{GlendaHi}\n", store: false);
@@ -290,7 +290,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("can't open /adm/secstore/store/glenda/f: ", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutCutShortLeavesWhatCameAndFails()
     {
         SConn c = await LoggedInAsync(17411);
@@ -303,7 +303,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal("abc", await h.FileAsync("/adm/secstore/store/glenda/f"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task APutTheFileCannotTakeFails()
     {
         await h.GlendaAsync();
@@ -321,7 +321,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("write error on f: ", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetCutShortByAReadErrorFailsAfterItsSize()
     {
         await h.GlendaAsync();
@@ -339,7 +339,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("read error on f: disk on fire", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARemoveIsDoneWithoutAnAnswer()
     {
         await h.GlendaAsync();
@@ -352,7 +352,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((2, "-1"), await c.ReadstrAsync());
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("RM sub", "can't remove a directory")]
     [InlineData("RM nonesuch", "remove failed: ")]
     public async Task ARemoveOfADirectoryOrAMissingFileFailsWithWhy(string op, string why)
@@ -365,7 +365,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains($"failed RM glenda/{op[3..]}", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARemoveOfANameTheStoreRefusesFails()
     {
         SConn c = await LoggedInAsync(17416);
@@ -374,7 +374,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("failed RM glenda/<nil>", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AGetOfANameTheStoreRefusesFails()
     {
         SConn c = await LoggedInAsync(17417);
@@ -382,7 +382,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((-1, "operation failed"), await c.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnOperationIsCutAtItsNewline()
     {
         await h.GlendaAsync();
@@ -395,7 +395,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("[glenda] GET f\n", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ChpassSetsTheAccountsHiFromTheNextRecord()
     {
         SConn c = await LoggedInAsync(17419);
@@ -407,7 +407,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains(" AUTH glenda\n", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ChpassWithoutAHiIsAProtocolBotch()
     {
         SConn c = await LoggedInAsync(17420);
@@ -418,7 +418,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("protocol botch CHPASS for glenda", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ChpassTriesFourTimesToWriteTheAccountThenGivesUp()
     {
         SConn c = await LoggedInAsync(17421);
@@ -433,7 +433,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnOperationItDoesNotKnowEndsTheConnection()
     {
         SConn c = await LoggedInAsync(17422);
@@ -443,7 +443,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.DoesNotContain("closed connection without saying goodbye", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AClientThatHangsUpWithoutByeIsLogged()
     {
         SConn c = await LoggedInAsync(17423);
@@ -451,7 +451,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         await WaitAsync(async () => (await h.LogsAsync()).Contains("glenda closed connection without saying goodbye", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFirstMessageItCannotReadIsAnswered()
     {
         await h.GlendaAsync();
@@ -463,7 +463,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFirstMessageItCannotReadIsReportedOnStandardError()
     {
         await h.GlendaAsync();
@@ -477,7 +477,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.StartsWith("secstored: remote: ", await h.FileAsync("/tmp/err"), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFailedLoginIsLoggedAsDenied()
     {
         await h.GlendaAsync();
@@ -494,7 +494,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("ANNOUNCE /net/tcp!127.0.0.1!17425", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("STA12345", "no STA from glenda")]
     [InlineData("STB1234567", "no STA from glenda")]
     [InlineData("STA123456789a", "secureidcheck denied glenda because authentication failed")]
@@ -522,7 +522,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithARadiusSecretStaIsStillRefusedForWantOfRadius()
     {
         await h.MkdirAsync("/lib/ndb");
@@ -538,7 +538,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.DoesNotContain("no /lib/ndb/local", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithAnAuthDatabaseBothAreRead()
     {
         await h.MkdirAsync("/lib/ndb");
@@ -552,7 +552,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains("no /lib/ndb/local", await h.LogsAsync(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task SNamesTheServerToTheClient()
     {
         await h.GlendaAsync();
@@ -561,7 +561,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal((0, "the store"), await Pak.ClientAsync(h.Init, "secstore", false, c, "glenda", "secretpw"));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task VServesWithoutForkingAway()
     {
         await h.GlendaAsync();
@@ -581,7 +581,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Contains(h.Kernel.Processes.Values, p => p.Pid == pid);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("-x", "/net", "")]
     [InlineData("-x", ".alt", "/net.alt/tcp!127.0.0.1!17431: ")]
     [InlineData("-x", "/nonesuch", "/nonesuch/tcp!127.0.0.1!17431: ")]
@@ -600,7 +600,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.StartsWith(why, status, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [Theory(Timeout = SecstoreHarness.TestTimeout)]
     [InlineData("-z")]
     [InlineData("-s")]
     [InlineData("-S")]
@@ -608,7 +608,7 @@ public sealed class SecstoredTests : IAsyncLifetime
     public async Task AFlagItDoesNotKnowOrWithoutItsArgumentIsUsage(string flag)
         => Assert.Equal(("usage: secstored [-R] [-S servername] [-s tcp!*!5356] [-v] [-x netmtpt]\n", "usage"), await h.RunAsync(string.Empty, "auth/secstored", flag));
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnAddressItCannotAnnounceIsFatal()
     {
         (string output, string status) = await h.RunAsync(string.Empty, "auth/secstored", "-v", "-s", "bogus!x!y");

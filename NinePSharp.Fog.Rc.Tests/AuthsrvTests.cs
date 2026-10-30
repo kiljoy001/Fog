@@ -224,7 +224,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal(new byte[Authsrv.Deskeylen], Authkey.FromKeys(new byte[Authsrv.Deskeylen], k.K.AesKey).K.DesKey);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ReadnReadsAcrossWritesUntilItHasAllOrTheFileEnds()
     {
         (int r, int w) = await init.PipeAsync();
@@ -236,7 +236,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Empty(await Authsrv.ReadnAsync(init, r, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARequestIsWrittenWholeOrNotAtAll()
     {
         init.Notify(note => note == "sys: write on closed pipe");
@@ -249,7 +249,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.NotEqual(string.Empty, Errstr.Get(init));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AReplyIsOkWithItsBytesOkvarWithAsManyAsItSaysOrTheServersError()
     {
         Assert.Equal((2, "xy"), await RdrespAsync([4, .. "xy"u8], 2));
@@ -266,7 +266,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TwoTicketsAreReadAsTheirLengthsSayAndErrstrIsLeftAsItWas()
     {
         Authkey k = Key("password", "glenda");
@@ -292,7 +292,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.NotEqual("AS protocol botch", Errstr.Get(init));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ReadconsGivesUpWithoutAConsoleOrWhenItsReadIsInterrupted()
     {
         // Without /dev/cons, or /dev/consctl for a reply without echo.
@@ -345,7 +345,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal("q: \n", typing.Written);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ARawReplyIsEditedByReadconsWhichLeavesTheConsoleAndDescriptorsAsItFoundThem()
     {
         // A backspace with nothing typed takes back nothing, ^U clears what was typed and asks
@@ -374,7 +374,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal("x", reply);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnExecSharingReadconssDescriptorsClosesTheConsoleItAwaitsAReplyOn()
     {
         // OCEXEC: a process sharing the descriptors execs while the reply is awaited, and the
@@ -396,7 +396,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal(Errors.BadFd, Errstr.Get(waiting));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheHostsNvramIsReadAndCheckedAndAKeyAskedForOnlyWhenTheFlagsSay()
     {
         Safe("bootes", "fog", Aes(1), config: "sskey", machkey: [1, 2, 3, 4, 5, 6, 7]).ToBytes().CopyTo(nvram, 0);
@@ -425,7 +425,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal("empty nvram authid or authdom\n", await ErrorsAsync(1));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ABadNvramIsAskedForAndWrittenWhenTheFlagsSayAndAlwaysForNVwrite()
     {
         // Each answer must fit, the password be typed the same twice, and p9sk1's DES key kept only when asked.
@@ -462,7 +462,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task NvramIsTheFileNvramNamesAtItsOffsetAndLength()
     {
         await WriteFileAsync("/tmp/nvr", [.. new byte[10], .. Safe("bootes", "fog", Aes(2)).ToBytes()]);
@@ -493,7 +493,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.StartsWith("can't write key to nvram: ", await ErrorsAsync(1), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task NvramIsAFileInTheRootOfAFatFileSystemWhoseNameEndsIn9fat()
     {
         byte[] key = Safe("bootes", "fog", Aes(4)).ToBytes();
@@ -547,7 +547,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithoutAnNvramFileTheHostsIsReadAndOneOfNoBytesIsShort()
     {
         Process bare = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(Commands.Commands.All), "glenda", clock, host, console).BootAsync();
@@ -565,7 +565,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AuthdialFindsTheAuthServerOfTheDomainByCsTryingEachInTurn()
     {
         int port = host.HostPort(17568);
@@ -596,7 +596,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal(why, Errstr.Get(init));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task TheNvramMayBeDescriptorZeroAndIsClosedWhateverHappens()
     {
         Safe("bootes", "fog", Aes(1)).ToBytes().CopyTo(nvram, 0);
@@ -619,7 +619,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal(fds, await FdsAsync(init));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WhatReadnvramSaysOfANvramItCannotOpenReadOrWriteNamesTheFile()
     {
         var safe = new Nvrsafe();
@@ -656,7 +656,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.DoesNotContain("/tmp/ro", written, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task ABareKernelsShortNvramIsNamedAsNoFileWhenItIsReadFor()
     {
         Process bare = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(Commands.Commands.All), "glenda", clock, host, console).BootAsync();
@@ -671,7 +671,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.StartsWith("can't read 126 bytes from <nil>: ", Encoding.UTF8.GetString((await bare.ReadAsync(read, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Span), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task OneBadSumIsEnoughAndOnlyAFlagToWriteAsksAnything()
     {
         Nvrsafe one = Safe("bootes", "fog", Aes(1), machkey: [1, 2, 3, 4, 5, 6, 7]);
@@ -692,7 +692,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         Assert.Equal("adm", Authsrv.Str(given.Authid));
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AnNvramLengthOfNoneReadsNothingAndOneLongerOrShorterIsWrittenWhole()
     {
         await WriteFileAsync("/tmp/nvr", Safe("bootes", "fog", Aes(2)).ToBytes());
@@ -710,7 +710,7 @@ public sealed class AuthsrvTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task AFatNameIsUpperCasedAndPaddedAndItsFileFoundByTheFirstEntryAndItsCluster()
     {
         byte[] key = Safe("bootes", "fog", Aes(4)).ToBytes();
