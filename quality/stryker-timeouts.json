@@ -1234,5 +1234,17 @@
     "mutator": "Negate expression",
     "line": "while (true)",
     "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
+  },
+  {
+    "file": "Pak.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "BigInteger q = r0 / r1;",
+    "reason": "mpinvert's remainders grow rather than shrink, so the extended gcd never reaches zero"
+  },
+  {
+    "file": "Pak.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "(r0, r1) = (r1, r0 - (q * r1));",
+    "reason": "mpinvert's remainders grow, or shrink by next to nothing, so the extended gcd never reaches zero"
   }
 ]
