@@ -1186,5 +1186,29 @@
     "mutator": "Statement mutation",
     "line": "await task;",
     "reason": "every wait ends at once, so a reader of an empty pipe goes round its loop for ever"
+  },
+  {
+    "file": "Pak.cs",
+    "mutator": "Statement mutation",
+    "line": "i++;",
+    "reason": "strtomp's scan never moves past the blank or the digit it is on, and goes round for ever without yielding"
+  },
+  {
+    "file": "Attr.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (a is not null && a.Name == name) {",
+    "reason": "_delattr never steps past the first attribute of the name, and goes round for ever without yielding"
+  },
+  {
+    "file": "Attr.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (l.Next.Name == name) {",
+    "reason": "_delattr neither drops an attribute of the name nor steps past it, and goes round for ever without yielding"
+  },
+  {
+    "file": "Attr.cs",
+    "mutator": "Block removal mutation",
+    "line": "else {",
+    "reason": "the walk down the list never steps past an attribute it keeps, and goes round for ever without yielding"
   }
 ]

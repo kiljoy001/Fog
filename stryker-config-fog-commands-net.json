@@ -20,7 +20,7 @@
       "**/Trampoline.cs"
     ],
     "mutation-level": "Standard",
-    "additional-timeout": 60000,
+    "additional-timeout": 300000,
     "thresholds": {
       "high": 100,
       "low": 100,
