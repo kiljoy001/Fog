@@ -1210,5 +1210,17 @@
     "mutator": "Block removal mutation",
     "line": "else {",
     "reason": "the walk down the list never steps past an attribute it keeps, and goes round for ever without yielding"
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Equality mutation",
+    "line": "if (rp.To == fd)",
+    "reason": "every descriptor is taken as clobbered, so pushopen moves it again and again until the stack overflows"
+  },
+  {
+    "file": "RcShell.Fork.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);",
+    "reason": "the child starts at the instruction that forked it, the &, backquote or subshell, so it forks again, without end"
   }
 ]
