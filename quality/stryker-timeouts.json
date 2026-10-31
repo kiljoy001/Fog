@@ -1222,5 +1222,17 @@
     "mutator": "Arithmetic mutation",
     "line": "child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);",
     "reason": "the child starts at the instruction that forked it, the &, backquote or subshell, so it forks again, without end"
+  },
+  {
+    "file": "Libauth.cs",
+    "mutator": "Boolean mutation",
+    "line": "while (true)",
+    "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
+  },
+  {
+    "file": "Libauth.cs",
+    "mutator": "Negate expression",
+    "line": "while (true)",
+    "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
   }
 ]
