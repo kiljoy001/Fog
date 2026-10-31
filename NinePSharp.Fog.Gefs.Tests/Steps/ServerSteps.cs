@@ -17,6 +17,7 @@ public sealed class ServerSteps(StoreContext context)
     private Process? init;
     private ulong sequence;
     private GefsException? refused;
+    private bool held;
 
     private GefsFs Files => context.Files!;
 
@@ -56,27 +57,42 @@ public sealed class ServerSteps(StoreContext context)
         File.WriteAllBytes(path, new byte[blocks * Format.BlockSize]);
     }
 
+    // The process's descriptors, as Linux lists them, name the files they hold open. They are listed
+    // as the open fails, with collection held off, so a handle the open kept is not closed by its
+    // finalizer before it is seen.
     [When("the file is opened as a store")]
     public void WhenOpenedAsStore()
     {
+        bool quiet = GC.TryStartNoGCRegion(64 << 20);
         try
         {
-            context.Server = GefsServer.Open(path!, StoreContext.InGroup, context.Clock);
+            try
+            {
+                context.Server = GefsServer.Open(path!, StoreContext.InGroup, context.Clock);
+            }
+            catch (GefsException error)
+            {
+                refused = error;
+            }
+
+            held = Directory.GetFiles("/proc/self/fd").Select(fd => new FileInfo(fd).LinkTarget).Contains(path);
         }
-        catch (GefsException error)
+        finally
         {
-            refused = error;
+            if (quiet && System.Runtime.GCSettings.LatencyMode == System.Runtime.GCLatencyMode.NoGCRegion)
+            {
+                GC.EndNoGCRegion();
+            }
         }
     }
 
     [Then("the open fails")]
     public void ThenOpenFails() => Assert.NotNull(refused);
 
-    // The process's descriptors, as Linux lists them, name the files they hold open.
     [Then("nothing holds the file open")]
     public void ThenNotHeld()
     {
-        Assert.DoesNotContain(path, Directory.GetFiles("/proc/self/fd").Select(fd => new FileInfo(fd).LinkTarget));
+        Assert.False(held);
         File.Delete(path!);
     }
 
