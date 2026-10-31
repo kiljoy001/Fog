@@ -201,7 +201,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
 
     // A note interrupting the sleep is seen by the handler, which the rule after it counts.
     [When(@"^the child sleeps (\d+) milliseconds$")]
-    public Task WhenSleeps(long milliseconds) => child!.Do(async p =>
+    public Task WhenSleeps(long milliseconds) => Bounded(child!.Do(async p =>
     {
         try
         {
@@ -210,7 +210,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         catch (SyscallException)
         {
         }
-    });
+    }));
 
     [When(@"^the child sets an alarm of (\d+) milliseconds and exits$")]
     public async Task WhenAlarmExits(long milliseconds)

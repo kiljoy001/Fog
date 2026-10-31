@@ -199,10 +199,7 @@ public sealed class ConsDeviceTests
         int cons = await init.OpenAsync("/dev/cons", NinePSharp.Constants.NinePConstants.OREAD);
         init.Notify(note => note == "interrupt");
         Task<ReadOnlyMemory<byte>> read = init.ReadAsync(cons, 10).AsTask();
-        while (!init.PostNote("interrupt"))
-        {
-        }
-
+        Assert.True(init.PostNote("interrupt"));
         Assert.Equal("interrupted", (await Assert.ThrowsAsync<SyscallException>(() => read.WaitAsync(TimeSpan.FromSeconds(3)))).Message);
     }
 
