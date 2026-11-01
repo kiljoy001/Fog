@@ -14,7 +14,9 @@ public sealed class Uniq
     private int letters;
     private int linec;
     private char mode;
-    private int uniq;
+
+    // Whether the line was found to equal the one after it.
+    private bool uniq;
 
     private Uniq(Process process) => this.process = process;
 
@@ -129,25 +131,26 @@ public sealed class Uniq
     {
         switch (mode)
         {
-            case 'u' when uniq != 0:
-                uniq = 0;
+            case 'u' when uniq:
+                uniq = false;
                 return;
-            case 'd' when uniq == 0:
+            case 'd' when !uniq:
                 return;
             case 'c':
                 fout.AddRange(Encoding.UTF8.GetBytes(linec.ToString(CultureInfo.InvariantCulture).PadLeft(4) + " "));
                 break;
         }
 
-        uniq = 0;
+        uniq = false;
         fout.AddRange(buf);
         fout.Add((byte)'\n');
     }
 
     private bool Equal(byte[] b1, byte[] b2)
     {
-        int i = fields != 0 || letters != 0 ? Skip(b1) : 0;
-        int j = fields != 0 || letters != 0 ? Skip(b2) : 0;
+        // uniq.c skips only with fields or letters to skip; past none is the start.
+        int i = Skip(b1);
+        int j = Skip(b2);
         for (; ; i++, j++)
         {
             byte c = i < b1.Length ? b1[i] : (byte)0;
@@ -159,7 +162,7 @@ public sealed class Uniq
 
             if (c == 0)
             {
-                uniq++;
+                uniq = true;
                 return true;
             }
         }

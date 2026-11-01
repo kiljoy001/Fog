@@ -68,8 +68,9 @@ public sealed class Mv
         }
         catch (SyscallException)
         {
-            return null;
         }
+
+        return null;
     }
 
     private async Task<bool> FailAsync(string message)
@@ -175,6 +176,8 @@ public sealed class Mv
         }
 
         bool stat = await Copy1Async(fdf, fdt, fromname, toname);
+
+        // Stryker disable once Statement : the descriptor is closed as mv exits, if not before
         await process.CloseAsync(fdf);
         if (stat)
         {
@@ -198,6 +201,7 @@ public sealed class Mv
             }
         }
 
+        // Stryker disable once Statement : the descriptor is closed as mv exits, if not before
         await process.CloseAsync(fdt);
         return stat;
     }

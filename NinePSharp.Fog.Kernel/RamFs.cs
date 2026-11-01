@@ -188,6 +188,12 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     {
         lock (gate)
         {
+            // lib9p's screate: the directory must be writable, before any name is looked for.
+            if (!HasPermission(nodes[directory.Identity.Path], context.User, Write))
+            {
+                throw new ResourceCreateRejectedException(Errors.Permission);
+            }
+
             if (Find(nodes[directory.Identity.Path], name) is not null)
             {
                 throw new ResourceCreateRejectedException("file already exists");
@@ -219,6 +225,13 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
         lock (gate)
         {
             Node node = nodes[resource.Identity.Path];
+
+            // lib9p's dirwritable: the parent must be writable, the root having none.
+            if (node.Parent is { } up && !HasPermission(nodes[up], context.User, Write))
+            {
+                throw new IOException(Errors.Permission);
+            }
+
             if (node.Children.Count != 0)
             {
                 throw new IOException("has children");

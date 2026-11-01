@@ -8067,6 +8067,30 @@ Feature: rc runs scripts as 9front rc does
       mv b /nonesuch/x
       mv / /tmp/mv/b e
       mv b
+      ~ $status 'mv '[0-9]*': bad usage' && echo bad usage status
+      mkdir /tmp/mvf /tmp/mvf/d /tmp/mvf/p /tmp/mvf/p/s; cd /tmp/mvf
+      echo one >a; mv a a2 && echo moved
+      cd d; mv .. x; cd ..
+      echo c >c; echo b >b
+      x=`{ls -q c}; mv c b; y=`{ls -q b}; ~ $x(1) $y(1) && echo renamed
+      cat b
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      t=`{echo $a | sed 's/.............$//'}
+      mv b /nonesuch/$t/y >[2=1] | sed 's/aaaa*/LONG/g'
+      mv b /nonesuch/$t^a/y >[2=1] | sed 's/aaaa*/LONG/g'
+      echo x >p/f; echo y >p/g; chmod 555 p
+      mv p/s p/t
+      mv p/f p/h
+      mv p/f d/f
+      mv p/f p/g
+      ~ $status 'mv '[0-9]*': mv' && echo mv status
+      chmod 0 d/f; mv d/f q
+      chmod 644 d/f
+      echo old >d/t; chmod +a d/t; echo new >s; mv s d/t; cat d/t
+      touch -t 2000000000 m; touch n; mv m d/m; ls -t n d/m
+      mkdir u1 u2; echo a >u1/x; echo b >u2/x; echo c >u1/y; bind -a u2 u1; mv u1/y u1/x; cat u1/x; unmount u2 u1; ls u2; cat u1/x
       """
     Then it prints
       """
@@ -8088,6 +8112,24 @@ Feature: rc runs scripts as 9front rc does
       mv: null last name element moving /
       usage: mv fromfile tofile
       	  mv fromfile ... todir
+      bad usage status
+      moved
+      mv: .. is a directory, not copied to ./x
+      renamed
+      c
+      mv: can't create /nonesuch/LONG/y: file does not exist: '/nonesuch'
+      mv: path too big (max 4096): /nonesuch/LONG/y
+      mv: can't rename directory p/s: permission denied
+      mv: can't create p/h: permission denied: 'p/h'
+      mv: can't remove p/f: permission denied
+      mv: can't remove p/g: permission denied
+      mv status
+      mv: can't open d/f: permission denied: 'd/f'
+      new
+      d/m
+      n
+      c
+      c
       """
 
   @FOG_RC_RUN_261
@@ -8340,6 +8382,20 @@ Feature: rc runs scripts as 9front rc does
       uniq l | wc -c
       {echo $a$a$a$a$a$a$a$a; echo b} >l
       uniq l | wc -c
+      echo 'a
+      a
+      b' >h
+      uniq - h
+      uniq h && echo ok
+      echo ' x a
+        y a
+      z	 a
+      w b
+      v  b' >k
+      uniq -1 k
+      uniq -c -1 k
+      uniq -2 k
+      uniq +2 k
       """
     Then it prints
       """
@@ -8375,6 +8431,25 @@ Feature: rc runs scripts as 9front rc does
       uniq: unexpected argument g
         12291
             0
+      a
+      b
+      a
+      b
+      ok
+       x a
+      z	 a
+      w b
+      v  b
+         2  x a
+         1 z	 a
+         1 w b
+         1 v  b
+       x a
+       x a
+        y a
+      z	 a
+      w b
+      v  b
       """
 
   @FOG_RC_RUN_267
