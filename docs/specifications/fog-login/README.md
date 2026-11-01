@@ -264,6 +264,8 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   a program that makes no calls does not see a note until it makes one, since a managed program
   cannot be stopped between instructions as 9front's clock interrupt stops one.
 - `#p` serves `args`, `note`, `noteid` and `notepg` for each process, and lists no `trace`.
+- `#|` makes pipes only through `pipe`; it cannot yet be bound by name, as `bind '#|' dir` binds
+  a new pipe's `data` and `data1` on 9front.
 - `mount` without `-n` mounts unauthenticated until factotum (slice 6), as 9front's does to a
   server that needs no authentication; `-k` is taken and not used.
 - `mount -N` becomes none through `/dev/user`, as Fog names no device by `#`.
@@ -303,7 +305,11 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 10. `fog`.
 11. A first session that makes sense: the user's `$home` exists, `lib/profile` is `newuser`'s,
     with the user's factotum loaded from secstore, and `ls /bin` shows the installed
-    applications.
+    applications. `/bin` holds the commands a session works with files by and that 9front's
+    scripts run, each ported from 9front's source and checked against the oracle: first `ls`,
+    `wc`, `cp`, `mv`, `chmod`, `touch`, `tee`, `basename` and `cleanname`; then `date`, `tail`,
+    `cmp`, `tr`, `uniq`, `seq`, `xd`, `du` and `ps`; then libregexp with `grep` and `sed`; then
+    `sort`, `awk` and `diff`.
 12. A second factor: secstored's STA answer checked with Keycloak's direct grant, against a
     Keycloak realm whose direct-grant flow takes a user name and a one-time code.
 

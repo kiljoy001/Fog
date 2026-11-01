@@ -24,8 +24,8 @@ Feature: The kernel boots its root as 9front's bootrc and /lib/namespace build i
     Then reading "/root/tmp/notes" gives "kept"
 
   @FOG_KERNEL_038
-  Scenario: A stat of the root or of a mount point is named by the path's last element
-    Then "/" is named "/"
+  Scenario: A stat of the root or of a mount point is named by the path's last element, nothing for the root, as 9front's pathlast names it
+    Then "/" is named ""
     And "/mnt" is named "mnt"
 
   @FOG_KERNEL_038

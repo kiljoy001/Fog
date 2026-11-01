@@ -399,13 +399,17 @@ public sealed partial class Process
         }
     }
 
+    /// <summary>stat: a file's directory entry, named as the last element of the name it was reached by, as sysstat's pathlast names it.</summary>
     public async ValueTask<Stat> StatAsync(string path)
     {
         using Return returning = new(this);
         NamespaceChannel channel = await ResolveAsync(path);
         try
         {
-            return KernelFileStats.ToStat(await plane.StatAsync(channel, CancellationToken.None));
+            Stat d = KernelFileStats.ToStat(await plane.StatAsync(channel, CancellationToken.None));
+            string rooted = Clean(path.StartsWith('/') || path.StartsWith('#') ? path : $"{NameOf(process.CurrentDirectory)}/{path}");
+            string name = rooted[(rooted.LastIndexOf('/') + 1)..];
+            return new Stat((ushort)(d.Size + Encoding.UTF8.GetByteCount(name) - Encoding.UTF8.GetByteCount(d.Name)), d.Type, d.Dev, d.Qid, d.Mode, d.Atime, d.Mtime, d.Length, name, d.Uid, d.Gid, d.Muid);
         }
         catch (IOException error)
         {
@@ -844,7 +848,7 @@ public sealed partial class Process
             {
                 // A file removed since it was opened has no stat; procfdprint takes all it prints
                 // from the channel, and so does this, which then has only its name.
-                (char type, uint dev) = KernelFileStats.DeviceOf(slot.Handle.Resource);
+                (char type, uint dev) = KernelFileStats.Device(slot.Handle.Resource);
                 d = new Stat(0, type, dev, slot.Handle.Resource.Qid, 0, 0, 0, 0, string.Empty, string.Empty, string.Empty, string.Empty);
             }
 

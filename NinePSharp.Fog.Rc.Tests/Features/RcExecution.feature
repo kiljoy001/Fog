@@ -7199,14 +7199,14 @@ Feature: rc runs scripts as 9front rc does
           cat /proc/$pid/fd
       } <[3]/tmp/f >[4]/dev/null <>[5]/net/tcp/clone
       """
-    Then it prints
+    Then it prints, the store's qid paths shown as P
       """
       /tmp
         0 r  c    0 (0000000000000005 0 00)     0        0 /dev/null
         1 rw |    4 (0000000000000001 0 00)     0       68 #|/data1
         2 rw |    4 (0000000000000001 0 00)     0      130 #|/data1
-        3 r  R    0 (0000000000000026 2 00)     0      130 /tmp/s
-        4 r  R    0 (0000000000000027 2 00)     0        2 /tmp/f
+        3 r  R    0 (P 2 00)     0      130 /tmp/s
+        4 r  R    0 (P 2 00)     0        2 /tmp/f
         5 w  c    0 (0000000000000005 0 00)     0        0 /dev/null
         6 rw I    0 (0000000000000006 0 00)     0        0 /net/tcp/clone
       """
@@ -7627,4 +7627,503 @@ Feature: rc runs scripts as 9front rc does
       """
       % % /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
       % % /fd/0 /fd/0ctl /fd/1 /fd/1ctl /fd/2 /fd/2ctl /fd/3 /fd/3ctl /fd/4 /fd/4ctl
+      """
+
+  @FOG_RC_RUN_252
+  Scenario: ls lists a directory's entries sorted, or each file named, quoted as rc quotes
+    When rc runs the script
+      """
+      mkdir /tmp/l /tmp/l/d
+      echo >/tmp/l/b; echo >/tmp/l/'a b'; echo >/tmp/l/c
+      cd /tmp/l
+      ls
+      ls -r
+      ls -Q
+      ls -F
+      ls -p /tmp/l
+      ls /tmp/l/d /tmp/l/c /tmp//l/b
+      ls -d /tmp/l/ d /
+      ls /nonesuch c
+      ~ $status 'ls '[0-9]*': errors' && echo errors status
+      ls -z
+      ~ $status 'ls '[0-9]*': usage' && echo usage status
+      """
+    Then it prints
+      """
+      'a b'
+      b
+      c
+      d
+      d
+      c
+      b
+      'a b'
+      a b
+      b
+      c
+      d
+      'a b'
+      b
+      c
+      d/
+      'a b'
+      b
+      c
+      d
+      /tmp/l/b
+      /tmp/l/c
+      /
+      /tmp/l
+      d
+      ls: /nonesuch: file does not exist: '/nonesuch'
+      c
+      errors status
+      usage: ls [-dlmnpqrstuFQT] [file ...]
+      usage status
+      """
+
+  @FOG_RC_RUN_253
+  Scenario: ls -l gives each file's mode, device, owners, length and time, with the year for one six months old
+    Given the clock reads 1000000000
+    And "/tmp/a" holds "x"
+    And the clock moves on by 17280000 seconds
+    And "/tmp/b" holds "hello world"
+    When rc runs the script
+      """
+      >/tmp/c
+      s=x
+      for(i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14) s=$s^$s
+      echo -n $s >/tmp/big
+      for(i in 1 2 3 4 5 6 7 8 9 10 11) echo >>/env/v
+      cd /tmp
+      ls -l a b c
+      ls -lu a
+      ls -s a big c
+      ls -m a b
+      ls -T a
+      ls -q /env/home /env/v
+      ls -t a b c
+      ls -tr a b c
+      ls -n c b a
+      ls -lt /tmp/c /dev/null
+      ls -l /srv
+      """
+    Then it prints
+      """
+      --rwxrwxr-x R 0 glenda glenda  1 Sep  9  2001 a
+      --rwxrwxr-x R 0 glenda glenda 11 Mar 28 01:46 b
+      --rw-rw-rw- R 0 glenda glenda  0 Mar 28 01:46 c
+      --rwxrwxr-x R 0 glenda glenda 1 Sep  9  2001 a
+       1 a
+      16 big
+       0 c
+      [glenda] a
+      [glenda] b
+      - a
+      (0000000000000005  2 00) /env/home
+      (000000000000000e 22 00) /env/v
+      b
+      c
+      a
+      a
+      c
+      b
+      c
+      b
+      a
+      --rw-rw-rw- R 0 glenda glenda 0 Mar 28 01:46 /tmp/c
+      --rw-rw-rw- c 0 glenda glenda 0 Jan  1  1970 /dev/null
+      --r--r--r-- s 0 glenda glenda 0 Jan  1  1970 /srv/clone
+      --rw-rw-rw- s 0 glenda glenda 0 Jan  1  1970 /srv/mntexport
+      --rw-rw-rw- s 0 glenda glenda 0 Jan  1  1970 /srv/slashmnt
+      --rw-rw-rw- s 0 glenda glenda 0 Jan  1  1970 /srv/slashn
+      """
+
+  @FOG_RC_RUN_254
+  Scenario: chmod sets a mode in octal or by who, op and permissions, and says which it cannot take
+    When rc runs the script
+      """
+      mkdir /tmp/cm; cd /tmp/cm
+      >f
+      chmod 755 f; ls -F f
+      chmod a-x f; ls -F f
+      chmod u+x f; ls -F f
+      chmod -x f; ls -F f
+      chmod 'go=rx' f; ls -F f
+      chmod o-x f; ls -F f
+      chmod g-x f; ls -F f
+      chmod +t f; ls -T f
+      chmod -t f; ls -T f
+      chmod 600 f; chmod '=rw' f; chmod +rwxalt f; ls -FT f
+      chmod z f
+      ~ $status 'chmod '[0-9]*': mode' && echo mode status
+      chmod u f
+      chmod u%x f
+      chmod u+q f
+      chmod 644 /nonesuch f
+      echo $status
+      chmod 644
+      ~ $status 'chmod '[0-9]*': usage' && echo usage status
+      """
+    Then it prints
+      """
+      f*
+      f
+      f*
+      f
+      f*
+      f*
+      f
+      t f
+      - f
+      t f*
+      chmod: bad mode: z
+      mode status
+      chmod: bad mode: u
+      chmod: bad mode: u%x
+      chmod: bad mode: u+q
+      chmod: can't stat /nonesuch: file does not exist: '/nonesuch'
+
+      usage: chmod 0777 file ... or chmod [who]op[rwxalt] file ...
+      usage status
+      """
+
+  @FOG_RC_RUN_255
+  Scenario: touch sets a file's time to now or the time given, making it unless told not to
+    When rc runs the script
+      """
+      mkdir /tmp/tc; cd /tmp/tc
+      touch -t 1000 old
+      touch -t 0x7d0 new
+      ls -t old new
+      touch -t 3000 old; ls -t old new
+      touch new; ls -t old new
+      touch -c /none
+      ~ $status 'touch '[0-9]*': touch' && echo touch status
+      touch /nonesuch/f
+      touch -t 12x f
+      ~ $status 'touch '[0-9]*': usage' && echo usage status
+      touch -t '' f
+      touch -t
+      touch -z f
+      touch
+      touch -c old && echo status empty
+      """
+    Then it prints
+      """
+      new
+      old
+      old
+      new
+      new
+      old
+      touch: /none: cannot wstat: file does not exist: '/none'
+      touch status
+      touch: /nonesuch/f: cannot create: file does not exist: '/nonesuch'
+      usage: touch [-c] [-t time] files
+      usage status
+      usage: touch [-c] [-t time] files
+      usage: touch [-c] [-t time] files
+      usage: touch [-c] [-t time] files
+      usage: touch [-c] [-t time] files
+      status empty
+      """
+
+  @FOG_RC_RUN_256
+  Scenario: ls -l shows append-only and exclusive files, and the year for a time more than a day ahead
+    Given the clock reads 1000000000
+    When rc runs the script
+      """
+      >/tmp/f
+      chmod 640 /tmp/f; ls -l /tmp/f
+      chmod +al /tmp/f; ls -l /tmp/f
+      chmod -a /tmp/f; ls -l /tmp/f
+      for(t in 984448000 984447999 1000086400 1000086401 1100000000){
+          touch -t $t /tmp/f; ls -l /tmp/f
+      }
+      """
+    Then it prints
+      """
+      --rw-r----- R 0 glenda glenda 0 Sep  9 01:46 /tmp/f
+      alrw-r----- R 0 glenda glenda 0 Sep  9 01:46 /tmp/f
+      -lrw-r----- R 0 glenda glenda 0 Sep  9 01:46 /tmp/f
+      -lrw-r----- R 0 glenda glenda 0 Mar 13 01:46 /tmp/f
+      -lrw-r----- R 0 glenda glenda 0 Mar 13  2001 /tmp/f
+      -lrw-r----- R 0 glenda glenda 0 Sep 10 01:46 /tmp/f
+      -lrw-r----- R 0 glenda glenda 0 Sep 10  2001 /tmp/f
+      -lrw-r----- R 0 glenda glenda 0 Nov  9  2004 /tmp/f
+      """
+
+  @FOG_RC_RUN_257
+  Scenario: wc counts lines, words, runes, bad runes and bytes, of each file and in all
+    When rc runs the script
+      """
+      mkdir /tmp/wc; cd /tmp/wc
+      echo 'one two  three
+      four' >a
+      echo -n 'é 日𝄞' >b
+      >c
+      wc a
+      wc a b c
+      wc -l a
+      wc -w a
+      wc -r b
+      wc -c b
+      wc -b b
+      wc -lwrbc b
+      wc <a
+      wc a /nonesuch
+      ~ $status 'wc '[0-9]*': can''t open' && echo can''t open status
+      wc -z
+      ~ $status 'wc '[0-9]*': usage' && echo usage status
+      """
+    Then it prints
+      """
+            2       4      20 a
+            2       4      20 a
+            0       2      10 b
+            0       0       0 c
+            2       6      30 total
+            2 a
+            4 a
+            4 b
+           10 b
+            0 b
+            0       2       4       0      10 b
+            2       4      20
+            2       4      20 a
+      /nonesuch: file does not exist: '/nonesuch'
+            2       4      20 total
+      cant open status
+      usage: wc [-lwrbc] [file ...]
+      usage status
+      """
+
+  @FOG_RC_RUN_258
+  Scenario: wc counts a byte that begins no rune, or a rune left unfinished, as a bad rune
+    When rc runs the script, its \x escapes bytes
+      """
+      wc -lwrbc <<'!'
+      a\x80b \xC3 \xE6\x97 \xF0\x9D\x84 \xF8 \xC3\xC3\xA9 \xE6\x97\xA5\xF0\x9D\x84\x9E\xC3
+      !
+      wc -lwrbc <<'!'
+      \x80\xF0\x9D\x84\x9Ex\xE6\x97\xA5\xE6\x97
+      \xF0\x9D\x84\x09
+      !
+      read -c 3 <<'!' | wc -lwrbc
+      x\xF0\x9D
+      !
+      """
+    Then it prints
+      """
+            1       7      19       7      28
+            2       2       9       3      17
+            0       1       2       1       3
+      """
+
+  @FOG_RC_RUN_259
+  Scenario: cp copies a file to another or files into a directory, keeping the mode, and with -x the time
+    When rc runs the script
+      """
+      mkdir /tmp/cp /tmp/cp/d; cd /tmp/cp
+      echo hello >a
+      cp a b; cat b
+      cp a b d; ls d
+      chmod 755 a; cp a x; ls -F x
+      touch -t 1000 a; cp -x a y; ls -t y b
+      cp -g a g; cat g
+      cp a b c
+      ~ $status 'cp '[0-9]*': bad usage' && echo bad usage status
+      cp a a
+      ~ $status 'cp '[0-9]*': errors' && echo errors status
+      cp d e
+      cp /nonesuch e
+      cp a /nonesuch/x
+      cp a
+      ~ $status 'cp '[0-9]*': usage' && echo usage status
+      cp -z a b
+      """
+    Then it prints
+      """
+      hello
+      d/a
+      d/b
+      x*
+      b
+      y
+      hello
+      cp: c not a directory
+      bad usage status
+      cp: a and a are the same file
+      errors status
+      cp: d is a directory
+      cp: can't stat /nonesuch: file does not exist: '/nonesuch'
+      cp: can't create /nonesuch/x: file does not exist: '/nonesuch'
+      usage:	cp [-gux] fromfile tofile
+      	cp [-x] fromfile ... todir
+      usage status
+      usage:	cp [-gux] fromfile tofile
+      	cp [-x] fromfile ... todir
+      """
+
+  @FOG_RC_RUN_260
+  Scenario: mv renames a file in its directory, and copies one elsewhere, replacing what it moves onto
+    When rc runs the script
+      """
+      mkdir /tmp/mv /tmp/mv/d; cd /tmp/mv
+      echo one >a; mv a b; ls; cat b
+      echo two >c; mv c b; cat b
+      mv b d; ls d
+      mv d e; ls
+      mv e/b .; ls
+      mv b b
+      ~ $status 'mv '[0-9]*': failure' && echo failure status
+      mv x y z
+      ~ $status 'mv '[0-9]*': bad usage' && echo bad usage status
+      mv /nonesuch q
+      mv e /tmp/mv/nonesuch/x
+      mv b /nonesuch/x
+      mv / /tmp/mv/b e
+      mv b
+      """
+    Then it prints
+      """
+      b
+      d
+      one
+      two
+      d/b
+      e
+      b
+      e
+      mv: b and ./b are the same
+      failure status
+      mv: z not a directory
+      bad usage status
+      mv: can't stat /nonesuch: file does not exist: '/nonesuch'
+      mv: e is a directory, not copied to /tmp/mv/nonesuch/x
+      mv: can't create /nonesuch/x: file does not exist: '/nonesuch'
+      mv: null last name element moving /
+      usage: mv fromfile tofile
+      	  mv fromfile ... todir
+      """
+
+  @FOG_RC_RUN_261
+  Scenario: cleanname takes out empty and . elements and takes back .. as libc's cleanname does
+    When rc runs the script
+      """
+      cleanname a//b/./c/.. /../x ./../y ../../z '' . './#c/x' '#c/..' a/../.. /a/b/../../..
+      cleanname -d /usr/glenda x /abs ../up
+      cleanname -d
+      cleanname
+      ~ $status 'cleanname '[0-9]*': usage' && echo usage status
+      """
+    Then it prints
+      """
+      a/b
+      /x
+      ../y
+      ../../z
+      .
+      .
+      ./#c/x
+      .
+      ..
+      /
+      /usr/glenda/x
+      /abs
+      /usr/up
+      usage: cleanname [-d pwd] name...
+      usage: cleanname [-d pwd] name...
+      usage status
+      """
+
+  @FOG_RC_RUN_262
+  Scenario: basename gives a name's last element without the suffix given, or with -d the rest
+    When rc runs the script
+      """
+      basename /a/b/c.c
+      basename /a/b/c.c .c
+      basename c.c c.c
+      basename x .c
+      basename a/
+      basename -d /a/b/c
+      basename -d c
+      basename -d /c
+      basename -d a b
+      basename
+      ~ $status 'basename '[0-9]*': usage' && echo usage status
+      basename a b c
+      """
+    Then it prints
+      """
+      c.c
+      c
+
+      x
+
+      /a/b
+      .
+
+      .
+      usage: basename [-d] string [suffix]
+      usage status
+      usage: basename [-d] string [suffix]
+      """
+
+  @FOG_RC_RUN_263
+  Scenario: tee copies its input to each file and to its output, adding to them with -a
+    When rc runs the script
+      """
+      mkdir /tmp/tee; cd /tmp/tee
+      echo one | tee a b
+      cat a b
+      echo two | tee -a a
+      cat a
+      echo three | tee -a e
+      cat e
+      echo four | tee /nonesuch/x c
+      cat c
+      echo five | tee -iu d
+      cat d
+      tee -z
+      ~ $status 'tee '[0-9]*': usage' && echo usage status
+      """
+    Then it prints
+      """
+      one
+      one
+      one
+      two
+      one
+      two
+      three
+      three
+      tee: cannot open /nonesuch/x: file does not exist: '/nonesuch'
+      four
+      four
+      five
+      five
+      usage: tee [-ai] [file ...]
+      usage status
+      """
+
+  @FOG_RC_RUN_264
+  Scenario: tee -i ends without error when an interrupt cuts its read short, which kills a tee without it
+    When rc runs the script
+      """
+      for(flag in -i -a){
+          {sleep 2} | @{cat /dev/ppid >/tmp/tp; exec tee $flag /tmp/ti} >/dev/null &
+          t=$apid
+          sleep 1
+          echo -n interrupt >/proc/`{cat /tmp/tp}^/note
+          wait $t
+          if(~ $status *interrupt) echo $flag: killed
+          if not echo $flag: ended
+      }
+      """
+    Then it prints
+      """
+      -i: ended
+      -a: killed
       """

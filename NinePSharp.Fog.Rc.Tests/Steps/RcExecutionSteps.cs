@@ -250,6 +250,11 @@ public sealed class RcExecutionSteps
     [Then("it traces")]
     public Task ThenTraces(string expected) => CompareAsync(expected + "\n", Mask);
 
+    // The store's files share their qid paths' count with /bin's, which grows with each command
+    // Fog has, so a store file's path is shown as P.
+    [Then("it prints, the store's qid paths shown as P")]
+    public Task ThenPrintsStorePaths(string expected) => CompareAsync(expected + "\n", text => Regex.Replace(text, @"(?<= R +\d+ \()[0-9a-f]{16}(?= )", "P"));
+
     [Then("it prints, ending with a prompt")]
     public Task ThenPrintsPrompt(string expected) => CompareAsync(expected);
 

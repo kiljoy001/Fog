@@ -47,6 +47,30 @@ public sealed class ProcessTests
         Assert.Equal(49 + "tmp".Length + (3 * "glenda".Length), (await init.StatAsync("/tmp")).Size);
     }
 
+    // sysstat names the entry by pathlast of the name the file was reached by: nothing for /, and
+    // the record's size follows the name.
+    [Fact]
+    public async Task AStatIsNamedByTheLastElementOfTheNameItWasReachedBy()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), "glenda").BootAsync();
+        await init.ChdirAsync("/tmp");
+        Assert.Equal(
+            [string.Empty, string.Empty, "tmp", "tmp", "#c", "cons", "tmp"],
+            new[] { await init.StatAsync("/"), await init.StatAsync("/tmp/.."), await init.StatAsync("/tmp/"), await init.StatAsync("."), await init.StatAsync("#c"), await init.StatAsync("#c/cons"), await init.StatAsync("../tmp") }.Select(d => d.Name));
+        Assert.Equal((await init.StatAsync("/tmp")).Size - "tmp".Length, (await init.StatAsync("/")).Size);
+    }
+
+    // A directory read's records carry the type and dev a stat of each file gives, as devdir's do.
+    [Fact]
+    public async Task ADirectoryReadGivesEachEntryItsDevice()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>(), "glenda").BootAsync();
+        int fd = await init.OpenAsync("/dev", NinePSharp.Constants.NinePConstants.OREAD);
+        NinePSharp.Messages.Stat cons = (await init.DirReadAsync(fd)).Single(d => d.Name == "cons");
+        NinePSharp.Messages.Stat stat = await init.StatAsync("/dev/cons");
+        Assert.Equal(('c', stat.Dev), ((char)cons.Type, cons.Dev));
+    }
+
     [Fact]
     public void NullDirSetsEveryNumberToAllOnesAndEveryStringEmpty()
     {

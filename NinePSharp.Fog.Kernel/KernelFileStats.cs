@@ -14,6 +14,9 @@ internal sealed class KernelFileStats(ProcessDevices devices) : IFileStatOperati
     public async ValueTask<ReadOnlyMemory<byte>> StatAsync(ResourceOpenHandle handle, uint count, CancellationToken cancellationToken)
         => Bound(Encode(ToStat(await devices.StatOpenAsync(handle, cancellationToken))), count);
 
+    // devdir's type and dev, which a directory read's records carry as a stat's do.
+    public (ushort Type, uint Device) DeviceOf(ResourceHandle resource) => Device(resource);
+
     public ValueTask<uint> WStatAsync(ResourceHandle resource, ReadOnlyMemory<byte> stat, ResourceOperationContext context, CancellationToken cancellationToken)
         => devices.WStatAsync(resource, Decode(stat), context, cancellationToken);
 
@@ -25,12 +28,12 @@ internal sealed class KernelFileStats(ProcessDevices devices) : IFileStatOperati
     internal static Stat ToStat(ResourceStat stat)
     {
         int size = 49 + new[] { stat.Name, stat.User, stat.Group, stat.LastModifier }.Sum(Encoding.UTF8.GetByteCount);
-        (char type, uint dev) = DeviceOf(stat.Resource);
+        (char type, uint dev) = Device(stat.Resource);
         return new Stat((ushort)size, type, dev, stat.Resource.Qid, stat.Mode, stat.AccessTime, stat.ModificationTime, stat.Length, stat.Name, stat.User, stat.Group, stat.LastModifier);
     }
 
     // The device's letter and number, from a device named # and the letter, then the number if it has one.
-    internal static (char Type, uint Dev) DeviceOf(ResourceHandle resource)
+    internal static (char Type, uint Dev) Device(ResourceHandle resource)
     {
         string device = resource.Identity.Device;
         return (device[1], device.Length > 2 ? uint.Parse(device[2..], CultureInfo.InvariantCulture) : 0);
