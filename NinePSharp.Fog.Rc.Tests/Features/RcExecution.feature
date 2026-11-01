@@ -7647,6 +7647,16 @@ Feature: rc runs scripts as 9front rc does
       ~ $status 'ls '[0-9]*': errors' && echo errors status
       ls -z
       ~ $status 'ls '[0-9]*': usage' && echo usage status
+      fn mode { x=`{ls -l $1}; echo $x(1) }
+      >m; chmod 124 m; mode m; chmod 0 m; mode m
+      ls /nonesuch /nonesuch2
+      ~ $status 'ls '[0-9]*': errors' && echo errors status
+      ls c && echo ok
+      mkdir e e2; echo >e/y; echo >e2/a; echo >z
+      ls z e
+      ls e c
+      ls e && echo ok
+      ls e e2
       """
     Then it prints
       """
@@ -7680,6 +7690,21 @@ Feature: rc runs scripts as 9front rc does
       errors status
       usage: ls [-dlmnpqrstuFQT] [file ...]
       usage status
+      ----x-w-r--
+      -----------
+      ls: /nonesuch: file does not exist: '/nonesuch'
+      ls: /nonesuch2: file does not exist: '/nonesuch2'
+      errors status
+      c
+      ok
+      z
+      e/y
+      e/y
+      c
+      e/y
+      ok
+      e/y
+      e2/a
       """
 
   @FOG_RC_RUN_253
@@ -7707,6 +7732,10 @@ Feature: rc runs scripts as 9front rc does
       ls -n c b a
       ls -lt /tmp/c /dev/null
       ls -l /srv
+      cat a >/dev/null
+      ls -lu a
+      ls -t a b
+      ls -tu a b
       """
     Then it prints
       """
@@ -7737,6 +7766,34 @@ Feature: rc runs scripts as 9front rc does
       --rw-rw-rw- s 0 glenda glenda 0 Jan  1  1970 /srv/mntexport
       --rw-rw-rw- s 0 glenda glenda 0 Jan  1  1970 /srv/slashmnt
       --rw-rw-rw- s 0 glenda glenda 0 Jan  1  1970 /srv/slashn
+      --rwxrwxr-x R 0 glenda glenda 1 Mar 28 01:46 a
+      b
+      a
+      a
+      b
+      """
+
+  @FOG_RC_RUN_278
+  Scenario: ls -l pads each column to its widest, of devices, owners, groups and muids, and names the root's entries from it
+    Given the clock reads 1000000000
+    When rc runs the script
+      """
+      for(i in 1 2 3 4 5 6 7 8 9 10 11 12) { mkdir /tmp/m$i; mount /srv/slashn /tmp/m$i }
+      fn shown { sed 's/[A-Z][a-z][a-z]  *[0-9][0-9]*  *[0-9:][0-9:]* //; s/[0-9]/D/g' }
+      ls -ld /tmp/m12 /mnt/exportfs /net/tcp | shown
+      ls -ldm /mnt/exportfs /net/tcp /dev/null | shown
+      ls / | sed 2q
+      """
+    Then it prints
+      """
+      d-r-xr-xr-x M  D sys     sys     D /mnt/exportfs
+      d-r-xr-xr-x I  D network network D /net/tcp
+      d-r-xr-xr-x M DD sys     sys     D /tmp/mDD
+      [glenda]  --rw-rw-rw- c D glenda  glenda  D /dev/null
+      ['']        d-r-xr-xr-x M D sys     sys     D /mnt/exportfs
+      [network] d-r-xr-xr-x I D network network D /net/tcp
+      /adm
+      /bin
       """
 
   @FOG_RC_RUN_254

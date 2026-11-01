@@ -85,7 +85,9 @@ public sealed class Ls
         return w.ToString();
     }
 
-    // %M, as libc's dirmodefmt.
+    // %M, as libc's dirmodefmt. No file ls can stat is an auth file, which only an afid names.
+    // Stryker disable once String,Conditional : an auth file's A cannot be shown
+    // Stryker disable once Bitwise : a uint shifts the same either way
     internal static string Dirmode(uint m)
         => ((m & DMDIR) != 0 ? "d" : (m & DMAPPEND) != 0 ? "a" : (m & DMAUTH) != 0 ? "A" : "-")
             + ((m & DMEXCL) != 0 ? "l" : "-")
@@ -107,6 +109,8 @@ public sealed class Ls
                 IReadOnlyList<Stat> n = await process.DirReadAsync(fd);
                 string prefix = Xcleanname(s);
                 dirbuf.AddRange(n.Select(d => (d, multi ? prefix : null)));
+
+                // Stryker disable once Statement : the descriptor is closed as ls exits, if not before
                 await process.CloseAsync(fd);
                 await OutputAsync();
                 return false;
@@ -227,11 +231,15 @@ public sealed class Ls
         }
         else if (a.Prefix is not null)
         {
+            // A directory's listing and a name given alone that is the directory's own: one name
+            // cannot be both, so compar's tie here does not come.
+            // Stryker disable once all : no name is both a directory listed and a file given
             i = string.CompareOrdinal(a.Prefix, bd.Name);
             i = i == 0 ? 1 : i;
         }
         else if (b.Prefix is not null)
         {
+            // Stryker disable once all : no name is both a directory listed and a file given
             i = string.CompareOrdinal(ad.Name, b.Prefix);
             i = i == 0 ? -1 : i;
         }
