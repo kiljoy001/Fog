@@ -10123,3 +10123,397 @@ Feature: rc runs scripts as 9front rc does
       glenda N    0:00   0:00        0K Await    rc
       glenda N    0:00   0:00        0K Sleep    sleep 3600
       """
+
+  @FOG_RC_RUN_283
+  Scenario: diff prints the changes between files, as ed's commands or with context, and between directories
+    When rc runs the script
+      """
+      mkdir /tmp/diffs; cd /tmp/diffs
+      seq 1 10 >a
+      {seq 1 4; echo five; seq 6 7; seq 9 10; echo eleven} >b
+      diff a b
+      ~ $status 'diff '[0-9]*': some' && echo some status
+      diff a a && echo same status
+      diff -e a b; diff -f a b; diff -n a b; diff -c a b; diff -a a b; diff -u a b
+      seq 1 30 >c; {seq 1 2; echo x; seq 4 12; echo y; seq 14 27; echo z; seq 29 30} >d
+      diff -c c d; diff -u c d; diff -e c d
+      diff b a
+      echo -n tail >e; echo tail >f; diff e f; diff f e; diff -u e f
+      touch empty; diff empty a; diff a empty; diff -u empty a; diff -e a empty
+      echo 'a  b   c' >s1; echo 'a b c ' >s2; echo 'abc' >s3
+      diff s1 s2; diff -b s1 s2; diff -w s1 s3; diff -b s1 s3
+      cat a | diff - b
+      diff /dev/null b
+      echo 'binary file' >bin1; echo 'binary filf' >bin2; cp bin1 bin3
+      diff a bin1; diff bin1 bin2; diff bin1 bin3; diff bin1 a
+      ~ $status '' && echo binary status
+      mkdir -p d1/sub d2/sub d1/only1 d2/x
+      cp a d1/a; cp b d2/a; cp a d1/same; cp a d2/same; echo 1 >d1/sub/f; echo 2 >d2/sub/f; echo o >d1/one; echo t >d2/two
+      diff d1 d2
+      diff -r d1 d2
+      diff -e d1 d2
+      diff -u d1 d2
+      diff a d2
+      diff d2 b
+      diff a b d2
+      diff d1 b
+      diff a b c
+      diff a
+      diff -x a b
+      diff -h a b
+      ~ $status 'diff '[0-9]*': usage' && echo usage status
+      diff nonexistent a
+      diff a nonexistent
+      seq 1 2000 | tr -d '\012' >l1; {cat l1; echo} >l2
+      diff l1 l2 && echo long lines same
+      {echo a; cat l1; echo} >l5; echo b >l6; diff l5 l6 | wc -c; diff l5 l6 | sed 1q
+      {echo a; echo b; echo c} >m1; {echo c; echo b; echo a} >m2; diff m1 m2; diff -e m1 m2
+      echo x >d2/-; cat a | diff - a d2
+      mkdir d3; chmod 000 d3; diff d1 d3
+      """
+    Then it prints
+      """
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      some status
+      same status
+      10a
+      eleven
+      .
+      8d
+      5c
+      five
+      .
+      c5
+      five
+      .
+      d8
+      a10
+      eleven
+      .
+      a:5 c b:5
+      < 5
+      ---
+      > five
+      a:8 d b:7
+      < 8
+      a:10 a b:10
+      > eleven
+      a:2,10 - b:2,10
+        2
+        3
+        4
+      - 5
+      + five
+        6
+        7
+      - 8
+        9
+        10
+      + eleven
+      a:1,10 - b:1,10
+        1
+        2
+        3
+        4
+      - 5
+      + five
+        6
+        7
+      - 8
+        9
+        10
+      + eleven
+      --- a
+      +++ b
+      @@ -2,9 +2,9 @@
+       2
+       3
+       4
+      -5
+      +five
+       6
+       7
+      -8
+       9
+       10
+      +eleven
+      c:1,6 - d:1,6
+        1
+        2
+      - 3
+      + x
+        4
+        5
+        6
+      c:10,16 - d:10,16
+        10
+        11
+        12
+      - 13
+      + y
+        14
+        15
+        16
+      c:25,30 - d:25,30
+        25
+        26
+        27
+      - 28
+      + z
+        29
+        30
+      --- c
+      +++ d
+      @@ -1,6 +1,6 @@
+       1
+       2
+      -3
+      +x
+       4
+       5
+       6
+      @@ -10,7 +10,7 @@
+       10
+       11
+       12
+      -13
+      +y
+       14
+       15
+       16
+      @@ -25,6 +25,6 @@
+       25
+       26
+       27
+      -28
+      +z
+       29
+       30
+      28c
+      z
+      .
+      13c
+      y
+      .
+      3c
+      x
+      .
+      5c5
+      < five
+      ---
+      > 5
+      7a8
+      > 8
+      10d10
+      < eleven
+      1c1
+      < tail
+      \ No newline at end of file
+      ---
+      > tail
+      1c1
+      < tail
+      ---
+      > tail
+      \ No newline at end of file
+      --- e
+      +++ f
+      @@ -1,1 +1,1 @@
+      -tail
+      \ No newline at end of file
+      +tail
+      0a1,10
+      > 1
+      > 2
+      > 3
+      > 4
+      > 5
+      > 6
+      > 7
+      > 8
+      > 9
+      > 10
+      1,10d0
+      < 1
+      < 2
+      < 3
+      < 4
+      < 5
+      < 6
+      < 7
+      < 8
+      < 9
+      < 10
+      --- empty
+      +++ a
+      @@ -1,0 +1,10 @@
+      +1
+      +2
+      +3
+      +4
+      +5
+      +6
+      +7
+      +8
+      +9
+      +10
+      1,10d
+      1c1
+      < a  b   c
+      ---
+      > a b c 
+      1c1
+      < a  b   c
+      ---
+      > abc
+      diff: can't stat -
+      0a1,10
+      > 1
+      > 2
+      > 3
+      > 4
+      > five
+      > 6
+      > 7
+      > 9
+      > 10
+      > eleven
+      binary files a bin1 differ
+      binary files bin1 bin2 differ
+      binary files bin1 a differ
+      binary status
+      diff d1/a d2/a
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      Only in d1: one
+      Only in d1: only1
+      Common subdirectories: d1/sub and d2/sub
+      Only in d2: two
+      Only in d2: x
+      diff d1/a d2/a
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      Only in d1: one
+      Only in d1: only1
+      diff d1/sub/f d2/sub/f
+      1c1
+      < 1
+      ---
+      > 2
+      Only in d2: two
+      Only in d2: x
+      diff -e d1/a d2/a
+      10a
+      eleven
+      .
+      8d
+      5c
+      five
+      .
+      Common subdirectories: d1/sub and d2/sub
+      diff -u d1/a d2/a
+      --- d1/a
+      +++ d2/a
+      @@ -2,9 +2,9 @@
+       2
+       3
+       4
+      -5
+      +five
+       6
+       7
+      -8
+       9
+       10
+      +eleven
+      Common subdirectories: d1/sub and d2/sub
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      diff: cannot open d2/b: file does not exist: 'd2/b'
+      diff: cannot open d2/b: file does not exist: 'd2/b'
+      diff a d2
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      diff: cannot open d1/b: file does not exist: 'd1/b'
+      diff: not directory: c
+      usage: diff [-abcefmnrw] file1 ... file2
+      usage: diff [-abcefmnrw] file1 ... file2
+      usage: diff [-abcefmnrw] file1 ... file2
+      usage status
+      diff: can't stat nonexistent
+      diff: can't stat nonexistent
+      long lines same
+         4144
+      1,2c1
+      1,2d0
+      < a
+      < b
+      3a2,3
+      > b
+      > a
+      3a
+      b
+      a
+      .
+      1,2d
+      diff - d2
+      1,10c1
+      < 1
+      < 2
+      < 3
+      < 4
+      < 5
+      < 6
+      < 7
+      < 8
+      < 9
+      < 10
+      ---
+      > x
+      diff a d2
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      diff: can't open d3: permission denied: 'd3'
+      Only in d1: a
+      Only in d1: one
+      Only in d1: only1
+      Only in d1: same
+      Only in d1: sub
+      """
