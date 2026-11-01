@@ -1282,5 +1282,137 @@
     "mutator": "Null coalescing mutation (remove left)",
     "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
     "reason": "an open is answered without the server's own open, so the file is never readied and its client (the secstore scenarios) waits forever"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "f.Out.Add(fmt[p++]);",
+    "reason": "sprint's copy of the format's text never reaches the %"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "f.Out.Add(fmt[p++]);",
+    "reason": "sprint's copy of the format's text never reaches the %"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "if (c is >= '0' and <= '9')",
+    "reason": "strtod takes the NULs past the number as digits, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Logical mutation",
+    "line": "if (c is >= '0' and <= '9')",
+    "reason": "strtod takes the NULs past the number as digits, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "if (c is '\\t' or '\\n' or '\\v' or '\\f' or '\\r' or ' ' && state == 0)",
+    "reason": "strtod skips the NULs past the number as blanks, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Logical mutation",
+    "line": "if (c is '\\t' or '\\n' or '\\v' or '\\f' or '\\r' or ' ' && state == 0)",
+    "reason": "strtod skips the NULs past the number as blanks, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Negate expression",
+    "line": "if (c is '\\t' or '\\n' or '\\v' or '\\f' or '\\r' or ' ' && state == 0)",
+    "reason": "strtod skips the NULs past the number as blanks, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Negate expression",
+    "line": "else if (c is 'e' or 'E' && state is 2 or 4)",
+    "reason": "strtod takes each NUL past the number as an exponent's e, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "return n < Tab.Length ? 1 / Tab[n] : 1 / (Pow10(n / 2) * Pow10(n - (n / 2)));",
+    "reason": "pow10 recurses on a half that does not shrink"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));",
+    "reason": "pow10 recurses on a half that does not shrink"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));",
+    "reason": "pow10 recurses on a half that does not shrink"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Conditional (false) mutation",
+    "line": "return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));",
+    "reason": "pow10 recurses on a half that does not shrink"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "if (n < 0 || n >= Nsignif)",
+    "reason": "xadd's carry runs off its digits, and xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Negate expression",
+    "line": "if (n < 0 || n >= Nsignif)",
+    "reason": "xadd's carry runs off its digits, and xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int b = n; b >= 0; b--)",
+    "reason": "the carry or borrow never stops, or xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "if (c <= '9')",
+    "reason": "a 9 carries, so xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Boolean mutation",
+    "line": "return false;",
+    "reason": "a carry or borrow that ends is taken as one that went past the first digit, so xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int i = 0; i < n; i++)",
+    "reason": "Pad's loop does not end for a negative count"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "private static double Strtod(char[] digits, int e) => double.Parse($\"{new string(digits)}e{e - Nsignif + 1}\", CultureInfo.InvariantCulture);",
+    "reason": "xdtoa's digits are read back at the wrong exponent, so its conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "while (At(s, p) is ' ' or '\\t' or '\\n' or '\\f' or '\\r' or '\\v')",
+    "reason": "strtol skips the NULs past the number as blanks, without end"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "p++;",
+    "reason": "strtol's skip of blanks stays on the first"
   }
 ]

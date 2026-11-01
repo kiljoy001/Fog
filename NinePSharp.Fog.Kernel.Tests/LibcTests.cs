@@ -132,6 +132,12 @@ public sealed class LibcTests
         { "%*.*f|", [Libc.FmtArg.Of(8L), Libc.FmtArg.Of(2L), Libc.FmtArg.Of(3.14159d)], "20202020332e31347c" },
         { "%*s|", [Libc.FmtArg.Of(6L), Libc.FmtArg.Of("ab")], "2020202061627c" },
         { "%.*s|", [Libc.FmtArg.Of(1L), Libc.FmtArg.Of("ab")], "617c" },
+        { "%--5d|", [Libc.FmtArg.Of(42L)], "34322020207c" },
+        { "%zd", [Libc.FmtArg.Of(4294967301L)], "34323934393637333031" },
+        { "%up", [Libc.FmtArg.Of(-1L)], "66666666666666666666666666666666" },
+        { "%.80d|", [Libc.FmtArg.Of(1L)], "3030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030317c" },
+        { "%080d|", [Libc.FmtArg.Of(1L)], "3030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030317c" },
+        { "%.10s|", [Libc.FmtArg.Of("abc")], "6162637c" },
     };
 
     public static TheoryData<string> Values()
@@ -424,9 +430,31 @@ public sealed class LibcTests
     [InlineData("5 e3", "4014000000000000", 1)]
     [InlineData("7.", "401c000000000000", 2)]
     [InlineData("-.e1", "8000000000000000", 0)]
+    [InlineData("5e-3-", "3f747ae147ae147b", 4)]
     public void StrtodReadsAsPlan9sLibcDoes(string s, string bits, int end)
     {
         Assert.Equal((bits, end), (BitConverter.DoubleToInt64Bits(Libc.Strtod(s, out int stop)).ToString("x16", CultureInfo.InvariantCulture), stop));
+    }
+
+    // strtod keeps 1450 digits: a tie broken only past them stays a tie, and rounds to even.
+    [Fact]
+    public void StrtodReadsNoMoreThan1450Digits()
+    {
+        string past = "9007199254740993." + new string('0', 1434) + "1";
+        string within = "9007199254740993." + new string('0', 1433) + "1";
+        Assert.Equal((0x4340000000000000L, past.Length), (BitConverter.DoubleToInt64Bits(Libc.Strtod(past, out int end)), end));
+        Assert.Equal((0x4340000000000001L, within.Length), (BitConverter.DoubleToInt64Bits(Libc.Strtod(within, out end)), end));
+    }
+
+    // A slot past the arguments reads as zeros; a string is read as far as its NUL; a number read
+    // as a string, or %n's pointer, is no string to read or write.
+    [Fact]
+    public void SprintReadsItsSlotsAsTheyAre()
+    {
+        Assert.Equal("1 0 <nil>", Encoding.UTF8.GetString(Libc.Sprint("%d %d %s", [Libc.FmtArg.Of(1L)])));
+        Assert.Equal("ab|ab|", Encoding.UTF8.GetString(Libc.Sprint("%s|%.3s|", [Libc.FmtArg.Of("ab\0cd"), Libc.FmtArg.Of("ab\0cd")])));
+        Assert.Equal("a number where the format reads a string", Assert.Throws<ArgumentException>(() => Libc.Sprint("%s", [Libc.FmtArg.Of(5L)])).Message);
+        Assert.Equal("%n writes where the slot points, which is not a pointer", Assert.Throws<ArgumentException>(() => Libc.Sprint("%n", [Libc.FmtArg.Of(0L)])).Message);
     }
 
     // dofmt's verbs and flags, each as 9front printed it: integers of each size, base and flag,

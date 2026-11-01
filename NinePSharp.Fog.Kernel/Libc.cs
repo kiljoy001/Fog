@@ -75,6 +75,7 @@ public static class Libc
                 f.Out.Add(fmt[p++]);
             }
 
+            // Stryker disable once Equality : Dispatch gives -1 or a place past the %, never 0
             if (fmt[p++] == 0 || (p = Dispatch(f, fmt, p)) < 0)
             {
                 return [.. f.Out];
@@ -135,8 +136,12 @@ public static class Libc
 
             if (c is '-' or '+')
             {
-                sign |= c == '-' && state == 0;
-                esign |= c == '-' && state != 0;
+                if (c == '-')
+                {
+                    // A sign past the first, which then ends the number, negates the exponent.
+                    (sign, esign) = state == 0 ? (true, esign) : (sign, true);
+                }
+
                 if (state is 0 or 5)
                 {
                     state = state == 0 ? 1 : 6;
@@ -176,11 +181,12 @@ public static class Libc
         }
 
         end = state is 0 or 1 or 3 ? 0 : i - (state == 6 ? 2 : state == 5 ? 1 : 0);
-        string digits = dpoint ? a.ToString().TrimEnd('0') : a.ToString();
+
+        // strtod.c drops trailing zeros after a point, and gives 0 or Inf for an exponent past
+        // -327 or 310; the closest double is the same without either.
+        string digits = a.ToString();
         dp = unchecked((dpoint ? dp : digits.Length) + (esign ? -ex : ex));
-        double d = state is 0 or 1 or 3 || digits.Length == 0 || dp < -Maxe - (Nmant / 3) ? 0
-            : dp > Maxe ? double.PositiveInfinity
-            : double.Parse($"0.{digits}e{dp}", CultureInfo.InvariantCulture);
+        double d = digits.Length == 0 ? 0 : double.Parse($"0.{digits}e{dp}", CultureInfo.InvariantCulture);
         return sign ? -d : d;
     }
 
@@ -632,7 +638,7 @@ public static class Libc
 
                 // A Rune string, as far as a NUL, or its precision.
                 uint[] runes = [.. t.EnumerateRunes().Select(x => (uint)x.Value).TakeWhile(x => x != 0)];
-                Fmtrcpy(f, runes, (f.Flags & FmtPrec) != 0 ? Math.Min(f.Prec, runes.Length) : runes.Length);
+                Fmtrcpy(f, runes, runes.Length);
                 break;
             case 'X' or 'b' or 'd' or 'o' or 'p' or 'x':
                 Ifmt(f);
@@ -697,13 +703,11 @@ public static class Libc
         else
         {
             int v = (int)bits;
-            u = (fl & (FmtLong | FmtByte | FmtShort | FmtUnsigned)) switch
-            {
-                _ when (fl & FmtLong) != 0 => (uint)v,
-                _ when (fl & FmtByte) != 0 => (fl & FmtUnsigned) != 0 ? (byte)v : (uint)(sbyte)v,
-                _ when (fl & FmtShort) != 0 => (fl & FmtUnsigned) != 0 ? (ushort)v : (uint)(short)v,
-                _ => (uint)v,
-            };
+            bool unsigned = (fl & FmtUnsigned) != 0;
+            u = (fl & FmtLong) != 0 ? (uint)v
+                : (fl & FmtByte) != 0 ? (unsigned ? (byte)v : (uint)(sbyte)v)
+                : (fl & FmtShort) != 0 ? (unsigned ? (ushort)v : (uint)(short)v)
+                : (uint)v;
         }
 
         (int b, string conv) = f.R switch
@@ -716,6 +720,7 @@ public static class Libc
         };
         if ((fl & FmtUnsigned) == 0)
         {
+            // Stryker disable once Equality : the negative of 0 is 0
             if (isv && (long)vu < 0)
             {
                 (vu, neg) = (unchecked((ulong)-(long)vu), true);
@@ -758,8 +763,16 @@ public static class Libc
         }
         else if ((fl & FmtSharp) != 0 && b == 8)
         {
-            fl &= buf[p + 1] == '0' ? ~FmtSharp : ~0;
-            n += buf[p + 1] == '0' ? 0 : 1;
+            // A 0 takes no prefix 0, though one is put before it uncounted, as _ifmt puts it.
+            // Stryker disable once all : the prefix 0 put before a 0 is past the n bytes copied
+            if (buf[p + 1] == '0')
+            {
+                fl &= ~FmtSharp;
+            }
+            else
+            {
+                n++;
+            }
         }
 
         if ((fl & FmtZero) != 0 && (fl & (FmtLeft | FmtPrec)) == 0)
@@ -810,6 +823,7 @@ public static class Libc
             return;
         }
 
+        // Stryker disable once Equality : a rune past the precision is not copied, as _fmtcpy stops there
         int i = 0, j = 0;
         for (; j < f.Prec && i < m.Length; j++)
         {
@@ -850,7 +864,7 @@ public static class Libc
     // _fmtrcpy: n runes, no more than the precision, padded as _fmtcpy pads them.
     private static void Fmtrcpy(Fmt f, uint[] m, int n)
     {
-        n = (f.Flags & FmtPrec) != 0 && n > f.Prec ? f.Prec : n;
+        n = (f.Flags & FmtPrec) != 0 ? Math.Min(n, f.Prec) : n;
         Pad(f, (f.Flags & FmtLeft) == 0 ? f.Width - n : 0);
         foreach (uint r in m.Take(n))
         {
