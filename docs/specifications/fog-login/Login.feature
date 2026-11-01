@@ -73,44 +73,89 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
 
   @FOG_LOGIN_005
   Scenario: fog sends the script stock rcpu sends
-    When fog and 9front's rcpu each connect with the directory "/usr/glenda" and the command "ls /bin"
-    Then the bytes each sends after TLS and before 9P are the same
+    Given Fog's tcp17019 keeps the script each call sends and runs none
+    When 9front's rcpu calls from the directory "/mnt/term/root/usr/glenda" with the command "ls /bin"
+    And fog calls from the local directory "/usr/glenda" with the command "ls /bin"
+    Then the two scripts are the same
 
   @FOG_LOGIN_005
   Scenario: fog runs a command with the local standard input and output
-    When the shell runs "printf 'a\nb\n' | fog -h fog -u glenda -c 'wc -l'"
-    Then it prints "2"
+    When fog runs "-u glenda -c cat" with the standard input "a\nb\n"
+    Then fog prints "a\nb"
+    And fog exits 0
+
+  @FOG_LOGIN_005
+  Scenario: fog passes each argument after the command to rc
+    When fog runs "-u glenda -c echo 'two words' three"
+    Then fog prints "two words three"
     And fog exits 0
 
   @FOG_LOGIN_005
   Scenario: fog exits 1 when rc's status is not empty
-    When the shell runs "fog -h fog -u glenda -c 'exit oops'"
+    When fog runs "-u glenda -c 'exit oops'"
     Then fog exits 1
 
   @FOG_LOGIN_005
   Scenario: fog starts rc in the local directory, under /mnt/term/root
-    Given the local directory "/home/glenda/work" holds "app.wasm"
-    When the shell runs "cd /home/glenda/work; fog -h fog -u glenda -c 'pwd; ls'"
-    Then it prints "/mnt/term/root/home/glenda/work\napp.wasm"
+    Given fog's local directory holds "app.txt" with "from the client"
+    When fog runs "-u glenda -c 'pwd; cat app.txt'" in that directory
+    Then fog prints that directory under "/mnt/term/root", and then "from the client"
+
+  @FOG_LOGIN_005
+  Scenario: rc writes the local files through /mnt/term/root
+    Given fog's local directory holds "app.txt" with "from the client"
+    When fog runs "-u glenda -c 'echo from Fog >made.txt'" in that directory
+    Then fog exits 0
+    And fog's local directory holds "made.txt" with "from Fog\n"
 
   @FOG_LOGIN_005
   Scenario: fog on Windows names drives as drawterm does
     Given a Windows machine whose drives are "C:" and "D:"
-    When PowerShell runs "fog -h fog -u glenda -c 'ls /mnt/term/root'"
-    Then it prints "/mnt/term/root/C:\n/mnt/term/root/D:"
+    When fog runs "-u glenda -c 'cd /mnt/term/root; echo *'" from "C:\work"
+    Then fog prints "C: D:"
 
+  # As after Del in stock rcpu, the note copier holds the client's files open, so the session ends
+  # when fog's call does.
   @FOG_LOGIN_005
   Scenario: Ctrl-C in fog interrupts the command on Fog
-    Given fog runs "-h fog -u glenda" interactively
+    Given fog runs "-u glenda" interactively
     When the user types "sleep 100" and then Ctrl-C
-    Then rc on Fog is interrupted and prompts again
+    Then rc on Fog is interrupted, and typing "echo after" prints "after"
 
   @FOG_LOGIN_005
   Scenario: fog reports a lost connection
-    Given fog runs "-h fog -u glenda -c 'sleep 100'"
-    When the host drops the connection
+    Given fog runs "-u glenda -c 'sleep 100'" until rc is running
+    When the host drops fog's call
     Then fog prints "lost connection" on its standard error
     And fog exits 1
+
+  @FOG_LOGIN_005
+  Scenario: Without $PASS fog asks for the password on the terminal, and again after a mismatch
+    Given fog has no $PASS, and the terminal gives "wrongpw" and then "secretpw"
+    When fog runs "-u glenda -c 'echo in'"
+    Then the terminal was asked "glenda@fog dp9ik password: " twice
+    And fog prints "?password mismatch with auth server" on its standard error
+    And fog prints "in"
+
+  @FOG_LOGIN_005
+  Scenario: A wrong $PASS ends fog
+    Given fog's $PASS is "wrongpw"
+    When fog runs "-u glenda -c 'echo in'"
+    Then fog prints "fog: wrong password" on its standard error
+    And fog exits 1
+
+  @FOG_LOGIN_005
+  Scenario Outline: fog takes rcpu's usage without -k, -P, -p and -t
+    When fog runs "<args>"
+    Then fog prints "usage: fog [-u user] [-h host] [-c cmd arg ...]" on its standard error
+    And fog exits 1
+
+    Examples:
+      | args            |
+      | -p              |
+      | -k proto=dp9ik  |
+      | -u              |
+      | -u glenda extra |
 
   @FOG_LOGIN_006
   Scenario: An application installed from a session runs as a process and serves its files
@@ -230,3 +275,15 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     And Keycloak's user "glenda" is disabled
     When glenda logs in to secstore with glenda's password and the authenticator's current code
     Then the login fails "authentication failed"
+
+  @FOG_LOGIN_012
+  Scenario: dp9ik.net's client logs in, getting its tickets from Fog's auth server
+    When dp9ik.net's client calls 17019 as "glenda" with the password "secretpw", getting its tickets from 567
+    Then its ticket names "glenda" as the client's and the server's user
+    And over TLS-PSK keyed by its secret, the script "echo hello; cat /dev/user" prints "hello\nglenda"
+
+  @FOG_LOGIN_012
+  Scenario: dp9ik.net's client is asked again for a password whose ticket does not open
+    When dp9ik.net's client calls 17019 as "glenda" with the passwords "wrongpw" and then "secretpw", getting its tickets from 567
+    Then the password was asked for as "glenda@fog dp9ik password", and again after a mismatch
+    And over TLS-PSK keyed by its secret, the script "echo hello" prints "hello"

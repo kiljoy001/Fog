@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, `tlssrv` and `tcp17019` under `aux/listen`, through which stock 9front `rcpu` logs in, `secstored`, `secstore` and `secuser`, checked against 9front's in both directions, and dp9ik's client role in dp9ik.net (0.4.1), which logs in to Fog's `tcp17019` with its tickets from Fog's auth server, are built: slices 1 to 9.
+Status: design; the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, `tlssrv` and `tcp17019` under `aux/listen`, through which stock 9front `rcpu` logs in, `secstored`, `secstore` and `secuser`, checked against 9front's in both directions, and dp9ik's client role in dp9ik.net (0.4.1), which logs in to Fog's `tcp17019` with its tickets from Fog's auth server, and `fog`, which sends the script stock rcpu sends and serves the local console, streams and files, are built: slices 1 to 10.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -57,7 +57,10 @@ cat notes.txt | fog -h fog.example -c 'wc -l'
 
 `fog [-u user] [-h host] [-c cmd arg ...]` is `rcpu`'s usage, without `-k`, `-P`, `-p` and `-t`.
 `$cpu` names the host when `-h` does not, and the user is the local login name when `-u` does not
-give one. With no `-c`, rc is interactive (`rc -li`); with `-c`, rc runs the command
+give one. As drawterm takes them, `$auth` names the auth server, the host when it is not set, and
+`$PASS` gives the password, which is then not asked for; a wrong `$PASS` ends `fog`. A host is
+named as rconnect names one: `host` is `net!host!rcpu`, `host!port` is on that port, and
+`tcp!host!port` is as given; `rcpu` is 17019 and `ticket`, the auth server's, 567. With no `-c`, rc is interactive (`rc -li`); with `-c`, rc runs the command
 (`rc -lc`) with the local standard input, output and error as its own. `fog` exits 0 when rc's
 status is empty and 1 otherwise, as an rcpu client in a Unix shell can only say whether the
 status was empty.
@@ -210,8 +213,9 @@ The scripts need what the kernel does not have yet:
 1. Dial the host on 17019.
 2. p9any as the client, dp9ik only, fetching the ticket from the auth server for the host's
    domain: by default the host itself on 567, since Fog is its domain's auth server. The password
-   is read from the terminal without echo. This client role is added to dp9ik.net, next to its
-   server role.
+   is read from the terminal without echo, as drawterm's prompt asks for it (`glenda@fog dp9ik
+   password: `), and asked for again after `?password mismatch with auth server`. This client
+   role is dp9ik.net's `P9AuthClient`, next to its server role.
 3. TLS-PSK as the client, keyed by the session secret.
 4. Send rcpu's script, `dir`, `cmd` and `fn server` as rcpu writes them, preceded by their length.
 5. Serve 9P on the conversation, as `exportfs -r /` does, from a tree of its own:
@@ -223,7 +227,9 @@ The scripts need what the kernel does not have yet:
    - `/env/rstatus`, `/env/rfailed`: rc's status, as the server's script writes it;
    - `/root`: the local file system, with the local user's own permissions.
 6. When rc ends and the conversation closes, exit with rc's status as above. If the connection
-   is lost first, print "lost connection" and exit 1.
+   is lost first, that is, it ends without TLS's close, as when the host drops the call, print
+   "lost connection" and exit 1. As with stock rcpu, after an interrupt the note copier holds the
+   client's files open, so such a session ends when the client hangs up its call.
 
 It is a dotnet tool, so `dotnet tool install -g` gives the same `fog` command to PowerShell and
 to any Unix shell. Text and bytes cross the connection; PowerShell objects do not.

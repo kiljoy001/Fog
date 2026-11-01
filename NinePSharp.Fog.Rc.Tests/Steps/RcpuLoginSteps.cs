@@ -1,10 +1,14 @@
+using System.Globalization;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 using Dp9ik.P9Auth;
 using Dp9ik.Tls;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Auth;
+using NinePSharp.Fog.Client;
 using NinePSharp.Fog.Commands;
 using NinePSharp.Fog.Kernel;
 using NinePSharp.Fog.Namespaces.Tests.Support;
@@ -37,6 +41,12 @@ public sealed class RcpuLoginSteps
     private readonly CancellationTokenSource stopping = new();
     private readonly HashSet<long> session = [];
     private readonly List<PasswordPrompt> prompts = [];
+    private readonly Recorded fogOutput = new();
+    private readonly Recorded fogErrors = new();
+    private readonly Channel<string> fogInterrupts = Channel.CreateUnbounded<string>();
+    private readonly Queue<string> fogTyped = new();
+    private readonly List<string> fogAsked = [];
+    private readonly Dictionary<string, string> fogDrives = new(StringComparer.Ordinal);
     private FogKernel kernel = null!;
     private Process init = null!;
     private TcpListener? authsrv;
@@ -47,6 +57,12 @@ public sealed class RcpuLoginSteps
     private bool interactive;
     private TcpClient? call;
     private P9AuthClientResult? authenticated;
+    private Task<int>? fog;
+    private string? fogDirectory;
+    private string? fogPass;
+    private bool fogWithoutPass;
+    private AnonymousPipeServerStream? fogTyping;
+    private (string Output, int Code)? program;
 
     private int Port => host.HostPort(17019);
 
@@ -336,6 +352,192 @@ public sealed class RcpuLoginSteps
         Assert.Equal(Unescape(text), Encoding.UTF8.GetString([.. all]).TrimEnd('\n'));
     }
 
+    // tcp17019 whose server function keeps the length line and the script a call sends, in a file
+    // of its own under /tmp/scripts, and then ends the call.
+    [Given(@"^Fog's tcp17019 keeps the script each call sends and runs none$")]
+    public async Task GivenKeepingScriptsAsync()
+    {
+        await MkdirAsync("/tmp/scripts");
+        await WriteAsync("/tmp/svc/tcp17019", Services.Tcp17019.Replace(
+            ". <{n=`{read} && ! ~ $#n 0 && read -c $n} >[2=1]",
+            "read -c 8 >/tmp/scripts/$pid; n=`{cat /tmp/scripts/$pid}; read -c $n >>/tmp/scripts/$pid",
+            StringComparison.Ordinal));
+    }
+
+    // 9front's /mnt/term holds the directory, so rcpu's pwd names it as fog's does.
+    [When(@"^9front's rcpu calls from the directory ""(.*)"" with the command ""(.*)""$")]
+    public async Task WhenNineFrontCallsFromAsync(string directory, string command)
+    {
+        NineFrontTerminal t = await TerminalAsync();
+        await KeyAsync(t, "glenda", passwords["glenda"]);
+        await t.RunAsync($"mkdir -p /tmp/term{directory["/mnt/term".Length..]}; bind -c /tmp/term /mnt/term");
+        printed = await t.RunAsync($"@{{cd {directory}; rcpu -h tcp!10.0.2.2!{Port} -u glenda -c '{command}'}} >[2=1]", TimeSpan.FromSeconds(60));
+    }
+
+    [When(@"^fog calls from the local directory ""(.*)"" with the command ""(.*)""$")]
+    public async Task WhenFogCallsFromAsync(string directory, string command)
+    {
+        fogDirectory = directory;
+        await RunFogAsync(["-u", "glenda", "-c", command], new MemoryStream());
+    }
+
+    [Then(@"^the two scripts are the same$")]
+    public async Task ThenScriptsSameAsync()
+    {
+        string[] kept = (await RunOnFogAsync("echo /tmp/scripts/*")).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.True(kept.Length == 2, $"{string.Join(' ', kept)}\n{FogFailure()}");
+        string first = await ReadFileAsync(kept[0]), second = await ReadFileAsync(kept[1]);
+        Assert.StartsWith("    7", first, StringComparison.Ordinal);
+        Assert.Equal(first, second);
+    }
+
+    [Given(@"^fog's local directory holds ""(.*)"" with ""(.*)""$")]
+    public void GivenLocalFile(string name, string text)
+    {
+        fogDirectory ??= System.IO.Directory.CreateTempSubdirectory("fog-local-").FullName;
+        File.WriteAllText(Path.Combine(fogDirectory, name), Unescape(text));
+    }
+
+    [Given(@"^a Windows machine whose drives are ""(.*)"" and ""(.*)""$")]
+    public void GivenDrives(string first, string second)
+    {
+        foreach (string drive in new[] { first, second })
+        {
+            fogDrives[drive] = System.IO.Directory.CreateTempSubdirectory("fog-drive-").FullName;
+        }
+
+        System.IO.Directory.CreateDirectory(Path.Combine(fogDrives[first], "work"));
+    }
+
+    [Given(@"^fog has no \$PASS, and the terminal gives ""(.*)"" and then ""(.*)""$")]
+    public void GivenTerminalPasswords(string first, string second)
+    {
+        fogWithoutPass = true;
+        fogTyped.Enqueue(first);
+        fogTyped.Enqueue(second);
+    }
+
+    [Given(@"^fog's \$PASS is ""(.*)""$")]
+    public void GivenPass(string pass) => fogPass = pass;
+
+    [When(@"^fog runs ""([^""]*)""$")]
+    public Task WhenFogRunsAsync(string args) => RunFogAsync(Words(args), new MemoryStream());
+
+    [When(@"^fog runs ""([^""]*)"" with the standard input ""([^""]*)""$")]
+    public Task WhenFogRunsWithInputAsync(string args, string input) => RunFogAsync(Words(args), new MemoryStream(Encoding.UTF8.GetBytes(Unescape(input))));
+
+    [When(@"^fog runs ""([^""]*)"" in that directory$")]
+    public Task WhenFogRunsInDirectoryAsync(string args) => RunFogAsync(Words(args), new MemoryStream());
+
+    [When(@"^fog runs ""([^""]*)"" from ""([^""]*)""$")]
+    public Task WhenFogRunsFromAsync(string args, string directory)
+    {
+        fogDirectory = directory;
+        return RunFogAsync(Words(args), new MemoryStream());
+    }
+
+    // rc reads the user's lines from fog's standard input, a pipe the test types into.
+    [Given(@"^fog runs ""([^""]*)"" interactively$")]
+    public async Task GivenFogInteractiveAsync(string args)
+    {
+        fogTyping = new AnonymousPipeServerStream(PipeDirection.Out);
+        fog = Task.Run(() => FogAsync(Words(args), new AnonymousPipeClientStream(PipeDirection.In, fogTyping.ClientSafePipeHandle)));
+        await UntilAsync(() => Prompts() == 1, "rc did not prompt");
+    }
+
+    [When(@"^the user types ""(.*)"" and then Ctrl-C$")]
+    public async Task WhenUserTypesThenCtrlCAsync(string line)
+    {
+        await TypeAsync(line);
+        string name = line.Split(' ')[0];
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == name), $"{name} did not start on Fog");
+        fogInterrupts.Writer.TryWrite("interrupt");
+    }
+
+    [Then(@"^rc on Fog is interrupted, and typing ""(.*)"" prints ""(.*)""$")]
+    public async Task ThenFogInterruptedAsync(string line, string text)
+    {
+        await UntilAsync(() => Prompts() == 2, "rc did not prompt again");
+        await TypeAsync(line);
+        await UntilAsync(() => fogOutput.Text.Contains(Unescape(text) + "\n", StringComparison.Ordinal), $"{line} printed nothing");
+    }
+
+    [Given(@"^fog runs ""([^""]*)"" until rc is running$")]
+    public async Task GivenFogRunningAsync(string args)
+    {
+        fog = Task.Run(() => FogAsync(Words(args), new MemoryStream()));
+        await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == "sleep"), "sleep did not start on Fog");
+    }
+
+    // tlssrv relays the call for the session; killing it hangs the call up.
+    [When(@"^the host drops fog's call$")]
+    public async Task WhenHostDropsAsync()
+    {
+        foreach (Process p in kernel.Processes.Values.Where(p => p.Text == "tlssrv"))
+        {
+            p.PostNote("kill");
+        }
+
+        await fog!.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    [Then(@"^fog prints ""(.*)""$")]
+    public void ThenFogPrints(string text) => Assert.True(fogOutput.Text.TrimEnd('\n') == Unescape(text), FogFailure());
+
+    [Then(@"^fog prints ""(.*)"" on its standard error$")]
+    public void ThenFogPrintsError(string text) => Assert.True(fogErrors.Text.Contains(Unescape(text), StringComparison.Ordinal), FogFailure());
+
+    [Then(@"^fog prints that directory under ""(.*)"", and then ""(.*)""$")]
+    public void ThenFogPrintsDirectory(string under, string text)
+        => Assert.True(fogOutput.Text.TrimEnd('\n') == $"{under}{fogDirectory}\n{Unescape(text)}", FogFailure());
+
+    [Then(@"^fog exits (\d+)$")]
+    public async Task ThenFogExitsAsync(int code) => Assert.True(await fog!.WaitAsync(TimeSpan.FromSeconds(60)) == code, FogFailure());
+
+    [Then(@"^fog's local directory holds ""(.*)"" with ""(.*)""$")]
+    public void ThenLocalFile(string name, string text) => Assert.Equal(Unescape(text), File.ReadAllText(Path.Combine(fogDirectory!, name)));
+
+    [Then(@"^the terminal was asked ""(.*)"" twice$")]
+    public void ThenAskedTwice(string prompt) => Assert.Equal([prompt, prompt], fogAsked);
+
+    // The built fog, run by dotnet as a shell runs it, its environment naming the host.
+    [When(@"^the shell runs fog ""([^""]*)"" with the standard input ""([^""]*)""$")]
+    public async Task WhenShellRunsFogAsync(string args, string input)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("dotnet") { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "NinePSharp.Fog.Client.dll"));
+        foreach (string word in Words(args))
+        {
+            start.ArgumentList.Add(word);
+        }
+
+        start.Environment["cpu"] = $"tcp!127.0.0.1!{Port}";
+        start.Environment["auth"] = $"tcp!127.0.0.1!{host.HostPort(567)}";
+        start.Environment["PASS"] = passwords["glenda"];
+        using System.Diagnostics.Process shell = System.Diagnostics.Process.Start(start)!;
+        await shell.StandardInput.WriteAsync(Unescape(input));
+        shell.StandardInput.Close();
+        Task<string> output = shell.StandardOutput.ReadToEndAsync();
+        Task<string> error = shell.StandardError.ReadToEndAsync();
+        try
+        {
+            await shell.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        catch (TimeoutException hung)
+        {
+            shell.Kill();
+            throw new TimeoutException($"{await DescriptorsAsync()}\n{await output}\n{await error}\n{Failure()}", hung);
+        }
+
+        program = (await output + await error, shell.ExitCode);
+    }
+
+    [Then(@"^the program prints ""(.*)""$")]
+    public void ThenProgramPrints(string text) => Assert.True(program!.Value.Output.TrimEnd('\n') == Unescape(text), program.Value.Output);
+
+    [Then(@"^the program exits (\d+)$")]
+    public void ThenProgramExits(int code) => Assert.True(program!.Value.Code == code, program.Value.Output);
+
     [Then(@"^it prints ""(.*)""$")]
     public void ThenPrints(string text) => Assert.True(printed.TrimEnd('\n') == Unescape(text), Failure());
 
@@ -402,6 +604,12 @@ public sealed class RcpuLoginSteps
         stopping.Cancel();
         authsrv?.Stop();
         call?.Dispose();
+        fogTyping?.Dispose();
+        foreach (string made in fogDrives.Values.Append(fogDirectory ?? string.Empty).Where(d => d.StartsWith(Path.GetTempPath(), StringComparison.Ordinal)))
+        {
+            System.IO.Directory.Delete(made, recursive: true);
+        }
+
         foreach (Process process in kernel?.Processes.Values ?? [])
         {
             process.PostNote("kill");
@@ -421,6 +629,47 @@ public sealed class RcpuLoginSteps
     }
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
+
+    // rc's words: blanks separate them, and single quotes hold blanks, '' a quote.
+    private static string[] Words(string line)
+    {
+        var words = new List<string>();
+        var word = new StringBuilder();
+        bool quoted = false, any = false;
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '\'' && quoted && i + 1 < line.Length && line[i + 1] == '\'')
+            {
+                word.Append('\'');
+                i++;
+            }
+            else if (c == '\'')
+            {
+                (quoted, any) = (!quoted, true);
+            }
+            else if (c == ' ' && !quoted)
+            {
+                if (any || word.Length > 0)
+                {
+                    words.Add(word.ToString());
+                }
+
+                (word, any) = (new StringBuilder(), false);
+            }
+            else
+            {
+                word.Append(c);
+            }
+        }
+
+        if (any || word.Length > 0)
+        {
+            words.Add(word.ToString());
+        }
+
+        return [.. words];
+    }
 
     // What the command left after #errors and #status, split.
     private void Collect(string all)
@@ -559,6 +808,79 @@ public sealed class RcpuLoginSteps
         authenticated = await P9AuthClient.AuthenticateAsync(call.GetStream(), config, stopping.Token).WaitAsync(TimeSpan.FromSeconds(30));
     }
 
+    private async Task RunFogAsync(string[] args, Stream input)
+    {
+        Task<int> running = FogAsync(args, input);
+        try
+        {
+            fog = Task.FromResult(await running.WaitAsync(TimeSpan.FromSeconds(60)));
+        }
+        catch (TimeoutException error)
+        {
+            throw new TimeoutException($"{await DescriptorsAsync()}\n{FogFailure()}", error);
+        }
+    }
+
+    // fog with the host's forwarded ports as $cpu and $auth, glenda's password as $PASS unless the
+    // scenario gives another or none, and a terminal that gives what the scenario typed.
+    private Task<int> FogAsync(string[] args, Stream input)
+    {
+        var local = new Local
+        {
+            Input = input,
+            Output = fogOutput,
+            Error = fogErrors,
+            Directory = fogDirectory ?? "/",
+            Environment = name => name switch
+            {
+                "cpu" => $"tcp!127.0.0.1!{Port}",
+                "auth" => $"tcp!127.0.0.1!{host.HostPort(567)}",
+                "PASS" => fogWithoutPass ? null : fogPass ?? passwords["glenda"],
+                _ => null,
+            },
+            LoginName = "glenda",
+            ReadPassword = (prompt, _) =>
+            {
+                fogAsked.Add(prompt);
+                return ValueTask.FromResult(fogTyped.Count > 0 ? fogTyped.Dequeue() : null);
+            },
+            ReadConsole = _ => ValueTask.FromResult<string?>(null),
+            WriteConsole = (data, ct) => fogOutput.WriteAsync(data, ct),
+            Interrupts = fogInterrupts.Reader,
+            Drives = fogDrives,
+        };
+        return Rcpu.RunAsync(args, local, stopping.Token);
+    }
+
+    private async Task TypeAsync(string line)
+    {
+        await fogTyping!.WriteAsync(Encoding.UTF8.GetBytes(line + "\n"));
+        await fogTyping.FlushAsync();
+    }
+
+    // rc's prompts so far, on fog's standard output or error.
+    private int Prompts() => (fogOutput.Text + fogErrors.Text).Split(FogPrompt).Length - 1;
+
+    // Each process's descriptors, as /proc/n/fd gives them.
+    private async Task<string> DescriptorsAsync()
+    {
+        var all = new StringBuilder();
+        foreach (Process p in kernel.Processes.Values)
+        {
+            try
+            {
+                all.Append(CultureInfo.InvariantCulture, $"{p.Pid} {p.Text}:\n{await ReadFileAsync($"/proc/{p.Pid}/fd")}");
+            }
+            catch (SyscallException)
+            {
+            }
+        }
+
+        return all.ToString();
+    }
+
+    private string FogFailure() => $"fog's output:\n{fogOutput.Text}\nfog's errors:\n{fogErrors.Text}\n{Failure()}";
+
     // authsrv on the port 567 is on the host, with the users' passwords.
     private void ServeAuth()
     {
@@ -616,5 +938,60 @@ public sealed class RcpuLoginSteps
         public void Succeed(string user)
         {
         }
+    }
+
+    // A stream that keeps what is written to it, for its text to be read while it is written.
+    private sealed class Recorded : Stream
+    {
+        private readonly List<byte> written = [];
+
+        public string Text
+        {
+            get
+            {
+                lock (written)
+                {
+                    return Encoding.UTF8.GetString([.. written]);
+                }
+            }
+        }
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            lock (written)
+            {
+                written.AddRange(buffer.AsSpan(offset, count));
+            }
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            lock (written)
+            {
+                written.AddRange(buffer.Span);
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }

@@ -106,6 +106,7 @@ scope() {
     fog-wasm) mutate NinePSharp.Fog.Wasm.Tests stryker-config-fog-wasm.json stryker-fog-wasm ;;
     fog-gefs) mutate NinePSharp.Fog.Gefs.Tests stryker-config-fog-gefs.json stryker-fog-gefs ;;
     fog-host) mutate NinePSharp.Fog.Host.Tests stryker-config-fog-host.json stryker-fog-host ;;
+    fog-client) mutate NinePSharp.Fog.Rc.Tests stryker-config-fog-client.json stryker-fog-client ;;
     *) echo "unknown mutation scope: $1" >&2; exit 2 ;;
   esac
 }
@@ -153,7 +154,7 @@ case "$MODE" in
   full)
     quality
     step "mutation testing"
-    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-commands-factotum fog-commands-auth fog-commands-net fog-kernel fog-thread fog-wasm fog-gefs fog-host; do
+    for each in fog fog-server fog-namespaces fog-auth fog-rc fog-commands fog-commands-factotum fog-commands-auth fog-commands-net fog-kernel fog-thread fog-wasm fog-gefs fog-host fog-client; do
       scope "$each"
     done
     coyote
