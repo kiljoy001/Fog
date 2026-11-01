@@ -23,6 +23,7 @@ public static class Commands
         ["cleanname"] = Cleanname.MainAsync,
         ["cmp"] = Cmp.MainAsync,
         ["cp"] = Cp.MainAsync,
+        ["du"] = Du.MainAsync,
         ["echo"] = Echo.MainAsync,
         ["ls"] = Ls.MainAsync,
         ["mkdir"] = Mkdir.MainAsync,

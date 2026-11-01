@@ -8668,3 +8668,156 @@ Feature: rc runs scripts as 9front rc does
       0000000 
       xd: too many formats (max 10)
       """
+
+  @FOG_RC_RUN_271
+  Scenario: du totals each directory in blocks, units, bytes or qids, counting a directory it has seen once
+    When rc runs the script
+      """
+      mkdir /tmp/du; cd /tmp/du
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      mkdir d d/e 'x y'
+      echo -n hello >a
+      echo -n $a$a$a$a$a$a$a$a$a$a$a$a >d/e/b
+      touch 'x y/w'
+      cd d
+      du
+      du -a
+      du -s
+      du -n
+      du -b 1
+      du -b 2k
+      du -b k
+      du -b kk
+      du -b 3x
+      du -e
+      du -h
+      du -h -n
+      du -p k
+      du -p m
+      du -p ''
+      du -p Y
+      du -p E
+      cd ..
+      du -p x
+      ~ $status 'du '[0-9]*': unknown suffix x' && echo suffix status
+      du 'x y'
+      du -a 'x y'
+      du -ah -b 1 d
+      du -ae -b 1 d
+      du a d/e/b
+      du /nonesuch
+      ~ $status '' && echo nonesuch status
+      du -f /nonesuch
+      x=`{du -q a}
+      y=`{ls -q a}
+      ~ $y(1) '('^$x(1) && ~ $x(2) a && echo qid of a
+      x=`{du -qs d}
+      y=`{ls -qd d}
+      ~ $y(1) '('^$x(1) && echo qid of d
+      du -x
+      ~ $status 'du '[0-9]*': usage' && echo usage status
+      du -r d
+      chmod 0 d/e/b
+      du -r d
+      du -ar d
+      chmod 0 d/e
+      du d
+      chmod 755 d/e; chmod 644 d/e/b
+      mkdir /tmp/dl /tmp/dl/l
+      bind /tmp/dl /tmp/dl/l
+      du /tmp/dl
+      unmount /tmp/dl/l
+      """
+    Then it prints
+      """
+      3	./e
+      3	.
+      3	./e/b
+      3	./e
+      3	.
+      3	.
+      3072	./e/b
+      3072	./e
+      3072	.
+      3	./e
+      3	.
+      4	./e
+      4	.
+      3	./e
+      3	.
+      1024	./e
+      1024	.
+      3	./e
+      3	.
+      3	./e
+      3	.
+      3k	./e
+      3k	.
+      3k	./e/b
+      3k	./e
+      3k	.
+      3	./e
+      3	.
+      1	./e
+      1	.
+      3072	./e
+      3072	.
+      3	./e
+      3	.
+      1	./e
+      1	.
+      du: unknown suffix x
+      suffix status
+      0	'x y'
+      0	'x y/w'
+      0	'x y'
+      3k	d/e/b
+      3k	d/e
+      3k	d
+      3	d/e/b
+      3	d/e
+      3	d
+      1	a
+      3	d/e/b
+      du: /nonesuch: file does not exist: '/nonesuch'
+      0	/nonesuch
+      nonesuch status
+      0	/nonesuch
+      qid of a
+      qid of d
+      usage: du [-aefhnqstu] [-b size] [-p si-pfx] [file ...]
+      usage status
+      du: d/e/b: permission denied: 'd/e/b'
+      du: d/e/b: permission denied: 'd/e/b'
+      du: d/e: permission denied: 'd/e'
+      0	d/e
+      0	d
+      0	/tmp/dl/l
+      0	/tmp/dl
+      """
+
+  @FOG_RC_RUN_272
+  Scenario: du -t gives each file's and directory's modified time, and -tu its accessed time
+    Given the clock reads 1000000000
+    And "/tmp/t" holds "x"
+    And the clock moves on by 100 seconds
+    When rc runs the script
+      """
+      cat /tmp/t >/dev/null
+      du -t /tmp/t
+      du -tu /tmp/t
+      du -u /tmp/t
+      mkdir /tmp/td; echo >/tmp/td/f
+      du -t /tmp/td
+      du -at /tmp/td
+      """
+    Then it prints
+      """
+      1000000000	/tmp/t
+      1000000100	/tmp/t
+      1024	/tmp/t
+      1000000100	/tmp/td
+      1000000100	/tmp/td/f
+      1000000100	/tmp/td
+      """
