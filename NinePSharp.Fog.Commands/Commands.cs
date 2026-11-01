@@ -25,6 +25,7 @@ public static class Commands
         ["cp"] = Cp.MainAsync,
         ["du"] = Du.MainAsync,
         ["echo"] = Echo.MainAsync,
+        ["grep"] = Grep.MainAsync,
         ["ls"] = Ls.MainAsync,
         ["mkdir"] = Mkdir.MainAsync,
         ["mntgen"] = Mntgen.MainAsync,

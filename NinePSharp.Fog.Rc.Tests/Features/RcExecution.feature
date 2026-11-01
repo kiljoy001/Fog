@@ -9348,3 +9348,167 @@ Feature: rc runs scripts as 9front rc does
       sed: onesuch1 command garbled: nonesuch1
       sed: Can't open /nonesuch
       """
+
+  @FOG_RC_RUN_275
+  Scenario: grep shows the lines its expression matches, or does not, counted, numbered or named by file
+    When rc runs the script
+      """
+      mkdir /tmp/gp; cd /tmp/gp
+      for(i in apple banana cherry date elderberry fig grape) echo $i >>f
+      echo 'Apple pie' >>f
+      echo 'kiwi
+      date' >g
+      grep an f
+      grep -v a f
+      grep -c a f
+      grep -n e f
+      grep -i apple f
+      grep -i APPLE f
+      grep '^b' f
+      grep 'y$' f
+      grep 'a.a' f
+      grep 'r+y' f
+      grep 'ap?p' f
+      grep 'b(an)+a' f
+      grep 'fig|kiwi' f g
+      grep '[bc]h?e' f
+      grep '[^a-e]ig' f
+      grep '[a-cx-z]$' f
+      grep 'x*' g
+      grep -l a f g
+      grep -L kiwi f g
+      grep -h kiwi f g
+      grep -c e f g
+      grep -s fig f
+      echo s $status
+      grep -s zzz f
+      ~ $status 'grep '[0-9]*': no matches' && echo s nomatch
+      grep -e fig -e kiwi f g
+      echo 'grape
+      date' >pf
+      grep -f pf f g
+      grep -n -e '^d' f g
+      grep '*a.p' f
+      echo 'a.p' >lit
+      grep '*a.p' lit
+      echo 'héllo wörld' >u
+      grep 'h.llo' u
+      grep '[é]' u
+      grep -c '[^a-z ]' u
+      grep 'w[ö]rld' u
+      echo -n 'last line' >nonl
+      grep last nonl
+      grep last nonl f
+      grep -v xyz nonl
+      grep 'pie
+      kiwi' f g
+      grep '\.' lit
+      grep 'a\|p' lit
+      grep zzz f
+      ~ $status 'grep '[0-9]*': no matches' && echo nomatch status
+      grep
+      grep -x a f
+      ~ $status 'grep '[0-9]*': usage' && echo usage status
+      grep '' f
+      grep '(' f
+      grep 'a)' f
+      grep '[a' f
+      grep '|a' f
+      grep 'a||b' f
+      ~ $status 'grep '[0-9]*': syntax' && echo syntax status
+      grep -e a -e '' f
+      grep a /nonesuch
+      grep -c a /nonesuch f
+      grep -f /nonesuch a
+      ~ $status 'grep '[0-9]*': open' && echo open status
+      echo -n >empty
+      grep -f empty f
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      echo $a$a$a$a$a$a$a$a$a^Z >long
+      grep Z long | wc -c
+      grep -c Z long
+      """
+    Then it prints
+      """
+      banana
+      cherry
+      elderberry
+      fig
+      Apple pie
+      4
+      1: apple
+      3: cherry
+      4: date
+      5: elderberry
+      7: grape
+      8: Apple pie
+      apple
+      Apple pie
+      apple
+      Apple pie
+      banana
+      cherry
+      elderberry
+      banana
+      cherry
+      elderberry
+      apple
+      grape
+      banana
+      f:fig
+      g:kiwi
+      cherry
+      elderberry
+      fig
+      banana
+      cherry
+      elderberry
+      kiwi
+      date
+      f
+      g
+      f
+      kiwi
+      f:6
+      g:1
+      s 
+      s nomatch
+      f:fig
+      g:kiwi
+      f:date
+      f:grape
+      g:date
+      f:4: date
+      g:2: date
+      a.p
+      héllo wörld
+      héllo wörld
+      1
+      héllo wörld
+      last linenonl:last line
+      last linef:Apple pie
+      g:kiwi
+      a.p
+      nomatch status
+      usage: grep [-bchiLlnsv] [-e pattern] [-f patternfile] [file ...]
+      usage: grep [-bchiLlnsv] [-e pattern] [-f patternfile] [file ...]
+      usage status
+      grep: empty pattern
+      grep: (: syntax error
+      grep: a): syntax error
+      grep: [a: empty pattern
+      grep: |a: empty pattern
+      grep: a||b: syntax error
+      syntax status
+      grep: a: empty pattern
+      grep: can't open /nonesuch: file does not exist: '/nonesuch'
+      grep: can't open /nonesuch: file does not exist: '/nonesuch'
+      f:4
+      grep: can't open /nonesuch: file does not exist: '/nonesuch'
+      open status
+      grep: empty:1: empty pattern
+        20482
+      1
+      """
