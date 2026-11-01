@@ -420,6 +420,13 @@ public sealed partial class Process
     public async ValueTask<long> SeekAsync(int fd, long offset, int whence)
     {
         using Return returning = new(this);
+
+        // sysseek: a pipe has no offset to move.
+        if ((await HandleAsync(fd))?.Resource.Identity.Provider == PipeDevice.Provider)
+        {
+            throw new SyscallException(Errors.IsStream);
+        }
+
         try
         {
             return await calls.SeekAsync(fd, offset, (Plan9SeekWhence)whence);

@@ -71,6 +71,21 @@ public sealed class ProcessTests
         Assert.Equal(('c', stat.Dev), ((char)cons.Type, cons.Dev));
     }
 
+    // sysseek refuses a pipe, whichever end and wherever to, and a closed descriptor as fdtochan does.
+    [Fact]
+    public async Task ASeekOnAPipeIsRefused()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        var (first, second) = await init.PipeAsync();
+        foreach ((int fd, int whence) in new[] { (first, 0), (second, 2) })
+        {
+            Assert.Equal("seek on a stream", (await Assert.ThrowsAsync<SyscallException>(async () => await init.SeekAsync(fd, 0, whence))).Message);
+        }
+
+        Assert.Equal("fd out of range or not open", (await Assert.ThrowsAsync<SyscallException>(async () => await init.SeekAsync(9, 0, 0))).Message);
+        Assert.Equal(0, await init.SeekAsync(await init.OpenAsync("/dev/null", 0), 0, 2));
+    }
+
     [Fact]
     public void NullDirSetsEveryNumberToAllOnesAndEveryStringEmpty()
     {

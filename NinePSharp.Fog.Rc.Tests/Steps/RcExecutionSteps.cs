@@ -24,6 +24,9 @@ public sealed class RcExecutionSteps
     private readonly ManualClock clock = new() { Now = DateTimeOffset.UtcNow };
     private readonly FakeHostNetwork host = new();
     private readonly FakeHostConsole console = new();
+
+    // How long the script sleeps, which each read and the whole run may take on top of their bounds.
+    private TimeSpan sleeps = TimeSpan.Zero;
     private FogKernel? kernel;
     private Process? init;
     private string script = string.Empty;
@@ -180,6 +183,13 @@ public sealed class RcExecutionSteps
 
     [When("rc runs the script")]
     public Task WhenRuns(string text) => RunAsync(text, "/dev/null", [Script]);
+
+    [When(@"^rc runs the script, which sleeps for (\d+) seconds$")]
+    public Task WhenRunsSleeping(int seconds, string text)
+    {
+        sleeps = TimeSpan.FromSeconds(seconds);
+        return RunAsync(text, "/dev/null", [Script]);
+    }
 
     // 9front's console cannot be typed raw bytes, so these run on Fog alone.
     [When(@"^rc runs the script, its \\x escapes bytes$")]
@@ -338,7 +348,7 @@ public sealed class RcExecutionSteps
         Task acting = meanwhile?.Invoke(pid) ?? Task.CompletedTask;
 
         // A zero-length write reads as empty, so the output ends where the hung-up pipe refuses reads.
-        using var run = new CancellationTokenSource(RunBound);
+        using var run = new CancellationTokenSource(RunBound + sleeps);
         var bytes = new List<byte>();
         try
         {
@@ -363,7 +373,7 @@ public sealed class RcExecutionSteps
     {
         try
         {
-            return await init!.ReadAsync(fd, 8192).AsTask().WaitAsync(Bound, run);
+            return await init!.ReadAsync(fd, 8192).AsTask().WaitAsync(Bound + sleeps, run);
         }
         catch (SyscallException)
         {

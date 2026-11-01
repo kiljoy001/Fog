@@ -38,10 +38,12 @@ public static class Commands
         ["tee"] = Tee.MainAsync,
         ["test"] = Test.MainAsync,
         ["touch"] = Touch.MainAsync,
+        ["tail"] = Tail.MainAsync,
         ["tr"] = Tr.MainAsync,
         ["tlssrv"] = Tlssrv.MainAsync,
         ["uniq"] = Uniq.MainAsync,
         ["unmount"] = Unmount.MainAsync,
         ["wc"] = Wc.MainAsync,
+        ["xd"] = Xd.MainAsync,
     };
 }

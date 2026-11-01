@@ -8,6 +8,7 @@ internal static class Errors
     public const string NotDirectory = "not a directory";
     public const string IsDirectory = "file is a directory";
     public const string NegativeOffset = "negative i/o offset";
+    public const string IsStream = "seek on a stream";
     public const string ExecDirectory = "cannot exec directory";
     public const string BadFd = "fd out of range or not open";
     public const string NoChild = "no living children";

@@ -8209,6 +8209,13 @@ Feature: rc runs scripts as 9front rc does
       uniq /nonesuch
       ~ $status 'uniq '[0-9]*': cannot open /nonesuch' && echo cannot open status
       uniq f g
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      {echo $a$a$a; echo b; echo b} >l
+      uniq l | wc -c
+      {echo $a$a$a$a$a$a$a$a; echo b} >l
+      uniq l | wc -c
       """
     Then it prints
       """
@@ -8242,6 +8249,8 @@ Feature: rc runs scripts as 9front rc does
       uniq: cannot open /nonesuch
       cannot open status
       uniq: unexpected argument g
+        12291
+            0
       """
 
   @FOG_RC_RUN_267
@@ -8332,4 +8341,330 @@ Feature: rc runs scripts as 9front rc does
       write status
       E
          4368
+      """
+
+  @FOG_RC_RUN_268
+  Scenario: tail prints the end of a file or of its input, from a count of lines or bytes, backwards, or as it grows
+    When rc runs the script
+      """
+      mkdir /tmp/tl; cd /tmp/tl
+      for(i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) echo $i >>f
+      tail f | tr '\x0a' ' '; echo
+      tail -3 f | tr '\x0a' ' '; echo
+      tail +13 f | tr '\x0a' ' '; echo
+      tail -n 2 f | tr '\x0a' ' '; echo
+      tail -n +14 f | tr '\x0a' ' '; echo
+      tail -c 5 f | tr '\x0a' ' '; echo
+      tail +30c f | tr '\x0a' ' '; echo
+      tail -c+30 f | tr '\x0a' ' '; echo
+      tail -r -3 f | tr '\x0a' ' '; echo
+      tail -3r f | tr '\x0a' ' '; echo
+      tail -r f | tr '\x0a' ' '; echo
+      tail -0 f | tr '\x0a' ' '; echo
+      cat f | tail -3 | tr '\x0a' ' '; echo
+      cat f | tail -3r | tr '\x0a' ' '; echo
+      cat f | tail -r | tr '\x0a' ' '; echo
+      cat f | tail -c 4 | tr '\x0a' ' '; echo
+      cat f | tail +14 | tr '\x0a' ' '; echo
+      cat f | tail +30c | tr '\x0a' ' '; echo
+      cat f | tail -0 | tr '\x0a' ' '; echo
+      cat f | tail +0 | tr '\x0a' ' '; echo
+      echo -n abc | tail -1; echo
+      echo -n 'a
+      b' | tail -1r
+      {echo; echo a; echo b} >g
+      tail -2 g | tr '\x0a' ' '; echo
+      tail -2r g | tr '\x0a' ' '; echo
+      touch e; tail e; tail -f e &
+      sleep 1; echo kill >/proc/$apid/note
+      tail +100c f; tail +100 f; cat f | tail +100
+      tail -c 100 f
+      ~ $status '' && echo empty status
+      tail -5 -5 f
+      tail -r -c 3 f
+      tail +3r f
+      ~ $status 'tail '[0-9]*': incompatible options' && echo incompatible status
+      tail -3000000b f
+      ~ $status 'tail '[0-9]*': too big' && echo too big status
+      tail -2x f; tail -n; tail -n x f; tail f f
+      ~ $status 'tail '[0-9]*': usage' && echo usage status
+      tail /nonesuch
+      ~ $status 'tail '[0-9]*': /nonesuch' && echo nonesuch status
+      cd /; tail -- /nonesuch; tail -x; tail +x; cd /tmp/tl
+      echo a | tail -f
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      echo -n $a$a$a$a$a$a$a$a$a >big
+      cat big | tail -c 36000 | wc -c
+      tail -c 36000 big | wc -c
+      cat big | tail -c 36000 >[1=]
+      tail -c 36000 big >[1=]
+      ~ $status '' && echo empty status
+      """
+    Then it prints
+      """
+      6 7 8 9 10 11 12 13 14 15 
+      13 14 15 
+      13 14 15 
+      14 15 
+      14 15 
+      4 15 
+      14 15 
+      14 15 
+      15 14 13 
+      15 14 13 
+      15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 
+      1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+      13 14 15 
+      15 14 13 
+      15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 
+       15 
+      14 15 
+      14 15 
+
+      1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+      abc
+      b
+       a b 
+      b a 
+      tail: : negative i/o offset
+      empty status
+      tail: excess option: 
+      tail: incompatible options: 
+      tail: incompatible options: 
+      incompatible status
+      tail: too big: 
+      too big status
+      usage: tail [-n N] [-c N] [-f] [-r] [+-N[bc][fr]] [file]
+      usage: tail [-n N] [-c N] [-f] [-r] [+-N[bc][fr]] [file]
+      usage: tail [-n N] [-c N] [-f] [-r] [+-N[bc][fr]] [file]
+      usage: tail [-n N] [-c N] [-f] [-r] [+-N[bc][fr]] [file]
+      usage status
+      tail: /nonesuch: file does not exist: '/nonesuch'
+      nonesuch status
+      tail: /nonesuch: file does not exist: '/nonesuch'
+      tail: -x: file does not exist: '-x'
+      tail: +x: file does not exist: '+x'
+      a
+        36000
+        36000
+      tail: : fd out of range or not open
+      tail: : inappropriate use of fd
+      empty status
+      """
+
+  @FOG_RC_RUN_269
+  Scenario: tail -f prints what is added to a file every five seconds, from the start again of one that shrank
+    When rc runs the script, which sleeps for 11 seconds
+      """
+      cd /tmp
+      echo a >h; echo b >>h
+      tail -f h >o &
+      t=$apid
+      sleep 1; echo c >>h; sleep 5; echo d >h; sleep 5
+      echo kill >/proc/$t/note
+      cat o
+      """
+    Then it prints
+      """
+      a
+      b
+      c
+      d
+      """
+
+  @FOG_RC_RUN_270
+  Scenario: xd dumps its input in each format given, each address as the -a before it says, and its write errors are fatal
+    When rc runs the script
+      """
+      mkdir /tmp/xt; cd /tmp/xt
+      for(i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) echo $i >>f
+      echo -n 'héllo xwörld
+      yÿ' | tr xy '\x09\x09' >u
+      echo -n 'aaaaé€bbbcccdd' >v
+      xd f
+      xd -c f
+      xd -c u
+      xd -b f
+      xd -1o u
+      xd -2d u
+      xd -wx u
+      xd -4o u
+      xd -ld u
+      xd -8x v
+      xd -vd v
+      xd -vo v
+      xd -s -2x u
+      xd -s -4x u
+      xd -s -8x v
+      xd -s -vd v
+      xd -c -x f
+      xd -x -ao -c -ad -1d f
+      xd -ad f
+      xd -ao -b f
+      a=aaaaaaaaaaaaaaaa
+      echo -n $a^$a^$a^bbbbbbbbbbbbbbbb^$a^$a >rep
+      xd -r -c rep
+      xd -c rep
+      xd </dev/null
+      xd f u
+      xd f /nonesuch
+      ~ $status 'xd '[0-9]*': error' && echo error status
+      xd -u f /nonesuch
+      xd -c -
+      xd <[0=]
+      ~ $status 'xd '[0-9]*': read error: fd out of range or not open' && echo read status
+      cat f | xd >[1=]
+      ~ $status 'xd '[0-9]*': write error: fd out of range or not open' && echo write status
+      xd f >[1=]
+      xd -q; xd -rx; xd -a; xd -ay; xd -aox; xd -xc; xd -cx; xd -- f; xd -é
+      ~ $status 'xd '[0-9]*': usage' && echo usage status
+      xd -x -x -x -x -x -x -x -x -x </dev/null
+      xd -x -x -x -x -x -x -x -x -x -x </dev/null
+      """
+    Then it prints
+      """
+      0000000  310a320a 330a340a 350a360a 370a380a
+      0000010  390a3130 0a31310a 31320a31 330a3134
+      0000020  0a31350a
+      0000024 
+      0000000   1 \n  2 \n  3 \n  4 \n  5 \n  6 \n  7 \n  8 \n
+      0000010   9 \n  1  0 \n  1  1 \n  1  2 \n  1  3 \n  1  4
+      0000020  \n  1  5 \n
+      0000024 
+      0000000   h c3 a9  l  l  o    \t  w c3 b6  r  l  d \n \t
+      0000010  c3 bf
+      0000012 
+      0000000  31 0a 32 0a 33 0a 34 0a 35 0a 36 0a 37 0a 38 0a
+      0000010  39 0a 31 30 0a 31 31 0a 31 32 0a 31 33 0a 31 34
+      0000020  0a 31 35 0a
+      0000024 
+      0000000  150 303 251 154 154 157 040 011 167 303 266 162 154 144 012 011
+      0000010  303 277
+      0000012 
+      0000000  26819 43372 27759 08201 30659 46706 27748 02569
+      0000010  50111
+      0000012 
+      0000000  68c3 a96c 6c6f 2009 77c3 b672 6c64 0a09
+      0000010  c3bf
+      0000012 
+      0000000  15060724554 15433620011 16760733162 15431005011
+      0000010  30357600000
+      0000012 
+      0000000  1757653356 1819222025 2009314930 1818495497
+      0000010  3284074496
+      0000012 
+      0000000  61616161c3a9e282 ac62626263636364
+      0000010  6400000000000000
+      0000011 
+      0000000  07016996766942356098 12421598896955024228
+      0000010  07205759403792793600
+      0000011 
+      0000000  0605413026070352361202 1261423046114330661544
+      0000010  0620000000000000000000
+      0000011 
+      0000000  c368 6ca9 6f6c 0920 c377 72b6 646c 090a
+      0000010  bfc3
+      0000012 
+      0000000  6ca9c368 09206f6c 72b6c377 090a646c
+      0000010  0000bfc3
+      0000012 
+      0000000  82e2a9c361616161 64636363626262ac
+      0000010  0000000000000064
+      0000011 
+      0000000  09431287226284728673 07233734704990675628
+      0000010  00000000000000000100
+      0000011 
+      0000000   1 \n  2 \n  3 \n  4 \n  5 \n  6 \n  7 \n  8 \n
+            0  310a320a 330a340a 350a360a 370a380a
+      0000010   9 \n  1  0 \n  1  1 \n  1  2 \n  1  3 \n  1  4
+           10  390a3130 0a31310a 31320a31 330a3134
+      0000020  \n  1  5 \n
+           20  0a31350a
+      0000024 
+      0000000  310a320a 330a340a 350a360a 370a380a
+            0   1 \n  2 \n  3 \n  4 \n  5 \n  6 \n  7 \n  8 \n
+            0  049 010 050 010 051 010 052 010 053 010 054 010 055 010 056 010
+      0000010  390a3130 0a31310a 31320a31 330a3134
+           20   9 \n  1  0 \n  1  1 \n  1  2 \n  1  3 \n  1  4
+           16  057 010 049 048 010 049 049 010 049 050 010 049 051 010 049 052
+      0000020  0a31350a
+           40  \n  1  5 \n
+           32  010 049 053 010
+      0000036 
+      0000000  310a320a 330a340a 350a360a 370a380a
+      0000016  390a3130 0a31310a 31320a31 330a3134
+      0000032  0a31350a
+      0000036 
+      0000000  31 0a 32 0a 33 0a 34 0a 35 0a 36 0a 37 0a 38 0a
+      0000020  39 0a 31 30 0a 31 31 0a 31 32 0a 31 33 0a 31 34
+      0000040  0a 31 35 0a
+      0000044 
+      0000000   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      *
+      0000030   b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  b
+      0000040   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      *
+      0000060 
+      0000060 
+      0000000   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      0000010   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      0000020   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      0000030   b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  b
+      0000040   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      0000050   a  a  a  a  a  a  a  a  a  a  a  a  a  a  a  a
+      0000060 
+      0000060 
+      0000000 
+      0000000 
+      f
+      0000000  310a320a 330a340a 350a360a 370a380a
+      0000010  390a3130 0a31310a 31320a31 330a3134
+      0000020  0a31350a
+      0000024 
+      u
+      0000000  68c3a96c 6c6f2009 77c3b672 6c640a09
+      0000010  c3bf0000
+      0000012 
+      xd: can't open /nonesuch
+      f
+      0000000  310a320a 330a340a 350a360a 370a380a
+      0000010  390a3130 0a31310a 31320a31 330a3134
+      0000020  0a31350a
+      0000024 
+      error status
+      f
+      0000000  310a320a 330a340a 350a360a 370a380a
+      0000010  390a3130 0a31310a 31320a31 330a3134
+      xd: can't open /nonesuch
+      0000020  0a31350a
+      0000024 
+      xd: can't open -
+      read error: fd out of range or not open
+      read status
+      write error: fd out of range or not open
+      write status
+      write error: fd out of range or not open
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage status
+      0000000 
+            0 
+            0 
+            0 
+            0 
+            0 
+            0 
+            0 
+            0 
+      0000000 
+      xd: too many formats (max 10)
       """
