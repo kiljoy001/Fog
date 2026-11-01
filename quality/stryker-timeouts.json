@@ -1246,5 +1246,11 @@
     "mutator": "Arithmetic mutation",
     "line": "(r0, r1) = (r1, r0 - (q * r1));",
     "reason": "mpinvert's remainders grow, or shrink by next to nothing, so the extended gcd never reaches zero"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Negate expression",
+    "line": "while (t < line.Length && Separator(line[t]))",
+    "reason": "tokenize's skip runs on past the line's end, counting through every int until the index fails, for each line it reads"
   }
 ]
