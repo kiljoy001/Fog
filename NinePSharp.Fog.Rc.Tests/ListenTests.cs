@@ -98,6 +98,27 @@ public sealed class ListenTests : IAsyncLifetime
         Assert.Equal("free\n", await CallWhenAnsweredAsync(17132));
     }
 
+    // listen sleeps (pid*10)%200 ms before it announces each service, so that the listens a
+    // machine starts together do not announce at once; on a clock that stands still, nothing is
+    // announced until the clock passes that sleep.
+    [Fact]
+    public async Task EachServiceIsAnnouncedOnlyOnceListensSleepHasPassed()
+    {
+        await ServiceAsync("tcp17151", "echo late");
+        await ListenAsync("-q", "-t", "/tmp/svc", "-a", "127.0.0.1");
+        Process serving = kernel.Processes.Values.Single(p => p.Args.StartsWith("listen [tcp ", StringComparison.Ordinal));
+        long sleep = (serving.Pid * 10) % 200;
+        Assert.True(sleep > 0, $"listen's pid {serving.Pid} sleeps for none");
+        for (int i = 0; i < 20; i++)
+        {
+            await Task.Delay(100);
+            Assert.DoesNotContain(kernel.Processes.Values, p => p.Args.EndsWith("!17151]", StringComparison.Ordinal));
+        }
+
+        clock.Advance(TimeSpan.FromMilliseconds(sleep));
+        Assert.Equal("late\n", await CallWhenAnsweredAsync(17151));
+    }
+
     [Fact]
     public async Task ACallIsLoggedUnlessQuietAndAServiceThatCannotRunOrHasABadNamespaceIsLogged()
     {
