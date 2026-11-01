@@ -37,6 +37,7 @@ public static class Commands
         ["read"] = Read.MainAsync,
         ["rm"] = Rm.MainAsync,
         ["sed"] = Sed.MainAsync,
+        ["date"] = Date.MainAsync,
         ["seq"] = Seq.MainAsync,
         ["sleep"] = Sleep.MainAsync,
         ["tee"] = Tee.MainAsync,

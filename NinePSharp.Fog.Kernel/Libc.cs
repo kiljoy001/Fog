@@ -100,7 +100,7 @@ public static class Libc
     // 1450 are dropped, and the value is the closest double, as strtod.c finds it.
     public static double Strtod(string s, out int end)
     {
-        const int Ndig = 1500, Maxe = 310, Nmant = 53;
+        const int Ndig = 1500;
         var a = new StringBuilder();
         bool sign = false, esign = false, dpoint = false;
         int dp = 0, ex = 0, state = 0, i = 0;

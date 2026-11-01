@@ -45,6 +45,9 @@ public sealed class FogKernel
 
         """;
 
+    // 9front's /adm/timezone/GMT.
+    private const string GmtZone = "GMT 0 GMT 0\n0\n\n";
+
     private static readonly string[] StoreDirectories = ["adm", "bin", "lib", "rc", "tmp", "usr"];
     private readonly IReadOnlyDictionary<string, ProgramMain> programs;
     private readonly ResourceHandle store;
@@ -186,12 +189,14 @@ public sealed class FogKernel
             await Files.ClunkAsync(program, Context(0, User), CancellationToken.None);
         }
 
-        ResourceHandle lib = await DirectoryAsync("lib");
-        ResourceOpenHandle namespaceFile = await Files.WalkAsync(lib, "namespace", CancellationToken.None) is { } written
-            ? await Files.OpenAsync(written, NinePConstants.OWRITE | NinePConstants.OTRUNC, Context(0, User), CancellationToken.None)
-            : await Files.CreateAndOpenAsync(lib, "namespace", 0b110_100_100, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
-        await Files.WriteAsync(namespaceFile, 0, Encoding.UTF8.GetBytes(NamespaceFile), Context(0, User), CancellationToken.None);
-        await Files.ClunkAsync(namespaceFile, Context(0, User), CancellationToken.None);
+        await WriteFileAsync(await DirectoryAsync("lib"), "namespace", NamespaceFile, true);
+
+        // The zones of /adm/timezone, GMT the one there is, and local, which init copies to
+        // $timezone, made GMT where an earlier boot has not left it another.
+        ResourceHandle adm = await DirectoryAsync("adm");
+        ResourceHandle zones = await Files.WalkAsync(adm, "timezone", CancellationToken.None) ?? await Files.CreateAsync(adm, "timezone", true, CancellationToken.None);
+        await WriteFileAsync(zones, "GMT", GmtZone, true);
+        await WriteFileAsync(zones, "local", GmtZone, false);
 
         VProcess first = Table.CreateInitial(new NamespaceNavigator(new MountTable(), Files).Attach(RootDevice.Root));
         MountTable mounts = first.ProcessGroup.MountTable;
@@ -208,6 +213,7 @@ public sealed class FogKernel
         mounts.Mount(SrvDevice.Root, RootDevice.MountPoint("srv"), MountFlags.Replace | MountFlags.Create);
         mounts.Mount(CapDevice.Root, RootDevice.MountPoint("dev"), MountFlags.After);
         var init = new Process(this, first, null, environment, "*init*", User, 0);
+        await CpenvAsync(init, "/adm/timezone/local", "/env/timezone");
         await BootrcAsync(init);
         return init;
     }
@@ -314,8 +320,40 @@ public sealed class FogKernel
     internal ResourceOperationContext Context(long pid, string user)
         => new(new ResourceOperationId(session, (ulong)Interlocked.Increment(ref sequence)), pid, user);
 
+    // cpenv, as 9front's init: the file's contents the value of the variable.
+    private static async Task CpenvAsync(Process init, string file, string var)
+    {
+        int fd = await init.OpenAsync(file, NinePConstants.OREAD);
+        var value = new List<byte>();
+        for (ReadOnlyMemory<byte> read; !(read = await init.ReadAsync(fd, 8192)).IsEmpty;)
+        {
+            value.AddRange(read.ToArray());
+        }
+
+        await init.CloseAsync(fd);
+        int env = await init.CreateAsync(var, NinePConstants.OWRITE, 0b110_110_110);
+        await init.WriteAsync(env, value.ToArray());
+        await init.CloseAsync(env);
+    }
+
     private async Task<ResourceHandle> DirectoryAsync(string name)
         => await Files.WalkAsync(store, name, CancellationToken.None) ?? await Files.CreateAsync(store, name, true, CancellationToken.None);
+
+    // The file written with the text, or, unless replace, left as it is where it is.
+    private async Task WriteFileAsync(ResourceHandle directory, string name, string text, bool replace)
+    {
+        ResourceHandle? written = await Files.WalkAsync(directory, name, CancellationToken.None);
+        if (written is not null && !replace)
+        {
+            return;
+        }
+
+        ResourceOpenHandle file = written is not null
+            ? await Files.OpenAsync(written, NinePConstants.OWRITE | NinePConstants.OTRUNC, Context(0, User), CancellationToken.None)
+            : await Files.CreateAndOpenAsync(directory, name, 0b110_100_100, NinePConstants.OWRITE, Context(0, User), CancellationToken.None);
+        await Files.WriteAsync(file, 0, Encoding.UTF8.GetBytes(text), Context(0, User), CancellationToken.None);
+        await Files.ClunkAsync(file, Context(0, User), CancellationToken.None);
+    }
 
     // bootrc's mount points: mntgen on /n, /mnt and /mnt/exportfs, each posted for others to mount,
     // when the kernel has mntgen to run.

@@ -9885,3 +9885,145 @@ Feature: rc runs scripts as 9front rc does
       """
     Then it prints nothing
     And the file server was sent 2 wstats
+
+  @FOG_RC_RUN_279
+  Scenario: date lays out the seconds given in GMT or the zone of $timezone, by its format's runs of letters
+    When rc runs the script
+      """
+      date -u 0
+      date -u 1000000000
+      date -un 1000000000
+      date -ut 1000000000
+      date -ui 1000000000
+      date -u -f 'W WW WWW M MM MMM MMMM D DD o h hh H HH m mm s ss A a' 1700000000
+      date -u -f '_D __MM ___hh Y YY YYYY Z ZZ ZZZ z ___Z __ZZ ______ZZZ' 86399
+      date -u -f 'ZZZZ|é|Y?h[a\]b[c]d]x' 1000000000
+      date -u -f 't tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn __ttt' 5
+      date -u -f o 1000000000; date -u -f o 1001000000; date -u -f o 1001100000; date -u -f o 1003000000
+      date -u -- -1
+      date -u 0x7fffffff
+      date -u 077
+      date -u -- -62135596800
+      date -u -- -62135596801
+      date -u -- -100000000000
+      date -u 253402300800
+      date -u 11000000000000
+      date -un -- -62135596801
+      echo 'XST -18000 XDT -14400
+       1000000000 1100000000' > /env/timezone
+      date 999999999; date 1000000000; date 1000018001; date 1100000000; date 1100014401; date -t 1050000000; date -n 1050000000
+      echo '  ABCDEFGHIJKLMNOP 3600 Q 0' > /env/timezone; date 0
+      echo 'ABCDEFGHIJKLMNOP 3600 QRS -7200 1 3' > /env/timezone; date 0; date 2; date 5
+      echo 'ABCDEFGHIJKLMNOPQ 0 ABC 0' > /env/timezone; date 0
+      echo 'AB 0 ABC 0' > /env/timezone; date 0
+      ~ $status 'date '[0-9]*': timezone: truncated name' && echo timezone status
+      echo 'ABC 1x ABC 0' > /env/timezone; date 0
+      echo 'ABC -1-2 ABC 0' > /env/timezone; date 0
+      echo -n 'ABC 12' > /env/timezone; date 0
+      echo -n 'ABC 0 ABC 0 5' > /env/timezone; date 0
+      echo 'ABC 0 ABC 0 5 x' > /env/timezone; date 0
+      echo 'ABC 0 ABC 9999999999' > /env/timezone; date 0
+      {echo ABC 0 ABC 0; seq 1 150} > /env/timezone; date 0
+      {echo ABC 0 ABC 0; seq 1 149} > /env/timezone; date 0
+      timezone=(XST -18000 XDT -14400); date 0
+      rm /env/timezone; date 0
+      date -x
+      date 1 2
+      date -f
+      ~ $status 'date '[0-9]*': usage' && echo usage status
+      date -u -f YYY 0; date -u -f MMMMM 0; date -u -f DDD 0; date -u -f oo 0; date -u -f WWWW 0; date -u -f HHH 0
+      ~ $status 'date '[0-9]*': garbled format HHH' && echo garbled status
+      date -u -f tttt 0; date -u -f uuuuu 0; date -u -f nnnnnnn 0; date -u -f AA 0; date -u -f aa 0; date -u -f '[abc' 0; date -u -f hhh 0; date -u -f mmm 0; date -u -f sss 0
+      """
+    Then it prints
+      """
+      Thu Jan  1 00:00:00 GMT 1970
+      Sun Sep  9 01:46:40 GMT 2001
+      1000000000
+      2001-09-09T01:46:40+00:00
+      2001-09-09
+      3 Tue Tuesday 11 11 Nov November 14 14 th 22 22 10 10 13 13 20 20 PM pm
+       1   01    23 1970 70 1970 +0000 +00:00 GMT +0000 +0000 +00:00       GMT
+      |é|20011a]b[c]dx
+      0 000 000 0 000 0 000000 0 000   0 000000     0 000000000   000
+      th
+      th
+      st
+      th
+      Wed Dec 31 23:59:59 GMT 1969
+      Tue Jan 19 03:14:07 GMT 2038
+      Thu Jan  1 00:01:03 GMT 1970
+      Mon Jan  1 00:00:00 GMT    1
+      Sun Dec 31 23:59:59 GMT   -1
+      Thu Mar 22 14:13:20 GMT -1200
+      Sat Jan  1 00:00:00 GMT 10000
+      Mon Feb 14 19:33:20 GMT 350546
+      -62167132801
+      Sat Sep  8 20:46:39 XST 2001
+      Sat Sep  8 20:46:40 XST 2001
+      Sun Sep  9 02:46:41 XDT 2001
+      Tue Nov  9 07:33:20 XDT 2004
+      Tue Nov  9 11:33:21 XDT 2004
+      2003-04-10T14:40:00-04:00
+      1050000000
+      date: timezone: truncated name
+      Thu Jan  1 01:00:00 ABCDEFGHIJKLMNO 1970
+      Thu Jan  1 01:00:02 ABCDEFGHIJKLMNO 1970
+      Thu Jan  1 01:00:05 ABCDEFGHIJKLMNO 1970
+      date: timezone: truncated name
+      date: timezone: truncated name
+      timezone status
+      date: timezone: non-number x in name
+      date: timezone: non-number - in name
+      date: timezone: non-number 
+      date: timezone: invalid transition time
+      date: timezone: invalid transition time
+      Thu Jan  1 00:00:00 ABC 1970
+      date: timezone: invalid timezone local
+      Thu Jan  1 00:00:00 ABC 1970
+      date: timezone: truncated name
+      date: timezone: file does not exist: '/env/timezone'
+      usage: date [-itun] [-f fmt] [seconds]
+      usage: date [-itun] [-f fmt] [seconds]
+      usage: date [-itun] [-f fmt] [seconds]
+      usage status
+      date: garbled format YYY
+      date: garbled format MMMMM
+      date: garbled format DDD
+      date: garbled format oo
+      date: garbled format WWWW
+      date: garbled format HHH
+      garbled status
+      date: garbled format tttt
+      date: garbled format uuuuu
+      date: garbled format nnnnnnn
+      date: garbled format AA
+      date: garbled format aa
+      date: garbled format [abc
+      date: garbled format hhh
+      date: garbled format mmm
+      date: garbled format sss
+      """
+
+  @FOG_RC_RUN_280
+  Scenario: date reads the time now from the clock, in the zone init copied from /adm/timezone/local
+    Given 9front's clock and /adm/timezone/local are its own, so this runs on Fog alone
+    And the clock reads 1700000000
+    When rc runs the script
+      """
+      date
+      date -n
+      date -t
+      cat /env/timezone
+      cmp /adm/timezone/GMT /adm/timezone/local && echo local is GMT
+      """
+    Then it prints
+      """
+      Tue Nov 14 22:13:20 GMT 2023
+      1700000000
+      2023-11-14T22:13:20+00:00
+      GMT 0 GMT 0
+      0
+
+      local is GMT
+      """
