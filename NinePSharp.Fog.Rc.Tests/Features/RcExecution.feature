@@ -8127,3 +8127,119 @@ Feature: rc runs scripts as 9front rc does
       -i: ended
       -a: killed
       """
+
+  @FOG_RC_RUN_265
+  Scenario: cmp says where two files first differ, or which ends first, from the offsets given
+    When rc runs the script
+      """
+      mkdir /tmp/cmp; cd /tmp/cmp
+      echo 'abc
+      def' >a
+      echo 'abc
+      dxf' >b
+      echo abc >c
+      cmp a a && echo same
+      cmp a b
+      ~ $status 'cmp '[0-9]*': differ' && echo differ status
+      cmp -L a b
+      cmp -l a b
+      cmp -s a b || echo silent
+      cmp a c
+      ~ $status 'cmp '[0-9]*': EOF' && echo EOF status
+      cmp c a
+      cmp -s a c || echo silent
+      cmp a b 4 4
+      cmp a b 6 6 && echo same from 6
+      cmp a b 0x6
+      cmp a b x
+      ~ $status 'cmp '[0-9]*': usage' && echo usage status
+      cmp a /nonesuch
+      ~ $status 'cmp '[0-9]*': open' && echo open status
+      cmp -s /nonesuch a
+      cmp a
+      cmp -z a b
+      """
+    Then it prints
+      """
+      same
+      a b differ: char 6
+      differ status
+      a b differ: char 6 line 2
+           6 0x65 0x78
+      silent
+      EOF on c after 4 bytes
+      EOF status
+      EOF on c after 4 bytes
+      silent
+      a b differ: char 2
+      same from 6
+      a b differ: char 1
+      usage: cmp [-lLs] file1 file2 [offset1 [offset2] ]
+      usage status
+      /nonesuch: file does not exist: '/nonesuch'
+      open status
+      usage: cmp [-lLs] file1 file2 [offset1 [offset2] ]
+      usage: cmp [-lLs] file1 file2 [offset1 [offset2] ]
+      """
+
+  @FOG_RC_RUN_266
+  Scenario: uniq gives each run of equal lines once, counted, or only the repeated or the single ones
+    When rc runs the script
+      """
+      mkdir /tmp/uq; cd /tmp/uq
+      echo 'a
+      a
+      b
+      c c
+      c d
+      c d
+      e' >f
+      echo -n z >>f
+      echo 'ab
+      abc
+      abd' >g
+      uniq f
+      uniq -c f
+      uniq -u f
+      uniq -d f
+      uniq -1 f
+      uniq +1 <f
+      uniq g
+      uniq -s g
+      uniq /nonesuch
+      ~ $status 'uniq '[0-9]*': cannot open /nonesuch' && echo cannot open status
+      uniq f g
+      """
+    Then it prints
+      """
+      a
+      b
+      c c
+      c d
+      e
+         2 a
+         1 b
+         1 c c
+         2 c d
+         1 e
+      b
+      c c
+      e
+      a
+      c d
+      a
+      c c
+      c d
+      e
+      a
+      c c
+      c d
+      e
+      ab
+      abc
+      abd
+      ab
+      uniq: cannot open /nonesuch
+      cannot open status
+      uniq: unexpected argument g
+      """

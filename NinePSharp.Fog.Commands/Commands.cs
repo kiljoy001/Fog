@@ -21,6 +21,7 @@ public static class Commands
         ["cat"] = Cat.MainAsync,
         ["chmod"] = Chmod.MainAsync,
         ["cleanname"] = Cleanname.MainAsync,
+        ["cmp"] = Cmp.MainAsync,
         ["cp"] = Cp.MainAsync,
         ["echo"] = Echo.MainAsync,
         ["ls"] = Ls.MainAsync,
@@ -38,6 +39,7 @@ public static class Commands
         ["test"] = Test.MainAsync,
         ["touch"] = Touch.MainAsync,
         ["tlssrv"] = Tlssrv.MainAsync,
+        ["uniq"] = Uniq.MainAsync,
         ["unmount"] = Unmount.MainAsync,
         ["wc"] = Wc.MainAsync,
     };
