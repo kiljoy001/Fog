@@ -10027,3 +10027,99 @@ Feature: rc runs scripts as 9front rc does
 
       local is GMT
       """
+
+  @FOG_RC_RUN_281
+  Scenario: ps prints a line for each process in /proc from its status, with its note group, real time, priorities or arguments
+    When rc runs the script
+      """
+      mkdir -p /tmp/p/1 /tmp/p/20 /tmp/p/3 /tmp/p/400 /tmp/p/5 /tmp/p/6 /tmp/p/7 /tmp/p/0x
+      echo 'rc glenda Await 1000 2000 3723000 0 0 0 512 10 13' >/tmp/p/1/status
+      echo 1 >/tmp/p/1/noteid
+      echo -n 'rc -i' >/tmp/p/1/args
+      echo '''long text'' averyveryverylonguser Semacquire 4000000000 61000 90061000 0 0 0 4294967295 1 2' >/tmp/p/20/status
+      echo 123456789012 >/tmp/p/20/noteid
+      echo 'cat
+      x' >/tmp/p/20/args
+      echo 'few fields 1 2 3' >/tmp/p/3/status
+      echo 'sleep none Sleep 0x10 010 59999 0 0 0 -1 99 100' >/tmp/p/400/status
+      touch /tmp/p/400/args
+      echo 'zero glenda Pread 0 0 0 0 0 0 0 0 0' >/tmp/p/0x/status
+      echo abc >/tmp/p/0x/noteid
+      echo 'a b c d e f g h i j k l m n o p q r' >/tmp/p/7/status
+      bind /tmp/p /proc
+      ps
+      ps -a
+      ps -n
+      ps -r
+      ps -p
+      ps -anrp
+      ps -x
+      mkdir /tmp/e
+      bind /tmp/e /proc
+      ps
+      ~ $status 'ps '[0-9]*': empty' && echo empty status
+      """
+    Then it prints
+      """
+      glenda           0x    0:00   0:00        0K Pread    zero
+      glenda            1    0:01   0:02      512K Await    rc
+      b                 7    0:00   0:00        0K c        a
+      averyveryverylonguser       20 66666:40   1:01  4294967295K Semacqui long text
+      none            400    0:00   0:00  4294967295K Sleep    sleep
+      glenda           0x    0:00   0:00        0K Pread    zero ?
+      glenda            1    0:01   0:02      512K Await    rc -i
+      b                 7    0:00   0:00        0K c        a ?
+      averyveryverylonguser       20 66666:40   1:01  4294967295K Semacqui cat x 
+      none            400    0:00   0:00  4294967295K Sleep    sleep
+      glenda           0x       0    0:00   0:00        0K Pread    zero
+      glenda            1       1    0:01   0:02      512K Await    rc
+      b                 7        ?    0:00   0:00        0K c        a
+      averyveryverylonguser       20 2147483647 66666:40   1:01  4294967295K Semacqui long text
+      none            400        ?    0:00   0:00  4294967295K Sleep    sleep
+      glenda           0x        0:00    0:00   0:00        0K Pread    zero
+      glenda            1     1:02:03    0:01   0:02      512K Await    rc
+      b                 7        0:00    0:00   0:00        0K c        a
+      averyveryverylonguser       20  1:01:01:01 66666:40   1:01  4294967295K Semacqui long text
+      none            400        0:59    0:00   0:00  4294967295K Sleep    sleep
+      glenda           0x    0:00   0:00   0  0       0K Pread    zero
+      glenda            1    0:01   0:02  10 13     512K Await    rc
+      b                 7    0:00   0:00   0  0       0K c        a
+      averyveryverylonguser       20 66666:40   1:01   1  2 4294967295K Semacqui long text
+      none            400    0:00   0:00  99 100 4294967295K Sleep    sleep
+      glenda           0x       0        0:00    0:00   0:00   0  0       0K Pread    zero ?
+      glenda            1       1     1:02:03    0:01   0:02  10 13     512K Await    rc -i
+      b                 7        ?        0:00    0:00   0:00   0  0       0K c        a ?
+      averyveryverylonguser       20 2147483647  1:01:01:01 66666:40   1:01   1  2 4294967295K Semacqui cat x 
+      none            400        ?        0:59    0:00   0:00  99 100 4294967295K Sleep    sleep
+      glenda           0x    0:00   0:00        0K Pread    zero
+      glenda            1    0:01   0:02      512K Await    rc
+      b                 7    0:00   0:00        0K c        a
+      averyveryverylonguser       20 66666:40   1:01  4294967295K Semacqui long text
+      none            400    0:00   0:00  4294967295K Sleep    sleep
+      ps: empty directory /proc
+      empty status
+      """
+
+  @FOG_RC_RUN_282
+  Scenario: A process's status gives its text, user, the call it is in, its real time from its fork and its priorities
+    Given 9front's processes and clock are its own, so this runs on Fog alone
+    When rc runs the script
+      """
+      fn mask { sed 's/ +[0-9]+( +0 +0 +0 +0 +10 +10)$/ N\1/; s/^glenda +[0-9]+ /glenda N /' }
+      cat /proc/$pid/status | mask
+      sleep 3600 &
+      while(! grep -s '^sleep +glenda +Sleep ' /proc/$apid/status) sleep 0
+      cat /proc/$apid/status | mask
+      ps >/tmp/ps; ps -a >/tmp/psa
+      grep ' Await +rc$' /tmp/ps | mask
+      grep 'sleep 3600$' /tmp/psa | mask
+      echo kill >/proc/$apid/note
+      wait
+      """
+    Then it prints
+      """
+      rc                          glenda                      Await                 0           0 N           0           0           0           0          10          10
+      sleep                       glenda                      Sleep                 0           0 N           0           0           0           0          10          10
+      glenda N    0:00   0:00        0K Await    rc
+      glenda N    0:00   0:00        0K Sleep    sleep 3600
+      """

@@ -5,8 +5,8 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Kernel;
 
-// devproc: #p, a directory for each process holding its args, fd, note, noteid and notepg. The rest
-// of devproc's files, and its trace, are left out.
+// devproc: #p, a directory for each process holding its args, fd, note, noteid, notepg and status.
+// The rest of devproc's files, and its trace, are left out.
 internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
 {
     public const string Provider = "proc";
@@ -24,6 +24,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
         ("note", 0),
         ("noteid", 0b110_110_100),
         ("notepg", 0),
+        ("status", 0b100_100_100),
     ];
 
     // proccmd: devproc's control messages and the fields each takes, any number for 0.
@@ -45,6 +46,7 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
         Note,
         NoteId,
         NotePg,
+        Status,
     }
 
     public static ResourceHandle Root { get; } = Handle(0, QidType.QTDIR);
@@ -148,6 +150,8 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
                 return Line(Encoding.UTF8.GetBytes(await process.FdsAsync()), offset, count);
             case File.NoteId:
                 return Slice(Encoding.ASCII.GetBytes(Number(process.NoteId)), offset, count);
+            case File.Status:
+                return Slice(Encoding.UTF8.GetBytes(Status(process)), offset, count);
             case File.Note:
                 if (count < 1)
                 {
@@ -297,6 +301,17 @@ internal sealed class ProcDevice(FogKernel kernel) : IResourceDataOperations
     }
 
     private void NoNone(Process? caller, Process process) => NoNone(caller, process, kernel.User);
+
+    // procread of status: the text, user and state, then the times, the memory, and the base and
+    // present priorities. Fog keeps no account of the time a process spends in its own code or
+    // the kernel's, and devproc none of its children's real time, so only the real time counts,
+    // from the fork; it has no pages of its own, and runs at PriNormal.
+    private string Status(Process process)
+    {
+        const int PriNormal = 10;
+        long real = (long)kernel.Clock.GetElapsedTime(process.Started).TotalMilliseconds;
+        return string.Create(CultureInfo.InvariantCulture, $"{process.Text,-27} {process.User,-27} {process.PsState ?? "Running",-11} {0,11} {0,11} {(uint)real,11} {0,11} {0,11} {0,11} {0,11} {PriNormal,11} {PriNormal,11}\n");
+    }
 
     // procgen: a file's own permissions with the procmode's read bits, or the procmode for none.
     private uint Permissions(ResourceHandle resource)

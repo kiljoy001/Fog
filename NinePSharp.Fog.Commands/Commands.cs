@@ -33,6 +33,7 @@ public static class Commands
         ["mv"] = Mv.MainAsync,
         ["ndb/cs"] = Cs.MainAsync,
         ["ndb/csquery"] = Csquery.MainAsync,
+        ["ps"] = Ps.MainAsync,
         ["pwd"] = Pwd.MainAsync,
         ["read"] = Read.MainAsync,
         ["rm"] = Rm.MainAsync,

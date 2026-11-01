@@ -39,7 +39,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
 
         Assert.Equal([Format(init.Pid), Format(child.Pid)], processes.Select(entry => entry.Name));
         Assert.Equal(directory, processes[1].Handle);
-        Assert.Equal(["args", "ctl", "fd", "note", "noteid", "notepg"], files.Select(entry => entry.Name));
+        Assert.Equal(["args", "ctl", "fd", "note", "noteid", "notepg", "status"], files.Select(entry => entry.Name));
         foreach (ResourceDirectoryEntry file in files)
         {
             Assert.Equal(await proc.WalkAsync(directory, file.Name, default), file.Handle);
@@ -61,6 +61,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal(("note", 0b110_100_000u), Describe(await StatAsync(child.Pid, "note")));
         Assert.Equal(("noteid", 0b110_110_100u), Describe(await StatAsync(child.Pid, "noteid")));
         Assert.Equal(("notepg", 0b110_100_000u), Describe(await StatAsync(child.Pid, "notepg")));
+        Assert.Equal(("status", 0b100_100_100u), Describe(await StatAsync(child.Pid, "status")));
     }
 
     [Fact]
@@ -192,10 +193,10 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal(
             [
                 "/tmp\n",
-                "  0 rw R    0 (0000000000000008 2 00)     0        5 /tmp/f\n",
+                "  0 rw R    0 (000000000000000b 2 00)     0        5 /tmp/f\n",
                 "  1 r  R    0 (0000000000000005 0 80)     0        0 /tmp\n",
                 "  2 r  p    0 (000000000000000b 0 00)     0      123 /proc/1/fd\n",
-                "  3  R    0 (0000000000000009 0 00)     0        0 /tmp/x\n",
+                "  3  R    0 (000000000000000c 0 00)     0        0 /tmp/x\n",
                 "  4 rw |    1 (0000000000000000 0 00)     0        0 #|/data\n",
                 "  5 rw |    1 (0000000000000001 0 00)     0        0 #|/data1\n",
             ],

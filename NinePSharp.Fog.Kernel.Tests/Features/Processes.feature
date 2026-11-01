@@ -251,13 +251,13 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
   Scenario: A child with RFENVG lists a copy of the environment
     Given a process that writes "hello" to "/env/greeting"
     When it forks a child with RFENVG that lists "/env"
-    Then the child listed "greeting"
+    Then the child listed "timezone greeting"
 
   @FOG_KERNEL_005
   Scenario: A child with RFENVG adds to its own copy of the environment
     Given a process that writes "hello" to "/env/greeting"
     When it forks a child with RFENVG that writes "bye" to "/env/farewell"
-    Then the parent lists "greeting" in "/env"
+    Then the parent lists "timezone greeting" in "/env"
 
   @FOG_KERNEL_006
   Scenario Outline: A failed walk names the path as far as the failing element

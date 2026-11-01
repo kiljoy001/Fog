@@ -70,7 +70,7 @@ public sealed partial class Process
     /// </summary>
     public ValueTask<long> AlarmAsync(long milliseconds)
     {
-        using Return returning = new(this);
+        using Return returning = new(this, "Alarm");
         lock (debug)
         {
             DateTimeOffset now = kernel.Clock.GetUtcNow();
@@ -240,14 +240,23 @@ public sealed partial class Process
     private readonly struct Return : IDisposable
     {
         private readonly Process process;
+        private readonly string? state;
 
-        public Return(Process process)
+        // The call named as sysctab names it, the process's psstate while it runs, or null for one
+        // that leaves the state as it is.
+        public Return(Process process, string? name)
         {
             this.process = process;
+            state = process.PsState;
+            process.PsState = name ?? state;
             process.Noted();
         }
 
-        public void Dispose() => process.Noted();
+        public void Dispose()
+        {
+            process.PsState = state;
+            process.Noted();
+        }
     }
 
     // A token cancelled by either of two, without a linked source, whose disposal waits for a
