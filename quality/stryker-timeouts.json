@@ -1252,5 +1252,35 @@
     "mutator": "Negate expression",
     "line": "while (t < line.Length && Separator(line[t]))",
     "reason": "tokenize's skip runs on past the line's end, counting through every int until the index fails, for each line it reads"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await WalkAndCloneAsync(r, Walk1, Clone);",
+    "reason": "a walk by walk1 is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
+    "reason": "an open is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await RespondAsync(r, r.Fid is null ? Eunknownfid : null);",
+    "reason": "a clunk is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Null coalescing mutation (left to right)",
+    "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
+    "reason": "an open is answered without the server's own open, so the file is never readied and its client (the secstore scenarios) waits forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Null coalescing mutation (remove left)",
+    "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
+    "reason": "an open is answered without the server's own open, so the file is never readied and its client (the secstore scenarios) waits forever"
   }
 ]
