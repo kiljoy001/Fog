@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Dp9ik.P9Auth;
+using Dp9ik.Tls;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Auth;
 using NinePSharp.Fog.Commands;
@@ -34,6 +36,7 @@ public sealed class RcpuLoginSteps
     private readonly Dictionary<string, string> passwords = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource stopping = new();
     private readonly HashSet<long> session = [];
+    private readonly List<PasswordPrompt> prompts = [];
     private FogKernel kernel = null!;
     private Process init = null!;
     private TcpListener? authsrv;
@@ -42,6 +45,8 @@ public sealed class RcpuLoginSteps
     private string status = string.Empty;
     private string closed = string.Empty;
     private bool interactive;
+    private TcpClient? call;
+    private P9AuthClientResult? authenticated;
 
     private int Port => host.HostPort(17019);
 
@@ -290,6 +295,47 @@ public sealed class RcpuLoginSteps
         closed = Encoding.UTF8.GetString([.. all]);
     }
 
+    [When(@"^dp9ik\.net's client calls 17019 as ""([^""]*)"" with the password ""([^""]*)"", getting its tickets from 567$")]
+    public Task WhenClientCallsAsync(string user, string password) => CallAsync(user, password);
+
+    [When(@"^dp9ik\.net's client calls 17019 as ""([^""]*)"" with the passwords ""([^""]*)"" and then ""([^""]*)"", getting its tickets from 567$")]
+    public Task WhenClientCallsTwiceAsync(string user, string first, string second) => CallAsync(user, first, second);
+
+    [Then(@"^its ticket names ""(.*)"" as the client's and the server's user$")]
+    public void ThenTicketNames(string user)
+    {
+        Assert.Equal(user, authenticated!.ClientUser);
+        Assert.Equal(user, authenticated.ServerUser);
+    }
+
+    [Then(@"^the password was asked for as ""(.*)"", and again after a mismatch$")]
+    public void ThenAskedAgain(string text)
+    {
+        Assert.Equal([text, text], prompts.Select(prompt => prompt.Text));
+        Assert.Equal([false, true], prompts.Select(prompt => prompt.Mismatch));
+    }
+
+    // rcpu's way of sending its script, its length on a line of seven and then the script, over
+    // TLS-PSK; what rc prints comes back until the session ends.
+    [Then(@"^over TLS-PSK keyed by its secret, the script ""(.*)"" prints ""(.*)""$")]
+    public async Task ThenScriptPrintsAsync(string script, string text)
+    {
+        using var bound = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Stream tls = await P9PskTls.ConnectAsync(call!.GetStream(), authenticated!.Secret, bound.Token);
+        byte[] body = Encoding.UTF8.GetBytes(script + "\n");
+        await tls.WriteAsync(Encoding.UTF8.GetBytes($"{body.Length,7}\n"), bound.Token);
+        await tls.WriteAsync(body, bound.Token);
+        await tls.FlushAsync(bound.Token);
+        var all = new List<byte>();
+        byte[] buf = new byte[8192];
+        for (int n; (n = await tls.ReadAsync(buf, bound.Token)) > 0;)
+        {
+            all.AddRange(buf.AsSpan(0, n));
+        }
+
+        Assert.Equal(Unescape(text), Encoding.UTF8.GetString([.. all]).TrimEnd('\n'));
+    }
+
     [Then(@"^it prints ""(.*)""$")]
     public void ThenPrints(string text) => Assert.True(printed.TrimEnd('\n') == Unescape(text), Failure());
 
@@ -355,6 +401,7 @@ public sealed class RcpuLoginSteps
     {
         stopping.Cancel();
         authsrv?.Stop();
+        call?.Dispose();
         foreach (Process process in kernel?.Processes.Values ?? [])
         {
             process.PostNote("kill");
@@ -487,6 +534,29 @@ public sealed class RcpuLoginSteps
         {
             return false;
         }
+    }
+
+    // dp9ik.net's client on a call to 17019, its tickets got from the auth server on 567, given
+    // each password in turn as it asks.
+    private async Task CallAsync(string user, params string[] given)
+    {
+        var left = new Queue<string>(given);
+        call = new TcpClient();
+        await call.ConnectAsync(IPAddress.Loopback, Port);
+        var config = new P9AuthClientConfig(
+            user,
+            (prompt, _) =>
+            {
+                prompts.Add(prompt);
+                return ValueTask.FromResult(left.Count > 0 ? left.Dequeue() : null);
+            },
+            async (_, token) =>
+            {
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+                await socket.ConnectAsync(IPAddress.Loopback, host.HostPort(567), token);
+                return new NetworkStream(socket, ownsSocket: true);
+            });
+        authenticated = await P9AuthClient.AuthenticateAsync(call.GetStream(), config, stopping.Token).WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     // authsrv on the port 567 is on the host, with the users' passwords.

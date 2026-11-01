@@ -4,8 +4,9 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
   and dp9ik through the host owner's factotum, is encrypted with TLS-PSK keyed by the session
   secret, and runs the script rcpu sends, as the authenticated user, with rc; rcpu's files are
   served back over the same conversation and mounted at /mnt/term. 9front runs unchanged in QEMU
-  from its release ISO; its ndb names Fog's auth server for the domain "fog". Scenarios are skipped
-  unless FOG_9FRONT_ISO names a 9front amd64 ISO and qemu-system-x86_64 is on the path.
+  from its release ISO; its ndb names Fog's auth server for the domain "fog". dp9ik.net's client,
+  which fog is to be built on, logs in the same way, its tickets got from the same auth server.
+  Scenarios are skipped unless FOG_9FRONT_ISO names a 9front amd64 ISO and qemu-system-x86_64 is on the path.
 
   Background:
     Given a Fog host listening on tcp port 17019, and the auth server for the domain "fog" on 567
@@ -86,3 +87,15 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
     Given glenda's secstore on 9front holds the file "notes" with "kept on 9front"
     When Fog runs "auth/secstore -i -s tcp!9front!5356 -u glenda -G notes" with glenda's secstore password
     Then it prints "kept on 9front"
+
+  @FOG_LOGIN_010
+  Scenario: dp9ik.net's client logs in to Fog, getting its tickets from Fog's auth server
+    When dp9ik.net's client calls 17019 as "glenda" with the password "secretpw", getting its tickets from 567
+    Then its ticket names "glenda" as the client's and the server's user
+    And over TLS-PSK keyed by its secret, the script "echo hello; cat /dev/user" prints "hello\nglenda"
+
+  @FOG_LOGIN_010
+  Scenario: dp9ik.net's client is asked again for a password whose ticket does not open
+    When dp9ik.net's client calls 17019 as "glenda" with the passwords "wrongpw" and then "secretpw", getting its tickets from 567
+    Then the password was asked for as "glenda@fog dp9ik password", and again after a mismatch
+    And over TLS-PSK keyed by its secret, the script "echo hello" prints "hello"

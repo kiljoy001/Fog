@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; slices 1 to 7, the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, and `tlssrv` and `tcp17019` under `aux/listen`, through which stock 9front `rcpu` logs in, are built.
+Status: design; the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, `tlssrv` and `tcp17019` under `aux/listen`, through which stock 9front `rcpu` logs in, `secstored`, `secstore` and `secuser`, checked against 9front's in both directions, and dp9ik's client role in dp9ik.net (0.4.1), which logs in to Fog's `tcp17019` with its tickets from Fog's auth server, are built: slices 1 to 9.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
