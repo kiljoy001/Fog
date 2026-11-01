@@ -1,4 +1,5 @@
 using NinePSharp.Fog.Kernel;
+using Plan9.Utf;
 
 namespace NinePSharp.Fog.Commands;
 
@@ -14,12 +15,17 @@ public sealed class Biobuf(Process process, int fd)
     public const int Bsize = 32768;
     public const int Beof = -1;
 
+    // The bytes Bgetc keeps from the buffer before for Bungetc.
+    private const int Bungetsize = 4;
+
     private readonly List<byte> buffer = [];
     private readonly byte[] obuf = new byte[Bsize];
     private bool eof;
     private bool readFailed;
     private int ocount;
     private bool inactive;
+    private int gpos;
+    private bool bracteof;
 
     public Func<string, Task>? Errorf { get; set; }
 
@@ -100,6 +106,118 @@ public sealed class Biobuf(Process process, int fd)
         }
 
         return c == 0 && readFailed ? Beof : c;
+    }
+
+    // Bgetc: the next byte, or Beof at the end of input, which it gives once more before it reads
+    // again, or once a read has failed.
+    public async Task<int> BgetcAsync()
+    {
+        if (gpos < buffer.Count)
+        {
+            return buffer[gpos++];
+        }
+
+        if (bracteof || readFailed)
+        {
+            bracteof = false;
+            return Beof;
+        }
+
+        buffer.RemoveRange(0, Math.Max(0, buffer.Count - Bungetsize));
+        gpos = buffer.Count;
+        ReadOnlyMemory<byte> read;
+        try
+        {
+            await (Iof?.Invoke() ?? Task.CompletedTask);
+            read = await process.ReadAsync(fd, Bsize);
+        }
+        catch (SyscallException error)
+        {
+            Errstr.Set(process, error.Message);
+            readFailed = true;
+            await BerrorAsync($"read error: {error.Message}");
+            return Beof;
+        }
+
+        if (read.IsEmpty)
+        {
+            bracteof = true;
+            return Beof;
+        }
+
+        buffer.AddRange(read.ToArray());
+        return buffer[gpos++];
+    }
+
+    // Bungetc: the last byte Bgetc gave back to it.
+    public void Bungetc()
+    {
+        bracteof = false;
+        gpos -= readFailed ? 0 : 1;
+    }
+
+    // Bgetrune: the next rune, the bytes fullrune says it needs read, and those of a bad one past
+    // its first given back; or Beof, where the input ends, even in a rune.
+    public async Task<long> BgetruneAsync()
+    {
+        int c = await BgetcAsync();
+        if (c < Utf.RuneSelf)
+        {
+            return c;
+        }
+
+        var str = new List<byte> { (byte)c };
+        for (; ;)
+        {
+            if ((c = await BgetcAsync()) < 0)
+            {
+                return c;
+            }
+
+            str.Add((byte)c);
+            if (Utf.FullRune(str.ToArray()))
+            {
+                int size = Utf.CharToRune(out uint rune, str.ToArray());
+                for (int i = str.Count; i > size; i--)
+                {
+                    Bungetc();
+                }
+
+                return rune;
+            }
+        }
+    }
+
+    // Bputc: a byte into the buffer, which is written when it is full; Beof when that fails.
+    public async Task<int> BputcAsync(byte c)
+    {
+        for (; ;)
+        {
+            if (ocount < Bsize)
+            {
+                obuf[ocount++] = c;
+                return 0;
+            }
+
+            if (await BflushAsync() == Beof)
+            {
+                return Beof;
+            }
+        }
+    }
+
+    // Bputrune: a rune's UTF-8.
+    public async Task<long> BputruneAsync(uint r)
+    {
+        if (r < Utf.RuneSelf)
+        {
+            await BputcAsync((byte)r);
+            return 1;
+        }
+
+        byte[] str = new byte[Utf.UtfMax];
+        int n = Utf.RuneToChar(str, r);
+        return await BwriteAsync(str.AsMemory(0, n)) != n ? Beof : n;
     }
 
     // Bwrite: the bytes put in the buffer, a full one written whole before more go in, or Beof

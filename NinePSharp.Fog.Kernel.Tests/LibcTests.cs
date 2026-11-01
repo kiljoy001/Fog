@@ -304,6 +304,57 @@ public sealed class LibcTests
         Assert.Equal(fields[1..], Floats.Select(f => Encoding.UTF8.GetString(Libc.Sprint(f, [Libc.FmtArg.Of(v)]))));
     }
 
+    // pow10, as 9front gives it: from its table to 1e159, and past it the product of two halves,
+    // or for a negative power the reciprocal of either.
+    [Theory]
+    [InlineData(-200, "16687e92154ef7ac")]
+    [InlineData(-161, "1e81fee341fc585d")]
+    [InlineData(-160, "1eb67e9c127b6e74")]
+    [InlineData(-159, "1eec1e43171a4a12")]
+    [InlineData(-1, "3fb999999999999a")]
+    [InlineData(0, "3ff0000000000000")]
+    [InlineData(1, "4024000000000000")]
+    [InlineData(22, "4480f0cf064dd592")]
+    [InlineData(23, "44b52d02c7e14af6")]
+    [InlineData(159, "60f2357684599702")]
+    [InlineData(160, "6126c2d4256ffcc3")]
+    [InlineData(161, "615c73892ecbfbf3")]
+    [InlineData(200, "6974e718d7d7625a")]
+    [InlineData(308, "7fe1ccf385ebc8a0")]
+    public void Pow10IsPlan9s(int n, string bits)
+    {
+        Assert.Equal(bits, BitConverter.DoubleToInt64Bits(Libc.Pow10(n)).ToString("x16", CultureInfo.InvariantCulture));
+    }
+
+    // xadd and xsub: a carry or borrow runs up the digits from the one given, and past the first
+    // makes it 1 or 9; xadd adds nothing at a digit outside the 17.
+    [Theory]
+    [InlineData("12345678901234567", 16, 1, "12345678901234568", false)]
+    [InlineData("12345678901234569", 16, 1, "12345678901234570", false)]
+    [InlineData("19999999999999999", 16, 1, "20000000000000000", false)]
+    [InlineData("99999999999999999", 16, 1, "10000000000000000", true)]
+    [InlineData("12345678901234567", 3, 5, "12395678901234567", false)]
+    [InlineData("12345678901234567", 0, 9, "12345678901234567", true)]
+    [InlineData("12345678901234567", 17, 1, "12345678901234567", false)]
+    [InlineData("12345678901234567", -1, 1, "12345678901234567", false)]
+    public void XaddCarriesUpTheDigits(string digits, int n, int v, string after, bool carried)
+    {
+        char[] a = digits.ToCharArray();
+        Assert.Equal((carried, after), (Libc.Xadd(a, n, v), new string(a)));
+    }
+
+    [Theory]
+    [InlineData("12345678901234567", 16, 1, "12345678901234566", false)]
+    [InlineData("12345678901234561", 16, 1, "12345678901234560", false)]
+    [InlineData("12345678901234560", 16, 1, "12345678901234559", false)]
+    [InlineData("10000000000000000", 16, 1, "09999999999999999", false)]
+    [InlineData("00000000000000000", 16, 1, "99999999999999999", true)]
+    public void XsubBorrowsDownTheDigits(string digits, int n, int v, string after, bool borrowed)
+    {
+        char[] a = digits.ToCharArray();
+        Assert.Equal((borrowed, after), (Libc.Xsub(a, n, v), new string(a)));
+    }
+
     // strtod.c's reading of each number, as 9front read it: the bits of the double it gave, and
     // where it stopped.
     [Theory]

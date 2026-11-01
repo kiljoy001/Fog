@@ -10,6 +10,9 @@ public sealed class Arguments
 
     public Arguments(IReadOnlyList<string> argv) => this.argv = argv;
 
+    // argc as ARGBEGIN keeps it: the arguments from the one whose flags are being read.
+    public int Argc => argv.Count - next;
+
     // The flag letters in order; the arguments left are Rest once they run out.
     public IEnumerable<char> Flags()
     {

@@ -8961,3 +8961,390 @@ Feature: rc runs scripts as 9front rc does
       300
       <ni|
       """
+
+  @FOG_RC_RUN_274
+  Scenario: sed edits its input by addresses, substitutions, the hold space, branches and the texts it adds
+    When rc runs the script
+      """
+      mkdir /tmp/sd; cd /tmp/sd
+      for(i in one two three four five six) echo $i >>f
+      sed -n 2p f
+      sed 2d f
+      sed -n '$p' f
+      sed -n '2,4p' f
+      sed -n '/two/,/four/p' f
+      sed -n '/t/p' f
+      sed '2,5!d' f
+      sed -n '3,$p' f
+      sed -n '4,2p' f
+      sed 's/o/0/' f
+      sed 's/o/0/g' f
+      sed -n 's/e/E/gp' f
+      sed 's/\(t\)\(w\)/\2\1/' f
+      sed 's/[aeiou]/(&)/g' f
+      sed 's/.*/[&]/' f
+      sed 's/o/\n/' f
+      sed 's/x*/-/g' f
+      sed 's/^/> /' f
+      sed 's/$/ </' f
+      sed -e 's/one/1/' -e 's/two/2/' f
+      sed '/one/{
+      s/one/ONE/
+      p
+      }' f
+      sed -n '/e$/{s/e$/E/;p;}' f
+      sed 'y/otf/OTF/' f
+      sed 'y/o\ne/0\n3/' f
+      sed '1h;2,$H;$!d;g' f
+      sed -n '1h;1!G;$p;h' f
+      sed -n 'x;p' f
+      sed 'N;s/\n/+/' f
+      sed '$!N;P;D' f
+      sed -n '$=' f
+      sed = f
+      sed 3q f
+      sed -n '/three/{=;q;}' f
+      sed '2i\
+      inserted' f
+      sed '2a\
+      appended\
+      twice' f
+      sed '2,3c\
+      changed' f
+      sed '$c\
+      last' f
+      sed 'c\
+      all' f
+      echo red >r1
+      sed '1r r1' f
+      sed '1r nonesuch' f
+      sed -n '/o/w out' f; cat out
+      sed -n 's/e/E/w out2' f; cat out2
+      sed ':a
+      s/o/0/
+      ta' f
+      sed -n '/one/b skip
+      p
+      : skip' f
+      sed 'b end
+      s/o/0/
+      :end' f
+      sed -g 's/e/3/' f
+      echo 'tabxend  ' | tr x '\x09' | sed -n l
+      echo 'é\back' | sed -n l
+      sed -n '/two/,+1p' f
+      sed '/x/,/y/d' f
+      sed -n '//p' f
+      sed -n '/o/s//0/p' f
+      echo '#!/bin/rc' | sed 's/#/%/'
+      echo 'a.b.c' | sed 's/\./:/g'
+      echo 'hello' | sed 's/l\{2\}/L/'
+      echo 'aaa' | sed 's/a*/b/g'
+      echo 'abc' | sed 's/b*/X/g'
+      echo 's/one/uno/
+      s/two/dos/' >prog
+      sed -f prog f
+      echo 'p' >prog2
+      sed -n -f prog2 -e '$=' f
+      sed
+      sed -x f
+      sed -e
+      sed 'k' f
+      sed 's/a/b' f
+      sed 's/a/b/x' f
+      sed 'y/ab/c/' f
+      sed '0p' f
+      sed '1,2=' f
+      sed '1,2q' f
+      sed 'b nolabel' f
+      sed ':toolonglabel' f
+      sed ':a
+      :a' f
+      sed '}' f
+      sed '{p' f
+      sed 's/\(a/b/' f
+      sed 's/a/\1/' f
+      sed 's/[b-a]/x/' f
+      sed 'p ' f
+      sed nonesuch1 nonesuch2
+      sed p /nonesuch
+      """
+    Then it prints
+      """
+      two
+      one
+      three
+      four
+      five
+      six
+      six
+      two
+      three
+      four
+      two
+      three
+      four
+      two
+      three
+      two
+      three
+      four
+      five
+      three
+      four
+      five
+      six
+      four
+      0ne
+      tw0
+      three
+      f0ur
+      five
+      six
+      0ne
+      tw0
+      three
+      f0ur
+      five
+      six
+      onE
+      thrEE
+      fivE
+      one
+      two
+      three
+      four
+      five
+      six
+      (o)n(e)
+      tw(o)
+      thr(e)(e)
+      f(o)(u)r
+      f(i)v(e)
+      s(i)x
+      [one]
+      [two]
+      [three]
+      [four]
+      [five]
+      [six]
+
+      ne
+      tw
+
+      three
+      f
+      ur
+      five
+      six
+      -o-n-e
+      -t-w-o
+      -t-h-r-e-e
+      -f-o-u-r
+      -f-i-v-e
+      -s-i-
+      > one
+      > two
+      > three
+      > four
+      > five
+      > six
+      one <
+      two <
+      three <
+      four <
+      five <
+      six <
+      1
+      2
+      three
+      four
+      five
+      six
+      ONE
+      ONE
+      two
+      three
+      four
+      five
+      six
+      onE
+      threE
+      fivE
+      One
+      TwO
+      Three
+      FOur
+      Five
+      six
+      0n3
+      tw0
+      thr33
+      f0ur
+      fiv3
+      six
+      one
+      two
+      three
+      four
+      five
+      six
+      six
+      five
+      four
+      three
+      two
+      one
+
+      one
+      two
+      three
+      four
+      five
+      one+two
+      three+four
+      five+six
+      one
+      two
+      three
+      four
+      five
+      six
+      6
+      one
+      two
+      three
+      3
+      one
+      inserted
+      two
+      three
+      four
+      five
+      six
+      one
+      two
+      appended
+      twice
+      three
+      four
+      five
+      six
+      one
+      changed
+      four
+      five
+      six
+      one
+      two
+      three
+      four
+      five
+      one
+      red
+      two
+      three
+      four
+      five
+      six
+      one
+      two
+      three
+      four
+      five
+      six
+      one
+      two
+      four
+      onE
+      thrEe
+      fivE
+      0ne
+      tw0
+      three
+      f0ur
+      five
+      six
+      two
+      three
+      four
+      five
+      six
+      one
+      two
+      three
+      four
+      five
+      six
+      on3
+      two
+      thr33
+      four
+      fiv3
+      six
+      tab\tend  \n
+      \x00e9\\back
+      sed: Unrecognized command: /two/,+1p
+      one
+      two
+      three
+      four
+      five
+      sed: First RE may not be null
+      0ne
+      tw0
+      f0ur
+      %!/bin/rc
+      a:b:c
+      hello
+      b
+      XaXXc
+      uno
+      dos
+      three
+      four
+      five
+      six
+      one
+      two
+      three
+      four
+      five
+      six
+      6
+      sed: Unknown flag: x
+      sed: missing pattern
+      sed: Unrecognized command: k
+      sed: s command garbled: s/a/b
+      sed: x command garbled: s/a/b/x
+      sed: y command garbled: y/ab/c/
+      sed: line number 0 is illegal
+      sed: Only one address allowed: 1,2=
+      sed: Only one address allowed: 1,2q
+      sed: Undefined label: nolabel
+      sed: Label too long: :toolonglabel
+      sed: Duplicate labels: :a
+      sed: Too many }'s
+      sed: Too many {'s
+      one
+      two
+      three
+      four
+      five
+      six
+      one
+      two
+      three
+      four
+      five
+      six
+      one
+      two
+      three
+      four
+      five
+      six
+      sed:   command garbled: p 
+      sed: onesuch1 command garbled: nonesuch1
+      sed: Can't open /nonesuch
+      """

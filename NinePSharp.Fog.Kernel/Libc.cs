@@ -206,6 +206,64 @@ public static class Libc
         return ovfl ? uint.MaxValue : neg ? unchecked(0u - n) : n;
     }
 
+    // pow10: from the table, or the product of two halves, or their reciprocal.
+    internal static double Pow10(int n)
+    {
+        // Stryker disable once Equality : pow10(0) is 1 by either branch
+        if (n < 0)
+        {
+            n = -n;
+            return n < Tab.Length ? 1 / Tab[n] : 1 / (Pow10(n / 2) * Pow10(n - (n / 2)));
+        }
+
+        return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));
+    }
+
+    // xadd: v added at digit n, carried up; true when it carried out of the first, which is then 1.
+    internal static bool Xadd(char[] a, int n, int v)
+    {
+        if (n < 0 || n >= Nsignif)
+        {
+            return false;
+        }
+
+        for (int b = n; b >= 0; b--)
+        {
+            int c = a[b] + v;
+            if (c <= '9')
+            {
+                a[b] = (char)c;
+                return false;
+            }
+
+            a[b] = '0';
+            v = 1;
+        }
+
+        a[0] = '1';
+        return true;
+    }
+
+    // xsub: v taken from digit n, borrowed down; true when it borrowed past the first, then 9.
+    internal static bool Xsub(char[] a, int n, int v)
+    {
+        for (int b = n; b >= 0; b--)
+        {
+            int c = a[b] - v;
+            if (c >= '0')
+            {
+                a[b] = (char)c;
+                return false;
+            }
+
+            a[b] = '9';
+            v = 1;
+        }
+
+        a[0] = '9';
+        return true;
+    }
+
     private static T Signed<T>(string s, int radix, out int end)
         where T : IBinaryInteger<T>, IMinMaxValue<T>
     {
@@ -297,18 +355,6 @@ public static class Libc
         >= 'A' and <= 'Z' => c - 'A' + 10,
         _ => 36,
     };
-
-    // pow10: from the table, or the product of two halves, or their reciprocal.
-    private static double Pow10(int n)
-    {
-        if (n < 0)
-        {
-            n = -n;
-            return n < Tab.Length ? 1 / Tab[n] : 1 / (Pow10(n / 2) * Pow10(n - (n / 2)));
-        }
-
-        return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));
-    }
 
     // xdtoa: 17 digits of f taken by multiplying by ten, made exact against strtod, then rounded
     // to the precision and laid out in e or f style; g takes f style for an exponent from -4 to
@@ -829,51 +875,6 @@ public static class Libc
     }
 
     private static double Strtod(char[] digits, int e) => double.Parse($"{new string(digits)}e{e - Nsignif + 1}", CultureInfo.InvariantCulture);
-
-    // xadd: v added at digit n, carried up; true when it carried out of the first, which is then 1.
-    private static bool Xadd(char[] a, int n, int v)
-    {
-        if (n < 0 || n >= Nsignif)
-        {
-            return false;
-        }
-
-        for (int b = n; b >= 0; b--)
-        {
-            int c = a[b] + v;
-            if (c <= '9')
-            {
-                a[b] = (char)c;
-                return false;
-            }
-
-            a[b] = '0';
-            v = 1;
-        }
-
-        a[0] = '1';
-        return true;
-    }
-
-    // xsub: v taken from digit n, borrowed down; true when it borrowed past the first, then 9.
-    private static bool Xsub(char[] a, int n, int v)
-    {
-        for (int b = n; b >= 0; b--)
-        {
-            int c = a[b] - v;
-            if (c >= '0')
-            {
-                a[b] = (char)c;
-                return false;
-            }
-
-            a[b] = '9';
-            v = 1;
-        }
-
-        a[0] = '9';
-        return true;
-    }
 
     // A varargs slot: eight bytes, which a verb reads as an int, long, vlong, double or pointer, or
     // a string, for %s and %S. A slot past the last reads as zeros, where 9front reads its stack.
