@@ -10517,3 +10517,518 @@ Feature: rc runs scripts as 9front rc does
       Only in d1: same
       Only in d1: sub
       """
+
+  @FOG_RC_RUN_284
+  Scenario: sort orders lines by keys built from their fields as its flags say, in parts merged from temporary files past -l
+    When rc runs the script
+      """
+      mkdir /tmp/sorts; cd /tmp/sorts
+      {echo banana; echo apple; echo Cherry; echo apple; echo 10; echo 9; echo -3; echo ' b'; echo 'a b'; echo 'a	b'} >w
+      sort w; sort -r w; sort -u w; sort -f w; sort -n w; sort -nr w
+      sort -d w; sort -i w; sort -w w; sort -b w; sort -fu w
+      seq 1 30 | sort | sed 12q; seq 1 30 | sort -n | sed 3q; seq 1 30 | sort -rn | sed 3q; seq 1 40 | sort -r | sed 5q
+      {echo 'b 2 x'; echo 'a 10 y'; echo 'c 1 z'; echo 'a 2 w'} >f
+      sort +1 f; sort +1n f; sort -k2n f; sort -k2,2n -k1,1 f; sort +1 -2 f; sort -k3 f; sort -k1.2 f; sort '-t ' -k3 f; sort +0.1 f; sort -k2b,2 f; sort +1b -2 f
+      {echo 'x:3:c'; echo 'y:1:b'; echo 'z:2:a'; echo 'w'} >t; sort -t: +1n t; sort -t: -k2 t; sort -t: -k3,3 t; sort -t: +2 -3 t
+      {echo 'a·2'; echo 'b·1'} >u; sort -t· +1 u
+      {echo 1e3; echo 2.5; echo -0; echo 0.0; echo .5; echo 1.50; echo 007; echo 1e-1; echo '  3'; echo +4; echo -2.5e1; echo abc; echo 1e; echo 2e+1; echo -.25; echo 10.000} >n
+      sort -n n; sort -g n; sort -gr n; sort -nr n
+      {echo 'Mar x'; echo 'jan y'; echo 'DEC z'; echo 'foo'; echo ' feb'; echo 'ma'} >m; sort -M m; sort -Mr m
+      {echo 'éclair'; echo 'eclair'; echo 'Ebony'; echo 'zed'; echo 'Ève'; echo '日本'} >l; sort l; sort -f l; sort -d l; sort -df l; sort -i l; sort -r l; sort -fr l; sort -dr l
+      sort -u -k1,1 f; sort -u +0 -1 f
+      sort -c w; ~ $status 'sort '[0-9]*': order' && echo order status
+      sort w >sw; sort -c sw && echo sorted; sort -cu sw
+      sort -o out w; cat out; sort -o w w; cat w
+      seq 1 25 | sort -l 2 -T /tmp/sorts | sed 4q; ls /tmp/sorts | grep -c '^sort\.'
+      seq 1 25 | sort -l 0 -r | sed 2q; seq 1 12 | sort -l 1 -u -n | sed 2q
+      sort -v -k2n f; sort -vM m >/dev/null; sort -v +1.1b -2.3 -c -u f; sort -vfrd -l 5 -o /dev/null f
+      echo -n last | sort; seq 1 10000 | tr -d '\012' | sort | wc -c
+      echo stdin | sort -- f; echo stdin2 | sort - f
+      sort /nonesuch; sort -x; sort +x; sort -k0 f; sort -k1.0 f; sort -wr f; sort -nM f; sort -c w f; sort -k1q f
+      sort -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 -k1 f
+      sort -t'
+      ' f; ~ $status 'sort '[0-9]*': rob' && echo rob status
+      sort -k1 -r f; sort -l 1 -T /nonexistent f >[2=1] | sed 's/sort\.[0-9]+\./sort.N./'
+      sort -T /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -l 1 f
+      sort -o /nonexistent/x f
+      sort -m -k 2 f; sort -t f; sort -o; sort -k
+      """
+    Then it prints
+      """
+       b
+      -3
+      10
+      9
+      Cherry
+      a	b
+      a b
+      apple
+      apple
+      banana
+      banana
+      apple
+      apple
+      a b
+      a	b
+      Cherry
+      9
+      10
+      -3
+       b
+       b
+      -3
+      10
+      9
+      Cherry
+      a	b
+      a b
+      apple
+      banana
+       b
+      -3
+      10
+      9
+      a	b
+      a b
+      apple
+      apple
+      banana
+      Cherry
+      -3
+      banana
+      apple
+      Cherry
+      apple
+       b
+      a b
+      a	b
+      9
+      10
+      10
+      9
+      banana
+      apple
+      Cherry
+      apple
+       b
+      a b
+      a	b
+      -3
+       b
+      10
+      -3
+      9
+      Cherry
+      a	b
+      a b
+      apple
+      apple
+      banana
+       b
+      -3
+      10
+      9
+      Cherry
+      a b
+      a	b
+      apple
+      apple
+      banana
+      -3
+      10
+      9
+      Cherry
+      a b
+      a	b
+      apple
+      apple
+       b
+      banana
+       b
+      -3
+      10
+      9
+      Cherry
+      a	b
+      a b
+      apple
+      apple
+      banana
+       b
+      -3
+      10
+      9
+      a	b
+      a b
+      apple
+      banana
+      Cherry
+      1
+      10
+      11
+      12
+      13
+      14
+      15
+      16
+      17
+      18
+      19
+      2
+      1
+      2
+      3
+      30
+      29
+      28
+      9
+      8
+      7
+      6
+      5
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      c 1 z
+      a 2 w
+      b 2 x
+      a 10 y
+      c 1 z
+      a 2 w
+      b 2 x
+      a 10 y
+      c 1 z
+      a 2 w
+      b 2 x
+      a 10 y
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      a 2 w
+      b 2 x
+      a 10 y
+      c 1 z
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      a 2 w
+      b 2 x
+      a 10 y
+      c 1 z
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      w
+      y:1:b
+      z:2:a
+      x:3:c
+      w
+      y:1:b
+      z:2:a
+      x:3:c
+      w
+      z:2:a
+      y:1:b
+      x:3:c
+      w
+      z:2:a
+      y:1:b
+      x:3:c
+      b·1
+      a·2
+      -2.5e1
+      -.25
+      abc
+      -0
+      0.0
+      .5
+      1e3
+      1e-1
+      1e
+      1.50
+      2e+1
+      2.5
+        3
+      +4
+      007
+      10.000
+      -2.5e1
+      -.25
+      abc
+      -0
+      0.0
+      1e-1
+      .5
+      1e
+      1.50
+      2.5
+        3
+      +4
+      007
+      10.000
+      2e+1
+      1e3
+      1e3
+      2e+1
+      10.000
+      007
+      +4
+        3
+      2.5
+      1.50
+      1e
+      .5
+      1e-1
+      -0
+      abc
+      0.0
+      -.25
+      -2.5e1
+      10.000
+      007
+      +4
+        3
+      2.5
+      2e+1
+      1.50
+      1e3
+      1e
+      1e-1
+      .5
+      -0
+      abc
+      0.0
+      -.25
+      -2.5e1
+      ma
+      foo
+      jan y
+       feb
+      Mar x
+      DEC z
+      DEC z
+      Mar x
+       feb
+      jan y
+      foo
+      ma
+      Ebony
+      eclair
+      zed
+      Ève
+      éclair
+      日本
+      Ebony
+      éclair
+      eclair
+      Ève
+      zed
+      日本
+      日本
+      Ebony
+      eclair
+      zed
+      Ève
+      éclair
+      日本
+      Ebony
+      éclair
+      eclair
+      Ève
+      zed
+      日本
+      Ebony
+      éclair
+      eclair
+      Ève
+      zed
+      日本
+      éclair
+      Ève
+      zed
+      eclair
+      Ebony
+      日本
+      zed
+      Ève
+      éclair
+      eclair
+      Ebony
+      éclair
+      Ève
+      zed
+      eclair
+      Ebony
+      日本
+      a 10 y
+      b 2 x
+      c 1 z
+      a 10 y
+      b 2 x
+      c 1 z
+      sort: -c file not in sort
+      order status
+      sorted
+      sort: -c file not in sort
+       b
+      -3
+      10
+      9
+      Cherry
+      a	b
+      a b
+      apple
+      apple
+      banana
+       b
+      -3
+      10
+      9
+      Cherry
+      a	b
+      a b
+      apple
+      apple
+      banana
+      1
+      10
+      11
+      12
+      0
+      9
+      8
+      1
+      2
+      sort +1.* -*.*n
+      b 2 x
+       30 40 41 32 00
+       62 20 32 20 78 00
+      a 10 y
+       30 40 42 31 00
+       61 20 31 30 20 79 00
+      c 1 z
+       30 40 41 31 00
+       63 20 31 20 7a 00
+      a 2 w
+       30 40 41 32 00
+       61 20 32 20 77 00
+      =========
+      c 1 z
+      a 2 w
+      b 2 x
+      a 10 y
+      	 01 01 01 01 01 01 01 01 01 00 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 00 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 01 01 01 01 01
+      	 01 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      	 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+      sort -M
+      Mar x
+       0c 00
+      jan y
+       0a 00
+      DEC z
+       15 00
+      foo
+       09 00
+       feb
+       0b 00
+      ma
+       00
+      =========
+      sort +1.1b -2.3 -c -u
+      b 2 x
+       20 78 00
+      a 10 y
+       30 20 79 00
+      c 1 z
+       20 7a 00
+      sort: -c file not in sort
+      	 00 00 00 00 00 00 00 00 00 f6 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 df 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 cf ce cd cc cb ca c9 c8 c7 c6 00 00 00 00 00 00
+      	 00 be bd bc bb ba b9 b8 b7 b6 b5 b4 b3 b2 b1 b0
+      	 af ae ad ac ab aa a9 a8 a7 a6 a5 00 00 00 00 00
+      	 00 be bd bc bb ba b9 b8 b7 b6 b5 b4 b3 b2 b1 b0
+      	 af ae ad ac ab aa a9 a8 a7 a6 a5 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f 00 4f 55 55 55 55 59 00 00
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f 00 4f 55 55 55 55 59 00 00
+      sort -d -f -r -o /dev/null -l 5
+      b 2 x
+       bd df cd df a7 ff
+      a 10 y
+       be df ce cf df a6 ff
+      c 1 z
+       bc df ce df a5 ff
+      a 2 w
+       be df cd df a8 ff
+      =========
+      sort: newline added
+      last
+      sort: newline added
+        38895
+      a 10 y
+      a 2 w
+      b 2 x
+      c 1 z
+      stdin
+      a 10 y
+      a 2 w
+      b 2 x
+      c 1 z
+      stdin2
+      sort: open /nonesuch: file does not exist: '/nonesuch'
+      sort: unknown option: -x
+      sort: unknown option: +x
+      sort: field offset must be positive
+      sort: character offset must be positive
+      sort: illegal combination of flags: 300
+      sort: illegal combination of flags: c0
+      sort: -c can have at most one input file
+      sort: unknown option: field.q
+      sort: too many fields specified
+      aw come on, rob
+      rob status
+      sort: global field set after -k
+      c 1 z
+      b 2 x
+      a 2 w
+      a 10 y
+      sort: create /nonexistent/sort.N.0000: file does not exist: '/nonexistent'
+      temp file directory name is too long: /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      sort: create /nonexistent/x: file does not exist: '/nonexistent'
+      c 1 z
+      a 10 y
+      a 2 w
+      b 2 x
+      """

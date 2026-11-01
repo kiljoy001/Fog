@@ -5,9 +5,9 @@ namespace NinePSharp.Fog.Commands;
 
 // libbio's Biobuf. For reading, Brdline and Bread: Brdline gives a line, its delimiter included,
 // from a buffer of Bsize bytes, or null at the end of input, before a last line that has no
-// delimiter, or at a line too long for the buffer; Bread reads until it has what it was asked for
-// or the input ends. For writing, Bwrite and Bflush, which the program calls before it exits as
-// libbio's atexit does. Errors go to Errorf, as Blethal sets it, and Iof runs before each read,
+// delimiter, or at a line too long for the buffer, which Bgetc then reads; Bread reads until it
+// has what it was asked for or the input ends. For writing, Bwrite and Bflush, which the program
+// calls before it exits as libbio's atexit does. Errors go to Errorf, as Blethal sets it, and Iof runs before each read,
 // as a Biofn of the program's that then reads.
 public sealed class Biobuf(Process process, int fd)
 {
@@ -31,8 +31,15 @@ public sealed class Biobuf(Process process, int fd)
 
     public Func<Task>? Iof { get; set; }
 
+    // Blinelen: the length of the line Brdline last gave, or of what it left unread when it gave
+    // none, as Bgetc then reads it.
+    public int Blinelen { get; private set; }
+
     public async Task<byte[]?> BrdlineAsync(byte delim)
     {
+        // What Bgetc has given is gone.
+        buffer.RemoveRange(0, gpos);
+        gpos = 0;
         int scanned = 0;
         while (true)
         {
@@ -41,11 +48,13 @@ public sealed class Biobuf(Process process, int fd)
             {
                 byte[] line = buffer.GetRange(0, at + 1).ToArray();
                 buffer.RemoveRange(0, at + 1);
+                Blinelen = line.Length;
                 return line;
             }
 
             if (eof || buffer.Count >= Bsize)
             {
+                Blinelen = buffer.Count;
                 return null;
             }
 

@@ -123,6 +123,38 @@ public sealed class BiobufTests : IAsyncLifetime
         Assert.Single(errors);
     }
 
+    // Brdline gives each line and its length; where it gives none, Blinelen is what it left, which
+    // Bgetc reads from, and the next Brdline begins after what Bgetc gave. A line as long as the
+    // buffer is left whole, and at the end Blinelen is 0.
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
+    public async Task BrdlineLeavesWhatItCannotGiveToBgetc()
+    {
+        int fd = await init.CreateAsync("/tmp/lines", NinePConstants.ORDWR, 0b110_110_110);
+        await init.WriteAsync(fd, (byte[])[.. "ab\n"u8, .. Enumerable.Repeat((byte)'x', Bsize), .. "\ncd\nef"u8]);
+        await init.SeekAsync(fd, 0, 0);
+        Biobuf bp = Buffer(fd);
+        Assert.Equal("ab\n"u8.ToArray(), await bp.BrdlineAsync((byte)'\n'));
+        Assert.Equal(3, bp.Blinelen);
+        Assert.Null(await bp.BrdlineAsync((byte)'\n'));
+        Assert.Equal(Bsize, bp.Blinelen);
+        for (int i = 0; i < Bsize; i++)
+        {
+            Assert.Equal('x', await bp.BgetcAsync());
+        }
+
+        Assert.Equal('\n', await bp.BgetcAsync());
+        Assert.Equal('c', await bp.BgetcAsync());
+        Assert.Equal("d\n"u8.ToArray(), await bp.BrdlineAsync((byte)'\n'));
+        Assert.Equal(2, bp.Blinelen);
+        Assert.Null(await bp.BrdlineAsync((byte)'\n'));
+        Assert.Equal(2, bp.Blinelen);
+        Assert.Equal('e', await bp.BgetcAsync());
+        Assert.Equal('f', await bp.BgetcAsync());
+        Assert.Equal(Biobuf.Beof, await bp.BgetcAsync());
+        Assert.Null(await bp.BrdlineAsync((byte)'\n'));
+        Assert.Equal(0, bp.Blinelen);
+    }
+
     private Biobuf Buffer(int fd) => new(init, fd)
     {
         Errorf = message =>

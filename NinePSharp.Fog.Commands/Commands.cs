@@ -41,6 +41,7 @@ public static class Commands
         ["sed"] = Sed.MainAsync,
         ["date"] = Date.MainAsync,
         ["seq"] = Seq.MainAsync,
+        ["sort"] = Sort.MainAsync,
         ["sleep"] = Sleep.MainAsync,
         ["tee"] = Tee.MainAsync,
         ["test"] = Test.MainAsync,
