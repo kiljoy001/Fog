@@ -2,18 +2,34 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using NinePSharp.Constants;
+using Plan9.Utf;
 
 namespace NinePSharp.Fog.Kernel;
 
 // Plan 9 libc's strtol, strtoll and strtoul, whose longs are 32 bits: the number at the start of s,
-// and in end where it stops, or 0 when no digit was read; %q as quotefmtinstall gives it; %e, %f
-// and %g as fltfmt.c gives them; and getwd.
+// and in end where it stops, or 0 when no digit was read; %q as quotefmtinstall gives it; sprint,
+// with fmt's verbs and fltfmt.c's %e, %f and %g; and getwd.
 public static class Libc
 {
     private const string RcSpecial = "`^#*[]=|\\?${}()'<>&;";
     private const int FDigit = 30;
     private const int FDeflt = 6;
     private const int Nsignif = 17;
+
+    // fmt.h's flags.
+    private const int FmtWidth = 1;
+    private const int FmtLeft = FmtWidth << 1;
+    private const int FmtPrec = FmtLeft << 1;
+    private const int FmtSharp = FmtPrec << 1;
+    private const int FmtSpace = FmtSharp << 1;
+    private const int FmtSign = FmtSpace << 1;
+    private const int FmtZero = FmtSign << 1;
+    private const int FmtUnsigned = FmtZero << 1;
+    private const int FmtShort = FmtUnsigned << 1;
+    private const int FmtLong = FmtShort << 1;
+    private const int FmtVLong = FmtLong << 1;
+    private const int FmtComma = FmtVLong << 1;
+    private const int FmtByte = FmtComma << 1;
 
     // pow10's table: 1e0 to 1e159, each as the compiler rounds it.
     private static readonly double[] Tab = [.. Enumerable.Range(0, 160).Select(n => double.Parse($"1e{n}", CultureInfo.InvariantCulture))];
@@ -44,13 +60,26 @@ public static class Libc
         }
     }
 
-    // _floatfmt: f as the verb e, f or g gives it, or E or G with a capital E, to the precision
-    // given, 6 by default and 30 at most; with flags of '+', ' ', '#' and '-', and the width, which
-    // is padded with spaces, as _floatfmt keeps no flag but the width and '-'.
-    public static string Floatfmt(double f, char verb, int? prec = null, string flags = "", int width = 0)
+    // sprint, as dofmt.c and fmt.c run it: the format's text as it is, and each conversion with
+    // 9front's verbs and flags, its arguments read from args as 6c passes them, each an eight-byte
+    // slot that the verb reads as an int, long, vlong, double or pointer; %r prints errstr. What
+    // is formatted before a conversion the format ends in is kept, as vsnprint keeps it.
+    public static byte[] Sprint(string format, IReadOnlyList<FmtArg> args, string errstr = "")
     {
-        string s = Xdtoa(f, verb, Math.Min(prec ?? FDeflt, FDigit), flags);
-        return flags.Contains('-', StringComparison.Ordinal) ? s.PadRight(width) : s.PadLeft(width);
+        var f = new Fmt(args, errstr);
+        byte[] fmt = [.. Encoding.UTF8.GetBytes(format), 0];
+        for (int p = 0; ;)
+        {
+            while (fmt[p] is not (0 or (byte)'%'))
+            {
+                f.Out.Add(fmt[p++]);
+            }
+
+            if (fmt[p++] == 0 || (p = Dispatch(f, fmt, p)) < 0)
+            {
+                return [.. f.Out];
+            }
+        }
     }
 
     // ctime: asctime's "WW MMM _D hh:mm:ss ZZZ YYYY\n" for the time, in GMT, Fog's only zone.
@@ -63,6 +92,97 @@ public static class Libc
     public static int Strtol(string s, int radix, out int end) => Signed<int>(s, radix, out end);
 
     public static long Strtoll(string s, int radix, out int end) => Signed<long>(s, radix, out end);
+
+    // strtod: the number at the start of s, read by strtod.c's states: blanks, a sign, digits with a
+    // point, and an exponent, which any '-' past the first sign makes negative; or nan, inf or
+    // infinity in any case. end is where it stops, or 0 when no digit was read; the digits past
+    // 1450 are dropped, and the value is the closest double, as strtod.c finds it.
+    public static double Strtod(string s, out int end)
+    {
+        const int Ndig = 1500, Maxe = 310, Nmant = 53;
+        var a = new StringBuilder();
+        bool sign = false, esign = false, dpoint = false;
+        int dp = 0, ex = 0, state = 0, i = 0;
+        for (; ; i++)
+        {
+            char c = At(s, i);
+            if (c is >= '0' and <= '9')
+            {
+                if (state >= 5)
+                {
+                    state = 7;
+                    ex = unchecked((ex * 10) + c - '0');
+                    continue;
+                }
+
+                state = state <= 2 ? 2 : 4;
+                if (a.Length == 0 && c == '0')
+                {
+                    dp--;
+                }
+                else if (a.Length < Ndig - 50)
+                {
+                    a.Append(c);
+                }
+
+                continue;
+            }
+
+            if (c is '\t' or '\n' or '\v' or '\f' or '\r' or ' ' && state == 0)
+            {
+                continue;
+            }
+
+            if (c is '-' or '+')
+            {
+                sign |= c == '-' && state == 0;
+                esign |= c == '-' && state != 0;
+                if (state is 0 or 5)
+                {
+                    state = state == 0 ? 1 : 6;
+                    continue;
+                }
+            }
+            else if (c == '.')
+            {
+                (dpoint, dp) = (true, a.Length);
+                if (state is 0 or 1 or 2)
+                {
+                    state = state == 2 ? 4 : 3;
+                    continue;
+                }
+            }
+            else if (c is 'e' or 'E' && state is 2 or 4)
+            {
+                state = 5;
+                continue;
+            }
+
+            break;
+        }
+
+        string rest = s[Math.Min(i, s.Length)..].ToLowerInvariant();
+        if (state is 0 or 1 && rest.StartsWith("nan", StringComparison.Ordinal))
+        {
+            // NaN(), whose bits are 9front's.
+            end = i + 3;
+            return BitConverter.Int64BitsToDouble(sign ? unchecked((long)0xfff0000000000001) : 0x7ff0000000000001);
+        }
+
+        if (state is 0 or 1 && rest.StartsWith("inf", StringComparison.Ordinal))
+        {
+            end = i + (rest.StartsWith("infinity", StringComparison.Ordinal) ? 8 : 3);
+            return sign ? double.NegativeInfinity : double.PositiveInfinity;
+        }
+
+        end = state is 0 or 1 or 3 ? 0 : i - (state == 6 ? 2 : state == 5 ? 1 : 0);
+        string digits = dpoint ? a.ToString().TrimEnd('0') : a.ToString();
+        dp = unchecked((dpoint ? dp : digits.Length) + (esign ? -ex : ex));
+        double d = state is 0 or 1 or 3 || digits.Length == 0 || dp < -Maxe - (Nmant / 3) ? 0
+            : dp > Maxe ? double.PositiveInfinity
+            : double.Parse($"0.{digits}e{dp}", CultureInfo.InvariantCulture);
+        return sign ? -d : d;
+    }
 
     // strtoul skips a 0x only before a hex digit, and gives the largest for an overflow.
     public static uint Strtoul(string s, int radix, out int end)
@@ -372,6 +492,342 @@ public static class Libc
         return s.ToString();
     }
 
+    // _fmtdispatch: the flags, width and precision of a conversion and then its verb; where the
+    // format goes on after it, or -1 when the format ends first.
+    private static int Dispatch(Fmt f, byte[] fmt, int p)
+    {
+        (f.Flags, f.Width, f.Prec) = (0, 0, 0);
+        for (; ;)
+        {
+            p += Utf.CharToRune(out uint r, fmt.AsSpan(p));
+            f.R = r;
+            int i;
+            switch (r)
+            {
+                case 0:
+                    return -1;
+                case '.':
+                    f.Flags |= FmtWidth | FmtPrec;
+                    continue;
+                case '0' when (f.Flags & FmtWidth) == 0:
+                    f.Flags |= FmtZero;
+                    continue;
+                case >= '0' and <= '9':
+                    // The digits are read as signed chars.
+                    for (i = 0; r is >= '0' and <= '9'; r = unchecked((uint)(sbyte)fmt[p++]))
+                    {
+                        i = unchecked((i * 10) + (int)r - '0');
+                    }
+
+                    p--;
+                    break;
+                case '*':
+                    i = (int)f.Next().Bits;
+                    if (i < 0)
+                    {
+                        if ((f.Flags & FmtPrec) != 0)
+                        {
+                            (f.Flags, f.Prec) = (f.Flags & ~FmtPrec, 0);
+                            continue;
+                        }
+
+                        (i, f.Flags) = (unchecked(-i), f.Flags | FmtLeft);
+                    }
+
+                    break;
+                default:
+                    if (Verb(f, r) == 0)
+                    {
+                        return p;
+                    }
+
+                    continue;
+            }
+
+            // numflag: a number is the width, or the precision after a point.
+            if ((f.Flags & FmtWidth) != 0)
+            {
+                (f.Flags, f.Prec) = (f.Flags | FmtPrec, i);
+            }
+            else
+            {
+                (f.Flags, f.Width) = (f.Flags | FmtWidth, i);
+            }
+        }
+    }
+
+    // fmtfmt's verb: 1 for a flag, which the conversion goes on after, 0 once it is done.
+    private static int Verb(Fmt f, uint r)
+    {
+        switch (r)
+        {
+            case ' ' or '#' or '+' or ',' or '-' or 'h' or 'l' or 'u' or 'z':
+                Flagfmt(f, r);
+                return 1;
+            case '%':
+                f.Prec = 1;
+                Fmtrcpy(f, [r], 1);
+                break;
+            case 'C':
+                Fmtrcpy(f, [(uint)(int)f.Next().Bits], 1);
+                break;
+            case 'E' or 'G' or 'e' or 'f' or 'g':
+                string flags = ((f.Flags & FmtSign) != 0 ? "+" : string.Empty) + ((f.Flags & FmtSpace) != 0 ? " " : string.Empty) + ((f.Flags & FmtSharp) != 0 ? "#" : string.Empty);
+                byte[] s = Encoding.ASCII.GetBytes(Xdtoa(BitConverter.Int64BitsToDouble(f.Next().Bits), (char)r, Math.Min((f.Flags & FmtPrec) != 0 ? f.Prec : FDeflt, FDigit), flags));
+                f.Flags &= FmtWidth | FmtLeft;
+                Fmtcpy(f, s, s.Length, s.Length);
+                break;
+            case 'S':
+                if (f.Next().String() is not { } t)
+                {
+                    Fmtcpy(f, "<nil>"u8.ToArray(), 5, 5);
+                    break;
+                }
+
+                // A Rune string, as far as a NUL, or its precision.
+                uint[] runes = [.. t.EnumerateRunes().Select(x => (uint)x.Value).TakeWhile(x => x != 0)];
+                Fmtrcpy(f, runes, (f.Flags & FmtPrec) != 0 ? Math.Min(f.Prec, runes.Length) : runes.Length);
+                break;
+            case 'X' or 'b' or 'd' or 'o' or 'p' or 'x':
+                Ifmt(f);
+                break;
+            case 'c':
+                f.Prec = 1;
+                Fmtcpy(f, [(byte)f.Next().Bits], 1, 1);
+                break;
+            case 'n':
+                throw new ArgumentException("%n writes where the slot points, which is not a pointer");
+            case 'r':
+                Fmtstrcpy(f, f.Errstr);
+                break;
+            case 's':
+                Fmtstrcpy(f, f.Next().String());
+                break;
+            default:
+                // _badfmt: the verb between percent signs.
+                byte[] x = [(byte)'%', .. Rune(r), (byte)'%'];
+                f.Prec = x.Length;
+                Fmtcpy(f, x, x.Length, x.Length);
+                break;
+        }
+
+        return 0;
+    }
+
+    private static void Flagfmt(Fmt f, uint r)
+    {
+        f.Flags |= r switch
+        {
+            ',' => FmtComma,
+            '-' => FmtLeft,
+            '+' => FmtSign,
+            '#' => FmtSharp,
+            ' ' => FmtSpace,
+            'u' => FmtUnsigned,
+            'h' => (f.Flags & FmtShort) != 0 ? FmtByte | FmtShort : FmtShort,
+            'l' => (f.Flags & FmtLong) != 0 ? FmtVLong | FmtLong : FmtLong,
+            _ => FmtLong | FmtVLong,
+        };
+    }
+
+    // _ifmt: an integer of the size the flags say, in the verb's base, signed unless 'u', with
+    // its precision in zeros, then its sign or prefix, and zeros to the width with '0'.
+    private static void Ifmt(Fmt f)
+    {
+        int fl = f.Flags;
+        bool isv = false, neg = false;
+        ulong vu = 0;
+        uint u = 0;
+        long bits = f.Next().Bits;
+        if (f.R == 'p')
+        {
+            (vu, isv, f.R) = ((ulong)bits, true, 'x');
+            fl |= FmtUnsigned;
+        }
+        else if ((fl & FmtVLong) != 0)
+        {
+            (vu, isv) = ((ulong)bits, true);
+        }
+        else
+        {
+            int v = (int)bits;
+            u = (fl & (FmtLong | FmtByte | FmtShort | FmtUnsigned)) switch
+            {
+                _ when (fl & FmtLong) != 0 => (uint)v,
+                _ when (fl & FmtByte) != 0 => (fl & FmtUnsigned) != 0 ? (byte)v : (uint)(sbyte)v,
+                _ when (fl & FmtShort) != 0 => (fl & FmtUnsigned) != 0 ? (ushort)v : (uint)(short)v,
+                _ => (uint)v,
+            };
+        }
+
+        (int b, string conv) = f.R switch
+        {
+            'd' => (10, "0123456789abcdef"),
+            'x' => (16, "0123456789abcdef"),
+            'X' => (16, "0123456789ABCDEF"),
+            'b' => (2, "0123456789abcdef"),
+            _ => (8, "0123456789abcdef"),
+        };
+        if ((fl & FmtUnsigned) == 0)
+        {
+            if (isv && (long)vu < 0)
+            {
+                (vu, neg) = (unchecked((ulong)-(long)vu), true);
+            }
+            else if (!isv && (int)u < 0)
+            {
+                (u, neg) = (unchecked((uint)-(int)u), true);
+            }
+        }
+
+        char[] buf = new char[70];
+        int p = buf.Length - 1, n = 0;
+        for (ulong rest = isv ? vu : u; rest != 0; rest /= (ulong)b)
+        {
+            if ((fl & FmtComma) != 0 && n % 4 == 3)
+            {
+                buf[p--] = ',';
+                n++;
+            }
+
+            buf[p--] = conv[(int)(rest % (ulong)b)];
+            n++;
+        }
+
+        if (n == 0)
+        {
+            buf[p--] = '0';
+            n = 1;
+        }
+
+        for (; n < f.Prec && p > 3; n++)
+        {
+            buf[p--] = '0';
+        }
+
+        n += neg || (fl & (FmtSign | FmtSpace)) != 0 ? 1 : 0;
+        if ((fl & FmtSharp) != 0 && b == 16)
+        {
+            n += 2;
+        }
+        else if ((fl & FmtSharp) != 0 && b == 8)
+        {
+            fl &= buf[p + 1] == '0' ? ~FmtSharp : ~0;
+            n += buf[p + 1] == '0' ? 0 : 1;
+        }
+
+        if ((fl & FmtZero) != 0 && (fl & (FmtLeft | FmtPrec)) == 0)
+        {
+            for (; n < f.Width && p > 3; n++)
+            {
+                buf[p--] = '0';
+            }
+
+            f.Width = 0;
+        }
+
+        if ((fl & FmtSharp) != 0 && b is 16 or 8)
+        {
+            if (b == 16)
+            {
+                buf[p--] = (char)f.R;
+            }
+
+            buf[p--] = '0';
+        }
+
+        if (neg || (fl & (FmtSign | FmtSpace)) != 0)
+        {
+            buf[p--] = neg ? '-' : (fl & FmtSign) != 0 ? '+' : ' ';
+        }
+
+        f.Flags &= ~FmtPrec;
+        byte[] digits = Encoding.ASCII.GetBytes(buf, p + 1, n);
+        Fmtcpy(f, digits, n, n);
+    }
+
+    // fmtstrcpy: a string as far as its precision in runes, or <nil> for none.
+    private static void Fmtstrcpy(Fmt f, string? s)
+    {
+        if (s is null)
+        {
+            Fmtcpy(f, "<nil>"u8.ToArray(), 5, 5);
+            return;
+        }
+
+        byte[] m = Encoding.UTF8.GetBytes(s);
+        int nul = Array.IndexOf(m, (byte)0);
+        m = nul < 0 ? m : m[..nul];
+        if ((f.Flags & FmtPrec) == 0)
+        {
+            Fmtcpy(f, m, Utf.UtfLen(m), m.Length);
+            return;
+        }
+
+        int i = 0, j = 0;
+        for (; j < f.Prec && i < m.Length; j++)
+        {
+            i += Utf.CharToRune(out _, m.AsSpan(i));
+        }
+
+        Fmtcpy(f, m, j, i);
+    }
+
+    // _fmtcpy: n runes of the sz bytes at m, no more than the precision, padded to the width with
+    // spaces, on the left unless '-'; a rune cut short ends it. Past the bytes, which _badfmt's
+    // count of a verb's bytes as runes reads, it finds NULs, as 9front finds them there.
+    private static void Fmtcpy(Fmt f, byte[] m, int n, int sz)
+    {
+        n = (f.Flags & FmtPrec) != 0 && n > f.Prec ? f.Prec : n;
+        Pad(f, (f.Flags & FmtLeft) == 0 ? f.Width - n : 0);
+        for (int i = 0, nc = n; nc > 0; nc--)
+        {
+            if (i >= sz || m[i] < Utf.RuneSelf)
+            {
+                f.Out.Add(i < sz ? m[i] : (byte)0);
+                i++;
+            }
+            else if (sz - i >= Utf.UtfMax || Utf.FullRune(m.AsSpan(i, sz - i)))
+            {
+                i += Utf.CharToRune(out uint r, m.AsSpan(i, sz - i));
+                f.Out.AddRange(Rune(r));
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        Pad(f, (f.Flags & FmtLeft) != 0 ? f.Width - n : 0);
+    }
+
+    // _fmtrcpy: n runes, no more than the precision, padded as _fmtcpy pads them.
+    private static void Fmtrcpy(Fmt f, uint[] m, int n)
+    {
+        n = (f.Flags & FmtPrec) != 0 && n > f.Prec ? f.Prec : n;
+        Pad(f, (f.Flags & FmtLeft) == 0 ? f.Width - n : 0);
+        foreach (uint r in m.Take(n))
+        {
+            f.Out.AddRange(Rune(r));
+        }
+
+        Pad(f, (f.Flags & FmtLeft) != 0 ? f.Width - n : 0);
+    }
+
+    private static void Pad(Fmt f, int n)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            f.Out.Add((byte)' ');
+        }
+    }
+
+    private static byte[] Rune(uint r)
+    {
+        byte[] b = new byte[Utf.UtfMax];
+        return b[..Utf.RuneToChar(b, r)];
+    }
+
     private static double Strtod(char[] digits, int e) => double.Parse($"{new string(digits)}e{e - Nsignif + 1}", CultureInfo.InvariantCulture);
 
     // xadd: v added at digit n, carried up; true when it carried out of the first, which is then 1.
@@ -417,5 +873,41 @@ public static class Libc
 
         a[0] = '9';
         return true;
+    }
+
+    // A varargs slot: eight bytes, which a verb reads as an int, long, vlong, double or pointer, or
+    // a string, for %s and %S. A slot past the last reads as zeros, where 9front reads its stack.
+    public readonly record struct FmtArg(long Bits, string? Text)
+    {
+        public static FmtArg Of(double d) => new(BitConverter.DoubleToInt64Bits(d), null);
+
+        public static FmtArg Of(long v) => new(v, null);
+
+        public static FmtArg Of(string s) => new(0, s);
+
+        // The slot as a pointer to a string: nil for zeros; anything else is no string, which 9front
+        // faults on reading.
+        public string? String() => Text ?? (Bits == 0 ? null : throw new ArgumentException("a number where the format reads a string"));
+    }
+
+    // fmt.h's Fmt, as far as sprint uses it.
+    private sealed class Fmt(IReadOnlyList<FmtArg> args, string errstr)
+    {
+        private int next;
+
+        public List<byte> Out { get; } = [];
+
+        public string Errstr => errstr;
+
+        public uint R { get; set; }
+
+        public int Flags { get; set; }
+
+        public int Width { get; set; }
+
+        public int Prec { get; set; }
+
+        // va_arg: the next slot.
+        public FmtArg Next() => next < args.Count ? args[next++] : default;
     }
 }

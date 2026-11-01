@@ -139,11 +139,11 @@ public sealed class Du
                 val /= 1024;
             }
 
-            line = $"{Libc.Floatfmt(val, 'g', 6)}{Pfxes[scale] ?? "<nil>"}";
+            line = $"{Encoding.UTF8.GetString(Libc.Sprint("%.6g", [Libc.FmtArg.Of(val)]))}{Pfxes[scale] ?? "<nil>"}";
         }
         else if (fltflag)
         {
-            line = Libc.Floatfmt((double)amt / unit, 'g', 6);
+            line = Encoding.UTF8.GetString(Libc.Sprint("%.6g", [Libc.FmtArg.Of((double)amt / unit)]));
         }
         else
         {

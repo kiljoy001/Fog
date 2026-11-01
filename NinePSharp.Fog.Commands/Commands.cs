@@ -35,6 +35,7 @@ public static class Commands
         ["pwd"] = Pwd.MainAsync,
         ["read"] = Read.MainAsync,
         ["rm"] = Rm.MainAsync,
+        ["seq"] = Seq.MainAsync,
         ["sleep"] = Sleep.MainAsync,
         ["tee"] = Tee.MainAsync,
         ["test"] = Test.MainAsync,

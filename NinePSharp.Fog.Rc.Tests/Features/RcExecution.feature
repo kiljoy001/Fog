@@ -8821,3 +8821,143 @@ Feature: rc runs scripts as 9front rc does
       1000000100	/tmp/td/f
       1000000100	/tmp/td
       """
+
+  @FOG_RC_RUN_273
+  Scenario: seq counts from first by incr to last, each value as its format reads the double
+    When rc runs the script
+      """
+      seq 3
+      seq 2 4
+      seq 1 2 7
+      seq 5 1
+      seq 5 -2 1
+      seq -5 -3
+      seq 0.1 0.1 0.5
+      seq -w 8 11
+      seq -w 0.5 0.5 2
+      seq -w -1 1
+      seq -w -10 5 0
+      seq -w 1e6 1e6 3e6
+      seq -f '%05.1f' 1 3
+      seq -f 'x%gy' 2
+      seq -f '%d' 3 4
+      seq -f '%lld' 1
+      seq -f '%x' 2.5
+      seq -f '%q' 1
+      seq -f '%e' 1
+      seq -f '%5.2f|' 1 3
+      seq -wf '%3g' 9 11
+      seq -f '%3g' -w 9 11
+      seq -f '[%g]
+      ' 1 2
+      seq 1 0 5
+      ~ $status 'seq '[0-9]*': zero increment' && echo zero status
+      seq
+      seq 1 2 3 4
+      seq -f
+      ~ $status 'seq '[0-9]*': usage' && echo usage status
+      seq abc
+      seq -0
+      seq -2
+      seq -w5
+      seq 2 0.5 3
+      seq 1 0.1 1.3
+      seq -w 1 0.1 1.3
+      seq 3.5
+      seq 1 .3333 2
+      seq -- 2
+      seq 1e2 1e2 3e2
+      seq -f '%.3s|' 0 0
+      """
+    Then it prints
+      """
+      1
+      2
+      3
+      2
+      3
+      4
+      1
+      3
+      5
+      7
+      5
+      3
+      1
+      -5
+      -4
+      -3
+      0.1
+      0.2
+      0.3
+      0.4
+      0.5
+      08
+      09
+      10
+      11
+      0.5
+      1.0
+      1.5
+      2.0
+      -1
+      00
+      01
+      -10
+      0-5
+      000
+      1e+06
+      2e+06
+      3e+06
+        1.0
+        2.0
+        3.0
+      x1y
+      x2y
+      0
+      0
+      4607182418800017408
+      0
+      0
+      %q%
+      1.000000e+00
+       1.00|
+       2.00|
+       3.00|
+      009
+      010
+      011
+      009
+      010
+      011
+      [1]
+      [2]
+      seq: zero increment
+      zero status
+      usage: seq [-fformat] [-w] [first [incr]] last
+      usage: seq [-fformat] [-w] [first [incr]] last
+      usage: seq [-fformat] [-w] [first [incr]] last
+      usage status
+      2
+      2.5
+      3
+      1
+      1.1
+      1.2
+      1.0
+      1.1
+      1.2
+      1
+      2
+      3
+      1
+      1.3333
+      1.6666
+      1.9999
+      1
+      2
+      100
+      200
+      300
+      <ni|
+      """
