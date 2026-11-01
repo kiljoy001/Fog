@@ -21,4 +21,8 @@
     <ProjectReference Include="..\NinePSharp.Fog.Kernel\NinePSharp.Fog.Kernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Data\fltfmt.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

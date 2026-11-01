@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using NinePSharp.Constants;
 using Xunit;
 
@@ -5,6 +7,25 @@ namespace NinePSharp.Fog.Kernel.Tests;
 
 public sealed class LibcTests
 {
+    // The formats fltfmt.tsv gives each value in, after its bits, as 9front's print gave them.
+    private static readonly string[] Floats =
+    [
+        "%g", "%.6g", "%.0g", "%.1g", "%.3g", "%.10g", "%.15g", "%.16g", "%.17g", "%.20g",
+        "%e", "%.0e", "%.3e", "%.16e", "%E", "%G", "%f", "%.0f", "%.2f", "%.10f", "%.20f", "%.35f",
+        "%#g", "%#.0f", "%#.0e", "%+g", "% g", "%+.3f", "%10.3g", "%-10.2f|", "%08.2f", "%#.3g",
+    ];
+
+    public static TheoryData<string> Values()
+    {
+        var values = new TheoryData<string>();
+        foreach (string line in File.ReadLines(Path.Combine(AppContext.BaseDirectory, "Data", "fltfmt.tsv")))
+        {
+            values.Add(line);
+        }
+
+        return values;
+    }
+
     [Theory]
     [InlineData("plain", "plain")]
     [InlineData("", "''")]
@@ -149,5 +170,27 @@ public sealed class LibcTests
     public void StrtoulReadsAsPlan9sLibcDoes(string s, int radix, uint value, int end)
     {
         Assert.Equal((value, end), (Libc.Strtoul(s, radix, out int stop), stop));
+    }
+
+    // fltfmt.c's %e, %f and %g, each value as 9front printed it in each format: zeros, negative
+    // zero, NaN and Inf, numbers that are halfway at the precision, past 17 digits, and as small as
+    // a denormal or as big as a double goes. The most negative double is left out: its %.35f is a
+    // byte longer than _floatfmt's buffer, which 9front overruns.
+    [Theory]
+    [MemberData(nameof(Values))]
+    public void FloatfmtPrintsAsFltfmtDoes(string line)
+    {
+        string[] fields = line.Split('\t');
+        double v = BitConverter.Int64BitsToDouble((long)ulong.Parse(fields[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+        Assert.Equal(fields[1..], Floats.Select(f => Print(f, v)));
+    }
+
+    // One float conversion and the text after it.
+    private static string Print(string format, double v)
+    {
+        Match m = Regex.Match(format, @"^%([-+ #0]*)(\d*)(?:\.(\d+))?([eEfgG])(.*)$");
+        int? prec = m.Groups[3].Success ? int.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture) : null;
+        int width = m.Groups[2].Length > 0 ? int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) : 0;
+        return Libc.Floatfmt(v, m.Groups[4].Value[0], prec, m.Groups[1].Value, width) + m.Groups[5].Value;
     }
 }
