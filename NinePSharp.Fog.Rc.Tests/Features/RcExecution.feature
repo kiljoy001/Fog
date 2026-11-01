@@ -8015,11 +8015,13 @@ Feature: rc runs scripts as 9front rc does
       cp a a
       ~ $status 'cp '[0-9]*': errors' && echo errors status
       cp d e
+      ~ $status 'cp '[0-9]*': errors' && echo errors status
       cp /nonesuch e
       cp a /nonesuch/x
       cp a
       ~ $status 'cp '[0-9]*': usage' && echo usage status
       cp -z a b
+      cp a b2 && echo copied
       """
     Then it prints
       """
@@ -8035,6 +8037,7 @@ Feature: rc runs scripts as 9front rc does
       cp: a and a are the same file
       errors status
       cp: d is a directory
+      errors status
       cp: can't stat /nonesuch: file does not exist: '/nonesuch'
       cp: can't create /nonesuch/x: file does not exist: '/nonesuch'
       usage:	cp [-gux] fromfile tofile
@@ -8042,6 +8045,7 @@ Feature: rc runs scripts as 9front rc does
       usage status
       usage:	cp [-gux] fromfile tofile
       	cp [-x] fromfile ... todir
+      copied
       """
 
   @FOG_RC_RUN_260

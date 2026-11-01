@@ -77,8 +77,9 @@ public sealed class Cp
         }
         catch (SyscallException)
         {
-            return null;
         }
+
+        return null;
     }
 
     private async Task FailAsync(string message)
