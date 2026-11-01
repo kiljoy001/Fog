@@ -27,6 +27,7 @@
       "break": 100
     },
     "concurrency": 4,
-    "coverage-analysis": "perTestInIsolation"
+    "coverage-analysis": "perTestInIsolation",
+    "disable-mix-mutants": true
   }
 }
