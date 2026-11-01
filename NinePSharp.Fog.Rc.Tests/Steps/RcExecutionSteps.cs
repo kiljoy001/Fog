@@ -152,6 +152,9 @@ public sealed class RcExecutionSteps
     [Then("the file server was asked for no reads")]
     public void ThenNoReads() => Assert.Empty(server!.ReadTags);
 
+    [Then(@"^the file server was sent (\d+) wstats?$")]
+    public void ThenWStats(int count) => Assert.Equal(count, server!.WStats);
+
     [Then(@"^the largest read the file server was asked for was (\d+) bytes$")]
     public void ThenLargestRead(int count) => Assert.Equal(count, server!.LargestData);
 

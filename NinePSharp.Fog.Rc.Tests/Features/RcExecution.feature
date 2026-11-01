@@ -9871,3 +9871,17 @@ Feature: rc runs scripts as 9front rc does
       errors status
       uniq ends
       """
+
+  @FOG_RC_RUN_277
+  Scenario: cp -g and -u set the copy's group, and -u its owner, by a wstat a plain cp does not send
+    Given a file server holding "notes" with "hello", on descriptor 3
+    When rc runs the script
+      """
+      mkdir /tmp/fs; mount -c /fd/3 /tmp/fs
+      echo x >/tmp/a
+      cp /tmp/a /tmp/fs/c1
+      cp -g /tmp/a /tmp/fs/c2
+      cp -u /tmp/a /tmp/fs/c3
+      """
+    Then it prints nothing
+    And the file server was sent 2 wstats
