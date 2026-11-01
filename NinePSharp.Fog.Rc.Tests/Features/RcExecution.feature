@@ -8555,6 +8555,32 @@ Feature: rc runs scripts as 9front rc does
       tr aé bE </tmp/tr4096 >/tmp/tr4096o
       cat /tmp/tr4096o | tr -d b; echo
       cat /tmp/tr4096o | tr -cd b | wc -c
+      echo a | tr a b && echo ok
+      echo aab | tr -d aa
+      echo abc | tr b '\0' | tr -d '\0'
+      echo abc | tr b '\0' | tr -dc '\0' | xd -c
+      echo abbc | tr b '\0' | tr -ds x '\0' | xd -c
+      echo abc | tr b '\0' | tr -c '\0a' x | xd -c
+      echo abc | tr b '\0' | tr '\0' x
+      echo ab | tr ab 'y\0' | xd -c
+      echo axxb | tr x '\0' | tr -s a 'b\0' | xd -c
+      echo abc | tr -c a 'y\0' | xd -c
+      echo abcd | tr a-d '\0-\003' | tr '\0-\003' w
+      echo a- | tr 'a-' xy
+      echo '`a' | tr a-c x-z
+      echo -- -x | tr -- '-x' ab
+      echo a | tr a '\001' | tr -d x | xd -c
+      echo 􏿾 | tr -ds x 􏿾
+      echo 􏿾􏿾 | tr -s 􏿾 􏿾
+      echo 􏿿 | tr 􏿿 x
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      echo -n $a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a | tr a € | wc -c
+      b=$a^aaaaaaaaaaaaaaa
+      c=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$b
+      echo -n $c^é^$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a >/tmp/trbig
+      tr aé bE </tmp/trbig | tr -d b; echo
+      tr aé bE </tmp/trbig | tr -cd b | wc -c
       """
     Then it prints
       """
@@ -8597,6 +8623,35 @@ Feature: rc runs scripts as 9front rc does
       write status
       E
          4368
+      b
+      ok
+      b
+      ac
+      0000000  00
+      0000001 
+      0000000   a 00  c \n
+      0000004 
+      0000000   a 00  x  x
+      0000004 
+      axc
+      0000000   y 00 \n
+      0000003 
+      0000000   b 00  b \n
+      0000004 
+      0000000   a 00 00 00
+      0000004 
+      wwww
+      xy
+      `x
+      aa ab
+      0000000  01 \n
+      0000002 
+      􏿾
+      􏿾
+      x
+        12288
+      E
+        12303
       """
 
   @FOG_RC_RUN_268

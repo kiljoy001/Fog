@@ -15,7 +15,12 @@ public sealed class Tr
 
     private readonly Process process;
     private readonly string argv0;
+
+    // A bit for each rune; a bigger table holds them as well.
+    // Stryker disable once Arithmetic : a bigger table holds the runes as well
     private readonly byte[] f = new byte[(Runemax + 1) / 8];
+
+    // Stryker disable once Arithmetic : a bigger table holds the runes as well
     private readonly byte[] t = new byte[(Runemax + 1) / 8];
     private readonly byte[] wbuf = new byte[Buf];
     private readonly byte[] rbuf = new byte[Buf];
@@ -58,20 +63,11 @@ public sealed class Tr
         // The arguments as exec leaves them, each ending in a NUL and the next after it.
         byte[] strings = [.. argv.SelectMany(a => Encoding.UTF8.GetBytes(a).Append((byte)0))];
         int first = argv.Take(argv.Count - args.Count).Sum(a => Encoding.UTF8.GetByteCount(a) + 1);
-        if (args.Count > 0)
-        {
-            tr.pfrom.Init(strings, first);
-        }
 
-        if (args.Count > 1)
-        {
-            tr.pto.Init(strings, first + Encoding.UTF8.GetByteCount(args[0]) + 1);
-        }
-
-        if (args.Count > 2)
-        {
-            await tr.UsageAsync();
-        }
+        // A string not given is the NULs past the last, as tr.c does not read one it was not given;
+        // more than two are refused below as they are by tr.c's own check.
+        tr.pfrom.Init(strings, first);
+        tr.pto.Init(strings, args.Count > 0 ? first + Encoding.UTF8.GetByteCount(args[0]) + 1 : strings.Length);
 
         if (tr.dflag)
         {
@@ -150,8 +146,6 @@ public sealed class Tr
                 await WriteruneAsync((uint)r);
             }
         }
-
-        await WflushAsync();
     }
 
     private async Task ComplementAsync()
@@ -205,6 +199,8 @@ public sealed class Tr
 
         pfrom.Rewind();
         uint[] p = new uint[high + 1];
+
+        // Stryker disable once Equality : the highest rune is one string1 maps, and set below
         for (long i = 0; i <= high; i++)
         {
             p[i] = (uint)i;
@@ -253,8 +249,6 @@ public sealed class Tr
                 await WriteruneAsync((uint)from);
             }
         }
-
-        await WflushAsync();
     }
 
     // The next rune of standard input, or null at its end, output flushed before each read.
@@ -307,6 +301,9 @@ public sealed class Tr
     {
         byte[] buf = new byte[Utf.UtfMax];
         int n = Utf.RuneToChar(buf, r);
+
+        // A flush sooner, or one put off until the buffer is full, writes the same bytes.
+        // Stryker disable once Equality,Negate : the bytes written are the same
         if (wptr + n >= Buf)
         {
             await WflushAsync();
@@ -397,6 +394,8 @@ public sealed class Tr
     // The next rune of the specification, a range a-b giving each from a to b, or -1 at its end.
     private async Task<long> CanonAsync(Pcb p)
     {
+        // A range's end is past its start, so never 0.
+        // Stryker disable once Equality : a range never ends at 0
         if (p.Final >= 0)
         {
             if (p.Last < p.Final)
@@ -404,6 +403,7 @@ public sealed class Tr
                 return ++p.Last;
             }
 
+            // Stryker disable once Unary : a range's end past its last rune is as good as none
             p.Final = -1;
         }
 
