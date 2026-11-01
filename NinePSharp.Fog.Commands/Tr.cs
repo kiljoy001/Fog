@@ -303,7 +303,7 @@ public sealed class Tr
         int n = Utf.RuneToChar(buf, r);
 
         // A flush sooner, or one put off until the buffer is full, writes the same bytes.
-        // Stryker disable once Equality,Negate : the bytes written are the same
+        // Stryker disable once Equality,Boolean : the bytes written are the same
         if (wptr + n >= Buf)
         {
             await WflushAsync();
