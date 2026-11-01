@@ -75,7 +75,7 @@ public sealed class Cmp
             }
 
             process.Exits("open");
-            return -1;
+            return default;
         }
     }
 
@@ -204,6 +204,7 @@ public sealed class Cmp
 
         if (!sflag)
         {
+            // Stryker disable once Equality : the files' lengths left differ here, as an equal one has exited
             await PrintAsync(string.Create(CultureInfo.InvariantCulture, $"EOF on {(b1e - b1s > b2e - b2s ? name2 : name1)} after {nc - 1} bytes\n"));
         }
 

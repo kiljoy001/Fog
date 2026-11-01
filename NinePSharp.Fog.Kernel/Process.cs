@@ -185,6 +185,11 @@ public sealed partial class Process
         {
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.NoCreate));
         }
+        catch (NamespaceException error) when (error.Error == NamespaceError.ResourceAlreadyExists)
+        {
+            // OEXCL: the file is there.
+            throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.Exist));
+        }
         catch (NamespaceException error) when (error.Error == NamespaceError.ResourceNotDirectory)
         {
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.CreateNonDirectory));

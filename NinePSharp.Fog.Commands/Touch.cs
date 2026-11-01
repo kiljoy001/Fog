@@ -41,13 +41,13 @@ public static class Touch
             await UsageAsync<string>(process);
         }
 
-        int status = 0;
+        bool failed = false;
         foreach (string name in files)
         {
-            status += await TouchAsync(process, nocreate, name, now);
+            failed |= await TouchAsync(process, nocreate, name, now) != 0;
         }
 
-        process.Exits(status != 0 ? "touch" : null);
+        process.Exits(failed ? "touch" : null);
     }
 
     private static async Task<int> TouchAsync(Process process, bool nocreate, string name, uint now)
@@ -87,6 +87,7 @@ public static class Touch
         {
         }
 
+        // Stryker disable once Statement : the descriptor is closed as touch exits, if not before
         await process.CloseAsync(fd);
         return 0;
     }

@@ -101,6 +101,6 @@ public sealed class Seq
     {
         await process.WriteAsync(2, "usage: seq [-fformat] [-w] [first [incr]] last\n"u8.ToArray());
         process.Exits("usage");
-        return string.Empty;
+        return default!;
     }
 }

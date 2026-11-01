@@ -204,7 +204,7 @@ public sealed class Grep
         await process.WriteAsync(2, Encoding.UTF8.GetBytes($"usage: grep [-{Validflags}] [-e pattern] [-f patternfile] [file ...]\n"));
         await bout.BflushAsync();
         process.Exits("usage");
-        return string.Empty;
+        return default!;
     }
 
     private async Task YyerrorAsync(string e)

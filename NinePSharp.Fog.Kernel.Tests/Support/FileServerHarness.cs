@@ -72,6 +72,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     // Every read is refused with this error.
     public string? ReadRefusal { get; set; }
 
+    // A read of this file is refused with this error, and the directory read as ever.
+    public (string File, string Error)? FileReadRefusal { get; set; }
+
     // Every write is refused with this error.
     public string? WriteRefusal { get; set; }
 
@@ -174,6 +177,11 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
                 if (ReadRefusal is { } error)
                 {
                     return new Rerror(read.Item.Tag, error);
+                }
+
+                if (FileReadRefusal is { } unread && opened.TryGetValue(read.Item.Fid, out string? file) && file == unread.File)
+                {
+                    return new Rerror(read.Item.Tag, unread.Error);
                 }
 
                 if (HoldReads && await HoldAsync(read.Item.Tag) is { } interrupted)

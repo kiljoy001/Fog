@@ -1,3 +1,4 @@
+using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel.Tests.Support;
 using Xunit;
 
@@ -69,6 +70,18 @@ public sealed class ProcessTests
         NinePSharp.Messages.Stat cons = (await init.DirReadAsync(fd)).Single(d => d.Name == "cons");
         NinePSharp.Messages.Stat stat = await init.StatAsync("/dev/cons");
         Assert.Equal(('c', stat.Dev), ((char)cons.Type, cons.Dev));
+    }
+
+    // create with OEXCL refuses a file that is there, a device's or the store's, by its name.
+    [Fact]
+    public async Task AnExclusiveCreateOfAFileThatIsThereIsRefused()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        await init.CloseAsync(await init.CreateAsync("/tmp/x", NinePConstants.OWRITE, 0b110_110_110));
+        foreach (string path in new[] { "/tmp/x", "/dev/null" })
+        {
+            Assert.Equal($"file already exists: '{path}'", (await Assert.ThrowsAsync<SyscallException>(async () => await init.CreateAsync(path, NinePConstants.OREAD | NinePConstants.OEXCL, 0b110_110_110))).Message);
+        }
     }
 
     // sysseek refuses a pipe, whichever end and wherever to, and a closed descriptor as fdtochan does.

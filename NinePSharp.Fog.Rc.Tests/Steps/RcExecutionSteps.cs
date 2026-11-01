@@ -144,7 +144,7 @@ public sealed class RcExecutionSteps
     public Task GivenLimitedFileServer(string file, string text, int limit) => ServeAsync(file, text, new FileServerHarness { ReadLimit = limit });
 
     [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3, whose reads fail with ""(.*)""$")]
-    public Task GivenFailingFileServer(string file, string text, string error) => ServeAsync(file, text, new FileServerHarness { ReadRefusal = error });
+    public Task GivenFailingFileServer(string file, string text, string error) => ServeAsync(file, text, new FileServerHarness { FileReadRefusal = (file, error) });
 
     [Then("the file server was asked to open nothing")]
     public void ThenOpenedNothing() => Assert.Empty(server!.OpenModes);

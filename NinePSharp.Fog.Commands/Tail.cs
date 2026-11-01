@@ -403,7 +403,7 @@ public sealed class Tail
         {
             Errstr.Set(process, error.Message);
             await FatalAsync(string.Empty);
-            return -1;
+            return default;
         }
     }
 

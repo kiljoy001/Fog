@@ -61,11 +61,11 @@ public static class Chmod
     // [who]op[rwxalt]: the bits the spec sets and the mode it sets them to, or null when it is not one.
     internal static (uint Mask, uint Mode)? Parsemode(string spec)
     {
-        uint mask = DMAPPEND | DMEXCL | DMTMP;
+        uint who = 0;
         int s = 0;
         for (; s < spec.Length && "ugoa".Contains(spec[s], StringComparison.Ordinal); s++)
         {
-            mask |= spec[s] switch
+            who |= spec[s] switch
             {
                 'u' => U(DMRWE),
                 'g' => G(DMRWE),
@@ -79,10 +79,8 @@ public static class Chmod
             return null;
         }
 
-        if (s == 0)
-        {
-            mask |= A(DMRWE);
-        }
+        // No one named is everyone.
+        uint mask = (s == 0 ? A(DMRWE) : who) | DMAPPEND | DMEXCL | DMTMP;
 
         char op = spec[s++];
         if (op is not ('+' or '-' or '='))

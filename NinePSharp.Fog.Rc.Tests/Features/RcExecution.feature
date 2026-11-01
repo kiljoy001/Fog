@@ -7764,6 +7764,13 @@ Feature: rc runs scripts as 9front rc does
       echo $status
       chmod 644
       ~ $status 'chmod '[0-9]*': usage' && echo usage status
+      fn mode { x=`{ls -l $1}; echo $x(1) }
+      chmod 000 f; chmod +rrwwxxaallt f; mode f; ls -T f
+      chmod 600 f; chmod uu+x f; mode f
+      chmod 640 f; chmod 'go=r' f; mode f
+      chmod u-w f; mode f
+      chmod a+w f; mode f
+      chmod '=x' f; mode f
       """
     Then it prints
       """
@@ -7786,6 +7793,13 @@ Feature: rc runs scripts as 9front rc does
 
       usage: chmod 0777 file ... or chmod [who]op[rwxalt] file ...
       usage status
+      alrwxrwxrwx
+      t f
+      alrwx------
+      --rw-r--r--
+      --r--r--r--
+      --rw-rw-rw-
+      ----x--x--x
       """
 
   @FOG_RC_RUN_255
@@ -7808,6 +7822,9 @@ Feature: rc runs scripts as 9front rc does
       touch -z f
       touch
       touch -c old && echo status empty
+      touch /dev/null
+      touch /nonesuch/a /nonesuch/b
+      ~ $status 'touch '[0-9]*': touch' && echo touch status
       """
     Then it prints
       """
@@ -7827,6 +7844,10 @@ Feature: rc runs scripts as 9front rc does
       usage: touch [-c] [-t time] files
       usage: touch [-c] [-t time] files
       status empty
+      touch: /dev/null: cannot create: file already exists: '/dev/null'
+      touch: /nonesuch/a: cannot create: file does not exist: '/nonesuch'
+      touch: /nonesuch/b: cannot create: file does not exist: '/nonesuch'
+      touch status
       """
 
   @FOG_RC_RUN_256
@@ -7876,6 +7897,7 @@ Feature: rc runs scripts as 9front rc does
       ~ $status 'wc '[0-9]*': can''t open' && echo can''t open status
       wc -z
       ~ $status 'wc '[0-9]*': usage' && echo usage status
+      wc <[0=]
       """
     Then it prints
       """
@@ -7897,6 +7919,8 @@ Feature: rc runs scripts as 9front rc does
       cant open status
       usage: wc [-lwrbc] [file ...]
       usage status
+      fd out of range or not open
+            0       0       0
       """
 
   @FOG_RC_RUN_258
@@ -7913,12 +7937,66 @@ Feature: rc runs scripts as 9front rc does
       read -c 3 <<'!' | wc -lwrbc
       x\xF0\x9D
       !
+      echo -n '\x7F' | wc -lwrbc
+      wc -lwrbc <<'!'
+      \xC2\x80
+      !
+      wc -lwrbc <<'!'
+      \xC2\xBF
+      !
+      wc -lwrbc <<'!'
+      \xC0\x80
+      !
+      wc -lwrbc <<'!'
+      \xDF\xBF
+      !
+      wc -lwrbc <<'!'
+      \xBF
+      !
+      wc -lwrbc <<'!'
+      \xE0\x80\x80
+      !
+      wc -lwrbc <<'!'
+      \xEF\xBF\xBF
+      !
+      wc -lwrbc <<'!'
+      \xF0\x80\x80\x80
+      !
+      wc -lwrbc <<'!'
+      \xF7\xBF\xBF\xBF
+      !
+      wc -lwrbc <<'!'
+      \xF8
+      !
+      wc -lwrbc <<'!'
+      \xC1\x80
+      !
+      wc -lwrbc <<'!'
+      \xE0\xC0
+      !
+      wc -lwrbc <<'!'
+      \xC2\xC0
+      !
       """
     Then it prints
       """
             1       7      19       7      28
             2       2       9       3      17
             0       1       2       1       3
+            0       1       1       0       1
+            1       1       2       0       3
+            1       1       2       0       3
+            1       1       2       0       3
+            1       1       2       0       3
+            1       1       2       1       2
+            1       1       2       0       4
+            1       1       2       0       4
+            1       1       2       0       5
+            1       1       2       0       5
+            1       1       2       1       2
+            1       1       2       0       3
+            1       1       3       2       3
+            1       1       3       2       3
       """
 
   @FOG_RC_RUN_259
@@ -8017,6 +8095,9 @@ Feature: rc runs scripts as 9front rc does
       cleanname -d
       cleanname
       ~ $status 'cleanname '[0-9]*': usage' && echo usage status
+      cleanname 'a/../#c/x' './x/y/../../#c' 'a/../b/../#c' '#c/./x' '#c/x'
+      cleanname a && echo ok
+      cleanname -x a
       """
     Then it prints
       """
@@ -8036,6 +8117,14 @@ Feature: rc runs scripts as 9front rc does
       usage: cleanname [-d pwd] name...
       usage: cleanname [-d pwd] name...
       usage status
+      ./#c/x
+      ./#c
+      ./#c
+      #c/x
+      #c/x
+      a
+      ok
+      usage: cleanname [-d pwd] name...
       """
 
   @FOG_RC_RUN_262
@@ -8054,6 +8143,7 @@ Feature: rc runs scripts as 9front rc does
       basename
       ~ $status 'basename '[0-9]*': usage' && echo usage status
       basename a b c
+      basename /a/b && echo ok
       """
     Then it prints
       """
@@ -8069,6 +8159,8 @@ Feature: rc runs scripts as 9front rc does
       usage: basename [-d] string [suffix]
       usage status
       usage: basename [-d] string [suffix]
+      b
+      ok
       """
 
   @FOG_RC_RUN_263
@@ -8158,6 +8250,17 @@ Feature: rc runs scripts as 9front rc does
       cmp -s /nonesuch a
       cmp a
       cmp -z a b
+      echo -n ab >s1; echo -n axc >s2
+      cmp -l s1 s2
+      echo a | cmp /fd/0 s1 5
+      ~ $status 'cmp '[0-9]*': seek' && echo seek status
+      echo a | cmp -s /fd/0 s1 5
+      ~ $status 'cmp '[0-9]*': seek' && echo seek status
+      seq 1 20000 >big1; sed 's/^19999$/x/' big1 >big2
+      cmp big1 big2
+      cmp -L big1 big2
+      cmp -l big1 big2
+      cmp big1 big1 70000 70000 && echo same past 64K
       """
     Then it prints
       """
@@ -8180,6 +8283,23 @@ Feature: rc runs scripts as 9front rc does
       open status
       usage: cmp [-lLs] file1 file2 [offset1 [offset2] ]
       usage: cmp [-lLs] file1 file2 [offset1 [offset2] ]
+           2 0x62 0x78
+      EOF on s1 after 2 bytes
+      cmp: /fd/0: seek by 5: seek on a stream
+      seek status
+      seek status
+      big1 big2 differ: char 108883
+      big1 big2 differ: char 108883 line 19999
+      108883 0x31 0x78
+      108884 0x39 0x0a
+      108885 0x39 0x32
+      108886 0x39 0x30
+      108887 0x39 0x30
+      108888 0x0a 0x30
+      108889 0x32 0x30
+      108890 0x30 0x0a
+      EOF on big2 after 108890 bytes
+      same past 64K
       """
 
   @FOG_RC_RUN_266
@@ -9511,4 +9631,52 @@ Feature: rc runs scripts as 9front rc does
       grep: empty:1: empty pattern
         20482
       1
+      """
+
+  @FOG_RC_RUN_276
+  Scenario: commands say what a failed read says, as each does
+    Given a file server holding "notes" with "hello", on descriptor 3, whose reads fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      cd /tmp/fs
+      wc notes
+      echo hi >/tmp/hi
+      cmp notes /tmp/hi
+      ~ $status 'cmp '[0-9]*': read error' && echo read error status
+      cmp -s /tmp/hi notes
+      ~ $status 'cmp '[0-9]*': read error' && echo read error status
+      cmp /tmp/hi notes
+      tail notes
+      ~ $status '' && echo empty status
+      xd notes
+      grep x notes
+      ~ $status 'grep '[0-9]*': no matches' && echo no matches status
+      sed p notes
+      tr a b <notes
+      du -r /tmp/fs
+      cp notes /tmp/c
+      ~ $status 'cp '[0-9]*': errors' && echo errors status
+      uniq notes && echo uniq ends
+      """
+    Then it prints
+      """
+      notes: no reading
+            0       0       0 notes
+      error on notes after 0 bytes
+      read error status
+      read error status
+      error on notes after 0 bytes
+      tail: : no reading
+      empty status
+      read error: no reading
+      grep: read error on notes: no reading
+      no matches status
+      sed: read error: no reading
+      tr: read error: no reading
+      du: /tmp/fs/notes: no reading
+      cp: error reading notes: no reading
+      errors status
+      uniq ends
       """

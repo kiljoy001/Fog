@@ -42,6 +42,8 @@ public static class Cleanname
         bool erasedprefix = false;
         var q = new StringBuilder(rooted ? "/" : string.Empty);
         int start = q.Length, dotdot = q.Length;
+
+        // Stryker disable once Equality : at the name's end an element is empty and skipped either way
         for (int p = start; p < name.Length;)
         {
             int end = name.IndexOf('/', p) is int s and >= 0 ? s : name.Length;
@@ -52,7 +54,11 @@ public static class Cleanname
                 continue;
             }
 
-            erasedprefix |= elem == "." && p == 0;
+            if (elem == "." && p == 0)
+            {
+                erasedprefix = true;
+            }
+
             p = end;
             if (elem == "..")
             {
