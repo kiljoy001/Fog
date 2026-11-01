@@ -8243,3 +8243,93 @@ Feature: rc runs scripts as 9front rc does
       cannot open status
       uniq: unexpected argument g
       """
+
+  @FOG_RC_RUN_267
+  Scenario: tr translates, deletes and squeezes runes, its strings taking ranges and escapes
+    When rc runs the script
+      """
+      echo hello | tr a-y b-z
+      echo hello | tr -d l
+      echo aabbccdd | tr -s abc abc
+      echo hello world | tr -c a-z _; echo
+      echo hello, world | tr -cs a-z '\n'; echo
+      echo aabbcab | tr -ds a b
+      echo hello world | tr -dc 'lo\n'; echo
+      echo abcxn | tr abcxn '\x41\102\nx\xg'
+      echo abc | tr 'a\x' 'xy'
+      echo abc | tr a-c '\x3b1-\x3b3'
+      echo héllo αβγ | tr é-ε e-i
+      echo hello | tr x-x ol
+      echo hello | tr l-l-o L
+      echo ÿ | tr '\377' y
+      echo abc | tr -c b '-'; echo
+      echo abcdef | tr -c a-c xy; echo
+      echo abcdef | tr -cs a xy; echo
+      echo abcdef | tr -c a; echo
+      echo abc | tr ab x
+      tr aa xy
+      ~ $status 'tr '[0-9]*': ambiguous translation' && echo ambiguous status
+      tr z-a x
+      ~ $status 'tr '[0-9]*': invalid range specification' && echo range status
+      tr '\777' x
+      tr '\400' x </dev/null
+      ~ $status 'tr '[0-9]*': character > 0377' && echo character status
+      tr
+      tr -d
+      tr -ds a
+      tr a b c
+      tr -x a b
+      ~ $status 'tr '[0-9]*': usage' && echo usage status
+      tr a b <[0=]
+      ~ $status 'tr '[0-9]*': read error: fd out of range or not open' && echo read status
+      echo a | tr a b >[1=]
+      ~ $status 'tr '[0-9]*': write error: fd out of range or not open' && echo write status
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a^$a^a
+      echo -n $a$a$a$a$a$a$a$a$a$a$a$a$a$a$a^é^$a >/tmp/tr4096
+      tr aé bE </tmp/tr4096 >/tmp/tr4096o
+      cat /tmp/tr4096o | tr -d b; echo
+      cat /tmp/tr4096o | tr -cd b | wc -c
+      """
+    Then it prints
+      """
+      ifmmp
+      heo
+      abcdd
+      hello_world_
+      hellonworldn
+      bcb
+      llool
+      ABnxx
+      xbc
+      αβγ
+      hello iii
+      helll
+      heLLL
+      y
+      -b--
+      abcyyyy
+      ay
+      usage: tr [-cds] [string1 [string2]]
+
+      xxc
+      tr: ambiguous translation
+      ambiguous status
+      tr: invalid range specification
+      range status
+      tr: character > 0377
+      tr: character > 0377
+      character status
+      usage: tr [-cds] [string1 [string2]]
+      usage: tr [-cds] [string1 [string2]]
+      usage: tr [-cds] [string1 [string2]]
+      usage: tr [-cds] [string1 [string2]]
+      usage: tr [-cds] [string1 [string2]]
+      usage status
+      tr: read error: fd out of range or not open
+      read status
+      tr: write error: fd out of range or not open
+      write status
+      E
+         4368
+      """
