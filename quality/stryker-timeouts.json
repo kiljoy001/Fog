@@ -1474,5 +1474,29 @@
     "mutator": "Statement mutation",
     "line": "process.Exits(xs);",
     "reason": "done goes on to sort after it has ended, and ends again on each error"
+  },
+  {
+    "file": "Export.cs",
+    "mutator": "String mutation",
+    "line": "var env = new NinePDir(\"env\");",
+    "reason": "without /env the server function cannot write rstatus, and the session never ends"
+  },
+  {
+    "file": "Export.cs",
+    "mutator": "Statement mutation",
+    "line": "root.AddChild(env);",
+    "reason": "without /env the server function cannot write rstatus, and the session never ends"
+  },
+  {
+    "file": "Export.cs",
+    "mutator": "String mutation",
+    "line": "=> Encoding.UTF8.GetBytes(await read(ct) ?? string.Empty);",
+    "reason": "a terminal at its end that gives a line forever is read forever"
+  },
+  {
+    "file": "Rcpu.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "for (; i < args.Length && args[i].StartsWith('-'); i++)",
+    "reason": "the options are read backwards from the first forever"
   }
 ]

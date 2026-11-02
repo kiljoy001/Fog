@@ -26,6 +26,25 @@ public sealed class RcpuTests
     public void AddressRefusesWhatItCannotDial(string address, string error)
         => Assert.Equal(error, Assert.Throws<FormatException>(() => Rcpu.Address(address, "rcpu")).Message);
 
+    // rcpu's options: -u, -h and -c, -c taking the rest; $cpu the host when -h is not given; and none
+    // at all, an unknown one, one without its value, a word after them or no host, a usage error.
+    [Theory]
+    [InlineData("-h tcp!x!1 -u bob -c ls -l", "bob tcp!x!1 ls,-l")]
+    [InlineData("-u bob", "bob tcp!fog!17019 ")]
+    [InlineData("-c echo", "glenda tcp!fog!17019 echo")]
+    [InlineData("", "glenda tcp!fog!17019 ")]
+    [InlineData("-h", null)]
+    [InlineData("-x y", null)]
+    [InlineData("-u bob extra", null)]
+    public void ArgumentsAreRcpusOptions(string args, string? given)
+    {
+        (string User, string Host, string[] Cmd)? parsed = Rcpu.Arguments(args.Length == 0 ? [] : args.Split(' '), Local(_ => "tcp!fog!17019"));
+        Assert.Equal(given, parsed is { } p ? $"{p.User} {p.Host} {string.Join(',', p.Cmd)}" : null);
+    }
+
+    [Fact]
+    public void WithNoHostAndNoCpuThereIsNoCall() => Assert.Null(Rcpu.Arguments(["-u", "bob"], Local(_ => null)));
+
     // pwrd's quoting: an empty word, or one with a blank, a control character or a character rc
     // gives a meaning, in quotes with each quote doubled; any other as it is, runes past ASCII too.
     [Theory]
@@ -58,19 +77,21 @@ public sealed class RcpuTests
     [InlineData("C:\\", true, "/mnt/term/root/C:")]
     public void DirectoryIsUnderMntTermRoot(string directory, bool windows, string expected)
     {
-        var local = new Local
-        {
-            Input = Stream.Null,
-            Output = Stream.Null,
-            Error = Stream.Null,
-            Directory = directory,
-            Environment = _ => null,
-            LoginName = "glenda",
-            ReadPassword = (_, _) => ValueTask.FromResult<string?>(null),
-            ReadConsole = _ => ValueTask.FromResult<string?>(null),
-            WriteConsole = (_, _) => ValueTask.CompletedTask,
-            Drives = windows ? new Dictionary<string, string> { ["C:"] = "C:\\" } : new Dictionary<string, string>(),
-        };
+        Local local = Local(_ => null, directory, windows ? new Dictionary<string, string> { ["C:"] = "C:\\" } : new Dictionary<string, string>());
         Assert.Equal(expected, Rcpu.Directory(local));
     }
+
+    private static Local Local(Func<string, string?> environment, string directory = "/", Dictionary<string, string>? drives = null) => new()
+    {
+        Input = Stream.Null,
+        Output = Stream.Null,
+        Error = Stream.Null,
+        Directory = directory,
+        Environment = environment,
+        LoginName = "glenda",
+        ReadPassword = (_, _) => ValueTask.FromResult<string?>(null),
+        ReadConsole = _ => ValueTask.FromResult<string?>(null),
+        WriteConsole = (_, _) => ValueTask.CompletedTask,
+        Drives = drives ?? new Dictionary<string, string>(),
+    };
 }

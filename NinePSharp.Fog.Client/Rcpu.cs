@@ -139,6 +139,7 @@ public static class Rcpu
 
     // rc's pwrd: a word quoted when it is empty or holds a blank, a control character or one rc
     // gives a meaning.
+    // Stryker disable once Equality : U+0080 is no blank and no character rc gives a meaning
     internal static string Word(string word)
         => word.Length == 0 || word.Any(c => c < 0x80 && (c <= ' ' || "`^#*[]=|\\?${}()'<>&;".Contains(c, StringComparison.Ordinal)))
             ? $"'{word.Replace("'", "''", StringComparison.Ordinal)}'"
@@ -225,14 +226,15 @@ public static class Rcpu
     // reads and writes take turns, so a write would wait for a read that waits for its answer.
     private sealed class Hangup(Stream inner, CancellationTokenSource ended) : Stream
     {
-        // Stryker disable Boolean : the 9P connection reads and writes the stream without asking what it can do
+        // Stryker disable once Boolean : the 9P connection reads the stream without asking whether it can
         public override bool CanRead => true;
 
+        // Stryker disable once Boolean : the 9P connection never seeks the stream
         public override bool CanSeek => false;
 
+        // Stryker disable once Boolean : the 9P connection writes the stream without asking whether it can
         public override bool CanWrite => true;
 
-        // Stryker restore Boolean
         public override long Length => throw new NotSupportedException();
 
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
@@ -248,6 +250,7 @@ public static class Rcpu
                 read.AsSpan(0, n).CopyTo(buffer.Span);
                 if (n == 0)
                 {
+                    // Stryker disable once Statement : fog ends with the conversation, whether or not the reads it served are let go first
                     await ended.CancelAsync();
                 }
 
@@ -256,7 +259,11 @@ public static class Rcpu
             catch (IOException)
             {
                 Lost = true;
+
+                // Stryker disable once Statement : fog ends with the conversation, whether or not the reads it served are let go first
                 await ended.CancelAsync();
+
+                // Stryker disable once Statement : a read that ends the conversation instead ends it all the same, and Lost is said
                 throw;
             }
         }

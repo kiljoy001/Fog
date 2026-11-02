@@ -113,10 +113,11 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
             {
                 using var both = CancellationTokenSource.CreateLinkedTokenSource(ct, hangup);
 
-                // Stryker disable once Null coalescing,String : a file with no reader has no read in its mode, so it is never opened to read
+                // Stryker disable once NullCoalescing,String : a file with no reader has no read in its mode, so it is never opened to read
                 pending = await (read ?? throw new NotSupportedException("permission denied"))(both.Token);
             }
 
+            // Stryker disable once Equality : a slice of all of it is all of it
             byte[] data = pending.Length <= count ? pending : pending[..(int)count];
             pending = pending[data.Length..];
             return data;
@@ -124,7 +125,7 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
 
         public override async Task<uint> WriteAsync(ulong offset, byte[] data, CancellationToken ct)
         {
-            // Stryker disable once Null coalescing,String : a file with no writer has no write in its mode, so it is never opened to write
+            // Stryker disable once NullCoalescing,String : a file with no writer has no write in its mode, so it is never opened to write
             await (write ?? throw new NotSupportedException("permission denied"))(data, ct);
             return (uint)data.Length;
         }
