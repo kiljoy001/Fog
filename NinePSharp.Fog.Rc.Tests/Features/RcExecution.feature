@@ -11977,3 +11977,184 @@ Feature: rc runs scripts as 9front rc does
       0	/tmp/fs
       du status
       """
+
+  @FOG_RC_RUN_295
+  Scenario: sort's numbers with exponents, its field options and their dump, its errors and statuses, and its merges of many temporary files
+    When rc runs the script
+      """
+      mkdir /tmp/so; cd /tmp/so
+      {echo 'b 2.5e1 x'; echo 'a -3E-1 y'; echo 'c 007 z'; echo 'd 1e+2 w'; echo 'e .5 v'; echo 'f -0 u'; echo 'g 1.5e1x t'; echo 'h 0.0e9 s'; echo 'i 1e1000 r'; echo 'j -.e5 q'} >n
+      sort -n +1 n; sort -g +1 n; sort -rn +1 -2 n; sort -k2n n; sort -k2,2nr n; sort -k 2.2,2.4 n
+      sort -v </dev/null; sort -v -b -f -r </dev/null; sort -v +1 -2 +3.4b -5.6 -k 2.3b,4.5 -c -u -o /tmp/so/vo -l 100 </dev/null
+      sort -v +.2 -.3 </dev/null; sort -v -k 3 -k 1.1b,1.0 -k 2nr </dev/null; sort -v -T /tmp -tx -m -d -i -w </dev/null
+      sort -x; ~ $status 'sort '[0-9]*': option' && echo option status
+      sort +x; sort -k 0; sort -k 1.0; sort -k 1,2Q; sort -nM n; sort -k1 -n n | sed 1q
+      sort -t '
+      ' n
+      ~ $status 'sort '[0-9]*': rob' && echo rob status
+      sort +1 +2 +3 +4 +5 +6 +7 +8 +9 +10 +11 +12 +13 +14 +15 +16 +17 +18 +19 +20 +21 n
+      x=`{awk 'BEGIN { for (i = 0; i < 40; i++) printf "./" }'}; sort -T /tmp/so/$x -l 1 n; ~ $status 'sort '[0-9]*': tdir' && echo tdir status
+      x=`{awk 'BEGIN { for (i = 0; i < 39; i++) printf "./" }'}; sort -T /tmp/so/$x -l 2 n | sed 2q
+      seq 1 300 | sort -l 10 -r | sed 3q; seq 1 300 | sort -l 10 -T /tmp/so -n | sed -n '1p;150p;300p'
+      seq 1 25 | sort -l 2 -u -T/tmp/so | sed -n '1p;$p'; seq 1 120 | sed 's/^/x/' | sort -l 10 -ox2 -T /tmp/so; sed -n '1p;$p' x2
+      sort -o n n; sed 2q n
+      {echo Mar; echo jan; echo FEB; echo xyz; echo Dec} | sort -M; {echo Mar; echo jan; echo FEB} | sort -Mr
+      {seq 1 5; echo 3} | sort -c; ~ $status 'sort '[0-9]*': order' && echo order status
+      for(i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16) echo prefixprefixprefix$i >>rad; sort rad | sed -n '1p;8p;16p'; sort -f rad | sed 1q; sort -r rad | sed 1q
+      for(i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14) echo samesame$i >>rad14; sort -r rad14 | sed 1q
+      {echo 'a é b'; echo 'c é a'; echo 'b é c'} | sort -t é +1
+      echo end
+      """
+    Then it prints
+      """
+      a -3E-1 y
+      f -0 u
+      h 0.0e9 s
+      j -.e5 q
+      e .5 v
+      d 1e+2 w
+      i 1e1000 r
+      g 1.5e1x t
+      b 2.5e1 x
+      c 007 z
+      a -3E-1 y
+      f -0 u
+      h 0.0e9 s
+      j -.e5 q
+      e .5 v
+      c 007 z
+      g 1.5e1x t
+      b 2.5e1 x
+      d 1e+2 w
+      i 1e1000 r
+      c 007 z
+      b 2.5e1 x
+      g 1.5e1x t
+      d 1e+2 w
+      i 1e1000 r
+      e .5 v
+      f -0 u
+      h 0.0e9 s
+      j -.e5 q
+      a -3E-1 y
+      a -3E-1 y
+      f -0 u
+      h 0.0e9 s
+      j -.e5 q
+      e .5 v
+      d 1e+2 w
+      i 1e1000 r
+      g 1.5e1x t
+      b 2.5e1 x
+      c 007 z
+      c 007 z
+      b 2.5e1 x
+      g 1.5e1x t
+      d 1e+2 w
+      i 1e1000 r
+      e .5 v
+      f -0 u
+      h 0.0e9 s
+      j -.e5 q
+      a -3E-1 y
+      j -.e5 q
+      f -0 u
+      a -3E-1 y
+      e .5 v
+      h 0.0e9 s
+      c 007 z
+      g 1.5e1x t
+      d 1e+2 w
+      i 1e1000 r
+      b 2.5e1 x
+      sort
+      =========
+      	 00 fe fd fc fb fa f9 f8 f7 f6 f5 f4 f3 f2 f1 f0
+      	 ef ee ed ec eb ea e9 e8 e7 e6 e5 e4 e3 e2 e1 e0
+      	 df de dd dc db da d9 d8 d7 d6 d5 d4 d3 d2 d1 d0
+      	 cf ce cd cc cb ca c9 c8 c7 c6 c5 c4 c3 c2 c1 c0
+      	 bf be bd bc bb ba b9 b8 b7 b6 b5 b4 b3 b2 b1 b0
+      	 af ae ad ac ab aa a9 a8 a7 a6 a5 a4 a3 a2 a1 a0
+      	 9f be bd bc bb ba b9 b8 b7 b6 b5 b4 b3 b2 b1 b0
+      	 af ae ad ac ab aa a9 a8 a7 a6 a5 84 83 82 81 80
+      	 80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f
+      	 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f
+      	 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af
+      	 b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ba bb bc bd be bf
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f d7 4f 55 55 55 55 59 de df
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f f7 4f 55 55 55 55 59 fe ff
+      sort -b -f -r
+      =========
+      sort +1.* -2.* +3.4b -5.6 +1.2b -3.5 -c -u -o /tmp/so/vo -l 100
+      sort +*.2 -*.3
+      =========
+      sort +2.* -*.* +0.0b -1.0 +1.* -*.*nr
+      =========
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 30 31 32 33 34 35 36 37 38 39 00 00 00 00 00 00
+      	 00 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 00 00 00 00 00
+      	 00 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f
+      	 70 71 72 73 74 75 76 77 78 79 7a 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      sort -d -i -w
+      =========
+      sort: unknown option: -x
+      option status
+      sort: unknown option: +x
+      sort: field offset must be positive
+      sort: character offset must be positive
+      sort: unknown option: field.Q
+      sort: illegal combination of flags: c0
+      sort: global field set after -k
+      b 2.5e1 x
+      aw come on, rob
+      rob status
+      sort: too many fields specified
+      temp file directory name is too long: /tmp/so/././././././././././././././././././././././././././././././././././././././././
+      tdir status
+      temp file directory name is too long: /tmp/so/./././././././././././././././././././././././././././././././././././././././
+      99
+      98
+      97
+      1
+      150
+      300
+      1
+      9
+      x1
+      x99
+      a -3E-1 y
+      b 2.5e1 x
+      xyz
+      jan
+      FEB
+      Mar
+      Dec
+      Mar
+      FEB
+      jan
+      sort: -c file not in sort
+      order status
+      prefixprefixprefix1
+      prefixprefixprefix16
+      prefixprefixprefix9
+      prefixprefixprefix1
+      prefixprefixprefix9
+      samesame9
+      c é a
+      a é b
+      b é c
+      end
+      """
