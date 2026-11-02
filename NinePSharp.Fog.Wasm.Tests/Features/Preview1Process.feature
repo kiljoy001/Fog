@@ -196,11 +196,11 @@ Feature: A WASI Preview 1 core module runs as a Fog process
       | indirect-type-mismatch | report <pid>: wasm-trap: indirect call type mismatch |
 
   @WASI_NS_019
-  Scenario: The application's environment is its process's environment
+  Scenario: The application's environment is its process's environment, init's $timezone first
     Given "/bin/report" holds the application "environ"
     And the process's environment holds "region" as "north"
     When a child with a pipe as descriptor 1 execs "/bin/report"
-    Then the pipe holds "region=north\n"
+    Then the pipe holds "timezone=GMT 0 GMT 0\n0\n\n\nregion=north\n"
 
   @WASI_NS_022
   Scenario: fd_write on a descriptor that is not open is BADF
