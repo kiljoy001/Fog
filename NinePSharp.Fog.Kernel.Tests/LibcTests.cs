@@ -491,4 +491,33 @@ public sealed class LibcTests
         Assert.Equal("'ab'|'a\tb'|<nil>|' é'", Q("%#q|%q|%q|%Q", "ab", "a\tb", null!, " é"));
         Assert.Equal("%q%", System.Text.Encoding.UTF8.GetString(Libc.Sprint("%q"u8.ToArray(), [Libc.FmtArg.Of("a b")])));
     }
+
+    // %q of strings of bytes against 9front's: each of quote.tsv's lines the bytes quotefmtinstall's
+    // %q gave of a format and a string, among them widths, '-', '#', precisions, quotes, blanks,
+    // runes past ASCII, a byte that begins none and runes cut short.
+    [Fact]
+    public void QuoteFormatsBytesAs9frontsDoes()
+    {
+        string[] formats = ["%q", "%5q", "%-5q", "%12q", "%-12q", "%.0q", "%.1q", "%.2q", "%.3q", "%#q", "%#5q", "%#-6q", "%#.2q", "%#.0q", "%3.1q", "%-8.3q", "%12.4q"];
+        byte[][] strings =
+        [
+            [], "ab"u8.ToArray(), "a b"u8.ToArray(), "it's"u8.ToArray(), "x'y'z"u8.ToArray(), [0xc3, 0xa9], "héllo wörld"u8.ToArray(), " é"u8.ToArray(),
+            "a\tb"u8.ToArray(), [0xff], [0x61, 0xc3], [0xc3], [0xe2, 0x82], [0x61, 0x62, 0xe2, 0x82], [0x7f], [0x61, 0x01, 0x62], "'''"u8.ToArray(), "abcdefghij"u8.ToArray(),
+        ];
+        foreach (string line in File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "Data", "quote.tsv")))
+        {
+            string[] f = line.Split(' ');
+            byte[] got = Libc.Sprint(System.Text.Encoding.ASCII.GetBytes(formats[int.Parse(f[0], System.Globalization.CultureInfo.InvariantCulture)]), [Libc.FmtArg.Of(strings[int.Parse(f[1], System.Globalization.CultureInfo.InvariantCulture)])], quotefmt: true);
+            Assert.True(Convert.ToHexStringLower(got) == f[2], line);
+        }
+    }
+
+    // A string of bytes ends at its first NUL, as C's does, quoted or not.
+    [Fact]
+    public void AStringOfBytesEndsAtItsNul()
+    {
+        static string S(string format, byte[] s) => System.Text.Encoding.UTF8.GetString(Libc.Sprint(System.Text.Encoding.UTF8.GetBytes(format), [Libc.FmtArg.Of(s)], quotefmt: true));
+
+        Assert.Equal("ab|'a b'||''|''", S("%s|", [0x61, 0x62, 0, 0x63]) + S("%q|", [0x61, 0x20, 0x62, 0, 0x63]) + S("%s|", [0, 0x61]) + S("%q|", [0, 0x61]) + S("%.1q", [0, 0x61]));
+    }
 }

@@ -6,6 +6,8 @@ namespace NinePSharp.Fog.Kernel.Tests;
 
 public sealed class ProcessTests
 {
+    private const string TmGmt = "GMT 0 GMT 0\n0\n\n";
+
     // bootrc's lines: mntgen run for /n, /mnt and /mnt/exportfs in turn, and the service each posts
     // made writable by all, unless it failed.
     [Fact]
@@ -61,6 +63,92 @@ public sealed class ProcessTests
         await Task.Delay(100);
         Assert.True(init.PostNote("interrupt"));
         Assert.Equal("interrupted", (await Assert.ThrowsAsync<SyscallException>(() => none.WaitAsync(TimeSpan.FromSeconds(5)))).Message);
+    }
+
+    // Each call is named in the state its status shows as sysctab names it, the state before it
+    // given back as it returns; a call to the host keeps the state of the call it is made in.
+    [Fact]
+    public async Task EachCallIsNamedAsSysctabNamesIt()
+    {
+        FogKernel kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>());
+        Process init = await kernel.BootAsync();
+        var names = new List<string?>();
+        kernel.Traced = (p, state) =>
+        {
+            if (p == init)
+            {
+                names.Add(state);
+            }
+        };
+
+        int fd = await init.CreateAsync("/tmp/t", NinePConstants.ORDWR, 0b110_110_110);
+        await init.PWriteAsync(fd, "x"u8.ToArray(), 0);
+        await init.PReadAsync(fd, 1, 0);
+        NinePSharp.Messages.Stat stat = await init.FStatAsync(fd);
+        await init.SeekAsync(fd, 0, 0);
+        await init.Fd2PathAsync(fd);
+        int dup = await init.DupAsync(fd, -1);
+        await init.RenumberAsync(dup, 9);
+        await init.CloseAsync(9);
+        await init.FWStatAsync(fd, stat);
+        await init.CloseAsync(fd);
+        await init.StatAsync("/tmp/t");
+        await init.WStatAsync("/tmp/t", stat);
+        await init.CloseAsync(await init.OpenAsync("/tmp/t", NinePConstants.OREAD));
+        await init.PipeAsync();
+        await init.ChdirAsync("/tmp");
+        await init.BindAsync("/tmp", "/mnt", NinePSharp.Namespaces.MountFlags.Replace);
+        await init.UnmountAsync("/tmp", "/mnt");
+        await init.RemoveAsync("/tmp/t");
+        await init.RforkAsync(RforkFlags.Fdg);
+        init.Fork(RforkFlags.Proc, _ => Task.CompletedTask);
+        await init.WaitAsync();
+        await init.SleepAsync(0);
+        await init.AlarmAsync(0);
+        await init.HostAsync(_ => Task.FromResult(0));
+        Assert.Equal(
+            "Create Pwrite Pread Fstat Seek Fd2path Dup Dup Close Fwstat Close Stat Wstat Open Close Pipe Chdir Bind Open Close Unmount Remove Rfork Rfork Await Sleep Alarm none",
+            string.Join(' ', names.Select(n => n ?? "none")));
+    }
+
+    // A boot writes /lib/namespace and /adm/timezone/GMT again, and keeps the local zone an earlier
+    // boot left, which init copies to $timezone; the first boot makes local GMT.
+    [Fact]
+    public async Task ABootRewritesTheNamespaceAndGmtAndKeepsLocal()
+    {
+        var files = new RamFs("ram", "#R", "none");
+        Process first = await new FogKernel(new Dictionary<string, ProgramMain>(), files, files.Root).BootAsync();
+        Assert.Equal(TmGmt, await TextAsync(first, "/adm/timezone/local"));
+        Assert.Equal(TmGmt, await TextAsync(first, "/env/timezone"));
+        await WriteAsync(first, "/adm/timezone/local", "EST -18000 EDT -14400\n");
+        await WriteAsync(first, "/adm/timezone/GMT", "changed");
+        await WriteAsync(first, "/lib/namespace", "changed");
+
+        Process second = await new FogKernel(new Dictionary<string, ProgramMain>(), files, files.Root).BootAsync();
+        Assert.Equal(TmGmt, await TextAsync(second, "/adm/timezone/GMT"));
+        Assert.Equal(FogKernel.NamespaceFile, await TextAsync(second, "/lib/namespace"));
+        Assert.Equal("EST -18000 EDT -14400\n", await TextAsync(second, "/adm/timezone/local"));
+        Assert.Equal("EST -18000 EDT -14400\n", await TextAsync(second, "/env/timezone"));
+        Assert.True(((await second.StatAsync("/adm/timezone")).Qid.Type & QidType.QTDIR) != 0);
+    }
+
+    // A process in none of its calls is Running in its status.
+    [Fact]
+    public async Task AProcessInNoCallIsRunning()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        var waiting = new TaskCompletionSource();
+        var started = new TaskCompletionSource();
+        long pid = init.Fork(RforkFlags.Proc, async _ =>
+        {
+            started.SetResult();
+            await waiting.Task;
+        });
+        await started.Task;
+        int fd = await init.OpenAsync($"/proc/{pid}/status", NinePConstants.OREAD);
+        string status = System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 512)).Span);
+        waiting.SetResult();
+        Assert.Equal("Running", status[56..63]);
     }
 
     [Fact]
@@ -157,5 +245,20 @@ public sealed class ProcessTests
         Assert.Equal((2L, true), await init.PipeReadinessAsync(second));
         Assert.Null(await init.PipeReadinessAsync(await init.OpenAsync("/dev/null", 0)));
         Assert.Equal("fd out of range or not open", (await Assert.ThrowsAsync<SyscallException>(async () => await init.PipeReadinessAsync(9))).Message);
+    }
+
+    private static async Task<string> TextAsync(Process p, string path)
+    {
+        int fd = await p.OpenAsync(path, NinePConstants.OREAD);
+        string text = System.Text.Encoding.UTF8.GetString((await p.ReadAsync(fd, 8192)).Span);
+        await p.CloseAsync(fd);
+        return text;
+    }
+
+    private static async Task WriteAsync(Process p, string path, string text)
+    {
+        int fd = await p.OpenAsync(path, NinePConstants.OWRITE | NinePConstants.OTRUNC);
+        await p.WriteAsync(fd, System.Text.Encoding.UTF8.GetBytes(text));
+        await p.CloseAsync(fd);
     }
 }

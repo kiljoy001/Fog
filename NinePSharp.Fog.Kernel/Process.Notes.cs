@@ -248,7 +248,10 @@ public sealed partial class Process
         {
             this.process = process;
             state = process.PsState;
+
+            // Stryker disable once NullCoalescing : a call with no name is made only by a program between its calls, when there is no state, and no named call is made within another
             process.PsState = name ?? state;
+            process.kernel.Traced?.Invoke(process, process.PsState);
             process.Noted();
         }
 

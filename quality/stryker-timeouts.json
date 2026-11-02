@@ -1498,5 +1498,11 @@
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "for (; i < args.Length && args[i].StartsWith('-'); i++)",
     "reason": "the options are read backwards from the first forever"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
+    "line": "=> await PReadAsync(fd, count, -1, cancellationToken);",
+    "reason": "a read at offset 1 gives the same bytes again, and a program reading to the end never meets it"
   }
 ]

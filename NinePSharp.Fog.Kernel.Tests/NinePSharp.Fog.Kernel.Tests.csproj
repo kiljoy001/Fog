@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <None Update="Data\fltfmt.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Data\quote.tsv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -115,6 +115,9 @@ public sealed class FogKernel
 
     internal MountDevice Mounts { get; } = new();
 
+    // Told of each call a process begins, and the state it then has, as its status would show it.
+    internal Action<Process, string?>? Traced { get; set; }
+
     // The store the kernel boots from, which #R names.
     internal ResourceHandle Store => store;
 
