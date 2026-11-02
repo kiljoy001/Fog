@@ -12200,6 +12200,12 @@ Feature: rc runs scripts as 9front rc does
       EOF9x
       mkdir /tmp/sp/m; seq 1 110 >hund
       @{p=`{cat /dev/ppid}; mkdir /tmp/sp/m/`{echo $p | awk '{ printf "sort.%04d.0011", $1 % 10000 }'}; exec sort -l 10 -T /tmp/sp/m hund} >[2=1] | sed 's/sort\.[0-9]+\.0011: .*/sort.N.0011/'
+      rm -rf /tmp/sp/m; mkdir /tmp/sp/m; {@{p=`{cat /dev/ppid}; mkdir /tmp/sp/m/`{echo $p | awk '{ printf "sort.%04d.0011", $1 % 10000 }'}; exec sort -l 10 -T /tmp/sp/m hund} >/dev/null >[2]/dev/null; st create}
+      {echo a; echo -n bxc} | tr x '\000' | sort | xd -c; seq 1 20000 | sort >[1=]; st write
+      sort -v +1.2b -3.9 +1b -2n </dev/null; sort -v +1 -9 </dev/null; sort -t </dev/null && echo t ok
+      {for(i in `{seq 1 13}) echo ab$i; echo axz; echo a} | tr z '\000' | sort | xd -c | sed 3q
+      {for(i in `{seq 1 13}) echo ab$i; echo a; echo axz} | tr z '\000' | sort -r | xd -c | sed 3q
+      {echo axb; echo aa; echo ab} | tr x '\000' | sort -d | xd -c
       echo end
       """
     Then it prints
@@ -12710,6 +12716,24 @@ Feature: rc runs scripts as 9front rc does
       123
       129
       sort: create /tmp/sp/m/sort.N.0011
+      create status
+      sort: newline added
+      0000000   a \n  b 00  c \n
+      0000006 
+      write status
+      sort +1.2b -3.9 +1.*b -2.*n
+      =========
+      sort +1.* -9.*
+      =========
+      t ok
+      0000000   a \n  a  b  1 \n  a  b  1  0 \n  a  b  1  1 \n
+      0000010   a  b  1  2 \n  a  b  1  3 \n  a  b  2 \n  a  b
+      0000020   3 \n  a  b  4 \n  a  b  5 \n  a  b  6 \n  a  b
+      0000000   a  x 00 \n  a  b  9 \n  a  b  8 \n  a  b  7 \n
+      0000010   a  b  6 \n  a  b  5 \n  a  b  4 \n  a  b  3 \n
+      0000020   a  b  2 \n  a  b  1  3 \n  a  b  1  2 \n  a  b
+      0000000   a  a \n  a 00  b \n  a  b \n
+      000000a 
       end
       """
 

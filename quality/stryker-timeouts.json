@@ -1456,5 +1456,23 @@
     "mutator": "Statement mutation",
     "line": "s++;",
     "reason": "rdname's skip over the blanks before a name never moves past the first"
+  },
+  {
+    "file": "Sort.cs",
+    "mutator": "Statement mutation",
+    "line": "b++;",
+    "reason": "rsort4 sorts the same partitions on the same byte forever"
+  },
+  {
+    "file": "Sort.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int i = 0; i < ntemp; i++)",
+    "reason": "done names one temporary file more, past the length tdir allows, and calls itself again"
+  },
+  {
+    "file": "Sort.cs",
+    "mutator": "Statement mutation",
+    "line": "process.Exits(xs);",
+    "reason": "done goes on to sort after it has ended, and ends again on each error"
   }
 ]

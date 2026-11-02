@@ -168,6 +168,7 @@ public sealed class Sort
     private static int Atol(string s) => (int)Libc.Strtol(s, 10, out _);
 
     // %C of a char: a byte past ASCII is a negative char, no rune, and so the error rune.
+    // Stryker disable once Equality : an option's bytes are UTF-8, so no first byte of one is 0x80
     private static string Charfmt(byte c) => c < Utf.RuneSelf ? ((char)c).ToString() : "�";
 
     private static void Sort4<T>(T[] a, int n, Func<T, Key> key)
@@ -522,6 +523,7 @@ public sealed class Sort
                         continue;
                 }
 
+                // Stryker disable once Statement : each state a digit can meet is a case above
                 break;
             }
 
@@ -1401,17 +1403,20 @@ public sealed class Sort
                 c = -1;
             }
 
+            // Stryker disable once Equality : a NUL, kept or taken out, maps to 0
             if ((f.Flags & Dflag) != 0 && c >= 0 && !(c is ' ' or '\t' or (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')) && Latin(c) < 0)
             {
                 c = -1;
             }
 
+            // Stryker disable once Equality : a NUL folds to itself
             if ((f.Flags & Fflag) != 0 && c >= 0)
             {
                 c = c is >= 'a' and <= 'z' ? c + ('A' - 'a') : c;
                 c = Latin(c) is int j and >= 0 ? Latinmap[j + 2] : c;
             }
 
+            // Stryker disable once Equality : past the NUL at 0, no rune maps to 0
             if ((f.Flags & Rflag) != 0 && c >= 0 && i > 0 && i < Utf.RuneSelf)
             {
                 c = ~c & 0xff;
@@ -1462,6 +1467,7 @@ public sealed class Sort
 
         private void Grow(int n)
         {
+            // Stryker disable once Equality,Arithmetic : how much room a key is given past what it holds changes no key
             if (n > K.Length)
             {
                 byte[] k = new byte[Math.Max(n, K.Length * 2)];
