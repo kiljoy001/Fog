@@ -11699,3 +11699,162 @@ Feature: rc runs scripts as 9front rc does
       sed: Too many files in w commands 2 
       nfiles = 120; MAXF = 120
       """
+
+  @FOG_RC_RUN_291
+  Scenario: comm prints the lines of two sorted files in three columns, leaving out those its flags name, its lines cut after 2047 bytes and compared as signed chars
+    When rc runs the script
+      """
+      mkdir /tmp/cm; cd /tmp/cm
+      {echo a; echo b; echo d; echo f} >x; {echo b; echo c; echo d; echo g; echo h} >y
+      comm x y
+      comm -1 x y; comm -2 x y; comm -3 x y
+      comm -12 x y; comm -13 x y; comm -23 x y; comm -123 x y
+      comm -21 x y; comm -1 -1 x y; comm -2 -2 x y
+      comm x x; comm /dev/null y; comm x /dev/null; comm /dev/null /dev/null
+      cat y | comm - x
+      echo -n tail >>x; comm x y
+      comm; ~ $status 'comm '[0-9]*': usage' && echo usage status
+      comm x; comm -4 x y
+      comm x /nonesuch; ~ $status 'comm '[0-9]*': open' && echo open status
+      comm /nonesuch y
+      awk 'BEGIN { for (i = 0; i < 2100; i++) printf "a"; print "" }' >long; comm long long | awk '{ print length($0) }'
+      awk 'BEGIN { for (i = 0; i < 2047; i++) printf "a"; print "bc" }' >long2; comm long2 /dev/null | awk '{ print length($0) }'
+      echo é >u; echo e >v; comm u v; comm v u
+      echo end
+      """
+    Then it prints
+      """
+      a
+      		b
+      	c
+      		d
+      f
+      	g
+      	h
+      	b
+      c
+      	d
+      g
+      h
+      a
+      	b
+      	d
+      f
+      a
+      	c
+      f
+      	g
+      	h
+      b
+      d
+      c
+      g
+      h
+      a
+      f
+      b
+      d
+      	b
+      c
+      	d
+      g
+      h
+      a
+      	b
+      	d
+      f
+      		a
+      		b
+      		d
+      		f
+      	b
+      	c
+      	d
+      	g
+      	h
+      a
+      b
+      d
+      f
+      	a
+      		b
+      c
+      		d
+      	f
+      g
+      h
+      a
+      		b
+      	c
+      		d
+      f
+      	g
+      	h
+      usage: comm [-123] file1 file2
+      usage status
+      usage: comm [-123] file1 file2
+      usage: comm [-123] file1 file2
+      comm: cannot open /nonesuch: file does not exist: '/nonesuch'
+      open status
+      comm: cannot open /nonesuch: file does not exist: '/nonesuch'
+      2049
+      54
+      2047
+      1
+      é
+      	e
+      	é
+      e
+      end
+      """
+
+  @FOG_RC_RUN_292
+  Scenario: strings prints each run of printable runes as long as its minimum, after its offset, and names each file of several
+    When rc runs the script
+      """
+      mkdir /tmp/st; cd /tmp/st
+      {echo -n short; echo -n x | tr x '\001'; echo -n 'longer string'; echo -n x | tr x '\177'; echo 'tab	tab'; echo 'héllo wörld'; echo -n 'ab'} >f
+      echo 'hello world' >a
+      strings f
+      strings -m 3 f
+      strings -m 20 f
+      strings -m 1 f | sed 3q
+      strings -m4 f a
+      strings -m 0; ~ $status 'strings '[0-9]*': usage' && echo usage status
+      strings -m; strings -x
+      strings /nonesuch a
+      cat f | strings
+      echo -n 'abcdefgh' | strings
+      echo end
+      """
+    Then it prints
+      """
+             6: longer string
+            29: héllo wörld
+             0: short
+             6: longer string
+            20: tab
+            24: tab
+            29: héllo wörld
+             0: short
+             6: longer string
+            20: tab
+      f:
+             0: short
+             6: longer string
+            29: héllo wörld
+      a:
+             0: hello world
+      usage: strings [-m min] [file...]
+      usage status
+      usage: strings [-m min] [file...]
+      usage: strings [-m min] [file...]
+      /nonesuch:
+      open: file does not exist: '/nonesuch'
+      a:
+             0: hello world
+             6: longer string
+            29: héllo wörld
+             0: abcdefgh
+      end
+      """
