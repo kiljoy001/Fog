@@ -1,0 +1,189 @@
+1000000000	0	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	0	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+1000000000	1	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	1	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+1000000000	-1	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	-1	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+1000000000	999	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	999	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+1000000000	1000	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	1000	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+1000000000	123456789	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	123456789	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+1000000000	999999999	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+1000000000	999999999	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	0	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	0	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	1	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	1	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	-1	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	-1	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	999	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	999	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	1000	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	1000	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	123456789	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	123456789	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+-1	999999999	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+-1	999999999	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	0	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	0	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	1	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	1	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	-1	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	-1	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	999	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	999	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	1000	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	1000	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	123456789	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	123456789	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	999999999	t tt ttt u uu uuu uuuu n nn nnn nnnn nnnnn nnnnnn
+0	999999999	___t ___tt ____ttt _____uuuu ________nnnnnn __nn ___n _uuu
+0	0	A a h hh H HH m mm s ss
+0	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+0	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+-1	0	A a h hh H HH m mm s ss
+-1	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+-1	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1	0	A a h hh H HH m mm s ss
+1	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+43199	0	A a h hh H HH m mm s ss
+43199	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+43199	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+43200	0	A a h hh H HH m mm s ss
+43200	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+43200	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+86399	0	A a h hh H HH m mm s ss
+86399	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+86399	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+86400	0	A a h hh H HH m mm s ss
+86400	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+86400	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+999999999	0	A a h hh H HH m mm s ss
+999999999	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+999999999	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1000000000	0	A a h hh H HH m mm s ss
+1000000000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1000000000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1000000001	0	A a h hh H HH m mm s ss
+1000000001	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1000000001	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1099999999	0	A a h hh H HH m mm s ss
+1099999999	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1099999999	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1100000000	0	A a h hh H HH m mm s ss
+1100000000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1100000000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1100000001	0	A a h hh H HH m mm s ss
+1100000001	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1100000001	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1199999999	0	A a h hh H HH m mm s ss
+1199999999	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1199999999	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1200000000	0	A a h hh H HH m mm s ss
+1200000000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1200000000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1200000001	0	A a h hh H HH m mm s ss
+1200000001	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1200000001	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1700000000	0	A a h hh H HH m mm s ss
+1700000000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1700000000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+-1000000000	0	A a h hh H HH m mm s ss
+-1000000000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+-1000000000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+-62135596801	0	A a h hh H HH m mm s ss
+-62135596801	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+-62135596801	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+-62135596800	0	A a h hh H HH m mm s ss
+-62135596800	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+-62135596800	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+-62167132801	0	A a h hh H HH m mm s ss
+-62167132801	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+-62167132801	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+-100000000000	0	A a h hh H HH m mm s ss
+-100000000000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+-100000000000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+253402300800	0	A a h hh H HH m mm s ss
+253402300800	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+253402300800	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+951782400	0	A a h hh H HH m mm s ss
+951782400	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+951782400	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+946684800	0	A a h hh H HH m mm s ss
+946684800	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+946684800	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1610715907	0	A a h hh H HH m mm s ss
+1610715907	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1610715907	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1609459200	0	A a h hh H HH m mm s ss
+1609459200	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1609459200	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1613394307	0	A a h hh H HH m mm s ss
+1613394307	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1613394307	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1612137600	0	A a h hh H HH m mm s ss
+1612137600	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1612137600	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1615813507	0	A a h hh H HH m mm s ss
+1615813507	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1615813507	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1614556800	0	A a h hh H HH m mm s ss
+1614556800	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1614556800	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1618491907	0	A a h hh H HH m mm s ss
+1618491907	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1618491907	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1617235200	0	A a h hh H HH m mm s ss
+1617235200	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1617235200	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1621083907	0	A a h hh H HH m mm s ss
+1621083907	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1621083907	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1619827200	0	A a h hh H HH m mm s ss
+1619827200	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1619827200	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1623762307	0	A a h hh H HH m mm s ss
+1623762307	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1623762307	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1622505600	0	A a h hh H HH m mm s ss
+1622505600	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1622505600	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1626354307	0	A a h hh H HH m mm s ss
+1626354307	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1626354307	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1625097600	0	A a h hh H HH m mm s ss
+1625097600	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1625097600	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1629032707	0	A a h hh H HH m mm s ss
+1629032707	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1629032707	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1627776000	0	A a h hh H HH m mm s ss
+1627776000	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1627776000	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1631711107	0	A a h hh H HH m mm s ss
+1631711107	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1631711107	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1630454400	0	A a h hh H HH m mm s ss
+1630454400	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1630454400	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1634303107	0	A a h hh H HH m mm s ss
+1634303107	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1634303107	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1633046400	0	A a h hh H HH m mm s ss
+1633046400	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1633046400	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1636981507	0	A a h hh H HH m mm s ss
+1636981507	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1636981507	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1635724800	0	A a h hh H HH m mm s ss
+1635724800	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1635724800	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1639573507	0	A a h hh H HH m mm s ss
+1639573507	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1639573507	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
+1638316800	0	A a h hh H HH m mm s ss
+1638316800	0	Z ZZ ZZZ __Z ____ZZ ______ZZZ
+1638316800	0	o D DD _D W WW WWW M MM MMM MMMM YY YYYY
