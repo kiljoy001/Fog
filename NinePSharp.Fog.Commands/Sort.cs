@@ -172,6 +172,7 @@ public sealed class Sort
 
     private static void Sort4<T>(T[] a, int n, Func<T, Key> key)
     {
+        // Stryker disable once Equality : a key ends with the whole line, so no two keys tie unless their lines do, and either sort puts them in one order
         if (n > Threshold)
         {
             Rsort4(a, 0, n, 0, key);
@@ -249,10 +250,13 @@ public sealed class Sort
         p = start + (int)ended;
         foreach ((long m, _) in clist)
         {
+            // Stryker disable once Equality : a key ends with the whole line, so no two keys tie unless their lines do, and either sort puts them in one order
             if (m > Threshold)
             {
                 Rsort4(a, p, (int)m, b, key);
             }
+
+            // Stryker disable once Equality : a bubble sort of one key leaves it where it is
             else if (m > 1)
             {
                 Bsort4(a, p, (int)m, b, key);
@@ -266,6 +270,8 @@ public sealed class Sort
     private static void Bsort4<T>(T[] a, int start, int n, int b, Func<T, Key> key)
     {
         int l = start + n;
+
+        // Stryker disable once Arithmetic : from one before the start, the first passes have nothing before them to compare
         for (int j = start + 1; j < l; j++)
         {
             for (int i = j - 1; i >= start && Greater(key(a[i]), key(a[i + 1]), b); i--)
@@ -317,6 +323,8 @@ public sealed class Sort
         int n = Math.Max(lpe - lp, 0);
         int cl = k.Klen;
         k.Klen = cl + n + 1;
+
+        // Stryker disable once Equality : the byte past the field is written over by the key's 0xff
         for (int i = 0; i < n; i++)
         {
             k.Set(cl + i, (byte)~line[lp + i]);
@@ -456,6 +464,7 @@ public sealed class Sort
                     continue;
                 }
 
+                // Stryker disable once Statement : a sign the number cannot take is no digit, point or exponent, and ends it all the same
                 break;
             }
 
@@ -471,10 +480,13 @@ public sealed class Sort
                 if (state == Ns.Exp)
                 {
                     state = Ns.Expsign;
+
+                    // Stryker disable once Assignment : the sign of an exponent is read once; a second one ends the number
                     expsign |= c == '-';
                     continue;
                 }
 
+                // Stryker disable once Statement : a sign the number cannot take is no digit, point or exponent, and ends it all the same
                 break;
             }
 
@@ -528,6 +540,7 @@ public sealed class Sort
                     continue;
                 }
 
+                // Stryker disable once Statement : a point the number cannot take is no digit or exponent, and ends it all the same
                 break;
             }
 
@@ -544,9 +557,13 @@ public sealed class Sort
         {
             case Ns.Start or Ns.Sign or Ns.Zero or Ns.Zerofract or Ns.Point:
                 k.Set(k.Klen, 0x20);
+
+                // Stryker disable once Statement : a key's buffer is new, so the byte after the 0x20 is 0 already
                 k.Set(k.Klen + 1, 0);
                 k.Klen += 2;
                 return;
+
+            // Stryker disable once Logical : in Exp and Expsign no digit of the exponent has come, so it adds 0
             case Ns.Expsign or Ns.Exp or Ns.Expdigit:
                 dp = unchecked(dp + (expsign ? -exp : exp));
                 break;
@@ -563,6 +580,8 @@ public sealed class Sort
         }
 
         k.Set(k.Klen, (byte)s);
+
+        // Stryker disable once Bitwise : the byte kept is of bits 8 to 15, which either shift gives alike
         k.Set(k.Klen + 1, (byte)(dp >> 8));
         k.Set(k.Klen + 2, (byte)dp);
         k.Klen = cl + 1;
@@ -814,6 +833,8 @@ public sealed class Sort
 
         linep.Clear();
         await tb.BflushAsync();
+
+        // Stryker disable once Statement : a descriptor left open changes nothing sort writes
         await process.CloseAsync(f);
     }
 
@@ -824,6 +845,8 @@ public sealed class Sort
         for (int i = 0, n; i < ntemp; i += n)
         {
             n = ntemp - i;
+
+            // Stryker disable once Equality : Nmerge files merged through one more temporary file give the lines they would merged at once
             if (n <= Nmerge)
             {
                 await MergefilesAsync(i, n, b);
@@ -847,6 +870,8 @@ public sealed class Sort
             n = Nmerge;
             await MergefilesAsync(i, n, tb);
             await tb.BflushAsync();
+
+            // Stryker disable once Statement : a descriptor left open changes nothing sort writes
             await process.CloseAsync(f);
         }
     }
@@ -1249,6 +1274,8 @@ public sealed class Sort
 
             // Of -d, -f, -i and -w, with -r or not, sort.c takes all but -w with -r alone.
             int flags = f.Flags & ~(Bflag | B1flag);
+
+            // Stryker disable once Block : a field's key is built by dokey_ unless it is told otherwise
             if (flags == 0)
             {
                 f.Dokey = Dokey.Plain;

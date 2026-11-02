@@ -28,6 +28,9 @@ public sealed class Diff
     private bool mflag;
     private bool anychange;
 
+    // Which of util.c's two temporary files, /tmp/diff1 and /tmp/diff2, mktemp names next.
+    private int whichtmp;
+
     private Diff(Process process) => (this.process, stdout) = (process, new Biobuf(process, 1));
 
     public static async Task MainAsync(Process process, IReadOnlyList<string> argv)
@@ -90,6 +93,47 @@ public sealed class Diff
         }
 
         await diff.ExitsAsync(diff.anychange ? "some" : string.Empty);
+    }
+
+    // shellsort, CACM #201, by value and then serial.
+    internal static void Sort(Line[] f, int a, int n)
+    {
+        int m = 0;
+        for (int i = 1; i <= n; i *= 2)
+        {
+            int twice = 2 * i;
+
+            // Stryker disable once Arithmetic : gaps of one more halve down to 1 all the same, and any gaps ending in 1 sort
+            m = twice - 1;
+        }
+
+        for (m /= 2; m != 0; m /= 2)
+        {
+            int k = a + (n - m);
+            for (int j = a + 1; j <= k; j++)
+            {
+                int ai = j;
+                int aim = ai + m;
+                bool more;
+                do
+                {
+                    // Stryker disable once Equality : each line's serial is its own, so no two are equal
+                    bool later = f[aim].Serial > f[ai].Serial;
+                    if (f[aim].Value > f[ai].Value || (f[aim].Value == f[ai].Value && later))
+                    {
+                        break;
+                    }
+
+                    (f[ai], f[aim]) = (f[aim], f[ai]);
+                    aim = ai;
+                    ai -= m;
+
+                    // Stryker disable once Equality : aim is ai and a gap more, so never ai
+                    more = aim >= ai;
+                }
+                while (ai > a && more);
+            }
+        }
     }
 
     private static bool Directory(Stat s) => (s.Qid.Type & QidType.QTDIR) != 0;
@@ -176,38 +220,6 @@ public sealed class Diff
         return p;
     }
 
-    // shellsort, CACM #201, by value and then serial.
-    private static void Sort(Line[] f, int a, int n)
-    {
-        int m = 0;
-        for (int i = 1; i <= n; i *= 2)
-        {
-            m = (2 * i) - 1;
-        }
-
-        for (m /= 2; m != 0; m /= 2)
-        {
-            int k = a + (n - m);
-            for (int j = a + 1; j <= k; j++)
-            {
-                int ai = j;
-                int aim = ai + m;
-                do
-                {
-                    if (f[aim].Value > f[ai].Value || (f[aim].Value == f[ai].Value && f[aim].Serial > f[ai].Serial))
-                    {
-                        break;
-                    }
-
-                    (f[ai], f[aim]) = (f[aim], f[ai]);
-                    aim = ai;
-                    ai -= m;
-                }
-                while (ai > a && aim >= ai);
-            }
-        }
-    }
-
     private static void Unsort(Line[] f, int a, int l, int[] b)
     {
         int[] t = new int[l + 1];
@@ -270,6 +282,8 @@ public sealed class Diff
         while ((l = (i + j) / 2) > i)
         {
             int t = d.Clist[c[l]].Y;
+
+            // Stryker disable once Equality : at t equal to y the search narrows to l and gives it all the same
             if (t > y)
             {
                 j = l;
@@ -304,6 +318,7 @@ public sealed class Diff
             int j = a[i];
             if (j == 0)
             {
+                // Stryker disable once Statement : b[0] is 0, which is no candidate's y, and b[1] begins a class, so is negative, and the loop ends there
                 continue;
             }
 
@@ -342,11 +357,16 @@ public sealed class Diff
                     break;
                 }
             }
-            while ((y = b[++j]) > 0);
+            while (Member(b, ref j, out y));
         }
 
         return k;
     }
+
+    // The next member of the class in b, and whether there is one: b holds serials, negative where
+    // a class starts and -1 at the end.
+    // Stryker disable once Equality : b is never 0
+    private static bool Member(int[] b, ref int j, out int y) => (y = b[++j]) > 0;
 
     private static void Prune(D d)
     {
@@ -478,9 +498,11 @@ public sealed class Diff
         return (null, file, dir.Value);
     }
 
-    // mktmpfile: what the descriptor holds, kept as diff's temporary file keeps it, a regular file.
+    // mktmpfile: what the descriptor holds, kept as diff's temporary file keeps it, a regular file;
+    // a read that fails is told of by the name mktemp gives the file, its X's the pid's digits.
     private async Task<(Bfile? Copy, string File, Stat Sb)> MktmpfileAsync(int input, string file)
     {
+        string p = $"/tmp/diff{++whichtmp}{process.Pid % 100_000_000_000:D11}";
         var data = new List<byte>();
         try
         {
@@ -491,7 +513,7 @@ public sealed class Diff
         }
         catch (SyscallException e)
         {
-            await SysfatalAsync<Stat>($"cannot read/write {file}: {e.Message}");
+            await SysfatalAsync<Stat>($"cannot read/write {p}: {e.Message}");
         }
 
         // Stryker disable once String : the copy's names are never printed; diff names the file it was given
@@ -579,14 +601,14 @@ public sealed class Diff
             string? from = i < df.Count ? df[i] : null;
             string? to = j < dt.Count ? dt[j] : null;
 
-            // Stryker disable once String,Statement,Update : dirread gives no . or .., which diffdir.c passes over all the same
+            // Stryker disable once String,Statement,Update,Block : dirread gives no . or .., which diffdir.c passes over all the same
             if (from is "." or "..")
             {
                 i++;
                 continue;
             }
 
-            // Stryker disable once String,Statement,Update : dirread gives no . or .., which diffdir.c passes over all the same
+            // Stryker disable once String,Statement,Update,Block : dirread gives no . or .., which diffdir.c passes over all the same
             if (to is "." or "..")
             {
                 j++;
@@ -616,6 +638,7 @@ public sealed class Diff
                 continue;
             }
 
+            // Stryker disable once Arithmetic : level is only asked whether it is 0, which a level below the first is not either way
             await DiffAsync(await MkpathnameAsync(f, from!), await MkpathnameAsync(t, to!), level + 1);
             i++;
             j++;
@@ -737,6 +760,8 @@ public sealed class Diff
         }
 
         bool space = false;
+
+        // Stryker disable once Equality : the byte at len is readline's NUL, which adds nothing
         for (int p = 0; p < len; p++)
         {
             if (bflag != 0 && Isspace(buf[p]))
@@ -751,7 +776,10 @@ public sealed class Diff
                 space = false;
             }
 
-            sum = unchecked(sum + ((sbyte)buf[p] << (shift &= Halflong - 1)));
+            shift &= Halflong - 1;
+
+            // Stryker disable once Arithmetic : the halves added are the sum modulo 65535, which keeps the same lines equal subtracted
+            sum = unchecked(sum + ((sbyte)buf[p] << shift));
             shift += 7;
         }
 
@@ -820,6 +848,7 @@ public sealed class Diff
             }
         }
 
+        // Stryker disable once Equality : the offset past the last line is never fetched from
         for (; t < d.Len[1]; t++)
         {
             tlen = Readline(bt, tbuf, tbuf.Length);
@@ -854,6 +883,8 @@ public sealed class Diff
 
                 j0 = d.J[i0 - 1] + 1;
                 i1 = i0 - 1;
+
+                // Stryker disable once Equality : J[m+1] is the second file's length and one, never 0
                 while (i1 < m && d.J[i1 + 1] == 0)
                 {
                     i1++;
@@ -907,6 +938,7 @@ public sealed class Diff
         b = Math.Min(b, maxb);
         if (a > maxb)
         {
+            // Stryker disable once Statement : past the file's end b is below a, so nothing is fetched either way
             return;
         }
 
@@ -916,6 +948,8 @@ public sealed class Diff
             int len = Readline(bp, buf, buf.Length);
             await stdout.BwriteAsync(Encoding.UTF8.GetBytes(s));
             await stdout.BwriteAsync(Fmtcpy(buf));
+
+            // Stryker disable once Equality : readline gives -1 at the end, or a line of a byte or more, never 0
             if (len <= 0 || buf[len - 1] != '\n')
             {
                 await Bprint("\n\\ No newline at end of file\n");
@@ -1041,7 +1075,7 @@ public sealed class Diff
         }
     }
 
-    private record struct Line(int Serial, int Value);
+    internal record struct Line(int Serial, int Value);
 
     private readonly record struct Cand(int X, int Y, int Pred);
 

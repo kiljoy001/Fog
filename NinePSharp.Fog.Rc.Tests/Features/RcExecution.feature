@@ -12726,13 +12726,21 @@ Feature: rc runs scripts as 9front rc does
       fn gen2 { awk -v 's='$1 -v 'set='$2 'BEGIN { srand(s); n = split(set, w, ","); m = int(rand()*20); for (j = 0; j < m; j++) print w[int(rand()*n)+1] }' }
       for(i in `{seq 1 25}) {
       	gen2 $i 'aae,baa,c,x1,a b,a  b' >a; gen2 7$i 'baa,aaf,c,y1, a b,a	b,ab' >b
-      	echo '#' $i; diff a b; diff -b a b; diff -w a b; diff -n a b
+      	echo '#' $i; diff a b; diff -b a b; diff -w a b; diff -n a b; diff -f a b
       	cat a b >ab; diff a ab; diff ab a | sed 3q
       }
       diff /dev/null /dev/null && echo empty alike; echo x >one; diff one one && echo one alike
       seq 1 600 >p; {cat p; echo axc | tr x '\000'; echo tail} >z1; {cat p; echo ayc; echo tail} >z2; diff z1 z2
       {cat p; awk 'BEGIN { for (i = 0; i < 5000; i++) printf "a"; print "xb" }' | tr x '\000'; echo next} >l1
       {cat p; awk 'BEGIN { for (i = 0; i < 5000; i++) printf "a"; print "c" }'; echo next} >l2; diff l1 l2 && echo long lines alike
+      {cat p; awk 'BEGIN { for (i = 0; i < 4094; i++) printf "a"; print "xb" }' | tr x '\000'; echo next} >m1
+      {cat p; awk 'BEGIN { for (i = 0; i < 4094; i++) printf "a"; print "xc" }' | tr x '\000'; echo next} >m2; diff m1 m2 && echo cut at a NUL alike
+      echo aae >s1; echo baa >s2; diff s1 s2; diff -e s1 s2
+      seq 1 30 >g1; for(n in 11 12 13) { sed 's/^5$/x/; s/^'$n'$/y/' g1 >g2; diff -u g1 g2 | sed 1,2d; diff -c g1 g2 | sed 1,3d }
+      fn pair { awk -v 'x='$2 -v 'y='$3 'BEGIN { print x; print y }' >h1; awk -v 'y='$3 'BEGIN { print y }' >h2; diff $1 h1 h2; diff $1 h2 h1; echo '|' }
+      pair -b 'c  b' 'b  f\t'; pair -b '\tbfe\t' '  cbe'; pair -b '\t' '\tacb e'; pair -n 'bübüzzbÿ' 'übü'; pair -b '\tü  abÿ\t' 'zzaéÿ'
+      mkdir dd; echo x >dd/-; diff - one dd <[0=]; diff - one dd >[0]/tmp/dr/wo >[2=1] | sed 's/diff1[0-9]+/diff1N/'
+      mkdir -p é/ddddd/sub e2/sub; x=`{awk 'BEGIN { for (i = 0; i < 502; i++) printf "./" }'}; diff -r /tmp/dr//$x^é/ddddd e2 >[2=1] | wc -c
       mkdir -p é/dddddddddd/sub e2/sub; x=`{awk 'BEGIN { for (i = 0; i < 502; i++) printf "./" }'}; diff -r /tmp/dr//$x^é/dddddddddd e2 >[2=1] | wc -c
       echo end
       """
@@ -15235,6 +15243,11 @@ Feature: rc runs scripts as 9front rc does
       > ab
       > y1
       >  a b
+      c1 14
+      ab
+      y1
+       a b
+      .
       14a15,17
       > ab
       > y1
@@ -15337,6 +15350,28 @@ Feature: rc runs scripts as 9front rc does
       > c
       >  a b
       >  a b
+      c1 4
+      ab
+      .
+      c6
+      ab
+       a b
+      y1
+      a	b
+      a	b
+      y1
+      a	b
+      .
+      a8
+      y1
+      aaf
+      aaf
+      .
+      a9
+      c
+       a b
+       a b
+      .
       9a10,27
       > ab
       > baa
@@ -15429,6 +15464,21 @@ Feature: rc runs scripts as 9front rc does
       > a	b
       > ab
       >  a b
+      c1 4
+      a	b
+      y1
+      aaf
+       a b
+      aaf
+       a b
+      y1
+      aaf
+      a	b
+      baa
+      a	b
+      ab
+       a b
+      .
       4a5,17
       > a	b
       > y1
@@ -15547,6 +15597,16 @@ Feature: rc runs scripts as 9front rc does
       < aae
       ---
       > a	b
+      c1 7
+       a b
+      ab
+      y1
+       a b
+      a	b
+      .
+      c10 19
+      a	b
+      .
       19a20,27
       >  a b
       > ab
@@ -15634,6 +15694,11 @@ Feature: rc runs scripts as 9front rc does
       > y1
       > y1
       >  a b
+      c1 14
+      y1
+      y1
+       a b
+      .
       14a15,17
       > y1
       > y1
@@ -15742,6 +15807,29 @@ Feature: rc runs scripts as 9front rc does
       a:9 a b:17,18
       >  a b
       > y1
+      a0
+      c
+      ab
+      ab
+       a b
+      .
+      c2
+      ab
+      .
+      c4 8
+      ab
+      ab
+      baa
+      ab
+      aaf
+      aaf
+      baa
+      y1
+      .
+      a9
+       a b
+      y1
+      .
       9a10,27
       > c
       > ab
@@ -15831,6 +15919,21 @@ Feature: rc runs scripts as 9front rc does
       >  a b
       >  a b
       >  a b
+      d1
+      c3 4
+      y1
+      aaf
+       a b
+      a	b
+       a b
+      baa
+      y1
+      baa
+      baa
+       a b
+       a b
+       a b
+      .
       4a5,17
       > c
       > y1
@@ -15953,6 +16056,16 @@ Feature: rc runs scripts as 9front rc does
       ---
       > c
       >  a b
+      c1 11
+      aaf
+      ab
+      y1
+       a b
+      .
+      c13 18
+      c
+       a b
+      .
       19a20,27
       > aaf
       > ab
@@ -16031,6 +16144,11 @@ Feature: rc runs scripts as 9front rc does
       < x1
       ---
       >  a b
+      d1 2
+      d4 10
+      c12 14
+       a b
+      .
       14a15,17
       > baa
       > c
@@ -16132,6 +16250,25 @@ Feature: rc runs scripts as 9front rc does
       ---
       > baa
       > y1
+      c1 2
+      a	b
+      aaf
+      baa
+      baa
+      ab
+       a b
+      a	b
+      a	b
+       a b
+      y1
+      .
+      c4
+      ab
+      .
+      c6 9
+      baa
+      y1
+      .
       9a10,24
       > a	b
       > aaf
@@ -16211,6 +16348,19 @@ Feature: rc runs scripts as 9front rc does
       > c
       > a	b
       > y1
+      c1
+       a b
+       a b
+      .
+      c3 4
+      baa
+      y1
+      c
+      y1
+      c
+      a	b
+      y1
+      .
       4a5,14
       >  a b
       >  a b
@@ -16330,6 +16480,13 @@ Feature: rc runs scripts as 9front rc does
       >  a b
       > baa
       > aaf
+      c1 19
+      y1
+      aaf
+       a b
+      baa
+      aaf
+      .
       19a20,24
       > y1
       > aaf
@@ -16400,6 +16557,7 @@ Feature: rc runs scripts as 9front rc does
       < x1
       < c
       < x1
+      d1 14
       # 14
       1,7c1,2
       < c
@@ -16493,6 +16651,24 @@ Feature: rc runs scripts as 9front rc does
       > aaf
       > ab
       > a	b
+      c1 7
+      aaf
+      baa
+      .
+      c9
+      baa
+      y1
+       a b
+      c
+      aaf
+      ab
+       a b
+      baa
+       a b
+      aaf
+      ab
+      a	b
+      .
       9a10,24
       > aaf
       > baa
@@ -16557,6 +16733,19 @@ Feature: rc runs scripts as 9front rc does
       ---
       > a	b
       > ab
+      a0
+      aaf
+       a b
+      c
+      ab
+      .
+      a1
+      y1
+      .
+      c3 4
+      a	b
+      ab
+      .
       4a5,13
       > aaf
       >  a b
@@ -16655,6 +16844,11 @@ Feature: rc runs scripts as 9front rc does
       ---
       >  a b
       > ab
+      d2 5
+      c7 19
+       a b
+      ab
+      .
       19a20,23
       > baa
       > baa
@@ -16794,6 +16988,28 @@ Feature: rc runs scripts as 9front rc does
       > a	b
       > a	b
       > a	b
+      c1
+      ab
+       a b
+      ab
+      ab
+      c
+      ab
+      c
+      ab
+      baa
+       a b
+      aaf
+      ab
+      a	b
+      a	b
+      .
+      c3 14
+      ab
+      a	b
+      a	b
+      a	b
+      .
       14a15,33
       > ab
       >  a b
@@ -16905,6 +17121,23 @@ Feature: rc runs scripts as 9front rc does
       > c
       > aaf
       > a	b
+      c1 8
+      a	b
+      .
+      a9
+      baa
+      ab
+      baa
+      a	b
+      ab
+      y1
+      aaf
+       a b
+      ab
+      c
+      aaf
+      a	b
+      .
       9a10,23
       > a	b
       > baa
@@ -16982,6 +17215,18 @@ Feature: rc runs scripts as 9front rc does
       < x1
       ---
       > aaf
+      c1
+       a b
+      y1
+      c
+      ab
+       a b
+      y1
+      y1
+      .
+      c3 4
+      aaf
+      .
       4a5,13
       >  a b
       > y1
@@ -17088,6 +17333,13 @@ Feature: rc runs scripts as 9front rc does
       ---
       >  a b
       > ab
+      c1 5
+       a b
+      .
+      c7 19
+       a b
+      ab
+      .
       19a20,23
       >  a b
       > baa
@@ -17219,6 +17471,29 @@ Feature: rc runs scripts as 9front rc does
       > ab
       >  a b
       > ab
+      c1
+      y1
+      y1
+      ab
+      ab
+      ab
+      .
+      c3 6
+      a	b
+      .
+      c9
+       a b
+      .
+      c11 14
+       a b
+       a b
+       a b
+      c
+      ab
+      ab
+       a b
+      ab
+      .
       14a15,33
       > y1
       > y1
@@ -17333,6 +17608,22 @@ Feature: rc runs scripts as 9front rc does
       > baa
       > aaf
       >  a b
+      d1 2
+      d4
+      c6 9
+      baa
+      ab
+       a b
+      a	b
+      y1
+      ab
+      y1
+       a b
+      a	b
+      baa
+      aaf
+       a b
+      .
       9a10,23
       > c
       > baa
@@ -17404,6 +17695,19 @@ Feature: rc runs scripts as 9front rc does
       ---
       > y1
       > y1
+      a0
+      aaf
+      y1
+      .
+      a1
+      a	b
+      c
+      y1
+      .
+      c3 4
+      y1
+      y1
+      .
       4a5,13
       > aaf
       > y1
@@ -17513,6 +17817,12 @@ Feature: rc runs scripts as 9front rc does
       > ab
       >  a b
       > a	b
+      c1 19
+      aaf
+      ab
+       a b
+      a	b
+      .
       19a20,23
       > aaf
       > ab
@@ -17637,6 +17947,27 @@ Feature: rc runs scripts as 9front rc does
       > a	b
       a:13 a b:18
       > y1
+      c2 9
+      y1
+      ab
+      a	b
+       a b
+      baa
+      .
+      c11 12
+       a b
+       a b
+      a	b
+      ab
+      c
+       a b
+      y1
+      a	b
+      a	b
+      .
+      a13
+      y1
+      .
       14a15,33
       > baa
       > y1
@@ -17666,6 +17997,133 @@ Feature: rc runs scripts as 9front rc does
       < a---
       > ayc
       long lines alike
+      cut at a NUL alike
+      @@ -2,13 +2,13 @@
+       2
+       3
+       4
+      -5
+      +x
+       6
+       7
+       8
+       9
+       10
+      -11
+      +y
+       12
+       13
+       14
+        4
+      - 5
+      + x
+        6
+        7
+        8
+        9
+        10
+      - 11
+      + y
+        12
+        13
+        14
+      @@ -2,7 +2,7 @@
+       2
+       3
+       4
+      -5
+      +x
+       6
+       7
+       8
+      @@ -9,7 +9,7 @@
+       9
+       10
+       11
+      -12
+      +y
+       13
+       14
+       15
+        4
+      - 5
+      + x
+        6
+        7
+        8
+      g1:9,15 - g2:9,15
+        9
+        10
+        11
+      - 12
+      + y
+        13
+        14
+        15
+      @@ -2,7 +2,7 @@
+       2
+       3
+       4
+      -5
+      +x
+       6
+       7
+       8
+      @@ -10,7 +10,7 @@
+       10
+       11
+       12
+      -13
+      +y
+       14
+       15
+       16
+        4
+      - 5
+      + x
+        6
+        7
+        8
+      g1:10,16 - g2:10,16
+        10
+        11
+        12
+      - 13
+      + y
+        14
+        15
+        16
+      1,2c1
+      < c  b
+      < b  f	
+      ---
+      > b  f	
+      1a2
+      > b  f	
+      |
+      1d0
+      < 	bfe	
+      0a1
+      > 	bfe	
+      |
+      1d0
+      < 	
+      0a1
+      > 	
+      |
+      h1:1 d h2:0
+      < bübüzzbÿ
+      h2:0 a h1:1
+      > bübüzzbÿ
+      |
+      1d0
+      < 	ü  abÿ	
+      0a1
+      > 	ü  abÿ	
+      |
+      diff: cannot stat -: fd out of range or not open
+      diff: cannot read/write /tmp/diff1N: inappropriate use of fd
+            0
          1029
       end
       """
