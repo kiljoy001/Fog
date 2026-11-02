@@ -244,6 +244,13 @@ public sealed class TlssrvTests : IAsyncLifetime
 
         // Only p9any's offer is sent before the call is closed.
         Assert.Equal("dp9ik@fog\0", Encoding.UTF8.GetString([.. all]));
+
+        // tlssrv's descriptors close as it exits, before it leaves the process table.
+        for (int i = 0; i < 100 && kernel.Processes.Values.Any(p => p.Text is "rc" or "tlssrv"); i++)
+        {
+            await Task.Delay(50);
+        }
+
         Assert.DoesNotContain(kernel.Processes.Values, p => p.Text is "rc" or "tlssrv");
     }
 
