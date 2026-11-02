@@ -16,7 +16,7 @@ public sealed class Tail
     private readonly Biobuf bout;
     private long fend;
     private int count;
-    private int anycount;
+    private bool anycount;
     private int follow;
     private int file;
     private bool beg;
@@ -77,7 +77,7 @@ public sealed class Tail
             await tail.FatalAsync("incompatible options");
         }
 
-        if (tail.anycount == 0)
+        if (!tail.anycount)
         {
             tail.count = tail.rev ? int.MaxValue : 10;
         }
@@ -133,6 +133,8 @@ public sealed class Tail
                 sb0 = await TruncAsync(sb1, sb0);
                 await CopyAsync();
                 sb1 = await TruncAsync(sb0, sb1);
+
+                // Stryker disable once Statement : a follow that does not wait between its reads prints the same bytes
                 await process.SleepAsync(5000);
             }
         }
@@ -151,6 +153,7 @@ public sealed class Tail
         }
         catch (SyscallException error)
         {
+            // Stryker disable once Statement : errstr is not read after a failed fstat
             Errstr.Set(process, error.Message);
             return was;
         }
@@ -423,11 +426,14 @@ public sealed class Tail
             return false;
         }
 
+        // Stryker disable once Assignment : a second count is refused just after
         beg |= p == 1 && s[0] == '+';
-        if (anycount++ != 0)
+        if (anycount)
         {
             await FatalAsync("excess option");
         }
+
+        anycount = true;
 
         // atol, whose 32-bit long strtol holds at its largest, so tail.c's check that the count
         // is neither negative nor too big for an int never fails.
@@ -438,6 +444,8 @@ public sealed class Tail
     private async Task<bool> IsseekableAsync()
     {
         fend = await SeekAsync(0, 2);
+
+        // Stryker disable once Equality : an empty file is as empty read through as from its end
         return fend > 0 && await SeekAsync(0, 0) == 0;
     }
 

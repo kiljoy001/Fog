@@ -8712,6 +8712,26 @@ Feature: rc runs scripts as 9front rc does
       cat big | tail -c 36000 >[1=]
       tail -c 36000 big >[1=]
       ~ $status '' && echo empty status
+      tail - f | tr '\x0a' ' '; echo
+      tail -c3 -5c f | tr '\x0a' ' '; echo
+      tail +0 f | tr '\x0a' ' '; echo
+      tail -0b f | tr '\x0a' ' '; echo
+      echo abc | tail +10c; echo end10c
+      {echo 'a
+      b
+      c'; sleep 1; echo -n q} | tail +5; echo endstale
+      seq 1 30000 | tail -2
+      seq 1 30000 | tail -c 7
+      seq 1 30000 | tail -r | sed 2q
+      echo -n 'a
+      b
+      c' | tail -1; echo
+      echo -n abc | tail -r
+      cat /dev/null | tail -r; echo endempty
+      seq 1 5 | tail -2r
+      seq 1 30000 | tail -30000 | sed 1q
+      seq 1 30000 | tail -c 40000 | sed 1q
+      echo end
       """
     Then it prints
       """
@@ -8763,6 +8783,28 @@ Feature: rc runs scripts as 9front rc does
       tail: : fd out of range or not open
       tail: : inappropriate use of fd
       empty status
+      usage: tail [-n N] [-c N] [-f] [-r] [+-N[bc][fr]] [file]
+
+      tail: excess option: 
+
+      1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+
+      end10c
+      endstale
+      29999
+      30000
+
+      30000
+      30000
+      29999
+      c
+      abc
+      endempty
+      5
+      4
+      1
+      334
+      end
       """
 
   @FOG_RC_RUN_269
@@ -8773,9 +8815,12 @@ Feature: rc runs scripts as 9front rc does
       echo a >h; echo b >>h
       tail -f h >o &
       t=$apid
+      tail +1f h >p &
+      u=$apid
       sleep 1; echo c >>h; sleep 5; echo d >h; sleep 5
-      echo kill >/proc/$t/note
+      echo kill >/proc/$t/note; echo kill >/proc/$u/note
       cat o
+      cmp o p && echo the same
       """
     Then it prints
       """
@@ -8783,6 +8828,7 @@ Feature: rc runs scripts as 9front rc does
       b
       c
       d
+      the same
       """
 
   @FOG_RC_RUN_270
