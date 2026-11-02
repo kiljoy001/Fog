@@ -12614,6 +12614,13 @@ Feature: rc runs scripts as 9front rc does
       	gen $i >a; gen 9$i >b
       	echo '#' $i; diff a b; diff -e a b; diff -u a b | sed 1,2d; diff -c a b | sed 1,3d
       }
+      fn gen2 { awk -v 's='$1 -v 'set='$2 'BEGIN { srand(s); n = split(set, w, ","); m = int(rand()*20); for (j = 0; j < m; j++) print w[int(rand()*n)+1] }' }
+      for(i in `{seq 1 25}) {
+      	gen2 $i 'aae,baa,c,x1,a b,a  b' >a; gen2 7$i 'baa,aaf,c,y1, a b,a	b,ab' >b
+      	echo '#' $i; diff a b; diff -b a b; diff -w a b; diff -n a b
+      	cat a b >ab; diff a ab; diff ab a | sed 3q
+      }
+      diff /dev/null /dev/null && echo empty alike; echo x >one; diff one one && echo one alike
       seq 1 600 >p; {cat p; echo axc | tr x '\000'; echo tail} >z1; {cat p; echo ayc; echo tail} >z2; diff z1 z2
       {cat p; awk 'BEGIN { for (i = 0; i < 5000; i++) printf "a"; print "xb" }' | tr x '\000'; echo next} >l1
       {cat p; awk 'BEGIN { for (i = 0; i < 5000; i++) printf "a"; print "c" }'; echo next} >l2; diff l1 l2 && echo long lines alike
@@ -15046,6 +15053,2506 @@ Feature: rc runs scripts as 9front rc does
       + baa
       + baa
       + d
+      # 1
+      1,14c1,3
+      < a  b
+      < c
+      < baa
+      < a  b
+      < x1
+      < a b
+      < x1
+      < x1
+      < aae
+      < aae
+      < a b
+      < c
+      < c
+      < a  b
+      ---
+      > ab
+      > y1
+      >  a b
+      1,14c1,3
+      < a  b
+      < c
+      < baa
+      < a  b
+      < x1
+      < a b
+      < x1
+      < x1
+      < aae
+      < aae
+      < a b
+      < c
+      < c
+      < a  b
+      ---
+      > ab
+      > y1
+      >  a b
+      2,13c2
+      < c
+      < baa
+      < a  b
+      < x1
+      < a b
+      < x1
+      < x1
+      < aae
+      < aae
+      < a b
+      < c
+      < c
+      ---
+      > y1
+      a:1,14 c b:1,3
+      < a  b
+      < c
+      < baa
+      < a  b
+      < x1
+      < a b
+      < x1
+      < x1
+      < aae
+      < aae
+      < a b
+      < c
+      < c
+      < a  b
+      ---
+      > ab
+      > y1
+      >  a b
+      14a15,17
+      > ab
+      > y1
+      >  a b
+      15,17d14
+      < ab
+      < y1
+      # 2
+      1,4c1
+      < a b
+      < a  b
+      < c
+      < a  b
+      ---
+      > ab
+      6c3,9
+      < x1
+      ---
+      > ab
+      >  a b
+      > y1
+      > a	b
+      > a	b
+      > y1
+      > a	b
+      8a12,14
+      > y1
+      > aaf
+      > aaf
+      9a16,18
+      > c
+      >  a b
+      >  a b
+      0a1,5
+      > ab
+      > baa
+      > ab
+      >  a b
+      > y1
+      3c8
+      < c
+      ---
+      > y1
+      6d10
+      < x1
+      7a12,14
+      > y1
+      > aaf
+      > aaf
+      9c16,18
+      < aae
+      ---
+      > c
+      >  a b
+      >  a b
+      1a2
+      > baa
+      3d3
+      < c
+      4a5,9
+      > y1
+      > a	b
+      > a	b
+      > y1
+      > a	b
+      6d10
+      < x1
+      7a12,14
+      > y1
+      > aaf
+      > aaf
+      9c16,18
+      < aae
+      ---
+      > c
+      >  a b
+      >  a b
+      a:1,4 c b:1
+      < a b
+      < a  b
+      < c
+      < a  b
+      ---
+      > ab
+      a:6 c b:3,9
+      < x1
+      ---
+      > ab
+      >  a b
+      > y1
+      > a	b
+      > a	b
+      > y1
+      > a	b
+      a:8 a b:12,14
+      > y1
+      > aaf
+      > aaf
+      a:9 a b:16,18
+      > c
+      >  a b
+      >  a b
+      9a10,27
+      > ab
+      > baa
+      > ab
+      >  a b
+      > y1
+      > a	b
+      > a	b
+      > y1
+      > a	b
+      > baa
+      > baa
+      > y1
+      > aaf
+      > aaf
+      > baa
+      > c
+      >  a b
+      >  a b
+      10,27d9
+      < ab
+      < baa
+      # 3
+      1,4c1,13
+      < x1
+      < c
+      < a b
+      < a  b
+      ---
+      > a	b
+      > y1
+      > aaf
+      >  a b
+      > aaf
+      >  a b
+      > y1
+      > aaf
+      > a	b
+      > baa
+      > a	b
+      > ab
+      >  a b
+      1,2d0
+      < x1
+      < c
+      3a2,8
+      > y1
+      > aaf
+      >  a b
+      > aaf
+      >  a b
+      > y1
+      > aaf
+      4a10,13
+      > baa
+      > a	b
+      > ab
+      >  a b
+      1,2c1,11
+      < x1
+      < c
+      ---
+      > a	b
+      > y1
+      > aaf
+      >  a b
+      > aaf
+      >  a b
+      > y1
+      > aaf
+      > a	b
+      > baa
+      > a	b
+      a:1,4 c b:1,13
+      < x1
+      < c
+      < a b
+      < a  b
+      ---
+      > a	b
+      > y1
+      > aaf
+      >  a b
+      > aaf
+      >  a b
+      > y1
+      > aaf
+      > a	b
+      > baa
+      > a	b
+      > ab
+      >  a b
+      4a5,17
+      > a	b
+      > y1
+      > aaf
+      >  a b
+      > aaf
+      >  a b
+      > y1
+      > aaf
+      > a	b
+      > baa
+      > a	b
+      > ab
+      >  a b
+      5,17d4
+      < a	b
+      < y1
+      # 4
+      1,7c1,5
+      < x1
+      < a  b
+      < a  b
+      < a  b
+      < x1
+      < aae
+      < x1
+      ---
+      >  a b
+      > ab
+      > y1
+      >  a b
+      > a	b
+      10,19c8
+      < aae
+      < a  b
+      < a b
+      < a  b
+      < a  b
+      < c
+      < a  b
+      < aae
+      < a b
+      < aae
+      ---
+      > a	b
+      1c1,4
+      < x1
+      ---
+      >  a b
+      > ab
+      > y1
+      >  a b
+      3,7d5
+      < a  b
+      < a  b
+      < x1
+      < aae
+      < x1
+      10d7
+      < aae
+      12,19d8
+      < a b
+      < a  b
+      < a  b
+      < c
+      < a  b
+      < aae
+      < a b
+      < aae
+      1d0
+      < x1
+      3a3
+      > y1
+      5,10d4
+      < x1
+      < aae
+      < x1
+      < c
+      < baa
+      < aae
+      12,14d5
+      < a b
+      < a  b
+      < a  b
+      16,17c7
+      < a  b
+      < aae
+      ---
+      > baa
+      19d8
+      < aae
+      a:1,7 c b:1,5
+      < x1
+      < a  b
+      < a  b
+      < a  b
+      < x1
+      < aae
+      < x1
+      ---
+      >  a b
+      > ab
+      > y1
+      >  a b
+      > a	b
+      a:10,19 c b:8
+      < aae
+      < a  b
+      < a b
+      < a  b
+      < a  b
+      < c
+      < a  b
+      < aae
+      < a b
+      < aae
+      ---
+      > a	b
+      19a20,27
+      >  a b
+      > ab
+      > y1
+      >  a b
+      > a	b
+      > c
+      > baa
+      > a	b
+      20,27d19
+      <  a b
+      < ab
+      # 5
+      1,14c1,3
+      < c
+      < c
+      < baa
+      < a  b
+      < baa
+      < a b
+      < baa
+      < a  b
+      < baa
+      < aae
+      < x1
+      < aae
+      < c
+      < a b
+      ---
+      > y1
+      > y1
+      >  a b
+      1,14c1,3
+      < c
+      < c
+      < baa
+      < a  b
+      < baa
+      < a b
+      < baa
+      < a  b
+      < baa
+      < aae
+      < x1
+      < aae
+      < c
+      < a b
+      ---
+      > y1
+      > y1
+      >  a b
+      1,13c1,2
+      < c
+      < c
+      < baa
+      < a  b
+      < baa
+      < a b
+      < baa
+      < a  b
+      < baa
+      < aae
+      < x1
+      < aae
+      < c
+      ---
+      > y1
+      > y1
+      a:1,14 c b:1,3
+      < c
+      < c
+      < baa
+      < a  b
+      < baa
+      < a b
+      < baa
+      < a  b
+      < baa
+      < aae
+      < x1
+      < aae
+      < c
+      < a b
+      ---
+      > y1
+      > y1
+      >  a b
+      14a15,17
+      > y1
+      > y1
+      >  a b
+      15,17d14
+      < y1
+      < y1
+      # 6
+      0a1,4
+      > c
+      > ab
+      > ab
+      >  a b
+      2c6
+      < a  b
+      ---
+      > ab
+      4,8c8,15
+      < a  b
+      < a  b
+      < x1
+      < a b
+      < x1
+      ---
+      > ab
+      > ab
+      > baa
+      > ab
+      > aaf
+      > aaf
+      > baa
+      > y1
+      9a17,18
+      >  a b
+      > y1
+      0a1,4
+      > c
+      > ab
+      > ab
+      >  a b
+      2c6
+      < a  b
+      ---
+      > ab
+      4,8c8,15
+      < a  b
+      < a  b
+      < x1
+      < a b
+      < x1
+      ---
+      > ab
+      > ab
+      > baa
+      > ab
+      > aaf
+      > aaf
+      > baa
+      > y1
+      9a17,18
+      >  a b
+      > y1
+      0a1,4
+      > c
+      > ab
+      > ab
+      >  a b
+      6c10
+      < x1
+      ---
+      > baa
+      8c12,15
+      < x1
+      ---
+      > aaf
+      > aaf
+      > baa
+      > y1
+      9a17,18
+      >  a b
+      > y1
+      a:0 a b:1,4
+      > c
+      > ab
+      > ab
+      >  a b
+      a:2 c b:6
+      < a  b
+      ---
+      > ab
+      a:4,8 c b:8,15
+      < a  b
+      < a  b
+      < x1
+      < a b
+      < x1
+      ---
+      > ab
+      > ab
+      > baa
+      > ab
+      > aaf
+      > aaf
+      > baa
+      > y1
+      a:9 a b:17,18
+      >  a b
+      > y1
+      9a10,27
+      > c
+      > ab
+      > ab
+      >  a b
+      > baa
+      > ab
+      > c
+      > ab
+      > ab
+      > baa
+      > ab
+      > aaf
+      > aaf
+      > baa
+      > y1
+      > c
+      >  a b
+      > y1
+      10,27d9
+      < c
+      < ab
+      # 7
+      1d0
+      < baa
+      3,4c2,13
+      < a b
+      < a  b
+      ---
+      > y1
+      > aaf
+      >  a b
+      > a	b
+      >  a b
+      > baa
+      > y1
+      > baa
+      > baa
+      >  a b
+      >  a b
+      >  a b
+      1d0
+      < baa
+      2a2,4
+      > y1
+      > aaf
+      >  a b
+      4c6,13
+      < a  b
+      ---
+      >  a b
+      > baa
+      > y1
+      > baa
+      > baa
+      >  a b
+      >  a b
+      >  a b
+      1d0
+      < baa
+      2a2,11
+      > y1
+      > aaf
+      >  a b
+      > a	b
+      >  a b
+      > baa
+      > y1
+      > baa
+      > baa
+      >  a b
+      a:1 d b:0
+      < baa
+      a:3,4 c b:2,13
+      < a b
+      < a  b
+      ---
+      > y1
+      > aaf
+      >  a b
+      > a	b
+      >  a b
+      > baa
+      > y1
+      > baa
+      > baa
+      >  a b
+      >  a b
+      >  a b
+      4a5,17
+      > c
+      > y1
+      > aaf
+      >  a b
+      > a	b
+      >  a b
+      > baa
+      > y1
+      > baa
+      > baa
+      >  a b
+      >  a b
+      >  a b
+      5,17d4
+      < c
+      < y1
+      # 8
+      1,11c1,4
+      < aae
+      < a  b
+      < a  b
+      < a  b
+      < baa
+      < aae
+      < aae
+      < a b
+      < x1
+      < aae
+      < a b
+      ---
+      > aaf
+      > ab
+      > y1
+      >  a b
+      13,18c6,7
+      < a  b
+      < a b
+      < a b
+      < a b
+      < baa
+      < x1
+      ---
+      > c
+      >  a b
+      1,11c1,4
+      < aae
+      < a  b
+      < a  b
+      < a  b
+      < baa
+      < aae
+      < aae
+      < a b
+      < x1
+      < aae
+      < a b
+      ---
+      > aaf
+      > ab
+      > y1
+      >  a b
+      13,18c6,7
+      < a  b
+      < a b
+      < a b
+      < a b
+      < baa
+      < x1
+      ---
+      > c
+      >  a b
+      1c1
+      < aae
+      ---
+      > aaf
+      2a3
+      > y1
+      4,11d4
+      < a  b
+      < baa
+      < aae
+      < aae
+      < a b
+      < x1
+      < aae
+      < a b
+      12a6
+      > c
+      14,18d7
+      < a b
+      < a b
+      < a b
+      < baa
+      < x1
+      a:1,11 c b:1,4
+      < aae
+      < a  b
+      < a  b
+      < a  b
+      < baa
+      < aae
+      < aae
+      < a b
+      < x1
+      < aae
+      < a b
+      ---
+      > aaf
+      > ab
+      > y1
+      >  a b
+      a:13,18 c b:6,7
+      < a  b
+      < a b
+      < a b
+      < a b
+      < baa
+      < x1
+      ---
+      > c
+      >  a b
+      19a20,27
+      > aaf
+      > ab
+      > y1
+      >  a b
+      > c
+      > c
+      >  a b
+      > baa
+      20,27d19
+      < aaf
+      < ab
+      # 9
+      1,2d0
+      < a  b
+      < c
+      4,10d1
+      < a  b
+      < a b
+      < a  b
+      < a b
+      < baa
+      < x1
+      < aae
+      12,14c3
+      < a b
+      < c
+      < x1
+      ---
+      >  a b
+      1,2d0
+      < a  b
+      < c
+      4,10d1
+      < a  b
+      < a b
+      < a  b
+      < a b
+      < baa
+      < x1
+      < aae
+      12,14c3
+      < a b
+      < c
+      < x1
+      ---
+      >  a b
+      1,2d0
+      < a  b
+      < c
+      4,10d1
+      < a  b
+      < a b
+      < a  b
+      < a b
+      < baa
+      < x1
+      < aae
+      13,14d3
+      < c
+      < x1
+      a:1,2 d b:0
+      < a  b
+      < c
+      a:4,10 d b:1
+      < a  b
+      < a b
+      < a  b
+      < a b
+      < baa
+      < x1
+      < aae
+      a:12,14 c b:3
+      < a b
+      < c
+      < x1
+      ---
+      >  a b
+      14a15,17
+      > baa
+      > c
+      >  a b
+      15,17d14
+      < baa
+      < c
+      # 10
+      1,2c1,10
+      < a  b
+      < a  b
+      ---
+      > a	b
+      > aaf
+      > baa
+      > baa
+      > ab
+      >  a b
+      > a	b
+      > a	b
+      >  a b
+      > y1
+      4c12
+      < a b
+      ---
+      > ab
+      6,9c14,15
+      < x1
+      < c
+      < a  b
+      < x1
+      ---
+      > baa
+      > y1
+      1a2,6
+      > aaf
+      > baa
+      > baa
+      > ab
+      >  a b
+      3d7
+      < c
+      4a9,10
+      >  a b
+      > y1
+      6c12
+      < x1
+      ---
+      > ab
+      8,9c14,15
+      < a  b
+      < x1
+      ---
+      > baa
+      > y1
+      1a2,4
+      > aaf
+      > baa
+      > baa
+      3d5
+      < c
+      4a7,10
+      > a	b
+      > a	b
+      >  a b
+      > y1
+      6,7d11
+      < x1
+      < c
+      9c13,15
+      < x1
+      ---
+      > c
+      > baa
+      > y1
+      a:1,2 c b:1,10
+      < a  b
+      < a  b
+      ---
+      > a	b
+      > aaf
+      > baa
+      > baa
+      > ab
+      >  a b
+      > a	b
+      > a	b
+      >  a b
+      > y1
+      a:4 c b:12
+      < a b
+      ---
+      > ab
+      a:6,9 c b:14,15
+      < x1
+      < c
+      < a  b
+      < x1
+      ---
+      > baa
+      > y1
+      9a10,24
+      > a	b
+      > aaf
+      > baa
+      > baa
+      > ab
+      >  a b
+      > a	b
+      > a	b
+      >  a b
+      > y1
+      > c
+      > ab
+      > c
+      > baa
+      > y1
+      10,24d9
+      < a	b
+      < aaf
+      # 11
+      1c1,2
+      < a b
+      ---
+      >  a b
+      >  a b
+      3,4c4,10
+      < a b
+      < a b
+      ---
+      > baa
+      > y1
+      > c
+      > y1
+      > c
+      > a	b
+      > y1
+      1c1,2
+      < a b
+      ---
+      >  a b
+      >  a b
+      2a4,8
+      > baa
+      > y1
+      > c
+      > y1
+      > c
+      4c10
+      < a b
+      ---
+      > y1
+      1a2
+      >  a b
+      2a4,8
+      > baa
+      > y1
+      > c
+      > y1
+      > c
+      4c10
+      < a b
+      ---
+      > y1
+      a:1 c b:1,2
+      < a b
+      ---
+      >  a b
+      >  a b
+      a:3,4 c b:4,10
+      < a b
+      < a b
+      ---
+      > baa
+      > y1
+      > c
+      > y1
+      > c
+      > a	b
+      > y1
+      4a5,14
+      >  a b
+      >  a b
+      > c
+      > baa
+      > y1
+      > c
+      > y1
+      > c
+      > a	b
+      > y1
+      5,14d4
+      <  a b
+      <  a b
+      # 12
+      1,19c1,5
+      < x1
+      < a  b
+      < a  b
+      < a b
+      < a b
+      < aae
+      < x1
+      < aae
+      < a b
+      < baa
+      < x1
+      < aae
+      < a  b
+      < x1
+      < aae
+      < a b
+      < baa
+      < c
+      < baa
+      ---
+      > y1
+      > aaf
+      >  a b
+      > baa
+      > aaf
+      1,19c1,5
+      < x1
+      < a  b
+      < a  b
+      < a b
+      < a b
+      < aae
+      < x1
+      < aae
+      < a b
+      < baa
+      < x1
+      < aae
+      < a  b
+      < x1
+      < aae
+      < a b
+      < baa
+      < c
+      < baa
+      ---
+      > y1
+      > aaf
+      >  a b
+      > baa
+      > aaf
+      1c1,2
+      < x1
+      ---
+      > y1
+      > aaf
+      3,19c4,5
+      < a  b
+      < a b
+      < a b
+      < aae
+      < x1
+      < aae
+      < a b
+      < baa
+      < x1
+      < aae
+      < a  b
+      < x1
+      < aae
+      < a b
+      < baa
+      < c
+      < baa
+      ---
+      > baa
+      > aaf
+      a:1,19 c b:1,5
+      < x1
+      < a  b
+      < a  b
+      < a b
+      < a b
+      < aae
+      < x1
+      < aae
+      < a b
+      < baa
+      < x1
+      < aae
+      < a  b
+      < x1
+      < aae
+      < a b
+      < baa
+      < c
+      < baa
+      ---
+      > y1
+      > aaf
+      >  a b
+      > baa
+      > aaf
+      19a20,24
+      > y1
+      > aaf
+      >  a b
+      > baa
+      > aaf
+      20,24d19
+      < y1
+      < aaf
+      # 13
+      1,14d0
+      < x1
+      < baa
+      < baa
+      < a b
+      < c
+      < a  b
+      < baa
+      < a b
+      < a  b
+      < baa
+      < baa
+      < x1
+      < c
+      < x1
+      1,14d0
+      < x1
+      < baa
+      < baa
+      < a b
+      < c
+      < a  b
+      < baa
+      < a b
+      < a  b
+      < baa
+      < baa
+      < x1
+      < c
+      < x1
+      1,14d0
+      < x1
+      < baa
+      < baa
+      < a b
+      < c
+      < a  b
+      < baa
+      < a b
+      < a  b
+      < baa
+      < baa
+      < x1
+      < c
+      < x1
+      a:1,14 d b:0
+      < x1
+      < baa
+      < baa
+      < a b
+      < c
+      < a  b
+      < baa
+      < a b
+      < a  b
+      < baa
+      < baa
+      < x1
+      < c
+      < x1
+      # 14
+      1,7c1,2
+      < c
+      < a b
+      < c
+      < a b
+      < aae
+      < x1
+      < a  b
+      ---
+      > aaf
+      > baa
+      9c4,15
+      < a  b
+      ---
+      > baa
+      > y1
+      >  a b
+      > c
+      > aaf
+      > ab
+      >  a b
+      > baa
+      >  a b
+      > aaf
+      > ab
+      > a	b
+      1,7c1,2
+      < c
+      < a b
+      < c
+      < a b
+      < aae
+      < x1
+      < a  b
+      ---
+      > aaf
+      > baa
+      8a4,14
+      > baa
+      > y1
+      >  a b
+      > c
+      > aaf
+      > ab
+      >  a b
+      > baa
+      >  a b
+      > aaf
+      > ab
+      1c1,5
+      < c
+      ---
+      > aaf
+      > baa
+      > baa
+      > baa
+      > y1
+      3a8
+      > aaf
+      5,6d9
+      < aae
+      < x1
+      8a12,14
+      >  a b
+      > aaf
+      > ab
+      a:1,7 c b:1,2
+      < c
+      < a b
+      < c
+      < a b
+      < aae
+      < x1
+      < a  b
+      ---
+      > aaf
+      > baa
+      a:9 c b:4,15
+      < a  b
+      ---
+      > baa
+      > y1
+      >  a b
+      > c
+      > aaf
+      > ab
+      >  a b
+      > baa
+      >  a b
+      > aaf
+      > ab
+      > a	b
+      9a10,24
+      > aaf
+      > baa
+      > baa
+      > baa
+      > y1
+      >  a b
+      > c
+      > aaf
+      > ab
+      >  a b
+      > baa
+      >  a b
+      > aaf
+      > ab
+      > a	b
+      10,24d9
+      < aaf
+      < baa
+      # 15
+      0a1,4
+      > aaf
+      >  a b
+      > c
+      > ab
+      1a6
+      > y1
+      3,4c8,9
+      < a b
+      < a b
+      ---
+      > a	b
+      > ab
+      0a1,4
+      > aaf
+      >  a b
+      > c
+      > ab
+      1a6
+      > y1
+      4c9
+      < a b
+      ---
+      > ab
+      0a1,4
+      > aaf
+      >  a b
+      > c
+      > ab
+      1a6
+      > y1
+      a:0 a b:1,4
+      > aaf
+      >  a b
+      > c
+      > ab
+      a:1 a b:6
+      > y1
+      a:3,4 c b:8,9
+      < a b
+      < a b
+      ---
+      > a	b
+      > ab
+      4a5,13
+      > aaf
+      >  a b
+      > c
+      > ab
+      > baa
+      > y1
+      > baa
+      > a	b
+      > ab
+      5,13d4
+      < aaf
+      <  a b
+      # 16
+      2,5d1
+      < a b
+      < a  b
+      < a b
+      < c
+      7,19c3,4
+      < baa
+      < c
+      < aae
+      < baa
+      < c
+      < a b
+      < a b
+      < c
+      < c
+      < x1
+      < c
+      < baa
+      < c
+      ---
+      >  a b
+      > ab
+      2,5d1
+      < a b
+      < a  b
+      < a b
+      < c
+      7,19c3,4
+      < baa
+      < c
+      < aae
+      < baa
+      < c
+      < a b
+      < a b
+      < c
+      < c
+      < x1
+      < c
+      < baa
+      < c
+      ---
+      >  a b
+      > ab
+      2,5d1
+      < a b
+      < a  b
+      < a b
+      < c
+      7,11d2
+      < baa
+      < c
+      < aae
+      < baa
+      < c
+      14,19d4
+      < c
+      < c
+      < x1
+      < c
+      < baa
+      < c
+      a:2,5 d b:1
+      < a b
+      < a  b
+      < a b
+      < c
+      a:7,19 c b:3,4
+      < baa
+      < c
+      < aae
+      < baa
+      < c
+      < a b
+      < a b
+      < c
+      < c
+      < x1
+      < c
+      < baa
+      < c
+      ---
+      >  a b
+      > ab
+      19a20,23
+      > baa
+      > baa
+      >  a b
+      > ab
+      20,23d19
+      < baa
+      < baa
+      # 17
+      1c1,14
+      < aae
+      ---
+      > ab
+      >  a b
+      > ab
+      > ab
+      > c
+      > ab
+      > c
+      > ab
+      > baa
+      >  a b
+      > aaf
+      > ab
+      > a	b
+      > a	b
+      3,14c16,19
+      < baa
+      < a b
+      < a  b
+      < a  b
+      < a b
+      < aae
+      < aae
+      < baa
+      < aae
+      < baa
+      < baa
+      < c
+      ---
+      > ab
+      > a	b
+      > a	b
+      > a	b
+      1,3c1,12
+      < aae
+      < baa
+      < baa
+      ---
+      > ab
+      >  a b
+      > ab
+      > ab
+      > c
+      > ab
+      > c
+      > ab
+      > baa
+      >  a b
+      > aaf
+      > ab
+      5a15,16
+      > baa
+      > ab
+      8,14c19
+      < aae
+      < aae
+      < baa
+      < aae
+      < baa
+      < baa
+      < c
+      ---
+      > a	b
+      1,3c1,9
+      < aae
+      < baa
+      < baa
+      ---
+      > ab
+      >  a b
+      > ab
+      > ab
+      > c
+      > ab
+      > c
+      > ab
+      > baa
+      4a11
+      > aaf
+      8,14c15,19
+      < aae
+      < aae
+      < baa
+      < aae
+      < baa
+      < baa
+      < c
+      ---
+      > baa
+      > ab
+      > a	b
+      > a	b
+      > a	b
+      a:1 c b:1,14
+      < aae
+      ---
+      > ab
+      >  a b
+      > ab
+      > ab
+      > c
+      > ab
+      > c
+      > ab
+      > baa
+      >  a b
+      > aaf
+      > ab
+      > a	b
+      > a	b
+      a:3,14 c b:16,19
+      < baa
+      < a b
+      < a  b
+      < a  b
+      < a b
+      < aae
+      < aae
+      < baa
+      < aae
+      < baa
+      < baa
+      < c
+      ---
+      > ab
+      > a	b
+      > a	b
+      > a	b
+      14a15,33
+      > ab
+      >  a b
+      > ab
+      > ab
+      > c
+      > ab
+      > c
+      > ab
+      > baa
+      >  a b
+      > aaf
+      > ab
+      > a	b
+      > a	b
+      > baa
+      > ab
+      > a	b
+      > a	b
+      > a	b
+      15,33d14
+      < ab
+      <  a b
+      # 18
+      1,8c1
+      < a  b
+      < a b
+      < c
+      < a b
+      < x1
+      < a b
+      < c
+      < x1
+      ---
+      > a	b
+      9a3,14
+      > baa
+      > ab
+      > baa
+      > a	b
+      > ab
+      > y1
+      > aaf
+      >  a b
+      > ab
+      > c
+      > aaf
+      > a	b
+      1a2,5
+      > baa
+      > baa
+      > ab
+      > baa
+      2a7,11
+      > ab
+      > y1
+      > aaf
+      >  a b
+      > ab
+      3a13
+      > aaf
+      5,9d14
+      < x1
+      < a b
+      < c
+      < x1
+      < baa
+      1a2,3
+      > baa
+      > baa
+      3c5
+      < c
+      ---
+      > baa
+      5d6
+      < x1
+      6a8,11
+      > y1
+      > aaf
+      >  a b
+      > ab
+      8,9c13,14
+      < x1
+      < baa
+      ---
+      > aaf
+      > a	b
+      a:1,8 c b:1
+      < a  b
+      < a b
+      < c
+      < a b
+      < x1
+      < a b
+      < c
+      < x1
+      ---
+      > a	b
+      a:9 a b:3,14
+      > baa
+      > ab
+      > baa
+      > a	b
+      > ab
+      > y1
+      > aaf
+      >  a b
+      > ab
+      > c
+      > aaf
+      > a	b
+      9a10,23
+      > a	b
+      > baa
+      > baa
+      > ab
+      > baa
+      > a	b
+      > ab
+      > y1
+      > aaf
+      >  a b
+      > ab
+      > c
+      > aaf
+      > a	b
+      10,23d9
+      < a	b
+      < baa
+      # 19
+      1c1,7
+      < a  b
+      ---
+      >  a b
+      > y1
+      > c
+      > ab
+      >  a b
+      > y1
+      > y1
+      3,4c9
+      < a b
+      < x1
+      ---
+      > aaf
+      1c1,7
+      < a  b
+      ---
+      >  a b
+      > y1
+      > c
+      > ab
+      >  a b
+      > y1
+      > y1
+      3,4c9
+      < a b
+      < x1
+      ---
+      > aaf
+      2c2,3
+      < baa
+      ---
+      > y1
+      > c
+      4c5,9
+      < x1
+      ---
+      >  a b
+      > y1
+      > y1
+      > baa
+      > aaf
+      a:1 c b:1,7
+      < a  b
+      ---
+      >  a b
+      > y1
+      > c
+      > ab
+      >  a b
+      > y1
+      > y1
+      a:3,4 c b:9
+      < a b
+      < x1
+      ---
+      > aaf
+      4a5,13
+      >  a b
+      > y1
+      > c
+      > ab
+      >  a b
+      > y1
+      > y1
+      > baa
+      > aaf
+      5,13d4
+      <  a b
+      < y1
+      # 20
+      1,5c1
+      < a b
+      < a b
+      < a  b
+      < x1
+      < a  b
+      ---
+      >  a b
+      7,19c3,4
+      < a b
+      < a b
+      < baa
+      < baa
+      < baa
+      < c
+      < a b
+      < baa
+      < a b
+      < x1
+      < c
+      < aae
+      < x1
+      ---
+      >  a b
+      > ab
+      1,5c1
+      < a b
+      < a b
+      < a  b
+      < x1
+      < a  b
+      ---
+      >  a b
+      7,19c3,4
+      < a b
+      < a b
+      < baa
+      < baa
+      < baa
+      < c
+      < a b
+      < baa
+      < a b
+      < x1
+      < c
+      < aae
+      < x1
+      ---
+      >  a b
+      > ab
+      2,5d1
+      < a b
+      < a  b
+      < x1
+      < a  b
+      9,19d4
+      < baa
+      < baa
+      < baa
+      < c
+      < a b
+      < baa
+      < a b
+      < x1
+      < c
+      < aae
+      < x1
+      a:1,5 c b:1
+      < a b
+      < a b
+      < a  b
+      < x1
+      < a  b
+      ---
+      >  a b
+      a:7,19 c b:3,4
+      < a b
+      < a b
+      < baa
+      < baa
+      < baa
+      < c
+      < a b
+      < baa
+      < a b
+      < x1
+      < c
+      < aae
+      < x1
+      ---
+      >  a b
+      > ab
+      19a20,23
+      >  a b
+      > baa
+      >  a b
+      > ab
+      20,23d19
+      <  a b
+      < baa
+      # 21
+      1c1,5
+      < x1
+      ---
+      > y1
+      > y1
+      > ab
+      > ab
+      > ab
+      3,6c7
+      < baa
+      < x1
+      < x1
+      < a  b
+      ---
+      > a	b
+      9c10
+      < c
+      ---
+      >  a b
+      11,14c12,19
+      < a  b
+      < a  b
+      < baa
+      < baa
+      ---
+      >  a b
+      >  a b
+      >  a b
+      > c
+      > ab
+      > ab
+      >  a b
+      > ab
+      1c1,5
+      < x1
+      ---
+      > y1
+      > y1
+      > ab
+      > ab
+      > ab
+      3,5d6
+      < baa
+      < x1
+      < x1
+      9c10
+      < c
+      ---
+      >  a b
+      11,14c12,19
+      < a  b
+      < a  b
+      < baa
+      < baa
+      ---
+      >  a b
+      >  a b
+      >  a b
+      > c
+      > ab
+      > ab
+      >  a b
+      > ab
+      1c1,5
+      < x1
+      ---
+      > y1
+      > y1
+      > ab
+      > ab
+      > ab
+      3,5d6
+      < baa
+      < x1
+      < x1
+      9c10
+      < c
+      ---
+      >  a b
+      13,14c14,19
+      < baa
+      < baa
+      ---
+      >  a b
+      > c
+      > ab
+      > ab
+      >  a b
+      > ab
+      a:1 c b:1,5
+      < x1
+      ---
+      > y1
+      > y1
+      > ab
+      > ab
+      > ab
+      a:3,6 c b:7
+      < baa
+      < x1
+      < x1
+      < a  b
+      ---
+      > a	b
+      a:9 c b:10
+      < c
+      ---
+      >  a b
+      a:11,14 c b:12,19
+      < a  b
+      < a  b
+      < baa
+      < baa
+      ---
+      >  a b
+      >  a b
+      >  a b
+      > c
+      > ab
+      > ab
+      >  a b
+      > ab
+      14a15,33
+      > y1
+      > y1
+      > ab
+      > ab
+      > ab
+      > baa
+      > a	b
+      > c
+      > c
+      >  a b
+      > baa
+      >  a b
+      >  a b
+      >  a b
+      > c
+      > ab
+      > ab
+      >  a b
+      > ab
+      15,33d14
+      < y1
+      < y1
+      # 22
+      1,2d0
+      < x1
+      < a b
+      4d1
+      < x1
+      6,9c3,14
+      < a b
+      < aae
+      < aae
+      < c
+      ---
+      > baa
+      > ab
+      >  a b
+      > a	b
+      > y1
+      > ab
+      > y1
+      >  a b
+      > a	b
+      > baa
+      > aaf
+      >  a b
+      1,2d0
+      < x1
+      < a b
+      4d1
+      < x1
+      5a3,5
+      > baa
+      > ab
+      >  a b
+      7,9c7,14
+      < aae
+      < aae
+      < c
+      ---
+      > y1
+      > ab
+      > y1
+      >  a b
+      > a	b
+      > baa
+      > aaf
+      >  a b
+      1,2d0
+      < x1
+      < a b
+      4d1
+      < x1
+      5a3
+      > baa
+      7,9c5,14
+      < aae
+      < aae
+      < c
+      ---
+      >  a b
+      > a	b
+      > y1
+      > ab
+      > y1
+      >  a b
+      > a	b
+      > baa
+      > aaf
+      >  a b
+      a:1,2 d b:0
+      < x1
+      < a b
+      a:4 d b:1
+      < x1
+      a:6,9 c b:3,14
+      < a b
+      < aae
+      < aae
+      < c
+      ---
+      > baa
+      > ab
+      >  a b
+      > a	b
+      > y1
+      > ab
+      > y1
+      >  a b
+      > a	b
+      > baa
+      > aaf
+      >  a b
+      9a10,23
+      > c
+      > baa
+      > baa
+      > ab
+      >  a b
+      > a	b
+      > y1
+      > ab
+      > y1
+      >  a b
+      > a	b
+      > baa
+      > aaf
+      >  a b
+      10,23d9
+      < c
+      < baa
+      # 23
+      0a1,2
+      > aaf
+      > y1
+      1a4,6
+      > a	b
+      > c
+      > y1
+      3,4c8,9
+      < a b
+      < x1
+      ---
+      > y1
+      > y1
+      0a1,2
+      > aaf
+      > y1
+      2d3
+      < baa
+      4c5,9
+      < x1
+      ---
+      > c
+      > y1
+      > baa
+      > y1
+      > y1
+      0a1,2
+      > aaf
+      > y1
+      2d3
+      < baa
+      4c5,9
+      < x1
+      ---
+      > c
+      > y1
+      > baa
+      > y1
+      > y1
+      a:0 a b:1,2
+      > aaf
+      > y1
+      a:1 a b:4,6
+      > a	b
+      > c
+      > y1
+      a:3,4 c b:8,9
+      < a b
+      < x1
+      ---
+      > y1
+      > y1
+      4a5,13
+      > aaf
+      > y1
+      > c
+      > a	b
+      > c
+      > y1
+      > baa
+      > y1
+      > y1
+      5,13d4
+      < aaf
+      < y1
+      # 24
+      1,19c1,4
+      < baa
+      < a b
+      < a  b
+      < x1
+      < x1
+      < baa
+      < baa
+      < baa
+      < x1
+      < c
+      < aae
+      < baa
+      < a b
+      < aae
+      < aae
+      < c
+      < x1
+      < a  b
+      < x1
+      ---
+      > aaf
+      > ab
+      >  a b
+      > a	b
+      1c1,3
+      < baa
+      ---
+      > aaf
+      > ab
+      >  a b
+      3,19d4
+      < a  b
+      < x1
+      < x1
+      < baa
+      < baa
+      < baa
+      < x1
+      < c
+      < aae
+      < baa
+      < a b
+      < aae
+      < aae
+      < c
+      < x1
+      < a  b
+      < x1
+      1c1
+      < baa
+      ---
+      > aaf
+      4,12d3
+      < x1
+      < x1
+      < baa
+      < baa
+      < baa
+      < x1
+      < c
+      < aae
+      < baa
+      14,19d4
+      < aae
+      < aae
+      < c
+      < x1
+      < a  b
+      < x1
+      a:1,19 c b:1,4
+      < baa
+      < a b
+      < a  b
+      < x1
+      < x1
+      < baa
+      < baa
+      < baa
+      < x1
+      < c
+      < aae
+      < baa
+      < a b
+      < aae
+      < aae
+      < c
+      < x1
+      < a  b
+      < x1
+      ---
+      > aaf
+      > ab
+      >  a b
+      > a	b
+      19a20,23
+      > aaf
+      > ab
+      >  a b
+      > a	b
+      20,23d19
+      < aaf
+      < ab
+      # 25
+      2,9c2,6
+      < aae
+      < baa
+      < x1
+      < aae
+      < aae
+      < a  b
+      < a b
+      < x1
+      ---
+      > y1
+      > ab
+      > a	b
+      >  a b
+      > baa
+      11,12c8,16
+      < a b
+      < x1
+      ---
+      >  a b
+      >  a b
+      > a	b
+      > ab
+      > c
+      >  a b
+      > y1
+      > a	b
+      > a	b
+      13a18
+      > y1
+      2,6c2,9
+      < aae
+      < baa
+      < x1
+      < aae
+      < aae
+      ---
+      > y1
+      > ab
+      > a	b
+      >  a b
+      > baa
+      > c
+      >  a b
+      >  a b
+      8,9c11
+      < a b
+      < x1
+      ---
+      > ab
+      10a13,14
+      >  a b
+      > y1
+      12c16
+      < x1
+      ---
+      > a	b
+      13a18
+      > y1
+      2,6c2,7
+      < aae
+      < baa
+      < x1
+      < aae
+      < aae
+      ---
+      > y1
+      > ab
+      > a	b
+      >  a b
+      > baa
+      > c
+      9c10,11
+      < x1
+      ---
+      > a	b
+      > ab
+      12c14,16
+      < x1
+      ---
+      > y1
+      > a	b
+      > a	b
+      13a18
+      > y1
+      a:2,9 c b:2,6
+      < aae
+      < baa
+      < x1
+      < aae
+      < aae
+      < a  b
+      < a b
+      < x1
+      ---
+      > y1
+      > ab
+      > a	b
+      >  a b
+      > baa
+      a:11,12 c b:8,16
+      < a b
+      < x1
+      ---
+      >  a b
+      >  a b
+      > a	b
+      > ab
+      > c
+      >  a b
+      > y1
+      > a	b
+      > a	b
+      a:13 a b:18
+      > y1
+      14a15,33
+      > baa
+      > y1
+      > ab
+      > a	b
+      >  a b
+      > baa
+      > c
+      >  a b
+      >  a b
+      > a	b
+      > ab
+      > c
+      >  a b
+      > y1
+      > a	b
+      > a	b
+      > baa
+      > y1
+      > baa
+      15,33d14
+      < baa
+      < y1
+      empty alike
+      one alike
       601c601
       < a---
       > ayc

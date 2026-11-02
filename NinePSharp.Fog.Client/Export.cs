@@ -22,6 +22,7 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
 
     public Export(Local local, CancellationToken hangup)
     {
+        // Stryker disable once String : the root's own name is never served; a walk starts at it
         var root = new NinePDir("/");
         var dev = new NinePDir("dev");
         dev.AddChild(new Device("cons", ct => Read(local.ReadConsole, ct), local.WriteConsole, hangup));
@@ -38,6 +39,8 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
         root.AddChild(mnt);
         var env = new NinePDir("env");
         env.AddChild(rstatus);
+
+        // Stryker disable once String,Initializer : the server function only removes rfailed; what it holds, and its mode, are never read
         env.AddChild(new NinePFile("rfailed", "lost connection"u8.ToArray()) { Mode = ReadWrite });
         root.AddChild(env);
         root.AddChild(Files(local));
@@ -81,6 +84,8 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
     private static async ValueTask WriteAsync(Stream stream, ReadOnlyMemory<byte> data, CancellationToken ct)
     {
         await stream.WriteAsync(data, ct);
+
+        // Stryker disable once Statement : the console's streams are unbuffered, so the flush has nothing to send
         await stream.FlushAsync(ct);
     }
 
@@ -92,6 +97,10 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
         Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask>? write,
         CancellationToken hangup) : NinePFile(name)
     {
+        // What a read gave beyond the count it was asked for, which the next read gives first, as a
+        // device keeps the rest of a line for the next read of it.
+        private byte[] pending = [];
+
         public override Stat GetStat(NinePDialect dialect)
         {
             Mode = (read is null ? 0u : 0b100_100_100) | (write is null ? 0u : 0b010_010_010);
@@ -100,13 +109,22 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
 
         public override async Task<byte[]> ReadAsync(ulong offset, uint count, CancellationToken ct)
         {
-            using var both = CancellationTokenSource.CreateLinkedTokenSource(ct, hangup);
-            byte[] data = await (read ?? throw new NotSupportedException("permission denied"))(both.Token);
-            return data.Length <= count ? data : data[..(int)count];
+            if (pending.Length == 0)
+            {
+                using var both = CancellationTokenSource.CreateLinkedTokenSource(ct, hangup);
+
+                // Stryker disable once Null coalescing,String : a file with no reader has no read in its mode, so it is never opened to read
+                pending = await (read ?? throw new NotSupportedException("permission denied"))(both.Token);
+            }
+
+            byte[] data = pending.Length <= count ? pending : pending[..(int)count];
+            pending = pending[data.Length..];
+            return data;
         }
 
         public override async Task<uint> WriteAsync(ulong offset, byte[] data, CancellationToken ct)
         {
+            // Stryker disable once Null coalescing,String : a file with no writer has no write in its mode, so it is never opened to write
             await (write ?? throw new NotSupportedException("permission denied"))(data, ct);
             return (uint)data.Length;
         }

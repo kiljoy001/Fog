@@ -189,6 +189,35 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
       | -u glenda extra |
 
   @FOG_LOGIN_005
+  Scenario: rc reads the terminal's lines, a byte at a time, and writes to it through /dev/cons
+    Given fog's terminal gives the lines "first line\nsecond"
+    When fog runs "-u glenda -c 'echo to the terminal >/dev/cons; read </dev/cons; read </dev/cons; read </dev/cons || echo at the end'"
+    Then fog prints "to the terminal\nfirst line\nsecond\nat the end"
+
+  @FOG_LOGIN_005
+  Scenario: fog serves the terminal for reading and writing, standard input for reading, and its output and errors for writing
+    When fog runs "-u glenda -c 'ls -l /mnt/term/dev/cons /mnt/term/fd/1? | sed ''s/ .* / /'''"
+    Then fog prints "--rw-rw-rw- /mnt/term/dev/cons\n--r--r--r-- /mnt/term/fd/10\n---w--w--w- /mnt/term/fd/11\n---w--w--w- /mnt/term/fd/12"
+
+  @FOG_LOGIN_005
+  Scenario: fog logs in as the local login name when it is given no user
+    When fog runs "-c 'cat /dev/user'"
+    Then fog prints "glenda"
+    And fog exits 0
+
+  @FOG_LOGIN_005
+  Scenario: fog cannot log in as a user the auth server does not know
+    When fog runs "-u nobody -c 'echo in'"
+    Then fog exits 1
+
+  @FOG_LOGIN_005
+  Scenario: Without $PASS fog asks for the password once, and says nothing of a mismatch, when it is right
+    Given fog has no $PASS, and the terminal gives "secretpw"
+    When fog runs "-u glenda -c 'echo in'"
+    Then fog prints "in"
+    And fog does not print "?password mismatch" on its standard error
+
+  @FOG_LOGIN_005
   Scenario: fog run as a program takes its standard input, environment and exit code from the shell
     When the shell runs fog "-u glenda -c cat" with the standard input "a\nb\n"
     Then the program prints "a\nb"

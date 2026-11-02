@@ -14,6 +14,10 @@ public static class Rcpu
 {
     public const string Usage = "usage: fog [-u user] [-h host] [-c cmd arg ...]\n";
 
+    // The services rconnect dials when an address names none: rcpu's, and the auth server's.
+    internal const string RcpuService = "rcpu";
+    internal const string TicketService = "ticket";
+
     // rcpu's server function, as 9front's rc prints it with whatis.
 #pragma warning disable SA1027 // the function is as 9front's rc prints it, indented with tabs
     internal const string Server = """
@@ -92,6 +96,8 @@ public static class Rcpu
                     break;
                 case "-c":
                     cmd = args[(i + 1)..];
+
+                    // Stryker disable once Arithmetic : past the last argument either way, the loop ends and none is left over
                     i = args.Length - 1;
                     break;
                 default:
@@ -120,8 +126,8 @@ public static class Rcpu
 
         return (host, port switch
         {
-            "rcpu" => 17019,
-            "ticket" => 567,
+            RcpuService => 17019,
+            TicketService => 567,
             _ => int.TryParse(port, out int n) ? n : throw new FormatException($"bad service {port}"),
         });
     }
@@ -147,8 +153,8 @@ public static class Rcpu
 
     private static async Task<int> RunAsync((string User, string Host, string[] Cmd) given, Local local, CancellationToken cancellationToken)
     {
-        (string host, int port) = Address(given.Host, "rcpu");
-        (string authHost, int authPort) = Address(local.Environment("auth") ?? host, "ticket");
+        (string host, int port) = Address(given.Host, RcpuService);
+        (string authHost, int authPort) = Address(local.Environment("auth") ?? host, TicketService);
         string? pass = local.Environment("PASS");
         using var call = new TcpClient();
         await call.ConnectAsync(host, port, cancellationToken);
@@ -172,6 +178,8 @@ public static class Rcpu
             {
                 var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
                 await socket.ConnectAsync(authHost, authPort, ct);
+
+                // Stryker disable once Boolean : the stream is the socket's only user; owning it only closes it sooner
                 return new NetworkStream(socket, ownsSocket: true);
             });
         P9AuthClientResult authenticated = await P9AuthClient.AuthenticateAsync(call.GetStream(), config, cancellationToken);
@@ -179,6 +187,8 @@ public static class Rcpu
         byte[] script = Encoding.UTF8.GetBytes(Script(Directory(local), given.Cmd));
         await conversation.WriteAsync(Encoding.UTF8.GetBytes($"{script.Length,7}\n"), cancellationToken);
         await conversation.WriteAsync(script, cancellationToken);
+
+        // Stryker disable once Statement : TLS's stream writes each record as it is given, so its flush has nothing to send
         await conversation.FlushAsync(cancellationToken);
 
         using var hangup = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -204,6 +214,8 @@ public static class Rcpu
     private static async Task WriteAsync(Stream stream, string text, CancellationToken cancellationToken)
     {
         await stream.WriteAsync(Encoding.UTF8.GetBytes(text), cancellationToken);
+
+        // Stryker disable once Statement : the console's error stream is unbuffered, so its flush has nothing to send
         await stream.FlushAsync(cancellationToken);
     }
 
@@ -213,12 +225,14 @@ public static class Rcpu
     // reads and writes take turns, so a write would wait for a read that waits for its answer.
     private sealed class Hangup(Stream inner, CancellationTokenSource ended) : Stream
     {
+        // Stryker disable Boolean : the 9P connection reads and writes the stream without asking what it can do
         public override bool CanRead => true;
 
         public override bool CanSeek => false;
 
         public override bool CanWrite => true;
 
+        // Stryker restore Boolean
         public override long Length => throw new NotSupportedException();
 
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }

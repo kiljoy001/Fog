@@ -45,6 +45,7 @@ public sealed class RcpuLoginSteps
     private readonly Recorded fogErrors = new();
     private readonly Channel<string> fogInterrupts = Channel.CreateUnbounded<string>();
     private readonly Queue<string> fogTyped = new();
+    private readonly Queue<string> fogConsole = new();
     private readonly List<string> fogAsked = [];
     private readonly Dictionary<string, string> fogDrives = new(StringComparer.Ordinal);
     private FogKernel kernel = null!;
@@ -417,6 +418,23 @@ public sealed class RcpuLoginSteps
         fogTyped.Enqueue(second);
     }
 
+    [Given(@"^fog has no \$PASS, and the terminal gives ""([^""]*)""$")]
+    public void GivenTerminalPassword(string password)
+    {
+        fogWithoutPass = true;
+        fogTyped.Enqueue(password);
+    }
+
+    // The lines the terminal gives /dev/cons, and then its end.
+    [Given(@"^fog's terminal gives the lines ""(.*)""$")]
+    public void GivenConsoleLines(string lines)
+    {
+        foreach (string line in Unescape(lines).Split('\n'))
+        {
+            fogConsole.Enqueue(line);
+        }
+    }
+
     [Given(@"^fog's \$PASS is ""(.*)""$")]
     public void GivenPass(string pass) => fogPass = pass;
 
@@ -486,6 +504,9 @@ public sealed class RcpuLoginSteps
 
     [Then(@"^fog prints ""(.*)"" on its standard error$")]
     public void ThenFogPrintsError(string text) => Assert.True(fogErrors.Text.Contains(Unescape(text), StringComparison.Ordinal), FogFailure());
+
+    [Then(@"^fog does not print ""(.*)"" on its standard error$")]
+    public void ThenFogDoesNotPrintError(string text) => Assert.False(fogErrors.Text.Contains(Unescape(text), StringComparison.Ordinal), FogFailure());
 
     [Then(@"^fog prints that directory under ""(.*)"", and then ""(.*)""$")]
     public void ThenFogPrintsDirectory(string under, string text)
@@ -844,7 +865,7 @@ public sealed class RcpuLoginSteps
                 fogAsked.Add(prompt);
                 return ValueTask.FromResult(fogTyped.Count > 0 ? fogTyped.Dequeue() : null);
             },
-            ReadConsole = _ => ValueTask.FromResult<string?>(null),
+            ReadConsole = _ => ValueTask.FromResult(fogConsole.Count > 0 ? fogConsole.Dequeue() + "\n" : null),
             WriteConsole = (data, ct) => fogOutput.WriteAsync(data, ct),
             Interrupts = fogInterrupts.Reader,
             Drives = fogDrives,

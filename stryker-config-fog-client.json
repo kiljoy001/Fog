@@ -16,6 +16,6 @@
     },
     "concurrency": 4,
     "coverage-analysis": "all",
-    "test-case-filter": "Category=FOG_LOGIN_005|Category=FOG_LOGIN_012"
+    "test-case-filter": "Category=FOG_LOGIN_005|Category=FOG_LOGIN_012|FullyQualifiedName~RcpuTests"
   }
 }
