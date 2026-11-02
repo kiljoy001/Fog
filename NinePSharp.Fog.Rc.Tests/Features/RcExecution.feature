@@ -10227,7 +10227,8 @@ Feature: rc runs scripts as 9front rc does
     When rc runs the script
       """
       fn mask { sed 's/ +[0-9]+( +0 +0 +0 +0 +10 +10)$/ N\1/; s/^glenda +[0-9]+ /glenda N /' }
-      cat /proc/$pid/status | mask
+      while(! grep '^rc +glenda +Await ' /proc/$pid/status >/tmp/st) sleep 0
+      mask </tmp/st
       sleep 3600 &
       while(! grep -s '^sleep +glenda +Sleep ' /proc/$apid/status) sleep 0
       cat /proc/$apid/status | mask

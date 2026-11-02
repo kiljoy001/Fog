@@ -94,6 +94,7 @@ public static class Date
             await process.CloseAsync(fd);
             return read.Length == 8 ? BinaryPrimitives.ReadInt64BigEndian(read.Span) : 0;
         }
+        // Stryker disable once Block : a block taken out returns the default, which is the 0 it returns
         catch (SyscallException)
         {
             return 0;
