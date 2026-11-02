@@ -318,7 +318,7 @@ public sealed class Diff
             int j = a[i];
             if (j == 0)
             {
-                // Stryker disable once Statement : b[0] is 0, which is no candidate's y, and b[1] begins a class, so is negative, and the loop ends there
+                // Stryker disable once Statement,Block : b[0] is 0, which is no candidate's y, and b[1] begins a class, so is negative, and the loop ends there
                 continue;
             }
 
@@ -370,7 +370,9 @@ public sealed class Diff
 
     private static void Prune(D d)
     {
-        for (d.Pref = 0; d.Pref < d.Len[0] && d.Pref < d.Len[1] && d.File[0][d.Pref + 1].Value == d.File[1][d.Pref + 1].Value; d.Pref++)
+        // Stryker disable once Linq : past the shorter file is its 0, which no line's hash is, so the longer one's bound stops it there too
+        int shorter = Math.Min(d.Len[0], d.Len[1]);
+        for (d.Pref = 0; d.Pref < shorter && d.File[0][d.Pref + 1].Value == d.File[1][d.Pref + 1].Value; d.Pref++)
         {
         }
 
@@ -784,7 +786,10 @@ public sealed class Diff
         }
 
         sum = (sum & ((1 << Halflong) - 1)) + (sum >> Halflong);
-        return (short)(sum & ((1 << Halflong) - 1)) + (short)(sum >> Halflong);
+
+        // Stryker disable once Bitwise : of either shift, short keeps bits 16 to 31 alike
+        int high = sum >> Halflong;
+        return (short)sum + (short)high;
     }
 
     // squishspace: with -b each run of blanks before a byte one space, with -w none.
@@ -938,7 +943,7 @@ public sealed class Diff
         b = Math.Min(b, maxb);
         if (a > maxb)
         {
-            // Stryker disable once Statement : past the file's end b is below a, so nothing is fetched either way
+            // Stryker disable once Statement,Block : past the file's end b is below a, so nothing is fetched either way
             return;
         }
 

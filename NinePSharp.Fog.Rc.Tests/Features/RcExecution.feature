@@ -12738,8 +12738,9 @@ Feature: rc runs scripts as 9front rc does
       echo aae >s1; echo baa >s2; diff s1 s2; diff -e s1 s2
       seq 1 30 >g1; for(n in 11 12 13) { sed 's/^5$/x/; s/^'$n'$/y/' g1 >g2; diff -u g1 g2 | sed 1,2d; diff -c g1 g2 | sed 1,3d }
       fn pair { awk -v 'x='$2 -v 'y='$3 'BEGIN { print x; print y }' >h1; awk -v 'y='$3 'BEGIN { print y }' >h2; diff $1 h1 h2; diff $1 h2 h1; echo '|' }
-      pair -b 'c  b' 'b  f\t'; pair -b '\tbfe\t' '  cbe'; pair -b '\t' '\tacb e'; pair -n 'bübüzzbÿ' 'übü'; pair -b '\tü  abÿ\t' 'zzaéÿ'
-      mkdir dd; echo x >dd/-; diff - one dd <[0=]; diff - one dd >[0]/tmp/dr/wo >[2=1] | sed 's/diff1[0-9]+/diff1N/'
+      pair -b 'c  b' 'b  f\t'; pair -b '\tbfe\t' '  cbe'; pair -b '\t' '\tacb e'; pair -n 'bübüzzbÿ' 'übü'; pair -b '\tü  abÿ\t' 'zzaéÿ'; pair -b 'ee afb d' 'eeafbd'; pair -b 'c   ba ' 'c ba '
+      {echo ' lead'; echo x} >lb1; {echo ' lead'; echo y} >lb2; diff -b lb1 lb2
+      mkdir dd; echo x >dd/-; diff - one dd <[0=]; diff - one dd >[0]/tmp/dr/wo >[2=1] | sed 's/diff1[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]:/diff1N:/'
       mkdir -p é/ddddd/sub e2/sub; x=`{awk 'BEGIN { for (i = 0; i < 502; i++) printf "./" }'}; diff -r /tmp/dr//$x^é/ddddd e2 >[2=1] | wc -c
       mkdir -p é/dddddddddd/sub e2/sub; x=`{awk 'BEGIN { for (i = 0; i < 502; i++) printf "./" }'}; diff -r /tmp/dr//$x^é/dddddddddd e2 >[2=1] | wc -c
       echo end
@@ -18121,6 +18122,23 @@ Feature: rc runs scripts as 9front rc does
       0a1
       > 	ü  abÿ	
       |
+      1,2c1
+      < ee afb d
+      < eeafbd
+      ---
+      > eeafbd
+      1a2
+      > eeafbd
+      |
+      2d1
+      < c ba 
+      1a2
+      > c ba 
+      |
+      2c2
+      < x
+      ---
+      > y
       diff: cannot stat -: fd out of range or not open
       diff: cannot read/write /tmp/diff1N: inappropriate use of fd
             0
