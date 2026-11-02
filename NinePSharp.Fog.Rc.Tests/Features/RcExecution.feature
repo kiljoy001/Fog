@@ -12177,8 +12177,29 @@ Feature: rc runs scripts as 9front rc does
       sort -o /nonesuch/x nums; st create; {sort -T /nonesuch -l 1 nums >[2=1]; st create} | sed 's/sort\.[0-9]+\./sort.N./'
       sort -ox1 -o nums; sed 1q x1; sort -o x2 nums -T; sed 1q x2; sort -Tx -T /tmp -l 2 nums | sed 1q
       sort -k; sort -v -k2 -k3,4 -k ,2 -1 -2 +1 -3 -.5 </dev/null; sort -l; sort -l5 nums | sed 1q; sort -t; sort -tx nums | sed 1q
-      seq 1 100 | sort -l 10 -T /tmp/sp | sed -n '1p;100p'; seq 1 110 | sort -l 10 -T /tmp/sp | sed -n '1p;110p'; ls /tmp/sp | grep -c '^sort\.'
+      seq 1 100 | sort -l 10 -T /tmp/sp | sed -n '1p;100p'; seq 1 110 | sort -l 10 -T /tmp/sp | sed -n '1p;110p'; ls /tmp/sp | grep -c 'sort\.'
       for(i in 1 2 3 4 5 6 7) {echo X$i; echo x$i} >>f14; sort -f f14 | sed 3q; echo Xz >>f14; sort -f f14 | sed 3q; echo xz >>f14; sort -f f14 | sed 3q
+      seq 1 5 >five; x=`{awk 'BEGIN { for (i = 0; i < 36; i++) printf "./" }'}; sort -T /tmp/sp/$x -l 1 five; st tdir; x=`{awk 'BEGIN { for (i = 0; i < 35; i++) printf "./" }'}; sort -T /tmp/sp/$x^. -l 1 five | sed 1q
+      @{cat /dev/ppid; exec sort -T /nonesuch -l 1 five} >[2=1] | awk 'index($0, sprintf("sort.%04d.0000", $1 % 10000)) { print "named by pid" }'
+      {echo a; echo a; echo ax; echo a; echo axx; echo b; echo axb} | tr x '\000' >nul; sort -u nul | xd -c | sed 1q; sort -f nul | xd -c | sed 1q; sort -d nul | xd -c | sed 1q; sort -r nul | xd -c | sed 1q
+      sort -l 2 -u -T /tmp/sp nul | xd -c | sed 1q; {cat nul; cat nul; cat nul} | sort | xd -c | sed 2q; sort -c nul; st order
+      for(i in 1 2 3 4 5 6 7) {echo a p$i; echo b q$i} >>tie14; sort -k1,1 tie14 | tr '\012' ' '; echo; echo a p8 >>tie14; sort -k1,1 tie14 | tr '\012' ' '; echo
+      for(o in 'b a b a b a b a b a b a b a' 'b b a a b b a a b b a a b b' 'c a b c a b c a b c a b c a' 'b c c a b a c b a c a b b c') {
+      	n=0; {for(k in `{echo $o}) { n=`{echo $n | awk '{ print $1 + 1 }'}; echo $k $n }} >tie; sort -k1,1 tie | tr '\012' ' '; echo
+      }
+      {echo 0.5; echo 0.05; echo 0.005; echo .50; echo -0.05; echo 5e-1} | sort -g; {echo 123; echo 129; echo 120} | sort -n -k1.1,1.2
+      sort -é; sort -k1é nums; sort +1é nums
+      sort -v -2 </dev/null; sort -v +1 -2 -3 </dev/null; sort -v +1 -k2 -3 </dev/null; sort -v -b +1 </dev/null; sort -v -ff +1 -0 </dev/null
+      sort -v +12.34 -56.78 -k 91.92,93.94 -k 9.9 </dev/null; sort -c five five; st option; sort five >[1=]; st write
+      x=`{awk 'BEGIN { for (i = 0; i < 36; i++) printf "./" }'}; sort -l 1 -T /tmp/sp/$x five -T /tmp | sed 1q; sort -l 1 -T /tmp/sp/$x five -T; st tdir
+      sort -o x5 five -o; sed 1q x5; sort -T /tmp/sp/$x five -l | sed 1q; sort -T /tmp/sp/$x -l 1 five -l; st tdir
+      sort -k1.1,1.2nr <<EOF9x
+      123
+      129
+      120
+      EOF9x
+      mkdir /tmp/sp/m; seq 1 110 >hund
+      @{p=`{cat /dev/ppid}; mkdir /tmp/sp/m/`{echo $p | awk '{ printf "sort.%04d.0011", $1 % 10000 }'}; exec sort -l 10 -T /tmp/sp/m hund} >[2=1] | sed 's/sort\.[0-9]+\.0011: .*/sort.N.0011/'
       echo end
       """
     Then it prints
@@ -12601,6 +12622,94 @@ Feature: rc runs scripts as 9front rc does
       X1
       x1
       X2
+      temp file directory name is too long: /tmp/sp/././././././././././././././././././././././././././././././././././././
+      tdir status
+      1
+      named by pid
+      0000000   a \n  b \n
+      0000000   a \n  a \n  a 00 \n  a \n  a 00 00 \n  a 00  b
+      0000000   a \n  a \n  a 00 \n  a \n  a 00 00 \n  a 00  b
+      0000000   b \n  a \n  a \n  a 00 \n  a \n  a 00  b \n  a
+      0000000   a \n  b \n
+      0000000   a \n  a \n  a \n  a \n  a \n  a \n  a \n  a \n
+      0000010   a \n  a 00 \n  a 00 \n  a 00 00 \n  a 00 00 \n
+      sort: -c file not in sort
+      order status
+      a p1 a p2 a p3 a p4 a p5 a p6 a p7 b q1 b q2 b q3 b q4 b q5 b q6 b q7 
+      a p1 a p2 a p3 a p4 a p5 a p6 a p7 a p8 b q1 b q2 b q3 b q4 b q5 b q6 b q7 
+      a 10 a 12 a 14 a 2 a 4 a 6 a 8 b 1 b 11 b 13 b 3 b 5 b 7 b 9 
+      a 11 a 12 a 3 a 4 a 7 a 8 b 1 b 10 b 13 b 14 b 2 b 5 b 6 b 9 
+      a 11 a 14 a 2 a 5 a 8 b 12 b 3 b 6 b 9 c 1 c 10 c 13 c 4 c 7 
+      a 11 a 4 a 6 a 9 b 1 b 12 b 13 b 5 b 8 c 10 c 14 c 2 c 3 c 7 
+      -0.05
+      0.005
+      0.05
+      0.5
+      .50
+      5e-1
+      120
+      123
+      129
+      sort: unknown option: -�
+      sort: unknown option: field.�
+      sort: unknown option: field.�
+      sort +*.* -2.*
+      =========
+      sort +1.* -2.* +*.* -3.*
+      =========
+      sort +1.* -*.* +1.* -*.* +*.* -3.*
+      =========
+      sort -b +1.*b -*.*b
+      =========
+      	 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f
+      	 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+      	 20 21 22 23 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f
+      	 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3e 3f
+      	 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f
+      	 60 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 7b 7c 7d 7e 7f
+      	 80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f
+      	 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f
+      	 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af
+      	 b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ba bb bc bd be bf
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f d7 4f 55 55 55 55 59 de df
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f f7 4f 55 55 55 55 59 fe ff
+      	 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f
+      	 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+      	 20 21 22 23 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f
+      	 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3e 3f
+      	 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f
+      	 60 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 7b 7c 7d 7e 7f
+      	 80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f
+      	 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f
+      	 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af
+      	 b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ba bb bc bd be bf
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f d7 4f 55 55 55 55 59 de df
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f f7 4f 55 55 55 55 59 fe ff
+      sort -f +1.* -0.*f
+      =========
+      sort +12.34 -56.78 +90.91 -92.94 +8.8 -*.*
+      =========
+      sort: -c can have at most one input file
+      option status
+      1
+      temp file directory name is too long: /tmp/sp/././././././././././././././././././././././././././././././././././././
+      tdir status
+      1
+      1
+      temp file directory name is too long: /tmp/sp/././././././././././././././././././././././././././././././././././././
+      tdir status
+      120
+      123
+      129
+      sort: create /tmp/sp/m/sort.N.0011
       end
       """
 
