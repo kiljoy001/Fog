@@ -5,7 +5,9 @@
       "NinePSharp.Fog.Rc.Tests.csproj"
     ],
     "mutate": [
-      "**/*.cs"
+      "**/*.cs",
+      "!**/Program.cs",
+      "!**/SystemConsole.cs"
     ],
     "mutation-level": "Standard",
     "additional-timeout": 300000,
@@ -16,6 +18,6 @@
     },
     "concurrency": 4,
     "coverage-analysis": "all",
-    "test-case-filter": "Category=FOG_LOGIN_005|Category=FOG_LOGIN_012|FullyQualifiedName~RcpuTests"
+    "test-case-filter": "Category=FOG_LOGIN_005|Category=FOG_LOGIN_012|FullyQualifiedName~RcpuTests|FullyQualifiedName~ConsoleLocalTests"
   }
 }
