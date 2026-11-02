@@ -10041,6 +10041,9 @@ Feature: rc runs scripts as 9front rc does
       date -u -f YYY 0; date -u -f MMMMM 0; date -u -f DDD 0; date -u -f oo 0; date -u -f WWWW 0; date -u -f HHH 0
       ~ $status 'date '[0-9]*': garbled format HHH' && echo garbled status
       date -u -f tttt 0; date -u -f uuuuu 0; date -u -f nnnnnnn 0; date -u -f AA 0; date -u -f aa 0; date -u -f '[abc' 0; date -u -f hhh 0; date -u -f mmm 0; date -u -f sss 0
+      echo -n abc >/tmp/bt; @{rfork n; bind /tmp/bt /dev/bintime; date -un}
+      touch /tmp/wo; chmod 200 /tmp/wo; @{rfork n; bind /tmp/wo /dev/bintime; date -un}
+      echo end
       """
     Then it prints
       """
@@ -10110,6 +10113,9 @@ Feature: rc runs scripts as 9front rc does
       date: garbled format hhh
       date: garbled format mmm
       date: garbled format sss
+      0
+      0
+      end
       """
 
   @FOG_RC_RUN_280
@@ -10166,6 +10172,10 @@ Feature: rc runs scripts as 9front rc does
       bind /tmp/e /proc
       ps
       ~ $status 'ps '[0-9]*': empty' && echo empty status
+      mkdir /tmp/x; chmod 000 /tmp/x; bind /tmp/x /proc
+      ps
+      ~ $status 'ps '[0-9]*': /proc' && echo proc status
+      echo end
       """
     Then it prints
       """
@@ -10206,6 +10216,9 @@ Feature: rc runs scripts as 9front rc does
       none            400    0:00   0:00  4294967295K Sleep    sleep
       ps: empty directory /proc
       empty status
+      ps: /proc: error: permission denied
+      proc status
+      end
       """
 
   @FOG_RC_RUN_282

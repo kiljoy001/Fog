@@ -72,6 +72,8 @@ public sealed class Ps
         }
 
         await ps.bout.BflushAsync();
+
+        // Stryker disable once Statement : a program of Fog's that returns exits with no status, as this does
         process.Exits(null);
     }
 
@@ -170,6 +172,7 @@ public sealed class Ps
         }
         finally
         {
+            // Stryker disable once Statement : the descriptor is closed as ps exits, if not before
             await process.CloseAsync(fd);
         }
     }

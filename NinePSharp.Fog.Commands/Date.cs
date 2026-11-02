@@ -77,6 +77,7 @@ public static class Date
             await SysfatalAsync(process, error!);
         }
 
+        // Stryker disable once Statement : a program of Fog's that returns exits with no status, as this does
         process.Exits(null);
     }
 
@@ -85,8 +86,11 @@ public static class Date
     {
         try
         {
+            // Stryker disable once Bitwise : date execs nothing, so closing on exec changes nothing
             int fd = await process.OpenAsync("/dev/bintime", NinePConstants.OREAD | NinePConstants.OCEXEC);
             ReadOnlyMemory<byte> read = await process.PReadAsync(fd, 8, 0);
+
+            // Stryker disable once Statement : the descriptor is closed as date exits, if not before
             await process.CloseAsync(fd);
             return read.Length == 8 ? BinaryPrimitives.ReadInt64BigEndian(read.Span) : 0;
         }
