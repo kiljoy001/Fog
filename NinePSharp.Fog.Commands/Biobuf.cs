@@ -25,6 +25,9 @@ public sealed class Biobuf(Process process, int fd)
     private int ocount;
     private bool inactive;
     private int gpos;
+
+    // How many bytes have been read from the file.
+    private long offset;
     private bool bracteof;
 
     public Func<string, Task>? Errorf { get; set; }
@@ -34,6 +37,9 @@ public sealed class Biobuf(Process process, int fd)
     // Blinelen: the length of the line Brdline last gave, or of what it left unread when it gave
     // none, as Bgetc then reads it.
     public int Blinelen { get; private set; }
+
+    // Boffset of a buffer being read: the offset in the file of the next byte it gives.
+    public long Boffset => offset - (buffer.Count - gpos);
 
     public async Task<byte[]?> BrdlineAsync(byte delim)
     {
@@ -70,6 +76,7 @@ public sealed class Biobuf(Process process, int fd)
             }
 
             eof = read.IsEmpty;
+            offset += read.Length;
             buffer.AddRange(read.ToArray());
         }
     }
@@ -104,6 +111,7 @@ public sealed class Biobuf(Process process, int fd)
                 }
 
                 eof = read.IsEmpty;
+                offset += read.Length;
                 buffer.AddRange(read.ToArray());
                 continue;
             }
@@ -155,6 +163,7 @@ public sealed class Biobuf(Process process, int fd)
             return Beof;
         }
 
+        offset += read.Length;
         buffer.AddRange(read.ToArray());
         return buffer[gpos++];
     }
