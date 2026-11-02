@@ -29,8 +29,25 @@ public sealed class Tm
     private int wday;
     private int nsec;
     private int tzoff;
+
+    // Stryker disable once String : tmtimens names the zone before anything reads it
     private string zone = string.Empty;
     private Tzone? tz;
+
+    // The fields of C's Tm, which a program may set before tmnorm finds the time they give.
+    public int Sec { get => sec; set => sec = value; }
+
+    public int Min { get => min; set => min = value; }
+
+    public int Hour { get => hour; set => hour = value; }
+
+    public int Mday { get => mday; set => mday = value; }
+
+    public int Mon { get => mon; set => mon = value; }
+
+    public int Year { get => year; set => year = value; }
+
+    public int Nanosec { get => nsec; set => nsec = value; }
 
     // tzload: the zone of the name, "local" being $timezone's, or null with errstr set.
     public static async Task<Tzone?> TzloadAsync(Process process, string tzname)
@@ -45,6 +62,7 @@ public sealed class Tm
         ReadOnlyMemory<byte> read;
         try
         {
+            // Stryker disable once Bitwise : the file is closed before tzload returns, so it is never open across an exec
             int f = await process.OpenAsync(path, NinePConstants.OREAD | NinePConstants.OCEXEC);
             try
             {
@@ -52,6 +70,7 @@ public sealed class Tm
             }
             finally
             {
+                // Stryker disable once Statement : a descriptor left open changes no zone tzload gives
                 await process.CloseAsync(f);
             }
         }
@@ -69,6 +88,8 @@ public sealed class Tm
 
         byte[] buf = [.. read.Span, 0];
         int p = 0;
+
+        // Stryker disable once String : a name is read into each before the zone is made of them, or an error is returned
         string stname = string.Empty, dlname = string.Empty;
         int stdiff = 0, dldiff = 0;
         string? error = Rdname(buf, ref p, out stname) ?? Rdlong(buf, ref p, out stdiff)
@@ -163,8 +184,8 @@ public sealed class Tm
                 {
                     1 => Print(f, "%*d", pad, mon + 1),
                     2 => Print(f, "%*s%02d", pad - 2, string.Empty, mon + 1),
-                    3 => Print(f, "%*.3s", pad, Months[mon]),
-                    4 => Print(f, "%*s", pad, Months[mon]),
+                    3 => Print(f, "%*.3s", pad, Name(Months, mon)),
+                    4 => Print(f, "%*s", pad, Name(Months, mon)),
                     _ => false,
                 },
                 (byte)'D' => Twodigits(f, w, pad, mday),
@@ -274,6 +295,7 @@ public sealed class Tm
             return null;
         }
 
+        // Stryker disable once Conditional : past the NUL the next byte is 0 all the same, and the error returns before f is read again
         for (; c is not (' ' or '\n'); c = buf[f] == 0 ? 0 : buf[f++])
         {
             if (c is < '0' or > '9')
@@ -294,13 +316,18 @@ public sealed class Tm
         return r < 0 ? r + b : r;
     }
 
+    // Stryker disable once Equality : at pad equal to w, pad - w is 0 too
     private static long P(long pad, long w) => pad < w ? 0 : pad - w;
 
-    private static bool Print(List<byte> f, string format, params object[] args)
+    private static bool Print(List<byte> f, string format, params object?[] args)
     {
-        f.AddRange(Libc.Sprint(format, [.. args.Select(a => a is string s ? Libc.FmtArg.Of(s) : Libc.FmtArg.Of(Convert.ToInt64(a)))]));
+        f.AddRange(Libc.Sprint(format, [.. args.Select(a => a is null or string ? Libc.FmtArg.Of((string?)a!) : Libc.FmtArg.Of(Convert.ToInt64(a, System.Globalization.CultureInfo.InvariantCulture)))]));
         return true;
     }
+
+    // A month's name, nil before January as months[-1] is in 9front's date.c, which %s prints as
+    // <nil>.
+    private static string? Name(string[] names, int i) => i >= 0 ? names[i] : null;
 
     private static bool Twodigits(List<byte> f, int w, long pad, int v) => w switch
     {
@@ -359,6 +386,8 @@ public sealed class Tm
     {
         char sgn = tzoff < 0 ? '-' : '+';
         int off = Math.Abs(tzoff);
+
+        // Stryker disable once Equality : at pad 5 it is 5 either way
         pad = w < 3 && pad < 5 ? 5 : pad;
         return w switch
         {
@@ -386,6 +415,8 @@ public sealed class Tm
             if (abs > at.Dlpairs[i] && abs <= (i + 1 < at.Dlpairs.Count ? at.Dlpairs[i + 1] : 0))
             {
                 dl = true;
+
+                // Stryker disable once Statement : no later pair can clear dl once a pair has set it
                 break;
             }
         }

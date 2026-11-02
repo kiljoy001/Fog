@@ -1450,5 +1450,11 @@
     "mutator": "Equality mutation",
     "line": "if (ocount == 0)",
     "reason": "Bflush of a full buffer writes nothing, so Bputc flushes it forever"
+  },
+  {
+    "file": "Tm.cs",
+    "mutator": "Statement mutation",
+    "line": "s++;",
+    "reason": "rdname's skip over the blanks before a name never moves past the first"
   }
 ]
