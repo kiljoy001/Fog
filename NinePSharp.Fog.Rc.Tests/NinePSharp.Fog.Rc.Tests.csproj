@@ -41,6 +41,7 @@
   <ItemGroup>
     <None Update="Data\awk\**" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Data\tm\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Data\diff\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
