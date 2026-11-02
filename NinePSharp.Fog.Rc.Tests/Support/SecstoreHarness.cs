@@ -33,12 +33,24 @@ internal sealed class SecstoreHarness : IAsyncDisposable
 
     public Process Init { get; private set; }
 
-    // A kernel on the manual clock, or on the clock given.
-    public static async Task<SecstoreHarness> StartAsync(byte[]? nvram = null, TimeProvider? clock = null)
+    // A kernel on the manual clock, or on the clock given; with rc, /bin/rc and its rcmain too.
+    public static async Task<SecstoreHarness> StartAsync(byte[]? nvram = null, TimeProvider? clock = null, bool rc = false)
     {
         var harness = new SecstoreHarness(null!, null!);
-        harness.Kernel = FogKernel.InMemory(new Dictionary<string, ProgramMain>(Commands.Commands.All), "glenda", clock ?? harness.Clock, new FakeHostNetwork(), harness.Console, nvram is null ? null : new HostNvram(nvram));
+        var programs = new Dictionary<string, ProgramMain>(Commands.Commands.All);
+        if (rc)
+        {
+            programs["rc"] = RcProgram.MainAsync;
+        }
+
+        harness.Kernel = FogKernel.InMemory(programs, "glenda", clock ?? harness.Clock, new FakeHostNetwork(), harness.Console, nvram is null ? null : new HostNvram(nvram));
         harness.Init = await harness.Kernel.BootAsync();
+        if (rc)
+        {
+            await harness.Init.CloseAsync(await harness.Init.CreateAsync("/root/rc/lib", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_111_101));
+            await harness.WriteFileAsync("/root/rc/lib/rcmain", Encoding.UTF8.GetBytes(RcProgram.Rcmain));
+        }
+
         for (int i = 0; i < 3; i++)
         {
             await harness.Init.OpenAsync("/dev/null", NinePConstants.ORDWR);

@@ -65,9 +65,13 @@ public static class Libc
     // slot that the verb reads as an int, long, vlong, double or pointer; %r prints errstr. What
     // is formatted before a conversion the format ends in is kept, as vsnprint keeps it.
     public static byte[] Sprint(string format, IReadOnlyList<FmtArg> args, string errstr = "")
+        => Sprint(Encoding.UTF8.GetBytes(format), args, errstr);
+
+    // sprint of a format of bytes; with quotefmt, %q and %Q quote as quotefmtinstall has them.
+    public static byte[] Sprint(byte[] format, IReadOnlyList<FmtArg> args, string errstr = "", bool quotefmt = false)
     {
-        var f = new Fmt(args, errstr);
-        byte[] fmt = [.. Encoding.UTF8.GetBytes(format), 0];
+        var f = new Fmt(args, errstr) { Quotefmt = quotefmt };
+        byte[] fmt = [.. format, 0];
         for (int p = 0; ;)
         {
             while (fmt[p] is not (0 or (byte)'%'))
@@ -650,10 +654,16 @@ public static class Libc
             case 'n':
                 throw new ArgumentException("%n writes where the slot points, which is not a pointer");
             case 'r':
-                Fmtstrcpy(f, f.Errstr);
+                Fmtstrcpy(f, Encoding.UTF8.GetBytes(f.Errstr));
                 break;
             case 's':
-                Fmtstrcpy(f, f.Next().String());
+                Fmtstrcpy(f, f.Next().Bytes());
+                break;
+            case 'q' when f.Quotefmt:
+                Quotestrfmt(f, f.Next().Bytes());
+                break;
+            case 'Q' when f.Quotefmt:
+                Quotestrfmt(f, f.Next().String() is { } q ? Encoding.UTF8.GetBytes(q) : null);
                 break;
             default:
                 // _badfmt: the verb between percent signs.
@@ -806,15 +816,14 @@ public static class Libc
     }
 
     // fmtstrcpy: a string as far as its precision in runes, or <nil> for none.
-    private static void Fmtstrcpy(Fmt f, string? s)
+    private static void Fmtstrcpy(Fmt f, byte[]? m)
     {
-        if (s is null)
+        if (m is null)
         {
             Fmtcpy(f, "<nil>"u8.ToArray(), 5, 5);
             return;
         }
 
-        byte[] m = Encoding.UTF8.GetBytes(s);
         int nul = Array.IndexOf(m, (byte)0);
         m = nul < 0 ? m : m[..nul];
         if ((f.Flags & FmtPrec) == 0)
@@ -831,6 +840,71 @@ public static class Libc
         }
 
         Fmtcpy(f, m, j, i);
+    }
+
+    // _quotestrfmt of a string of bytes: as it is, unless it is empty, # is given, or it holds a
+    // blank, a control character or a quote, when it is put in quotes, each quote in it doubled; as
+    // far as its precision in runes, the quotes counted in its width.
+    private static void Quotestrfmt(Fmt f, byte[]? s)
+    {
+        if (s is null)
+        {
+            Fmtcpy(f, "<nil>"u8.ToArray(), 5, 5);
+            return;
+        }
+
+        // _quotesetup, with no limit to the output.
+        int nul = Array.IndexOf(s, (byte)0);
+        s = nul < 0 ? s : s[..nul];
+        int nin = (f.Flags & FmtPrec) != 0 ? f.Prec : -1;
+        bool quoted = (f.Flags & FmtSharp) != 0 || nin == 0 || s.Length == 0;
+        int nbytesout = quoted ? 2 : 0, nbytesin = 0, nrunesin = 0;
+        for (; nin != 0 && nbytesin < s.Length; nin--)
+        {
+            int w = Utf.CharToRune(out uint c, s.AsSpan(nbytesin));
+            if (c <= ' ' || c == '\'')
+            {
+                nbytesout += quoted ? 0 : 2;
+                quoted = true;
+                nbytesout += c == '\'' ? 1 : 0;
+            }
+
+            nbytesin += w;
+            nrunesin++;
+            nbytesout += w;
+        }
+
+        if (!quoted)
+        {
+            Fmtcpy(f, s, nrunesin, nbytesin);
+            return;
+        }
+
+        // qstrfmt.
+        Pad(f, (f.Flags & FmtLeft) == 0 ? f.Width - nbytesout : 0);
+        f.Out.Add((byte)'\'');
+        for (int m = 0, nc = nrunesin; nc > 0; nc--)
+        {
+            uint r = s[m];
+            if (r < Utf.RuneSelf)
+            {
+                m++;
+            }
+            else if (nbytesin - m >= Utf.UtfMax || Utf.FullRune(s.AsSpan(m, nbytesin - m)))
+            {
+                m += Utf.CharToRune(out r, s.AsSpan(m, nbytesin - m));
+            }
+            else
+            {
+                break;
+            }
+
+            f.Out.AddRange(Rune(r));
+            f.Out.AddRange(r == '\'' ? Rune(r) : []);
+        }
+
+        f.Out.Add((byte)'\'');
+        Pad(f, (f.Flags & FmtLeft) != 0 ? f.Width - nbytesout : 0);
     }
 
     // _fmtcpy: n runes of the sz bytes at m, no more than the precision, padded to the width with
@@ -894,15 +968,23 @@ public static class Libc
     // a string, for %s and %S. A slot past the last reads as zeros, where 9front reads its stack.
     public readonly record struct FmtArg(long Bits, string? Text)
     {
+        public byte[]? Raw { get; init; }
+
         public static FmtArg Of(double d) => new(BitConverter.DoubleToInt64Bits(d), null);
 
         public static FmtArg Of(long v) => new(v, null);
 
         public static FmtArg Of(string s) => new(0, s);
 
+        // A string of bytes as they are, which need not be UTF-8.
+        public static FmtArg Of(byte[] s) => new(0, null) { Raw = s };
+
         // The slot as a pointer to a string: nil for zeros; anything else is no string, which 9front
         // faults on reading.
         public string? String() => Text ?? (Bits == 0 ? null : throw new ArgumentException("a number where the format reads a string"));
+
+        // The string's bytes: those given, or the UTF-8 of the text.
+        public byte[]? Bytes() => Raw ?? (String() is { } t ? Encoding.UTF8.GetBytes(t) : null);
     }
 
     // fmt.h's Fmt, as far as sprint uses it.
@@ -913,6 +995,8 @@ public static class Libc
         public List<byte> Out { get; } = [];
 
         public string Errstr => errstr;
+
+        public bool Quotefmt { get; init; }
 
         public uint R { get; set; }
 

@@ -11032,3 +11032,232 @@ Feature: rc runs scripts as 9front rc does
       a 2 w
       b 2 x
       """
+
+  @FOG_RC_RUN_285
+  Scenario: awk runs programs as 9front's does, its options, formats, pipes and errors
+    When rc runs the script
+      """
+      mkdir /tmp/awks; cd /tmp/awks
+      awk 'BEGIN { print 100000000000000000000, 1e400, 0*1e400, -0, 0.1+0.2, 1/3, 123456789012, 2^53+1, 017, 0x1f, 1e-5, .5e1 }'
+      awk 'BEGIN { OFMT = "%.2f"; CONVFMT = "%.3f"; x = 3.14159; print x, x ""; y = 10; print y "" }'
+      awk 'BEGIN { printf "%d|%5.1f|%-6s|%x|%o|%u|%c|%c|%c|%e|%G|%i|%5%|%s\n", -3.9, 2.25, "ab", 255, 8, -1, "hello", 256, "", 12345.678, 0.0001, 7, "end" }'
+      awk 'BEGIN { printf "%q %q %q\n", "a b", "plain", "it''s"; printf "%*d|%-*d|\n", 5, 42, 4, 7; printf "%z\n", 1 }'
+      awk 'BEGIN { srand(42); print rand(), rand(); print srand(7), int(rand()*1000) }'
+      awk 'BEGIN { print length("héllo"), substr("héllo", 2, 2), index("héllo", "l"), toupper("héllo"), utf(233), match("xéy", /é/), RSTART, RLENGTH }'
+      echo 'a b c' | awk '{ $5 = "e"; print; print NF; NF = 2; print; $0 = "x  y"; print $2, NF }'
+      {echo l1; echo l2; echo l3} >f; awk 'NR == 1 { while ((getline line < "f") > 0) print "got", line; close("f") } { print FILENAME, FNR, $0 }' f
+      awk 'BEGIN { while (("echo one; echo two" | getline x) > 0) print "<" x ">"; print system("exit 3"), system("") }'
+      awk 'BEGIN { print "to sort" | "sort"; print "a to sort" | "sort"; close("sort"); print "after" }'
+      {echo a:1; echo b:2} >colons; awk -F: -v 'x=5' '{ print $2 + x }' colons
+      awk -v 'y=a\tb' 'BEGIN { print y; print ARGC, ARGV[1], ARGV[2] }' 'v=1' f
+      awk '{ print v, $0 }' 'v=1' f 'v=2' f
+      awk -Ft 'BEGIN { print FS == "\t" }'
+      awk 'BEGIN { exit 3 }'; echo $status | sed 's/ [0-9]+:/ N:/'
+      awk 'BEGIN { exit "msg" }'; echo $status | sed 's/ [0-9]+:/ N:/'
+      awk '{ print; nextfile }' f f
+      awk 'BEGIN { a["x"]; a["y"]; delete a["x"]; for (k in a) print k; print length(a); split("", a); print length(a) }'
+      awk 'BEGIN { x[1,2] = 3; for (k in x) { split(k, p, SUBSEP); print p[1], p[2] } ; if ((1,2) in x) print "in" }'
+      awk 'function g(a) { a["k"] = 1 } BEGIN { g(arr); print arr["k"]; print substr("hello", 0), substr("hello", -1, 3), substr("hello", 4, 100) }'
+      awk 'BEGIN { print 1; print 2 > "/dev/stderr"; print 3 }'
+      awk 'BEGIN { getline; print "first:", $0; getline x; print "second:", x }' f
+      awk 'BEGIN { print length() }' 
+      awk '/l2/,/l3/ { print "range", $0 }' f
+      awk 'BEGIN { print index("abc", ""), "" < "a", 2 < 10, "2" < "10", $1 }'
+      awk 'BEGIN { printf "%s %s\n", "only" }'
+      awk 'BEGIN { x = 1/0 }'
+      awk 'BEGIN { print log(-1), exp(1000), sqrt(-4), log(0), int(1e300); printf "%d\n", 1e300 }'
+      awk 'BEGIN { print }  x y {'
+      awk 'BEGIN { print "unterminated }'
+      awk 'BEGIN { print $(-1) }'
+      awk 'BEGIN { getline x < "nonexistent"; print "r", (getline x < "nonexistent") }'
+      awk 'BEGIN { f(1) }'
+      awk 'function f(a, a) { } BEGIN { }'
+      awk 'BEGIN { next }'
+      awk '{ print }' nonexistent
+      awk
+      awk -f
+      awk -f nonexistent
+      awk -z 'BEGIN { print "z" }'
+      awk 'BEGIN { print "x" > "" }'
+      awk 'BEGIN { print substr("abc", 2) ; print 1==1.0, "a" ~ "^a$", "abc" ~ /b/ }'
+      echo 'one two' | awk '{ sub(/o/, "[&]"); print; gsub(/o|t/, "\\&"); print; n = gsub(//, "-"); print n, $0 }'
+      awk 'BEGIN { s = "aaa"; print gsub(/a*/, "X", s), s; t = "hello"; print gsub(/l*/, "-", t), t }'
+      {echo; echo p1 l1; echo p1 l2; echo; echo; echo p2 l1} >paras; awk 'BEGIN { RS = ""; } { print NR": "$0 }' paras
+      echo 'a;b;c' | awk 'BEGIN { RS = ";" } { print NR, $0 }'
+      echo end
+      """
+    Then it prints
+      """
+      awk: syntax error at line 1
+       context is
+      	BEGIN { print 100000000000000000000, >>>  1e400 <<< , 0*1e400, -0, 0.1+0.2, 1/3, 123456789012, 2^53+1, 017, 0x1f, 1e-5, .5e1 }
+      awk: illegal statement at line 1
+      3.142 3.142
+      10
+      -3|  2.3|ab    |ff|10|4294967295|h|Ā||1.234568e+04|0.0001|7|    %|end
+      'a b' plain 'it''s'
+         42|7   |
+      %z1
+      awk: weird printf conversion %z
+       source line 1
+      0.455925 0.251632
+      42 242
+      5 él 3 HÉLLO é 2 2 1
+      a b c  e
+      5
+      a b c  e
+      y 2
+      got l1
+      got l2
+      got l3
+      f 1 l1
+      f 2 l2
+      f 3 l3
+      <one>
+      <two>
+      1 0
+      a to sort
+      to sort
+      after
+      6
+      7
+      a	b
+      3 v=1 f
+      1 l1
+      1 l2
+      1 l3
+      2 l1
+      2 l2
+      2 l3
+      awk: syntax error at line 1
+       context is
+      	BEGIN { print FS >>>  == <<< 
+      awk: illegal statement at line 1
+      awk N: error
+      awk N: msg
+      l1
+      l1
+      y
+      1
+      0
+      1 2
+      in
+      1
+      hello hel lo
+      1
+      2
+      3
+      first: l1
+      second: l2
+      0
+      range l2
+      range l3
+      awk: syntax error at line 1
+       context is
+      	BEGIN { print index("abc", ""), "" >>>  < <<<  "a", 2 < 10, "2" < "10", $1 }
+      awk: illegal statement at line 1
+      awk: not enough args in printf(%s %s
+      )
+       source line 1
+      awk: division by zero
+       source line 1
+      1 1 1 1 1e+300
+      -2147483648
+      awk: log argument out of domain
+       source line 1
+      awk: exp result out of range
+       source line 1
+      awk: sqrt argument out of domain
+       source line 1
+      awk: log argument out of domain
+       source line 1
+      awk: syntax error at line 1
+       context is
+      	 >>>  <<< 
+      awk: illegal statement at line 1
+      	missing }
+      awk: non-terminated string unterminat... at line 1
+       context is
+      	 >>>  <<< 
+      awk: syntax error at line 2
+      awk: illegal statement at line 2
+      	missing }
+      awk: trying to access field -1
+       source line 1
+      r -1
+      awk: calling undefined function f
+       source line 1
+      awk: duplicate argument a at line 1 in function f
+       context is
+      	function f(a, >>>  a <<< ) { } BEGIN { }
+      awk: syntax error at line 1 in function f
+      awk: bailing out at line 1 in function f
+      awk: illegal break, continue, next or nextfile from BEGIN
+       source line 1
+      awk: can't open file nonexistent
+       source line 1
+      usage: awk [-F fieldsep] [-d] [-mf n] [-mr n] [-safe] [-v var=value] [-f programfile | 'program'] [file ...]
+      awk: no program filename
+
+      awk: can't open file nonexistent
+       source nonexistent:1
+       context is
+      	 >>>  <<< 
+      z
+      awk: unknown option -z ignored
+
+      awk: null file name in print or getline
+       source line 1
+      awk: syntax error at line 1
+       context is
+      	BEGIN { print substr("abc", 2) ; print >>>  1== <<< 
+      awk: illegal statement at line 1
+      [o]ne two
+      [&]ne &w&
+      10 -[-&-]-n-e- -&-w-&-
+      1 X
+      4 -h-e-o-
+      1: p1 l1
+      p1 l2
+      2: p2 l1
+      1 a
+      2 b
+      3 c
+
+      end
+      """
+
+  @FOG_RC_RUN_286
+  Scenario: awk dies of an overflow, as 9front's floating point traps it, its output flushed and its warnings not
+    Given 9front's trap gives its registers' addresses, which Fog has none of, so this runs on Fog alone
+    When rc runs the script
+      """
+      awk 'BEGIN { print exp(1000); print "before"; x = 2^2000; print "after" }'
+      echo $status | sed 's/ [0-9]+:/ N:/'
+      awk 'BEGIN { x = 1e308; x *= 10 }'
+      awk 'BEGIN { print 1e308 + 1e308 }'
+      awk 'BEGIN { print -1e308 - 1e308 }'
+      awk 'BEGIN { print 1e308 / 1e-10 }'
+      awk 'BEGIN { x = 10; x ^= 400 }'
+      awk 'BEGIN { x = 1e308; x += 1e308 }'
+      awk 'BEGIN { x = 1e308; x -= -1e308 }'
+      awk 'BEGIN { x = 1e308; x /= 1e-10 }'
+      awk 'BEGIN { print 3^3, 2^0.5, 10^-2, (-2)^3; x = 2; x ^= 10; print x }'
+      """
+    Then it prints
+      """
+      1
+      before
+      sys: fp: numeric overflow
+      awk N: sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      sys: fp: numeric overflow
+      27 1.41421 0.01 -8
+      1024
+      """

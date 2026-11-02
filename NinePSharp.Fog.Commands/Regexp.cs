@@ -55,11 +55,15 @@ public sealed class Regexp
 
     public string Regstr { get; }
 
-    public static Regexp Regcomp(string s) => Regcomp1(s, false, false);
+    public static Regexp Regcomp(string s) => Regcomp1(Encoding.UTF8.GetBytes(s), false, false);
 
-    public static Regexp Regcomplit(string s) => Regcomp1(s, false, true);
+    // regcomp of an expression's bytes, which need not be UTF-8: a byte that begins no rune is the
+    // error rune.
+    public static Regexp Regcomp(byte[] s) => Regcomp1(s, false, false);
 
-    public static Regexp Regcompnl(string s) => Regcomp1(s, true, false);
+    public static Regexp Regcomplit(string s) => Regcomp1(Encoding.UTF8.GetBytes(s), false, true);
+
+    public static Regexp Regcompnl(string s) => Regcomp1(Encoding.UTF8.GetBytes(s), true, false);
 
     // regerror: the message, and exits "regerr".
     public static async Task RegerrorAsync(Process process, string s)
@@ -278,6 +282,42 @@ public sealed class Regexp
         return matchgen > 0 ? 1 : 0;
     }
 
+    // regexec: rregexec over a string of bytes, ending at its first NUL, read as UTF-8 a rune at a
+    // time from sem[0]'s start, a byte that begins no rune the error rune; the Resubs are byte
+    // offsets. A line begins at the string's start or after a newline before the start.
+    public int Regexec(byte[] str, Resub[]? sem, int msize)
+    {
+        int end = Array.IndexOf(str, (byte)0);
+        byte[] buf = [.. str.AsSpan(0, end < 0 ? str.Length : end), 0];
+        int sp = sem is not null && msize > 0 && sem[0].Sp >= 0 ? sem[0].Sp : 0;
+
+        // The rune before the start, which says whether a line begins there.
+        var runes = new List<uint> { sp == 0 ? '\n' : buf[sp - 1] };
+        var offs = new List<int> { sp - 1 };
+        for (int b = sp; buf[b] != 0;)
+        {
+            offs.Add(b);
+            b += Utf.CharToRune(out uint r, buf.AsSpan(b));
+            runes.Add(r);
+        }
+
+        offs.Add(buf.Length - 1);
+        runes.Add(0);
+
+        // The runes begin after the one before the start, whatever subexpressions are asked for.
+        bool subs = sem is not null && msize > 0;
+        int ep = subs && sem![0].Ep >= 0 ? offs.FindIndex(1, o => o >= sem[0].Ep) : -1;
+        var rsem = new Resub[subs ? Math.Min(msize, Nsubexpm) : 1];
+        rsem[0] = new Resub(1, ep);
+        int n = Rregexec([.. runes], rsem, Math.Max(msize, 1));
+        for (int i = 0; n > 0 && subs && i < rsem.Length; i++)
+        {
+            sem![i] = new Resub(rsem[i].Sp < 0 ? -1 : offs[rsem[i].Sp], rsem[i].Ep < 0 ? -1 : offs[rsem[i].Ep]);
+        }
+
+        return n;
+    }
+
     // strecpy of a match into what is left of dlen.
     private static void Copy(List<uint> dst, int ep, uint[] str, Resub m)
     {
@@ -299,10 +339,11 @@ public sealed class Regexp
         return t;
     }
 
-    private static Regexp Regcomp1(string regstr, bool nl, bool lit)
+    private static Regexp Regcomp1(byte[] raw, bool nl, bool lit)
     {
-        var plex = new Parselex(regstr, lit);
-        Renode parsetr = plex.Node(TSub, plex.E0(), null);
+        string regstr = Encoding.UTF8.GetString(raw);
+        var plex = new Parselex(raw, regstr, lit);
+        Renode parsetr = plex.Node(TSub, raw.Length != 0 ? plex.E0() : null, null);
         var inst = new Reinst[plex.Instrs];
         for (int i = 0; i < inst.Length; i++)
         {
@@ -494,9 +535,9 @@ public sealed class Regexp
         private bool literal;
         private bool nc;
 
-        public Parselex(string regstr, bool lit)
+        public Parselex(byte[] regbytes, string regstr, bool lit)
         {
-            raw = [.. Encoding.UTF8.GetBytes(regstr), 0];
+            raw = [.. regbytes, 0];
             (orig, this.lit) = (regstr, lit);
         }
 

@@ -38,4 +38,8 @@
     <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\TypingConsole.cs" Link="Support\TypingConsole.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Data\awk\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
