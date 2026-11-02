@@ -12603,3 +12603,2453 @@ Feature: rc runs scripts as 9front rc does
       X2
       end
       """
+
+  @FOG_RC_RUN_297
+  Scenario: diff finds the same changes as 9front's between pseudo-random files whose lines repeat and collide in its hash
+    When rc runs the script
+      """
+      mkdir /tmp/dr; cd /tmp/dr
+      fn gen { awk -v 's='$1 'BEGIN { srand(s); split("aae baa aaf bab c d", w, " "); n = int(rand()*25); for (j = 0; j < n; j++) print w[int(rand()*6)+1] }' }
+      for(i in `{seq 1 30}) {
+      	gen $i >a; gen 9$i >b
+      	echo '#' $i; diff a b; diff -e a b; diff -u a b | sed 1,2d; diff -c a b | sed 1,3d
+      }
+      seq 1 600 >p; {cat p; echo axc | tr x '\000'; echo tail} >z1; {cat p; echo ayc; echo tail} >z2; diff z1 z2
+      {cat p; awk 'BEGIN { for (i = 0; i < 5000; i++) printf "a"; print "xb" }' | tr x '\000'; echo next} >l1
+      {cat p; awk 'BEGIN { for (i = 0; i < 5000; i++) printf "a"; print "c" }'; echo next} >l2; diff l1 l2 && echo long lines alike
+      mkdir -p é/dddddddddd/sub e2/sub; x=`{awk 'BEGIN { for (i = 0; i < 502; i++) printf "./" }'}; diff -r /tmp/dr//$x^é/dddddddddd e2 >[2=1] | wc -c
+      echo end
+      """
+    Then it prints
+      """
+      # 1
+      1,5d0
+      < d
+      < aaf
+      < baa
+      < d
+      < bab
+      7,10c2
+      < bab
+      < bab
+      < aae
+      < aae
+      ---
+      > baa
+      12,18d3
+      < aaf
+      < aaf
+      < d
+      < aae
+      < d
+      < aae
+      < d
+      12,18d
+      7,10c
+      baa
+      .
+      1,5d
+      @@ -1,18 +1,3 @@
+      -d
+      -aaf
+      -baa
+      -d
+      -bab
+       c
+      -bab
+      -bab
+      -aae
+      -aae
+      +baa
+       c
+      -aaf
+      -aaf
+      -d
+      -aae
+      -d
+      -aae
+      -d
+      - baa
+      - d
+      - bab
+        c
+      - bab
+      - bab
+      - aae
+      - aae
+      + baa
+        c
+      - aaf
+      - aaf
+      - d
+      - aae
+      - d
+      - aae
+      - d
+      # 2
+      0a1
+      > bab
+      2a4
+      > baa
+      4,5c6
+      < d
+      < baa
+      ---
+      > aae
+      7c8,10
+      < baa
+      ---
+      > aaf
+      > aae
+      > aaf
+      8a12
+      > d
+      9a14,16
+      > bab
+      > d
+      > d
+      10a18
+      > c
+      12a21,22
+      > baa
+      > aae
+      12a
+      baa
+      aae
+      .
+      10a
+      c
+      .
+      9a
+      bab
+      d
+      d
+      .
+      8a
+      d
+      .
+      7c
+      aaf
+      aae
+      aaf
+      .
+      4,5c
+      aae
+      .
+      2a
+      baa
+      .
+      0a
+      bab
+      .
+      @@ -1,12 +1,22 @@
+      +bab
+       c
+       d
+      +baa
+       aaf
+      -d
+      -baa
+      +aae
+       bab
+      -baa
+      +aaf
+      +aae
+      +aaf
+       baa
+      +d
+       aae
+      +bab
+      +d
+      +d
+       aae
+      +c
+       aaf
+       d
+      +baa
+      +aae
+        d
+      + baa
+        aaf
+      - d
+      - baa
+      + aae
+        bab
+      - baa
+      + aaf
+      + aae
+      + aaf
+        baa
+      + d
+        aae
+      + bab
+      + d
+      + d
+        aae
+      + c
+        aaf
+        d
+      + baa
+      + aae
+      # 3
+      1,2c1,5
+      < bab
+      < aaf
+      ---
+      > aaf
+      > baa
+      > baa
+      > baa
+      > aae
+      3a7
+      > baa
+      5d8
+      < d
+      6a10,16
+      > aaf
+      > d
+      > aaf
+      > aaf
+      > aaf
+      > d
+      > d
+      6a
+      aaf
+      d
+      aaf
+      aaf
+      aaf
+      d
+      d
+      .
+      5d
+      3a
+      baa
+      .
+      1,2c
+      aaf
+      baa
+      baa
+      baa
+      aae
+      .
+      @@ -1,6 +1,16 @@
+      -bab
+      -aaf
+      +aaf
+      +baa
+      +baa
+      +baa
+      +aae
+       c
+      +baa
+       d
+      -d
+       baa
+      +aaf
+      +d
+      +aaf
+      +aaf
+      +aaf
+      +d
+      +d
+      + aaf
+      + baa
+      + baa
+      + baa
+      + aae
+        c
+      + baa
+        d
+      - d
+        baa
+      + aaf
+      + d
+      + aaf
+      + aaf
+      + aaf
+      + d
+      + d
+      # 4
+      1,11c1
+      < bab
+      < d
+      < d
+      < d
+      < bab
+      < aae
+      < bab
+      < aaf
+      < baa
+      < aae
+      < d
+      ---
+      > aaf
+      13,14d2
+      < d
+      < d
+      16,17c4
+      < d
+      < aae
+      ---
+      > baa
+      19,21c6
+      < aae
+      < baa
+      < aaf
+      ---
+      > bab
+      23,24c8,10
+      < aae
+      < d
+      ---
+      > bab
+      > baa
+      > aaf
+      23,24c
+      bab
+      baa
+      aaf
+      .
+      19,21c
+      bab
+      .
+      16,17c
+      baa
+      .
+      13,14d
+      1,11c
+      aaf
+      .
+      @@ -1,24 +1,10 @@
+      -bab
+      -d
+      -d
+      -d
+      -bab
+      -aae
+      -bab
+      -aaf
+      -baa
+      -aae
+      -d
+      +aaf
+       c
+      -d
+      -d
+       aaf
+      -d
+      -aae
+      +baa
+       c
+      -aae
+      -baa
+      -aaf
+      +bab
+       c
+      -aae
+      -d
+      +bab
+      +baa
+      +aaf
+      - d
+      - d
+      - bab
+      - aae
+      - bab
+      - aaf
+      - baa
+      - aae
+      - d
+      + aaf
+        c
+      - d
+      - d
+        aaf
+      - d
+      - aae
+      + baa
+        c
+      - aae
+      - baa
+      - aaf
+      + bab
+        c
+      - aae
+      - d
+      + bab
+      + baa
+      + aaf
+      # 5
+      1,2d0
+      < aaf
+      < aaf
+      4,17c2
+      < d
+      < baa
+      < c
+      < baa
+      < d
+      < baa
+      < aae
+      < bab
+      < aae
+      < aaf
+      < c
+      < aaf
+      < d
+      < aae
+      ---
+      > baa
+      4,17c
+      baa
+      .
+      1,2d
+      @@ -1,18 +1,3 @@
+      -aaf
+      -aaf
+       baa
+      -d
+      -baa
+      -c
+      -baa
+      -d
+      -baa
+      -aae
+      -bab
+      -aae
+      -aaf
+      -c
+      -aaf
+      -d
+      -aae
+      +baa
+       c
+        baa
+      - d
+      - baa
+      - c
+      - baa
+      - d
+      - baa
+      - aae
+      - bab
+      - aae
+      - aaf
+      - c
+      - aaf
+      - d
+      - aae
+      + baa
+        c
+      # 6
+      1c1,2
+      < baa
+      ---
+      > aae
+      > c
+      2a4,9
+      > baa
+      > aae
+      > aae
+      > aae
+      > c
+      > baa
+      3a11,12
+      > aae
+      > c
+      4a14,15
+      > aaf
+      > baa
+      5a17
+      > aae
+      7d18
+      < c
+      9d19
+      < aaf
+      11d20
+      < baa
+      12a22
+      > d
+      12a
+      d
+      .
+      11d
+      9d
+      7d
+      5a
+      aae
+      .
+      4a
+      aaf
+      baa
+      .
+      3a
+      aae
+      c
+      .
+      2a
+      baa
+      aae
+      aae
+      aae
+      c
+      baa
+      .
+      1c
+      aae
+      c
+      .
+      @@ -1,12 +1,22 @@
+      -baa
+      +aae
+      +c
+       d
+      +baa
+      +aae
+      +aae
+      +aae
+      +c
+      +baa
+       aaf
+      +aae
+      +c
+       d
+      +aaf
+      +baa
+       d
+      +aae
+       bab
+      -c
+       bab
+      -aaf
+       aae
+      -baa
+       bab
+      +d
+      + c
+        d
+      + baa
+      + aae
+      + aae
+      + aae
+      + c
+      + baa
+        aaf
+      + aae
+      + c
+        d
+      + aaf
+      + baa
+        d
+      + aae
+        bab
+      - c
+        bab
+      - aaf
+        aae
+      - baa
+        bab
+      + d
+      # 7
+      1,2c1,4
+      < baa
+      < aaf
+      ---
+      > aae
+      > aae
+      > baa
+      > baa
+      5c7,11
+      < bab
+      ---
+      > c
+      > aaf
+      > aaf
+      > aaf
+      > c
+      6a13,16
+      > aaf
+      > baa
+      > baa
+      > c
+      6a
+      aaf
+      baa
+      baa
+      c
+      .
+      5c
+      c
+      aaf
+      aaf
+      aaf
+      c
+      .
+      1,2c
+      aae
+      aae
+      baa
+      baa
+      .
+      @@ -1,6 +1,16 @@
+      -baa
+      -aaf
+      +aae
+      +aae
+      +baa
+      +baa
+       c
+       d
+      -bab
+      +c
+      +aaf
+      +aaf
+      +aaf
+      +c
+       baa
+      +aaf
+      +baa
+      +baa
+      +c
+      + aae
+      + aae
+      + baa
+      + baa
+        c
+        d
+      - bab
+      + c
+      + aaf
+      + aaf
+      + aaf
+      + c
+        baa
+      + aaf
+      + baa
+      + baa
+      + c
+      # 8
+      1d0
+      < aae
+      3,8d1
+      < d
+      < d
+      < baa
+      < aae
+      < aae
+      < c
+      10,11d2
+      < aae
+      < c
+      13,16d3
+      < d
+      < c
+      < c
+      < c
+      18,24c5,9
+      < bab
+      < baa
+      < aaf
+      < c
+      < bab
+      < baa
+      < c
+      ---
+      > aaf
+      > bab
+      > aaf
+      > d
+      > aaf
+      18,24c
+      aaf
+      bab
+      aaf
+      d
+      aaf
+      .
+      13,16d
+      10,11d
+      3,8d
+      1d
+      @@ -1,24 +1,9 @@
+      -aae
+       d
+      -d
+      -d
+      -baa
+      -aae
+      -aae
+      -c
+       bab
+      -aae
+      -c
+       aaf
+      -d
+      -c
+      -c
+      -c
+       baa
+      -bab
+      -baa
+      -aaf
+      -c
+      -bab
+      -baa
+      -c
+      +aaf
+      +bab
+      +aaf
+      +d
+      +aaf
+      - d
+      - d
+      - baa
+      - aae
+      - aae
+      - c
+        bab
+      - aae
+      - c
+        aaf
+      - d
+      - c
+      - c
+      - c
+        baa
+      - bab
+      - baa
+      - aaf
+      - c
+      - bab
+      - baa
+      - c
+      + aaf
+      + bab
+      + aaf
+      + d
+      + aaf
+      # 9
+      1,4d0
+      < d
+      < aaf
+      < baa
+      < d
+      6,11c2
+      < d
+      < c
+      < baa
+      < bab
+      < aae
+      < aaf
+      ---
+      > aae
+      13,18d3
+      < aaf
+      < bab
+      < c
+      < c
+      < baa
+      < bab
+      13,18d
+      6,11c
+      aae
+      .
+      1,4d
+      @@ -1,18 +1,3 @@
+      -d
+      -aaf
+      -baa
+      -d
+       c
+      -d
+      -c
+      -baa
+      -bab
+      -aae
+      -aaf
+      +aae
+       c
+      -aaf
+      -bab
+      -c
+      -c
+      -baa
+      -bab
+      - baa
+      - d
+        c
+      - d
+      - c
+      - baa
+      - bab
+      - aae
+      - aaf
+      + aae
+        c
+      - aaf
+      - bab
+      - c
+      - c
+      - baa
+      - bab
+      # 10
+      1,2c1
+      < d
+      < d
+      ---
+      > aae
+      4c3
+      < c
+      ---
+      > aae
+      6,7c5
+      < bab
+      < aaf
+      ---
+      > aae
+      9d6
+      < bab
+      11a9,12
+      > c
+      > aaf
+      > aae
+      > c
+      11a
+      c
+      aaf
+      aae
+      c
+      .
+      9d
+      6,7c
+      aae
+      .
+      4c
+      aae
+      .
+      1,2c
+      aae
+      .
+      @@ -1,12 +1,13 @@
+      -d
+      -d
+      +aae
+       aaf
+      -c
+      +aae
+       aaf
+      -bab
+      -aaf
+      +aae
+       d
+      -bab
+       aae
+       aae
+      +c
+      +aaf
+      +aae
+      +c
+       baa
+      + aae
+        aaf
+      - c
+      + aae
+        aaf
+      - bab
+      - aaf
+      + aae
+        d
+      - bab
+        aae
+        aae
+      + c
+      + aaf
+      + aae
+      + c
+        baa
+      # 11
+      1c1,3
+      < c
+      ---
+      > aae
+      > d
+      > baa
+      5c7
+      < aae
+      ---
+      > c
+      5c
+      c
+      .
+      1c
+      aae
+      d
+      baa
+      .
+      @@ -1,5 +1,7 @@
+      -c
+      +aae
+      +d
+      +baa
+       aaf
+       c
+       c
+      -aae
+      +c
+      + d
+      + baa
+        aaf
+        c
+        c
+      - aae
+      + c
+      # 12
+      1d0
+      < bab
+      3,24d1
+      < d
+      < c
+      < c
+      < aae
+      < bab
+      < aae
+      < c
+      < baa
+      < bab
+      < aae
+      < d
+      < bab
+      < aae
+      < c
+      < baa
+      < aaf
+      < baa
+      < bab
+      < baa
+      < aaf
+      < baa
+      < c
+      3,24d
+      1d
+      @@ -1,24 +1,1 @@
+      -bab
+       d
+      -d
+      -c
+      -c
+      -aae
+      -bab
+      -aae
+      -c
+      -baa
+      -bab
+      -aae
+      -d
+      -bab
+      -aae
+      -c
+      -baa
+      -aaf
+      -baa
+      -bab
+      -baa
+      -aaf
+      -baa
+      -c
+      - d
+      - c
+      - c
+      - aae
+      - bab
+      - aae
+      - c
+      - baa
+      - bab
+      - aae
+      - d
+      - bab
+      - aae
+      - c
+      - baa
+      - aaf
+      - baa
+      - bab
+      - baa
+      - aaf
+      - baa
+      - c
+      # 13
+      1,2c1,5
+      < bab
+      < baa
+      ---
+      > c
+      > d
+      > c
+      > aaf
+      > aae
+      4,7c7
+      < c
+      < aaf
+      < d
+      < baa
+      ---
+      > aae
+      9a10
+      > bab
+      11c12
+      < baa
+      ---
+      > aae
+      13a15
+      > c
+      15c17
+      < aae
+      ---
+      > baa
+      17,18c19
+      < baa
+      < aaf
+      ---
+      > aae
+      17,18c
+      aae
+      .
+      15c
+      baa
+      .
+      13a
+      c
+      .
+      11c
+      aae
+      .
+      9a
+      bab
+      .
+      4,7c
+      aae
+      .
+      1,2c
+      c
+      d
+      c
+      aaf
+      aae
+      .
+      @@ -1,18 +1,19 @@
+      -bab
+      -baa
+      +c
+      +d
+      +c
+      +aaf
+      +aae
+       baa
+      -c
+      -aaf
+      -d
+      -baa
+      +aae
+       c
+       d
+      +bab
+       baa
+      -baa
+      +aae
+       bab
+       aaf
+      +c
+       bab
+      -aae
+      +baa
+       c
+      -baa
+      -aaf
+      +aae
+      + c
+      + d
+      + c
+      + aaf
+      + aae
+        baa
+      - c
+      - aaf
+      - d
+      - baa
+      + aae
+        c
+        d
+      + bab
+        baa
+      - baa
+      + aae
+        bab
+        aaf
+      + c
+        bab
+      - aae
+      + baa
+        c
+      - baa
+      - aaf
+      + aae
+      # 14
+      1,2c1
+      < aaf
+      < c
+      ---
+      > bab
+      4d2
+      < c
+      6c4,5
+      < bab
+      ---
+      > aaf
+      > c
+      8c7,10
+      < baa
+      ---
+      > c
+      > aaf
+      > aae
+      > bab
+      10,12c12,13
+      < baa
+      < d
+      < d
+      ---
+      > aaf
+      > aae
+      10,12c
+      aaf
+      aae
+      .
+      8c
+      c
+      aaf
+      aae
+      bab
+      .
+      6c
+      aaf
+      c
+      .
+      4d
+      1,2c
+      bab
+      .
+      @@ -1,12 +1,13 @@
+      -aaf
+      -c
+      +bab
+       aaf
+      -c
+       aae
+      -bab
+      +aaf
+      +c
+       d
+      -baa
+      +c
+      +aaf
+      +aae
+      +bab
+       d
+      -baa
+      -d
+      -d
+      +aaf
+      +aae
+      + bab
+        aaf
+      - c
+        aae
+      - bab
+      + aaf
+      + c
+        d
+      - baa
+      + c
+      + aaf
+      + aae
+      + bab
+        d
+      - baa
+      - d
+      - d
+      + aaf
+      + aae
+      # 15
+      0a1,2
+      > bab
+      > c
+      2c4,5
+      < baa
+      ---
+      > aaf
+      > aaf
+      4,5c7
+      < c
+      < c
+      ---
+      > baa
+      4,5c
+      baa
+      .
+      2c
+      aaf
+      aaf
+      .
+      0a
+      bab
+      c
+      .
+      @@ -1,5 +1,7 @@
+      +bab
+      +c
+       baa
+      -baa
+      +aaf
+      +aaf
+       c
+      -c
+      -c
+      +baa
+        baa
+      - baa
+      + aaf
+      + aaf
+        c
+      - c
+      - c
+      + baa
+      # 16
+      1,24d0
+      < baa
+      < c
+      < d
+      < c
+      < aaf
+      < baa
+      < baa
+      < aaf
+      < aae
+      < baa
+      < aaf
+      < c
+      < c
+      < aaf
+      < aaf
+      < bab
+      < aaf
+      < baa
+      < aaf
+      < d
+      < bab
+      < baa
+      < aaf
+      < bab
+      1,24d
+      @@ -1,24 +1,0 @@
+      -baa
+      -c
+      -d
+      -c
+      -aaf
+      -baa
+      -baa
+      -aaf
+      -aae
+      -baa
+      -aaf
+      -c
+      -c
+      -aaf
+      -aaf
+      -bab
+      -aaf
+      -baa
+      -aaf
+      -d
+      -bab
+      -baa
+      -aaf
+      -bab
+      - d
+      - c
+      - aaf
+      - baa
+      - baa
+      - aaf
+      - aae
+      - baa
+      - aaf
+      - c
+      - c
+      - aaf
+      - aaf
+      - bab
+      - aaf
+      - baa
+      - aaf
+      - d
+      - bab
+      - baa
+      - aaf
+      - bab
+      # 17
+      1,3c1
+      < aae
+      < baa
+      < baa
+      ---
+      > baa
+      5,6d2
+      < d
+      < d
+      8,9c4,7
+      < aae
+      < aae
+      ---
+      > baa
+      > c
+      > baa
+      > bab
+      11,12c9,13
+      < aae
+      < baa
+      ---
+      > baa
+      > bab
+      > aae
+      > c
+      > bab
+      13a15
+      > aae
+      15,17c17,18
+      < aaf
+      < bab
+      < aaf
+      ---
+      > baa
+      > bab
+      15,17c
+      baa
+      bab
+      .
+      13a
+      aae
+      .
+      11,12c
+      baa
+      bab
+      aae
+      c
+      bab
+      .
+      8,9c
+      baa
+      c
+      baa
+      bab
+      .
+      5,6d
+      1,3c
+      baa
+      .
+      @@ -1,18 +1,19 @@
+      -aae
+      -baa
+      -baa
+      +baa
+       c
+      -d
+      -d
+       c
+      -aae
+      -aae
+      +baa
+      +c
+      +baa
+      +bab
+       baa
+      -aae
+      -baa
+      +baa
+      +bab
+      +aae
+      +c
+      +bab
+       baa
+      +aae
+       aaf
+      -aaf
+      -bab
+      -aaf
+      +baa
+      +bab
+       baa
+      - baa
+      + baa
+        c
+      - d
+      - d
+        c
+      - aae
+      - aae
+      + baa
+      + c
+      + baa
+      + bab
+        baa
+      - aae
+      - baa
+      + baa
+      + bab
+      + aae
+      + c
+      + bab
+        baa
+      + aae
+        aaf
+      - aaf
+      - bab
+      - aaf
+      + baa
+      + bab
+        baa
+      # 18
+      1c1,7
+      < d
+      ---
+      > baa
+      > baa
+      > aae
+      > baa
+      > baa
+      > aae
+      > baa
+      3c9,10
+      < aaf
+      ---
+      > baa
+      > bab
+      5,12c12,13
+      < bab
+      < c
+      < aaf
+      < bab
+      < baa
+      < baa
+      < c
+      < bab
+      ---
+      > aae
+      > aae
+      5,12c
+      aae
+      aae
+      .
+      3c
+      baa
+      bab
+      .
+      1c
+      baa
+      baa
+      aae
+      baa
+      baa
+      aae
+      baa
+      .
+      @@ -1,12 +1,13 @@
+      -d
+      +baa
+      +baa
+      +aae
+      +baa
+      +baa
+      +aae
+      +baa
+       c
+      -aaf
+      +baa
+      +bab
+       c
+      -bab
+      -c
+      -aaf
+      -bab
+      -baa
+      -baa
+      -c
+      -bab
+      +aae
+      +aae
+      + baa
+      + aae
+      + baa
+      + baa
+      + aae
+      + baa
+        c
+      - aaf
+      + baa
+      + bab
+        c
+      - bab
+      - c
+      - aaf
+      - bab
+      - baa
+      - baa
+      - c
+      - bab
+      + aae
+      + aae
+      # 19
+      1,2c1
+      < d
+      < baa
+      ---
+      > aae
+      4d2
+      < bab
+      5a4,7
+      > baa
+      > d
+      > c
+      > d
+      5a
+      baa
+      d
+      c
+      d
+      .
+      4d
+      1,2c
+      aae
+      .
+      @@ -1,5 +1,7 @@
+      -d
+      -baa
+      +aae
+       c
+      -bab
+       baa
+      +baa
+      +d
+      +c
+      +d
+      + aae
+        c
+      - bab
+        baa
+      + baa
+      + d
+      + c
+      + d
+      # 20
+      1,24d0
+      < c
+      < c
+      < d
+      < bab
+      < d
+      < baa
+      < c
+      < c
+      < baa
+      < baa
+      < baa
+      < aaf
+      < c
+      < baa
+      < c
+      < bab
+      < aaf
+      < aae
+      < bab
+      < aae
+      < aae
+      < aae
+      < bab
+      < bab
+      1,24d
+      @@ -1,24 +1,0 @@
+      -c
+      -c
+      -d
+      -bab
+      -d
+      -baa
+      -c
+      -c
+      -baa
+      -baa
+      -baa
+      -aaf
+      -c
+      -baa
+      -c
+      -bab
+      -aaf
+      -aae
+      -bab
+      -aae
+      -aae
+      -aae
+      -bab
+      -bab
+      - d
+      - bab
+      - d
+      - baa
+      - c
+      - c
+      - baa
+      - baa
+      - baa
+      - aaf
+      - c
+      - baa
+      - c
+      - bab
+      - aaf
+      - aae
+      - bab
+      - aae
+      - aae
+      - aae
+      - bab
+      - bab
+      # 21
+      1c1,3
+      < bab
+      ---
+      > d
+      > c
+      > c
+      3a6,7
+      > baa
+      > aae
+      5a10
+      > bab
+      8,16c13,17
+      < aaf
+      < aaf
+      < baa
+      < d
+      < d
+      < baa
+      < baa
+      < c
+      < bab
+      ---
+      > bab
+      > aae
+      > aaf
+      > aaf
+      > aaf
+      8,16c
+      bab
+      aae
+      aaf
+      aaf
+      aaf
+      .
+      5a
+      bab
+      .
+      3a
+      baa
+      aae
+      .
+      1c
+      d
+      c
+      c
+      .
+      @@ -1,18 +1,19 @@
+      -bab
+      +d
+      +c
+      +c
+       baa
+       baa
+      +baa
+      +aae
+       bab
+       bab
+      +bab
+       d
+       aaf
+      -aaf
+      -aaf
+      -baa
+      -d
+      -d
+      -baa
+      -baa
+      -c
+      -bab
+      +bab
+      +aae
+      +aaf
+      +aaf
+      +aaf
+       aaf
+       aae
+      + c
+      + c
+        baa
+        baa
+      + baa
+      + aae
+        bab
+        bab
+      + bab
+        d
+        aaf
+      - aaf
+      - aaf
+      - baa
+      - d
+      - d
+      - baa
+      - baa
+      - c
+      - bab
+      + bab
+      + aae
+      + aaf
+      + aaf
+      + aaf
+        aaf
+        aae
+      # 22
+      1d0
+      < bab
+      3,4d1
+      < aaf
+      < bab
+      6d2
+      < c
+      8,10c4,8
+      < aae
+      < aaf
+      < baa
+      ---
+      > baa
+      > d
+      > aae
+      > c
+      > aae
+      11a10,13
+      > bab
+      > bab
+      > c
+      > aae
+      11a
+      bab
+      bab
+      c
+      aae
+      .
+      8,10c
+      baa
+      d
+      aae
+      c
+      aae
+      .
+      6d
+      3,4d
+      1d
+      @@ -1,11 +1,13 @@
+      -bab
+       c
+      -aaf
+      -bab
+       baa
+      -c
+       aae
+      -aae
+      -aaf
+      -baa
+      +baa
+      +d
+      +aae
+      +c
+      +aae
+       bab
+      +bab
+      +bab
+      +c
+      +aae
+      - aaf
+      - bab
+        baa
+      - c
+        aae
+      - aae
+      - aaf
+      - baa
+      + baa
+      + d
+      + aae
+      + c
+      + aae
+        bab
+      + bab
+      + bab
+      + c
+      + aae
+      # 23
+      1c1,2
+      < aaf
+      ---
+      > bab
+      > c
+      2a4,5
+      > baa
+      > bab
+      4,5c7
+      < bab
+      < d
+      ---
+      > aaf
+      4,5c
+      aaf
+      .
+      2a
+      baa
+      bab
+      .
+      1c
+      bab
+      c
+      .
+      @@ -1,5 +1,7 @@
+      -aaf
+      +bab
+      +c
+       baa
+      +baa
+      +bab
+       c
+      -bab
+      -d
+      +aaf
+      + c
+        baa
+      + baa
+      + bab
+        c
+      - bab
+      - d
+      + aaf
+      # 24
+      1,24d0
+      < baa
+      < c
+      < d
+      < bab
+      < bab
+      < baa
+      < baa
+      < baa
+      < bab
+      < aaf
+      < aae
+      < baa
+      < c
+      < aae
+      < aae
+      < aaf
+      < bab
+      < d
+      < bab
+      < baa
+      < aaf
+      < d
+      < bab
+      < aaf
+      1,24d
+      @@ -1,24 +1,0 @@
+      -baa
+      -c
+      -d
+      -bab
+      -bab
+      -baa
+      -baa
+      -baa
+      -bab
+      -aaf
+      -aae
+      -baa
+      -c
+      -aae
+      -aae
+      -aaf
+      -bab
+      -d
+      -bab
+      -baa
+      -aaf
+      -d
+      -bab
+      -aaf
+      - d
+      - bab
+      - bab
+      - baa
+      - baa
+      - baa
+      - bab
+      - aaf
+      - aae
+      - baa
+      - c
+      - aae
+      - aae
+      - aaf
+      - bab
+      - d
+      - bab
+      - baa
+      - aaf
+      - d
+      - bab
+      - aaf
+      # 25
+      1,6c1,4
+      < baa
+      < aae
+      < baa
+      < bab
+      < aae
+      < aae
+      ---
+      > aaf
+      > c
+      > c
+      > baa
+      7a6
+      > aaf
+      9,10c8,14
+      < bab
+      < aaf
+      ---
+      > d
+      > c
+      > c
+      > c
+      > aae
+      > aaf
+      > d
+      12c16,17
+      < bab
+      ---
+      > baa
+      > aaf
+      14,15d18
+      < aae
+      < aae
+      17,18d19
+      < bab
+      < d
+      17,18d
+      14,15d
+      12c
+      baa
+      aaf
+      .
+      9,10c
+      d
+      c
+      c
+      c
+      aae
+      aaf
+      d
+      .
+      7a
+      aaf
+      .
+      1,6c
+      aaf
+      c
+      c
+      baa
+      .
+      @@ -1,18 +1,19 @@
+      -baa
+      -aae
+      -baa
+      -bab
+      -aae
+      -aae
+      +aaf
+      +c
+      +c
+      +baa
+       d
+      +aaf
+       c
+      -bab
+      -aaf
+      +d
+      +c
+      +c
+      +c
+      +aae
+      +aaf
+      +d
+       c
+      -bab
+      +baa
+      +aaf
+       baa
+      -aae
+      -aae
+       aaf
+      -bab
+      -d
+      - baa
+      - bab
+      - aae
+      - aae
+      + aaf
+      + c
+      + c
+      + baa
+        d
+      + aaf
+        c
+      - bab
+      - aaf
+      + d
+      + c
+      + c
+      + c
+      + aae
+      + aaf
+      + d
+        c
+      - bab
+      + baa
+      + aaf
+        baa
+      - aae
+      - aae
+        aaf
+      - bab
+      - d
+      # 26
+      1,4c1,9
+      < aae
+      < bab
+      < aaf
+      < bab
+      ---
+      > baa
+      > baa
+      > aae
+      > aae
+      > aaf
+      > aae
+      > baa
+      > bab
+      > d
+      6,11c11,13
+      < c
+      < bab
+      < aaf
+      < c
+      < aaf
+      < aaf
+      ---
+      > aaf
+      > bab
+      > d
+      6,11c
+      aaf
+      bab
+      d
+      .
+      1,4c
+      baa
+      baa
+      aae
+      aae
+      aaf
+      aae
+      baa
+      bab
+      d
+      .
+      @@ -1,11 +1,13 @@
+      -aae
+      -bab
+      -aaf
+      -bab
+      +baa
+      +baa
+      +aae
+      +aae
+      +aaf
+      +aae
+      +baa
+      +bab
+      +d
+       c
+      -c
+      -bab
+      -aaf
+      -c
+      -aaf
+      -aaf
+      +aaf
+      +bab
+      +d
+      - aaf
+      - bab
+      + baa
+      + baa
+      + aae
+      + aae
+      + aaf
+      + aae
+      + baa
+      + bab
+      + d
+        c
+      - c
+      - bab
+      - aaf
+      - c
+      - aaf
+      - aaf
+      + aaf
+      + bab
+      + d
+      # 27
+      1,3c1
+      < d
+      < aae
+      < c
+      ---
+      > baa
+      5c3,6
+      < aaf
+      ---
+      > baa
+      > aae
+      > aae
+      > d
+      5c
+      baa
+      aae
+      aae
+      d
+      .
+      1,3c
+      baa
+      .
+      @@ -1,5 +1,6 @@
+      -d
+      -aae
+      -c
+      +baa
+       bab
+      -aaf
+      +baa
+      +aae
+      +aae
+      +d
+      - c
+      + baa
+        bab
+      - aaf
+      + baa
+      + aae
+      + aae
+      + d
+      # 28
+      1,24d0
+      < d
+      < bab
+      < d
+      < aaf
+      < aae
+      < baa
+      < c
+      < bab
+      < d
+      < aaf
+      < d
+      < d
+      < c
+      < d
+      < aaf
+      < aaf
+      < bab
+      < c
+      < c
+      < aaf
+      < c
+      < c
+      < c
+      < aaf
+      1,24d
+      @@ -1,24 +1,0 @@
+      -d
+      -bab
+      -d
+      -aaf
+      -aae
+      -baa
+      -c
+      -bab
+      -d
+      -aaf
+      -d
+      -d
+      -c
+      -d
+      -aaf
+      -aaf
+      -bab
+      -c
+      -c
+      -aaf
+      -c
+      -c
+      -c
+      -aaf
+      - d
+      - aaf
+      - aae
+      - baa
+      - c
+      - bab
+      - d
+      - aaf
+      - d
+      - d
+      - c
+      - d
+      - aaf
+      - aaf
+      - bab
+      - c
+      - c
+      - aaf
+      - c
+      - c
+      - c
+      - aaf
+      # 29
+      1,4c1,2
+      < c
+      < aae
+      < baa
+      < aaf
+      ---
+      > d
+      > bab
+      8,12c6,15
+      < aae
+      < d
+      < aaf
+      < bab
+      < baa
+      ---
+      > aaf
+      > baa
+      > baa
+      > aae
+      > c
+      > bab
+      > c
+      > aaf
+      > c
+      > aae
+      14,16c17,18
+      < d
+      < aaf
+      < aaf
+      ---
+      > bab
+      > aae
+      14,16c
+      bab
+      aae
+      .
+      8,12c
+      aaf
+      baa
+      baa
+      aae
+      c
+      bab
+      c
+      aaf
+      c
+      aae
+      .
+      1,4c
+      d
+      bab
+      .
+      @@ -1,17 +1,19 @@
+      -c
+      -aae
+      -baa
+      -aaf
+      +d
+      +bab
+       c
+       aae
+       aaf
+      -aae
+      -d
+      -aaf
+      -bab
+      -baa
+      +aaf
+      +baa
+      +baa
+      +aae
+      +c
+      +bab
+      +c
+      +aaf
+      +c
+      +aae
+       baa
+      -d
+      -aaf
+      -aaf
+      +bab
+      +aae
+       bab
+      - baa
+      - aaf
+      + d
+      + bab
+        c
+        aae
+        aaf
+      - aae
+      - d
+      - aaf
+      - bab
+      - baa
+      + aaf
+      + baa
+      + baa
+      + aae
+      + c
+      + bab
+      + c
+      + aaf
+      + c
+      + aae
+        baa
+      - d
+      - aaf
+      - aaf
+      + bab
+      + aae
+        bab
+      # 30
+      1,5d0
+      < bab
+      < bab
+      < aaf
+      < aaf
+      < aaf
+      8c3,6
+      < c
+      ---
+      > aae
+      > aae
+      > aae
+      > aae
+      10c8
+      < aaf
+      ---
+      > d
+      11a10,13
+      > c
+      > baa
+      > baa
+      > d
+      11a
+      c
+      baa
+      baa
+      d
+      .
+      10c
+      d
+      .
+      8c
+      aae
+      aae
+      aae
+      aae
+      .
+      1,5d
+      @@ -1,11 +1,13 @@
+      -bab
+      -bab
+      -aaf
+      -aaf
+      -aaf
+       d
+       aae
+      -c
+      +aae
+      +aae
+      +aae
+      +aae
+       d
+      -aaf
+      +d
+       baa
+      +c
+      +baa
+      +baa
+      +d
+      - aaf
+      - aaf
+      - aaf
+        d
+        aae
+      - c
+      + aae
+      + aae
+      + aae
+      + aae
+        d
+      - aaf
+      + d
+        baa
+      + c
+      + baa
+      + baa
+      + d
+      601c601
+      < a---
+      > ayc
+      long lines alike
+         1029
+      end
+      """

@@ -94,6 +94,7 @@ public sealed class Diff
 
     private static bool Directory(Stat s) => (s.Qid.Type & QidType.QTDIR) != 0;
 
+    // Stryker disable once Logical : a device read as a file gives diff what its copy would, and a directory is taken as one first
     private static bool RegularFile(Stat s) => s.Type == 'M' && !Directory(s);
 
     private static bool Isspace(byte c) => c is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\v' or (byte)'\f' or (byte)'\r';
@@ -102,6 +103,8 @@ public sealed class Diff
     private static int Strlen(byte[] buf)
     {
         int n = Array.IndexOf(buf, (byte)0);
+
+        // Stryker disable once Conditional,Equality : readline ends each line it keeps with a NUL
         return n < 0 ? buf.Length : n;
     }
 
@@ -466,6 +469,8 @@ public sealed class Diff
             }
 
             (Bfile? Copy, string File, Stat Sb) copy = await MktmpfileAsync(input, file);
+
+            // Stryker disable once Statement : a descriptor left open changes nothing diff prints
             await process.CloseAsync(input);
             return copy;
         }
@@ -489,6 +494,7 @@ public sealed class Diff
             await SysfatalAsync<Stat>($"cannot read/write {file}: {e.Message}");
         }
 
+        // Stryker disable once String : the copy's names are never printed; diff names the file it was given
         return (new Bfile([.. data]), file, new Stat(0, 'M', 0, new Qid(QidType.QTFILE, 0, 0), 0, 0, 0, (ulong)data.Count, string.Empty, string.Empty, string.Empty, string.Empty));
     }
 
@@ -558,6 +564,7 @@ public sealed class Diff
             // dirreadall's error is a directory of nothing.
         }
 
+        // Stryker disable once Statement : a descriptor left open changes nothing diff prints
         await process.CloseAsync(fd);
         names.Sort(Strcmp);
         return names;
@@ -571,12 +578,15 @@ public sealed class Diff
         {
             string? from = i < df.Count ? df[i] : null;
             string? to = j < dt.Count ? dt[j] : null;
+
+            // Stryker disable once String,Statement,Update : dirread gives no . or .., which diffdir.c passes over all the same
             if (from is "." or "..")
             {
                 i++;
                 continue;
             }
 
+            // Stryker disable once String,Statement,Update : dirread gives no . or .., which diffdir.c passes over all the same
             if (to is "." or "..")
             {
                 j++;
@@ -703,6 +713,7 @@ public sealed class Diff
                 data.AddRange(read.ToArray());
             }
 
+            // Stryker disable once Statement : a descriptor left open changes nothing diff prints
             await process.CloseAsync(fd);
         }
         catch (SyscallException e)
@@ -1069,8 +1080,10 @@ public sealed class Diff
 
         public long[] Ixnew { get; set; } = [];
 
+        // Stryker disable once String : diff names both files before it compares them
         public string File1 { get; set; } = string.Empty;
 
+        // Stryker disable once String : diff names both files before it compares them
         public string File2 { get; set; } = string.Empty;
 
         public Bfile?[] Input { get; } = new Bfile?[2];
