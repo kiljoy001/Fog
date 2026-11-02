@@ -17560,3 +17560,6093 @@ Feature: rc runs scripts as 9front rc does
          1029
       end
       """
+
+  @FOG_RC_RUN_298
+  Scenario: sort orders pseudo-random lines as 9front's does under each of its flags, in memory and merged from temporary files
+    When rc runs the script
+      """
+      mkdir /tmp/sr; cd /tmp/sr
+      fn gen { awk -v 's='$1 'BEGIN { srand(s); split("a A b B 0 1 9 - . é ~ z", w, " ")
+      	n = int(rand()*40); for (j = 0; j < n; j++) { m = int(rand()*8); l = ""
+      	for (k = 0; k < m; k++) { r = rand(); l = l (r < 0.15 ? " " : r < 0.2 ? "\t" : w[int(rand()*12)+1]) }
+      	print l } }' }
+      for(i in `{seq 1 12}) {
+      	gen $i >in
+      	echo '#' $i
+      	for(f in -m -f -d -i -r -n -g -u -fu -fr -dfi -b -nr -k2 -k2n -k1.2,1.3 -k2,2r '-t a' '-t a -k2' +1 +0.1 -M)
+      		{ echo '=' $f; sort $f in }
+      	sort -l 5 -T /tmp/sr in | sed 3q; sort -l 5 -u -T /tmp/sr -f in | sed 3q
+      }
+      echo end
+      """
+    Then it prints
+      """
+      # 1
+      = -m
+
+
+
+
+       
+       
+        
+       z~.
+       é	.-az
+       éAé B
+       é~99-0
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      B0.  
+      a.aab0A
+      b--a 1z
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      za 1
+      zéz
+      zé~-b~é
+      ézaé 
+      = -f
+
+
+
+
+       
+       
+        
+       é	.-az
+       éAé B
+       é~99-0
+       z~.
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      a.aab0A
+      b--a 1z
+      B0.  
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      ézaé 
+      za 1
+      zéz
+      zé~-b~é
+      = -d
+
+
+      .
+
+
+       
+       
+        
+       z~.
+       é	.-az
+       é~99-0
+       éAé B
+      -0
+      19aé-
+      1b999
+      9
+      9B-é- 
+      -B	~1-A
+      B0.  
+      a.aab0A
+      b~.	
+      b1~- ba
+      b--a 1z
+      bz	0 
+      bzB~
+      za 1
+      zé~-b~é
+      zéz
+      ézaé 
+      = -i
+
+
+
+
+       
+       
+        
+       é	.-az
+       éAé B
+       z~.
+       é~99-0
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      B0.  
+      a.aab0A
+      b--a 1z
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      ézaé 
+      za 1
+      zéz
+      zé~-b~é
+      = -r
+      ézaé 
+      zé~-b~é
+      zéz
+      za 1
+      b~.	
+      bzB~
+      bz	0 
+      b1~- ba
+      b--a 1z
+      a.aab0A
+      B0.  
+      9B-é- 
+      9
+      1b999
+      19aé-
+      .
+      -B	~1-A
+      -0
+       é~99-0
+       éAé B
+       é	.-az
+       z~.
+        
+       
+       
+
+
+
+
+      = -n
+      b--a 1z
+
+       é~99-0
+
+       
+      a.aab0A
+        
+      -B	~1-A
+      zé~-b~é
+      .
+      -0
+      b~.	
+       é	.-az
+       éAé B
+      za 1
+
+
+      B0.  
+      ézaé 
+      bzB~
+      zéz
+       z~.
+      b1~- ba
+       
+      bz	0 
+      1b999
+      9B-é- 
+      9
+      19aé-
+      = -g
+      b--a 1z
+
+       é~99-0
+
+       
+      a.aab0A
+        
+      -B	~1-A
+      zé~-b~é
+      .
+      -0
+      b~.	
+       é	.-az
+       éAé B
+      za 1
+
+
+      B0.  
+      ézaé 
+      bzB~
+      zéz
+       z~.
+      b1~- ba
+       
+      bz	0 
+      1b999
+      9B-é- 
+      9
+      19aé-
+      = -u
+
+       
+        
+       z~.
+       é	.-az
+       éAé B
+       é~99-0
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      B0.  
+      a.aab0A
+      b--a 1z
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      za 1
+      zéz
+      zé~-b~é
+      ézaé 
+      = -fu
+
+       
+        
+       é	.-az
+       éAé B
+       é~99-0
+       z~.
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      a.aab0A
+      b--a 1z
+      B0.  
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      ézaé 
+      za 1
+      zéz
+      zé~-b~é
+      = -fr
+      zé~-b~é
+      zéz
+      za 1
+      ézaé 
+      b~.	
+      bzB~
+      bz	0 
+      b1~- ba
+      B0.  
+      b--a 1z
+      a.aab0A
+      9B-é- 
+      9
+      1b999
+      19aé-
+      .
+      -B	~1-A
+      -0
+       z~.
+       é~99-0
+       éAé B
+       é	.-az
+        
+       
+       
+
+
+
+
+      = -dfi
+
+
+      .
+
+
+       
+       
+        
+       é~99-0
+       éAé B
+       é	.-az
+       z~.
+      -0
+      19aé-
+      1b999
+      9
+      9B-é- 
+      a.aab0A
+      b~.	
+      B0.  
+      b1~- ba
+      -B	~1-A
+      b--a 1z
+      bz	0 
+      bzB~
+      ézaé 
+      za 1
+      zé~-b~é
+      zéz
+      = -b
+
+
+
+
+       
+       
+        
+       z~.
+       é	.-az
+       éAé B
+       é~99-0
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      B0.  
+      a.aab0A
+      b--a 1z
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      za 1
+      zéz
+      zé~-b~é
+      ézaé 
+      = -nr
+      19aé-
+      9B-é- 
+      9
+      1b999
+      b--a 1z
+
+      a.aab0A
+        
+      -B	~1-A
+      zé~-b~é
+      .
+      -0
+      b~.	
+       é~99-0
+       éAé B
+
+
+      B0.  
+      ézaé 
+      bzB~
+      zéz
+       z~.
+      b1~- ba
+       
+      bz	0 
+       
+       é	.-az
+      za 1
+
+      = -k2
+
+
+
+
+       
+       
+        
+       z~.
+       é~99-0
+      -0
+      .
+      19aé-
+      1b999
+      9
+      a.aab0A
+      bzB~
+      zéz
+      zé~-b~é
+      b~.	
+       é	.-az
+      bz	0 
+      -B	~1-A
+      9B-é- 
+      ézaé 
+      B0.  
+      za 1
+      b--a 1z
+       éAé B
+      b1~- ba
+      = -k2n
+
+
+
+
+       
+       
+        
+       z~.
+       é	.-az
+       éAé B
+       é~99-0
+      -0
+      -B	~1-A
+      .
+      19aé-
+      1b999
+      9
+      9B-é- 
+      B0.  
+      a.aab0A
+      b1~- ba
+      bz	0 
+      bzB~
+      b~.	
+      zéz
+      zé~-b~é
+      ézaé 
+      b--a 1z
+      za 1
+      = -k1.2,1.3
+
+
+
+
+       
+       
+      .
+      9
+        
+      b--a 1z
+      a.aab0A
+      -0
+      B0.  
+      b1~- ba
+      19aé-
+      -B	~1-A
+      9B-é- 
+      za 1
+      1b999
+      bz	0 
+      bzB~
+      ézaé 
+       z~.
+      b~.	
+       é	.-az
+       éAé B
+      zéz
+       é~99-0
+      zé~-b~é
+      = -k2,2r
+      b1~- ba
+       éAé B
+      b--a 1z
+      za 1
+      B0.  
+      9B-é- 
+      ézaé 
+      -B	~1-A
+      bz	0 
+       é	.-az
+      b~.	
+
+
+
+
+       
+       
+        
+       z~.
+       é~99-0
+      -0
+      .
+      19aé-
+      1b999
+      9
+      a.aab0A
+      bzB~
+      zéz
+      zé~-b~é
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+
+       
+       
+        
+       z~.
+       é~99-0
+      -0
+      .
+      19aé-
+      1b999
+      9
+      a.aab0A
+      bzB~
+      zéz
+      zé~-b~é
+      b~.	
+       é	.-az
+      bz	0 
+      -B	~1-A
+      9B-é- 
+      ézaé 
+      B0.  
+      za 1
+      b--a 1z
+       éAé B
+      b1~- ba
+      = +0.1
+
+
+
+
+       
+       
+      .
+      9
+        
+      b--a 1z
+      a.aab0A
+      -0
+      B0.  
+      b1~- ba
+      19aé-
+      -B	~1-A
+      9B-é- 
+      za 1
+      1b999
+      bz	0 
+      bzB~
+      ézaé 
+       z~.
+      b~.	
+       é	.-az
+       éAé B
+      zéz
+      zé~-b~é
+       é~99-0
+      = -M
+      -0
+
+      9
+
+
+       
+        
+       
+
+      .
+      b--a 1z
+       é~99-0
+      b~.	
+      1b999
+       éAé B
+      9B-é- 
+      a.aab0A
+      19aé-
+      B0.  
+      ézaé 
+      bzB~
+      zéz
+       z~.
+      b1~- ba
+      -B	~1-A
+      bz	0 
+      zé~-b~é
+       é	.-az
+      za 1
+
+
+
+
+       
+        
+      # 2
+      = -m
+
+
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      1BB	  
+      9 	
+      A 
+      AA9b~B-
+      B A 
+      a9 9
+      a~z-B
+      b Ba é
+      z1
+      zba
+      zé-b1.B
+      = -f
+
+
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      1BB	  
+      9 	
+      A 
+      a9 9
+      AA9b~B-
+      a~z-B
+      B A 
+      b Ba é
+      z1
+      zba
+      zé-b1.B
+      = -d
+
+
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      1BB	  
+      9 	
+      A 
+      AA9b~B-
+      B A 
+      a9 9
+      a~z-B
+      b Ba é
+      z1
+      zba
+      -zb~z9
+      zé-b1.B
+      = -i
+
+
+
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      	0. 0
+      1BB	  
+      9 	
+      A 
+      AA9b~B-
+      B A 
+      a9 9
+      a~z-B
+      b Ba é
+      zé-b1.B
+      z1
+      zba
+      = -r
+      zé-b1.B
+      zba
+      z1
+      b Ba é
+      a~z-B
+      a9 9
+      B A 
+      AA9b~B-
+      A 
+      9 	
+      1BB	  
+      -zb~z9
+      -0 a 9A
+       AaB-B
+       0-
+      	0. 0
+
+
+
+      = -n
+      AA9b~B-
+      zba
+      -0 a 9A
+      a9 9
+      B A 
+
+      A 
+
+      zé-b1.B
+      -zb~z9
+      a~z-B
+       0-
+
+      	0. 0
+      z1
+       AaB-B
+      b Ba é
+      1BB	  
+      9 	
+      = -g
+      AA9b~B-
+      zba
+      -0 a 9A
+      a9 9
+      B A 
+
+      A 
+
+      zé-b1.B
+      -zb~z9
+      a~z-B
+       0-
+
+      	0. 0
+      z1
+       AaB-B
+      b Ba é
+      1BB	  
+      9 	
+      = -u
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      1BB	  
+      9 	
+      A 
+      AA9b~B-
+      B A 
+      a9 9
+      a~z-B
+      b Ba é
+      z1
+      zba
+      zé-b1.B
+      = -fu
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      1BB	  
+      9 	
+      A 
+      a9 9
+      AA9b~B-
+      a~z-B
+      B A 
+      b Ba é
+      z1
+      zba
+      zé-b1.B
+      = -fr
+      zé-b1.B
+      zba
+      z1
+      b Ba é
+      B A 
+      a~z-B
+      AA9b~B-
+      a9 9
+      A 
+      9 	
+      1BB	  
+      -zb~z9
+      -0 a 9A
+       AaB-B
+       0-
+      	0. 0
+
+
+
+      = -dfi
+
+
+
+       0-
+       AaB-B
+      	0. 0
+      -0 a 9A
+      1BB	  
+      9 	
+      A 
+      a9 9
+      AA9b~B-
+      a~z-B
+      B A 
+      b Ba é
+      z1
+      zé-b1.B
+      zba
+      -zb~z9
+      = -b
+
+
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      1BB	  
+      9 	
+      A 
+      AA9b~B-
+      B A 
+      a9 9
+      a~z-B
+      b Ba é
+      z1
+      zba
+      zé-b1.B
+      = -nr
+      9 	
+      1BB	  
+      zba
+      -0 a 9A
+      a9 9
+      B A 
+
+      A 
+
+      zé-b1.B
+      -zb~z9
+      a~z-B
+
+      	0. 0
+      z1
+       AaB-B
+      b Ba é
+      AA9b~B-
+       0-
+      = -k2
+
+
+
+       0-
+       AaB-B
+      -zb~z9
+      AA9b~B-
+      a~z-B
+      z1
+      zba
+      zé-b1.B
+      1BB	  
+      A 
+      9 	
+      	0. 0
+      a9 9
+      B A 
+      b Ba é
+      -0 a 9A
+      = -k2n
+
+
+
+      	0. 0
+       0-
+       AaB-B
+      -0 a 9A
+      -zb~z9
+      1BB	  
+      9 	
+      A 
+      AA9b~B-
+      B A 
+      a~z-B
+      b Ba é
+      z1
+      zba
+      zé-b1.B
+      a9 9
+      = -k1.2,1.3
+
+
+
+      A 
+      9 	
+      B A 
+      b Ba é
+      -0 a 9A
+       0-
+      	0. 0
+      z1
+      a9 9
+      AA9b~B-
+       AaB-B
+      1BB	  
+      zba
+      -zb~z9
+      a~z-B
+      zé-b1.B
+      = -k2,2r
+      -0 a 9A
+      b Ba é
+      B A 
+      a9 9
+      	0. 0
+      9 	
+      A 
+      1BB	  
+
+
+
+       0-
+       AaB-B
+      -zb~z9
+      AA9b~B-
+      a~z-B
+      z1
+      zba
+      zé-b1.B
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+       0-
+       AaB-B
+      -zb~z9
+      AA9b~B-
+      a~z-B
+      z1
+      zba
+      zé-b1.B
+      1BB	  
+      A 
+      9 	
+      	0. 0
+      a9 9
+      B A 
+      b Ba é
+      -0 a 9A
+      = +0.1
+
+
+
+      A 
+      9 	
+      B A 
+      b Ba é
+      -0 a 9A
+       0-
+      	0. 0
+      z1
+      a9 9
+      AA9b~B-
+       AaB-B
+      1BB	  
+      zba
+      -zb~z9
+      a~z-B
+      zé-b1.B
+      = -M
+      9 	
+
+      z1
+       0-
+      B A 
+
+      A 
+
+      1BB	  
+      zé-b1.B
+      -zb~z9
+      a~z-B
+      zba
+      -0 a 9A
+      	0. 0
+      a9 9
+       AaB-B
+      b Ba é
+      AA9b~B-
+
+
+
+
+      	0. 0
+       0-
+      # 3
+      = -m
+
+
+       0
+      .z~b 
+      1
+      aa - -a
+      z B999~
+      zB.a1
+      é~1~
+      = -f
+
+
+       0
+      .z~b 
+      1
+      aa - -a
+      é~1~
+      z B999~
+      zB.a1
+      = -d
+
+
+       0
+      1
+      aa - -a
+      z B999~
+      zB.a1
+      .z~b 
+      é~1~
+      = -i
+
+
+       0
+      .z~b 
+      1
+      aa - -a
+      z B999~
+      zB.a1
+      é~1~
+      = -r
+      é~1~
+      zB.a1
+      z B999~
+      aa - -a
+      1
+      .z~b 
+       0
+
+
+      = -n
+      .z~b 
+      z B999~
+       0
+
+      é~1~
+
+      aa - -a
+      zB.a1
+      1
+      = -g
+      .z~b 
+      z B999~
+       0
+
+      é~1~
+
+      aa - -a
+      zB.a1
+      1
+      = -u
+
+       0
+      .z~b 
+      1
+      aa - -a
+      z B999~
+      zB.a1
+      é~1~
+      = -fu
+
+       0
+      .z~b 
+      1
+      aa - -a
+      é~1~
+      z B999~
+      zB.a1
+      = -fr
+      zB.a1
+      z B999~
+      é~1~
+      aa - -a
+      1
+      .z~b 
+       0
+
+
+      = -dfi
+
+
+       0
+      1
+      é~1~
+      aa - -a
+      z B999~
+      .z~b 
+      zB.a1
+      = -b
+
+
+       0
+      .z~b 
+      1
+      aa - -a
+      z B999~
+      zB.a1
+      é~1~
+      = -nr
+      1
+      .z~b 
+      z B999~
+       0
+
+      é~1~
+
+      aa - -a
+      zB.a1
+      = -k2
+
+
+       0
+      1
+      zB.a1
+      é~1~
+      .z~b 
+      aa - -a
+      z B999~
+      = -k2n
+
+
+       0
+      .z~b 
+      1
+      aa - -a
+      z B999~
+      zB.a1
+      é~1~
+      = -k1.2,1.3
+
+
+      1
+      z B999~
+       0
+      zB.a1
+      aa - -a
+      .z~b 
+      é~1~
+      = -k2,2r
+      z B999~
+      aa - -a
+      .z~b 
+
+
+       0
+      1
+      zB.a1
+      é~1~
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+       0
+      1
+      zB.a1
+      é~1~
+      .z~b 
+      aa - -a
+      z B999~
+      = +0.1
+
+
+      1
+      z B999~
+       0
+      zB.a1
+      aa - -a
+      .z~b 
+      é~1~
+      = -M
+      1
+       0
+
+
+      .z~b 
+      z B999~
+      é~1~
+      aa - -a
+      zB.a1
+
+
+       0
+
+       0
+      .z~b 
+      # 4
+      = -m
+
+
+
+
+
+
+       
+        a
+       .
+       0	B A
+       B	a
+       z-
+      -A-~ .
+      .éz 9
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      A10z- B
+      Az.
+      B	 é0
+      B1z0
+      Bza
+      a0 é~B
+      a1é az
+      aAa9b A
+      b
+      bz -~b~
+      z- 0
+      z9~
+      ~
+      ~	zA 
+      ~ 90 z 
+      ~éa.
+      é 0a 
+      é AB.	b
+      ézéB09B
+      = -f
+
+
+
+
+
+
+       
+        a
+       .
+       0	B A
+       B	a
+       z-
+      -A-~ .
+      .éz 9
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      a0 é~B
+      A10z- B
+      a1é az
+      aAa9b A
+      Az.
+      b
+      B	 é0
+      B1z0
+      bz -~b~
+      Bza
+      é 0a 
+      é AB.	b
+      ézéB09B
+      z- 0
+      z9~
+      ~
+      ~	zA 
+      ~ 90 z 
+      ~éa.
+      = -d
+
+
+
+
+      ~
+
+
+      ~	zA 
+       
+       .
+        a
+       0	B A
+      ~ 90 z 
+       B	a
+       z-
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      -A-~ .
+      A10z- B
+      Az.
+      B	 é0
+      B1z0
+      Bza
+      a0 é~B
+      a1é az
+      aAa9b A
+      b
+      bz -~b~
+      z- 0
+      z9~
+      é 0a 
+      é AB.	b
+      ~éa.
+      .éz 9
+      ézéB09B
+      = -i
+
+
+
+
+
+
+       
+        a
+       .
+       0	B A
+      é 0a 
+      é AB.	b
+       B	a
+       z-
+      -A-~ .
+      .éz 9
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      A10z- B
+      Az.
+      B	 é0
+      B1z0
+      Bza
+      a0 é~B
+      a1é az
+      aAa9b A
+      b
+      bz -~b~
+      z- 0
+      z9~
+      ézéB09B
+      ~
+      ~ 90 z 
+      ~éa.
+      ~	zA 
+      = -r
+      ézéB09B
+      é AB.	b
+      é 0a 
+      ~éa.
+      ~ 90 z 
+      ~	zA 
+      ~
+      z9~
+      z- 0
+      bz -~b~
+      b
+      aAa9b A
+      a1é az
+      a0 é~B
+      Bza
+      B1z0
+      B	 é0
+      Az.
+      A10z- B
+      9-0 9A
+      9
+      1z91z
+      1 0~
+      1  ézB
+      0AA0AA 
+      .éz 9
+      -A-~ .
+       z-
+       B	a
+       0	B A
+       .
+        a
+       
+
+
+
+
+
+
+      = -n
+      z- 0
+       .
+      0AA0AA 
+       B	a
+        a
+      Bza
+      b
+
+
+      B	 é0
+      B1z0
+
+      A10z- B
+      a0 é~B
+      ~
+       0	B A
+      z9~
+      .éz 9
+      ~	zA 
+
+      é 0a 
+      -A-~ .
+      a1é az
+      ~éa.
+      bz -~b~
+
+      ~ 90 z 
+      ézéB09B
+       z-
+      Az.
+      aAa9b A
+      é AB.	b
+       
+
+      1z91z
+      1  ézB
+      1 0~
+      9
+      9-0 9A
+      = -g
+      z- 0
+       .
+      0AA0AA 
+       B	a
+        a
+      Bza
+      b
+
+
+      B	 é0
+      B1z0
+
+      A10z- B
+      a0 é~B
+      ~
+       0	B A
+      z9~
+      .éz 9
+      ~	zA 
+
+      é 0a 
+      -A-~ .
+      a1é az
+      ~éa.
+      bz -~b~
+
+      ~ 90 z 
+      ézéB09B
+       z-
+      Az.
+      aAa9b A
+      é AB.	b
+       
+
+      1z91z
+      1  ézB
+      1 0~
+      9
+      9-0 9A
+      = -u
+
+       
+        a
+       .
+       0	B A
+       B	a
+       z-
+      -A-~ .
+      .éz 9
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      A10z- B
+      Az.
+      B	 é0
+      B1z0
+      Bza
+      a0 é~B
+      a1é az
+      aAa9b A
+      b
+      bz -~b~
+      z- 0
+      z9~
+      ~
+      ~	zA 
+      ~ 90 z 
+      ~éa.
+      é 0a 
+      é AB.	b
+      ézéB09B
+      = -fu
+
+       
+        a
+       .
+       0	B A
+       B	a
+       z-
+      -A-~ .
+      .éz 9
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      a0 é~B
+      A10z- B
+      a1é az
+      aAa9b A
+      Az.
+      b
+      B	 é0
+      B1z0
+      bz -~b~
+      Bza
+      é 0a 
+      é AB.	b
+      ézéB09B
+      z- 0
+      z9~
+      ~
+      ~	zA 
+      ~ 90 z 
+      ~éa.
+      = -fr
+      ~éa.
+      ~ 90 z 
+      ~	zA 
+      ~
+      z9~
+      z- 0
+      ézéB09B
+      é AB.	b
+      é 0a 
+      Bza
+      bz -~b~
+      B1z0
+      B	 é0
+      b
+      Az.
+      aAa9b A
+      a1é az
+      A10z- B
+      a0 é~B
+      9-0 9A
+      9
+      1z91z
+      1 0~
+      1  ézB
+      0AA0AA 
+      .éz 9
+      -A-~ .
+       z-
+       B	a
+       0	B A
+       .
+        a
+       
+
+
+
+
+
+
+      = -dfi
+
+
+
+
+
+      ~
+
+       .
+       
+        a
+      é 0a 
+       0	B A
+      ~ 90 z 
+      é AB.	b
+       B	a
+       z-
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      ~éa.
+      -A-~ .
+      a0 é~B
+      a1é az
+      A10z- B
+      aAa9b A
+      Az.
+      b
+      B	 é0
+      B1z0
+      bz -~b~
+      Bza
+      z- 0
+      .éz 9
+      z9~
+      ~	zA 
+      ézéB09B
+      = -b
+
+
+
+
+
+
+       
+        a
+       .
+       0	B A
+       B	a
+       z-
+      -A-~ .
+      .éz 9
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      9-0 9A
+      A10z- B
+      Az.
+      B	 é0
+      B1z0
+      Bza
+      a0 é~B
+      a1é az
+      aAa9b A
+      b
+      bz -~b~
+      z- 0
+      z9~
+      ~
+      ~	zA 
+      ~ 90 z 
+      ~éa.
+      é 0a 
+      é AB.	b
+      ézéB09B
+      = -nr
+      9
+      9-0 9A
+      1z91z
+      1 0~
+      1  ézB
+      z- 0
+       .
+      b
+
+
+      B	 é0
+      B1z0
+
+      0AA0AA 
+      a0 é~B
+      ~
+       0	B A
+      z9~
+      .éz 9
+       B	a
+
+      é 0a 
+      -A-~ .
+      a1é az
+        a
+      bz -~b~
+
+      ~ 90 z 
+      ézéB09B
+       z-
+      Az.
+      aAa9b A
+      é AB.	b
+       
+
+      Bza
+      A10z- B
+      ~	zA 
+      ~éa.
+      = -k2
+
+
+
+
+
+
+       
+        a
+       .
+       z-
+      1z91z
+      9
+      Az.
+      B1z0
+      Bza
+      b
+      z9~
+      ~
+      ~éa.
+      ézéB09B
+      B	 é0
+       0	B A
+       B	a
+      ~	zA 
+      0AA0AA 
+      1  ézB
+      bz -~b~
+      -A-~ .
+      z- 0
+      é 0a 
+      1 0~
+      .éz 9
+      ~ 90 z 
+      9-0 9A
+      aAa9b A
+      é AB.	b
+      A10z- B
+      a1é az
+      a0 é~B
+      = -k2n
+
+
+
+
+
+
+       
+        a
+       .
+       0	B A
+       B	a
+       z-
+      -A-~ .
+      0AA0AA 
+      1  ézB
+      1 0~
+      1z91z
+      9
+      A10z- B
+      Az.
+      B	 é0
+      B1z0
+      Bza
+      a0 é~B
+      a1é az
+      aAa9b A
+      b
+      bz -~b~
+      z- 0
+      z9~
+      ~
+      ~	zA 
+      ~éa.
+      é 0a 
+      é AB.	b
+      ézéB09B
+      .éz 9
+      9-0 9A
+      ~ 90 z 
+      = -k1.2,1.3
+
+
+
+
+
+
+       
+      9
+      b
+      ~
+      B	 é0
+      ~	zA 
+      1  ézB
+      1 0~
+      é 0a 
+      ~ 90 z 
+      é AB.	b
+        a
+      z- 0
+      9-0 9A
+       .
+       0	B A
+      a0 é~B
+      A10z- B
+      B1z0
+      a1é az
+      z9~
+      -A-~ .
+      0AA0AA 
+      aAa9b A
+       B	a
+      bz -~b~
+       z-
+      Az.
+      1z91z
+      Bza
+      ézéB09B
+      ~éa.
+      .éz 9
+      = -k2,2r
+      a0 é~B
+      a1é az
+      A10z- B
+      é AB.	b
+      aAa9b A
+      9-0 9A
+      ~ 90 z 
+      .éz 9
+      1 0~
+      é 0a 
+      z- 0
+      -A-~ .
+      bz -~b~
+      1  ézB
+      0AA0AA 
+      ~	zA 
+       B	a
+       0	B A
+      B	 é0
+
+
+
+
+
+
+       
+        a
+       .
+       z-
+      1z91z
+      9
+      Az.
+      B1z0
+      Bza
+      b
+      z9~
+      ~
+      ~éa.
+      ézéB09B
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+
+
+
+       
+        a
+       .
+       z-
+      1z91z
+      9
+      Az.
+      B1z0
+      Bza
+      b
+      z9~
+      ~
+      ~éa.
+      ézéB09B
+      B	 é0
+       0	B A
+       B	a
+      ~	zA 
+      0AA0AA 
+      1  ézB
+      bz -~b~
+      -A-~ .
+      z- 0
+      é 0a 
+      1 0~
+      .éz 9
+      ~ 90 z 
+      9-0 9A
+      aAa9b A
+      é AB.	b
+      A10z- B
+      a1é az
+      a0 é~B
+      = +0.1
+
+
+
+
+
+
+       
+      9
+      b
+      ~
+      B	 é0
+      ~	zA 
+      1  ézB
+      é 0a 
+      1 0~
+      ~ 90 z 
+      é AB.	b
+        a
+      z- 0
+      9-0 9A
+       .
+       0	B A
+      a0 é~B
+      A10z- B
+      B1z0
+      a1é az
+      z9~
+      -A-~ .
+      0AA0AA 
+      aAa9b A
+       B	a
+      bz -~b~
+       z-
+      Az.
+      1z91z
+      Bza
+      ézéB09B
+      ~éa.
+      .éz 9
+      = -M
+      ~
+       .
+
+       B	a
+        a
+      9
+      b
+
+
+
+       z-
+
+       
+
+      z- 0
+      0AA0AA 
+       0	B A
+      z9~
+      .éz 9
+      9-0 9A
+      B	 é0
+      é 0a 
+      -A-~ .
+      a1é az
+      1 0~
+      bz -~b~
+      B1z0
+      ~ 90 z 
+      ézéB09B
+      1z91z
+      Az.
+      aAa9b A
+      é AB.	b
+      a0 é~B
+      Bza
+      1  ézB
+      A10z- B
+      ~	zA 
+      ~éa.
+
+
+
+
+       
+        a
+      # 5
+      = -m
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A
+      A00Aa..
+      Aa
+      Aéz9 
+      B 0	-z
+      a
+      aAé~ ~ 
+      az0zb9-
+      bbb
+      bé
+      bé0
+      zB9	
+      ~bbA0a
+      éb
+      é~-
+      = -f
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      a
+      A
+      A00Aa..
+      Aa
+      aAé~ ~ 
+      Aéz9 
+      az0zb9-
+      B 0	-z
+      bbb
+      bé
+      bé0
+      éb
+      é~-
+      zB9	
+      ~bbA0a
+      = -d
+
+
+
+
+      	
+      		 é
+       A
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A
+      A00Aa..
+      Aa
+      Aéz9 
+      B 0	-z
+      a
+      aAé~ ~ 
+      az0zb9-
+      -b~0B9
+      -ba
+      ~bbA0a
+      bbb
+      bé
+      bé0
+      zB9	
+      é~-
+      éb
+      = -i
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A
+      A00Aa..
+      Aa
+      Aéz9 
+      B 0	-z
+      a
+      aAé~ ~ 
+      az0zb9-
+      bé
+      éb
+      bé0
+      bbb
+      zB9	
+      é~-
+      ~bbA0a
+      = -r
+      é~-
+      éb
+      ~bbA0a
+      zB9	
+      bé0
+      bé
+      bbb
+      az0zb9-
+      aAé~ ~ 
+      a
+      B 0	-z
+      Aéz9 
+      Aa
+      A00Aa..
+      A
+      A
+      9b	0
+      1é.~z
+      1 -0
+      0
+      -b~0B9
+      -ba
+       A
+      		 é
+      	
+
+
+
+
+      = -n
+      bbb
+      aAé~ ~ 
+       A
+      Aéz9 
+      Aa
+
+      	
+      A00Aa..
+      az0zb9-
+      B 0	-z
+      ~bbA0a
+      0
+      é~-
+      bé
+      zB9	
+      a
+
+      -ba
+      bé0
+      éb
+      A
+
+      A
+      		 é
+
+      -b~0B9
+      1é.~z
+      1 -0
+      9b	0
+      = -g
+      bbb
+      aAé~ ~ 
+       A
+      Aéz9 
+      Aa
+
+      	
+      A00Aa..
+      az0zb9-
+      B 0	-z
+      ~bbA0a
+      0
+      é~-
+      bé
+      zB9	
+      a
+
+      -ba
+      bé0
+      éb
+      A
+
+      A
+      		 é
+
+      -b~0B9
+      1é.~z
+      1 -0
+      9b	0
+      = -u
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A00Aa..
+      Aa
+      Aéz9 
+      B 0	-z
+      a
+      aAé~ ~ 
+      az0zb9-
+      bbb
+      bé
+      bé0
+      zB9	
+      ~bbA0a
+      éb
+      é~-
+      = -fu
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A00Aa..
+      Aa
+      aAé~ ~ 
+      Aéz9 
+      az0zb9-
+      B 0	-z
+      bbb
+      bé
+      bé0
+      éb
+      é~-
+      zB9	
+      ~bbA0a
+      = -fr
+      ~bbA0a
+      zB9	
+      é~-
+      éb
+      bé0
+      bé
+      bbb
+      B 0	-z
+      az0zb9-
+      Aéz9 
+      aAé~ ~ 
+      Aa
+      A00Aa..
+      A
+      A
+      a
+      9b	0
+      1é.~z
+      1 -0
+      0
+      -b~0B9
+      -ba
+       A
+      		 é
+      	
+
+
+
+
+      = -dfi
+      é~-
+
+      	
+
+
+
+      		 é
+       A
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      a
+      A
+      A00Aa..
+      Aa
+      aAé~ ~ 
+      az0zb9-
+      Aéz9 
+      bé
+      éb
+      B 0	-z
+      bé0
+      -b~0B9
+      -ba
+      ~bbA0a
+      bbb
+      zB9	
+      = -b
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A
+      A00Aa..
+      Aa
+      Aéz9 
+      B 0	-z
+      a
+      aAé~ ~ 
+      az0zb9-
+      bbb
+      bé
+      bé0
+      zB9	
+      ~bbA0a
+      éb
+      é~-
+      = -nr
+      9b	0
+      1é.~z
+      1 -0
+      bbb
+      Aéz9 
+      Aa
+
+      	
+      A00Aa..
+      aAé~ ~ 
+      B 0	-z
+      ~bbA0a
+       A
+      é~-
+      bé
+      zB9	
+      a
+
+      -ba
+      bé0
+      éb
+      A
+
+      A
+
+      -b~0B9
+      az0zb9-
+      0
+      		 é
+      = -k2
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1é.~z
+      A
+      A
+      A00Aa..
+      Aa
+      a
+      az0zb9-
+      bbb
+      bé
+      bé0
+      ~bbA0a
+      éb
+      é~-
+      zB9	
+      9b	0
+      Aéz9 
+      1 -0
+      B 0	-z
+      aAé~ ~ 
+      = -k2n
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1 -0
+      1é.~z
+      9b	0
+      A
+      A
+      A00Aa..
+      Aa
+      Aéz9 
+      B 0	-z
+      a
+      aAé~ ~ 
+      az0zb9-
+      bbb
+      bé
+      bé0
+      zB9	
+      ~bbA0a
+      éb
+      é~-
+      = -k1.2,1.3
+
+
+
+
+      	
+      0
+      A
+      A
+      a
+      		 é
+      1 -0
+      B 0	-z
+      A00Aa..
+       A
+      aAé~ ~ 
+      zB9	
+      Aa
+      éb
+      9b	0
+      -ba
+      bbb
+      ~bbA0a
+      -b~0B9
+      az0zb9-
+      é~-
+      bé
+      1é.~z
+      bé0
+      Aéz9 
+      = -k2,2r
+      aAé~ ~ 
+      B 0	-z
+      1 -0
+      Aéz9 
+      9b	0
+      zB9	
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1é.~z
+      A
+      A
+      A00Aa..
+      Aa
+      a
+      az0zb9-
+      bbb
+      bé
+      bé0
+      ~bbA0a
+      éb
+      é~-
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+
+      	
+      		 é
+       A
+      -ba
+      -b~0B9
+      0
+      1é.~z
+      A
+      A
+      A00Aa..
+      Aa
+      a
+      az0zb9-
+      bbb
+      bé
+      bé0
+      ~bbA0a
+      éb
+      é~-
+      zB9	
+      9b	0
+      Aéz9 
+      1 -0
+      B 0	-z
+      aAé~ ~ 
+      = +0.1
+
+
+
+
+      	
+      0
+      A
+      A
+      a
+      		 é
+      1 -0
+      B 0	-z
+      A00Aa..
+       A
+      aAé~ ~ 
+      zB9	
+      Aa
+      éb
+      9b	0
+      -ba
+      bbb
+      ~bbA0a
+      -b~0B9
+      az0zb9-
+      é~-
+      bé
+      1é.~z
+      bé0
+      Aéz9 
+      = -M
+      a
+
+       A
+      éb
+      Aa
+
+      	
+      A
+
+      A
+
+      0
+      		 é
+      bé
+      bbb
+      zB9	
+      aAé~ ~ 
+      Aéz9 
+      -ba
+      bé0
+      A00Aa..
+      9b	0
+      B 0	-z
+      ~bbA0a
+      1 -0
+      1é.~z
+      -b~0B9
+      az0zb9-
+      é~-
+
+
+
+
+      	
+      		 é
+      # 6
+      = -m
+
+
+      	 
+      	~
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A-AA
+      A9
+      Aé  - 
+      B
+      bba
+      b~0
+      ~-
+      ~ézA 
+      é z
+      = -f
+
+
+      	 
+      	~
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A-AA
+      A9
+      Aé  - 
+      B
+      bba
+      b~0
+      é z
+      ~-
+      ~ézA 
+      = -d
+
+      ~-
+      -
+
+      	~
+      	 
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A9
+      A-AA
+      Aé  - 
+      B
+      b~0
+      bba
+      é z
+      ~ézA 
+      = -i
+
+
+      	 
+      é z
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      Aé  - 
+      A-	A
+      A-AA
+      A9
+      B
+      bba
+      b~0
+      	~
+      ~-
+      ~ézA 
+      = -r
+      é z
+      ~ézA 
+      ~-
+      b~0
+      bba
+      B
+      Aé  - 
+      A9
+      A-AA
+      A-	A
+      9A9é
+      99é-  
+      1~
+      00Ba	b
+      -
+      	~
+      	 
+
+
+      = -n
+      A-	A
+      A9
+      A-AA
+      	 
+      Aé  - 
+      ~ézA 
+
+
+      bba
+      ~-
+      é z
+      	~
+      00Ba	b
+      -
+      b~0
+      B
+      1~
+      9A9é
+      99é-  
+      = -g
+      A-	A
+      A9
+      A-AA
+      	 
+      Aé  - 
+      ~ézA 
+
+
+      bba
+      ~-
+      é z
+      	~
+      00Ba	b
+      -
+      b~0
+      B
+      1~
+      9A9é
+      99é-  
+      = -u
+
+      	 
+      	~
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A-AA
+      A9
+      Aé  - 
+      B
+      bba
+      b~0
+      ~-
+      ~ézA 
+      é z
+      = -fu
+
+      	 
+      	~
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A-AA
+      A9
+      Aé  - 
+      B
+      bba
+      b~0
+      é z
+      ~-
+      ~ézA 
+      = -fr
+      ~ézA 
+      ~-
+      é z
+      b~0
+      bba
+      B
+      Aé  - 
+      A9
+      A-AA
+      A-	A
+      9A9é
+      99é-  
+      1~
+      00Ba	b
+      -
+      	~
+      	 
+
+
+      = -dfi
+      	~
+      ~-
+
+
+      -
+      	 
+      é z
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      Aé  - 
+      A9
+      A-	A
+      A-AA
+      B
+      b~0
+      bba
+      ~ézA 
+      = -b
+
+
+      	 
+      	~
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A-AA
+      A9
+      Aé  - 
+      B
+      bba
+      b~0
+      ~-
+      ~ézA 
+      é z
+      = -nr
+      99é-  
+      9A9é
+      1~
+      A-AA
+      	 
+      Aé  - 
+      ~ézA 
+
+
+      bba
+      ~-
+      é z
+      	~
+      -
+      b~0
+      B
+      A-	A
+      A9
+      00Ba	b
+      = -k2
+
+
+      	 
+      	~
+      -
+      1~
+      9A9é
+      A-AA
+      A9
+      B
+      bba
+      b~0
+      ~-
+      A-	A
+      00Ba	b
+      ~ézA 
+      99é-  
+      Aé  - 
+      é z
+      = -k2n
+
+
+      	 
+      	~
+      -
+      00Ba	b
+      1~
+      99é-  
+      9A9é
+      A-	A
+      A-AA
+      A9
+      Aé  - 
+      B
+      bba
+      b~0
+      ~-
+      ~ézA 
+      é z
+      = -k1.2,1.3
+
+
+      -
+      B
+      	 
+      é z
+      ~-
+      A-	A
+      A-AA
+      00Ba	b
+      A9
+      99é-  
+      9A9é
+      bba
+      	~
+      1~
+      b~0
+      Aé  - 
+      ~ézA 
+      = -k2,2r
+      é z
+      Aé  - 
+      99é-  
+      ~ézA 
+      00Ba	b
+      A-	A
+
+
+      	 
+      	~
+      -
+      1~
+      9A9é
+      A-AA
+      A9
+      B
+      bba
+      b~0
+      ~-
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+      	 
+      	~
+      -
+      1~
+      9A9é
+      A-AA
+      A9
+      B
+      bba
+      b~0
+      ~-
+      A-	A
+      00Ba	b
+      ~ézA 
+      99é-  
+      Aé  - 
+      é z
+      = +0.1
+
+
+      -
+      B
+      	 
+      é z
+      ~-
+      A-	A
+      A-AA
+      00Ba	b
+      A9
+      99é-  
+      9A9é
+      bba
+      	~
+      1~
+      b~0
+      Aé  - 
+      ~ézA 
+      = -M
+      1~
+      é z
+      	~
+      	 
+      -
+      B
+
+
+      A9
+      ~-
+      9A9é
+      A-AA
+      Aé  - 
+      99é-  
+      ~ézA 
+      b~0
+      bba
+      A-	A
+      00Ba	b
+
+
+      	 
+
+      	 
+      	~
+      # 7
+      = -m
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -f
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -d
+      .
+
+      1
+      1Aa01
+      1--B
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -i
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      éBé	.9
+      BAAz.~
+      BBB ~0
+      = -r
+      éBé	.9
+      BBB ~0
+      BAAz.~
+      9-~B
+      1Aa01
+      1--B
+      1
+      .
+
+      = -n
+      .
+      BAAz.~
+      éBé	.9
+      BBB ~0
+
+      1
+      1--B
+      1Aa01
+      9-~B
+      = -g
+      .
+      BAAz.~
+      éBé	.9
+      BBB ~0
+
+      1
+      1--B
+      1Aa01
+      9-~B
+      = -u
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -fu
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -fr
+      éBé	.9
+      BBB ~0
+      BAAz.~
+      9-~B
+      1Aa01
+      1--B
+      1
+      .
+
+      = -dfi
+      .
+
+      1
+      1Aa01
+      1--B
+      9-~B
+      éBé	.9
+      BAAz.~
+      BBB ~0
+      = -b
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -nr
+      9-~B
+      1
+      1--B
+      1Aa01
+      .
+      BAAz.~
+      éBé	.9
+      BBB ~0
+
+      = -k2
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      éBé	.9
+      BBB ~0
+      = -k2n
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      BBB ~0
+      éBé	.9
+      = -k1.2,1.3
+
+      .
+      1
+      1--B
+      9-~B
+      BAAz.~
+      1Aa01
+      BBB ~0
+      éBé	.9
+      = -k2,2r
+      BBB ~0
+      éBé	.9
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+      .
+      1
+      1--B
+      1Aa01
+      9-~B
+      BAAz.~
+      éBé	.9
+      BBB ~0
+      = +0.1
+
+      .
+      1
+      1--B
+      9-~B
+      BAAz.~
+      1Aa01
+      BBB ~0
+      éBé	.9
+      = -M
+      .
+      1
+
+      BAAz.~
+      1--B
+      9-~B
+      éBé	.9
+      BBB ~0
+      1Aa01
+
+      .
+      1
+
+      .
+      1
+      # 8
+      = -m
+
+
+
+
+
+      	
+      	 -b~~B
+      	A9. z
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      ..A1aa 
+      .bbébb 
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      A.~11aA
+      B	910~b
+      a 1ba
+      abaéa
+      azb9
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      bé
+      z
+      z
+      z
+      zaB
+      ~	  9 0
+      ~a ~ A1
+      é
+      é.-0
+      = -f
+
+
+
+
+
+      	
+      	 -b~~B
+      	A9. z
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      ..A1aa 
+      .bbébb 
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      a 1ba
+      A.~11aA
+      abaéa
+      azb9
+      B	910~b
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      bé
+      é
+      é.-0
+      z
+      z
+      z
+      zaB
+      ~	  9 0
+      ~a ~ A1
+      = -d
+
+
+
+
+
+      	
+      ~	  9 0
+      	 -b~~B
+      	A9. z
+      . 	
+       ~	bB.
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      -A0azz
+      A.~11aA
+      ..A1aa 
+      B	910~b
+      ~a ~ A1
+      a 1ba
+      abaéa
+      azb9
+      -b-
+      b ~z1 
+      b0.é
+      bB -b
+      .bbébb 
+      bé
+      b.éAB1
+      z
+      z
+      z
+      zaB
+      é
+      é.-0
+      = -i
+
+
+      	
+
+
+
+      é
+      	 -b~~B
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      é.-0
+      ..A1aa 
+      .bbébb 
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9éA 
+      9a~- Az
+      A.~11aA
+      	A9. z
+      A	aBa
+      B	910~b
+      a 1ba
+      abaéa
+      azb9
+      bé
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      z
+      z
+      z
+      zaB
+      ~	  9 0
+      ~a ~ A1
+      = -r
+      é.-0
+      é
+      ~a ~ A1
+      ~	  9 0
+      zaB
+      z
+      z
+      z
+      bé
+      bB -b
+      b0.é
+      b.éAB1
+      b ~z1 
+      azb9
+      abaéa
+      a 1ba
+      B	910~b
+      A.~11aA
+      A	aBa
+      9éA 
+      9a~- Az
+      0b
+      0AA	ab 
+      01Bé
+      0 	9é
+      .bbébb 
+      ..A1aa 
+      . 	
+      -b-
+      -A0azz
+       ~	bB.
+      	A9. z
+      	 -b~~B
+      	
+
+
+
+
+
+      = -n
+
+      ~	  9 0
+      .bbébb 
+
+
+      0AA	ab 
+      0b
+      -b-
+      A	aBa
+      	A9. z
+      . 	
+      b ~z1 
+      b.éAB1
+      A.~11aA
+      a 1ba
+      abaéa
+
+      bB -b
+
+      z
+      é
+      z
+      zaB
+      ..A1aa 
+       ~	bB.
+      -A0azz
+      azb9
+      z
+      ~a ~ A1
+      bé
+      é.-0
+      0 	9é
+      	 -b~~B
+      b0.é
+      B	910~b
+      	
+      01Bé
+      9a~- Az
+      9éA 
+      = -g
+
+      ~	  9 0
+      .bbébb 
+
+
+      0AA	ab 
+      0b
+      -b-
+      A	aBa
+      	A9. z
+      . 	
+      b ~z1 
+      b.éAB1
+      A.~11aA
+      a 1ba
+      abaéa
+
+      bB -b
+
+      z
+      é
+      z
+      zaB
+      ..A1aa 
+       ~	bB.
+      -A0azz
+      azb9
+      z
+      ~a ~ A1
+      bé
+      é.-0
+      0 	9é
+      	 -b~~B
+      b0.é
+      B	910~b
+      	
+      01Bé
+      9a~- Az
+      9éA 
+      = -u
+
+      	
+      	 -b~~B
+      	A9. z
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      ..A1aa 
+      .bbébb 
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      A.~11aA
+      B	910~b
+      a 1ba
+      abaéa
+      azb9
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      bé
+      z
+      zaB
+      ~	  9 0
+      ~a ~ A1
+      é
+      é.-0
+      = -fu
+
+      	
+      	 -b~~B
+      	A9. z
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      ..A1aa 
+      .bbébb 
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      a 1ba
+      A.~11aA
+      abaéa
+      azb9
+      B	910~b
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      bé
+      é
+      é.-0
+      z
+      zaB
+      ~	  9 0
+      ~a ~ A1
+      = -fr
+      ~a ~ A1
+      ~	  9 0
+      zaB
+      z
+      z
+      z
+      é.-0
+      é
+      bé
+      bB -b
+      b0.é
+      b.éAB1
+      b ~z1 
+      B	910~b
+      azb9
+      abaéa
+      A.~11aA
+      a 1ba
+      A	aBa
+      9éA 
+      9a~- Az
+      0b
+      0AA	ab 
+      01Bé
+      0 	9é
+      .bbébb 
+      ..A1aa 
+      . 	
+      -b-
+      -A0azz
+       ~	bB.
+      	A9. z
+      	 -b~~B
+      	
+
+
+
+
+
+      = -dfi
+
+      	
+
+
+
+
+      é
+      . 	
+      ~	  9 0
+       ~	bB.
+      	 -b~~B
+      é.-0
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9éA 
+      9a~- Az
+      ~a ~ A1
+      a 1ba
+      -A0azz
+      A.~11aA
+      ..A1aa 
+      	A9. z
+      A	aBa
+      abaéa
+      azb9
+      -b-
+      bé
+      b ~z1 
+      b0.é
+      B	910~b
+      b.éAB1
+      bB -b
+      .bbébb 
+      z
+      z
+      z
+      zaB
+      = -b
+
+
+
+
+
+      	
+      	 -b~~B
+      	A9. z
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      ..A1aa 
+      .bbébb 
+      0 	9é
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      A.~11aA
+      B	910~b
+      a 1ba
+      abaéa
+      azb9
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      bé
+      z
+      z
+      z
+      zaB
+      ~	  9 0
+      ~a ~ A1
+      é
+      é.-0
+      = -nr
+      9a~- Az
+      9éA 
+      01Bé
+
+
+
+      0AA	ab 
+      0b
+      -b-
+      A	aBa
+      	A9. z
+      . 	
+      b ~z1 
+      b.éAB1
+      A.~11aA
+      a 1ba
+      abaéa
+
+      bB -b
+      ~	  9 0
+      z
+      é
+      z
+      zaB
+      ..A1aa 
+       ~	bB.
+      .bbébb 
+      azb9
+      z
+      ~a ~ A1
+      bé
+      é.-0
+      0 	9é
+      	 -b~~B
+      b0.é
+      B	910~b
+      	
+
+      -A0azz
+      = -k2
+
+
+
+
+
+      	
+      	 -b~~B
+      -A0azz
+      -b-
+      01Bé
+      0b
+      A.~11aA
+      abaéa
+      azb9
+      b.éAB1
+      b0.é
+      bé
+      z
+      z
+      z
+      zaB
+      é
+      é.-0
+      ~	  9 0
+      B	910~b
+      A	aBa
+      0AA	ab 
+       ~	bB.
+      ..A1aa 
+      .bbébb 
+      9éA 
+      . 	
+      0 	9é
+      bB -b
+      a 1ba
+      9a~- Az
+      	A9. z
+      ~a ~ A1
+      b ~z1 
+      = -k2n
+
+
+
+
+
+      	
+      	 -b~~B
+      	A9. z
+       ~	bB.
+      -A0azz
+      -b-
+      . 	
+      ..A1aa 
+      .bbébb 
+      01Bé
+      0AA	ab 
+      0b
+      9a~- Az
+      9éA 
+      A	aBa
+      A.~11aA
+      abaéa
+      azb9
+      b ~z1 
+      b.éAB1
+      b0.é
+      bB -b
+      bé
+      z
+      z
+      z
+      zaB
+      ~a ~ A1
+      é
+      é.-0
+      a 1ba
+      0 	9é
+      ~	  9 0
+      B	910~b
+      = -k1.2,1.3
+
+
+
+
+
+      	
+      z
+      z
+      z
+      é
+      ~	  9 0
+      B	910~b
+      A	aBa
+      . 	
+      0 	9é
+      	 -b~~B
+      a 1ba
+      b ~z1 
+      é.-0
+      ..A1aa 
+      A.~11aA
+      b.éAB1
+      b0.é
+      01Bé
+      -A0azz
+      	A9. z
+      0AA	ab 
+      bB -b
+      ~a ~ A1
+      zaB
+      9a~- Az
+      0b
+      -b-
+      abaéa
+      .bbébb 
+      azb9
+       ~	bB.
+      bé
+      9éA 
+      = -k2,2r
+      b ~z1 
+      ~a ~ A1
+      	A9. z
+      9a~- Az
+      a 1ba
+      bB -b
+      0 	9é
+      . 	
+      ..A1aa 
+      .bbébb 
+      9éA 
+       ~	bB.
+      0AA	ab 
+      A	aBa
+      B	910~b
+      ~	  9 0
+
+
+
+
+
+      	
+      	 -b~~B
+      -A0azz
+      -b-
+      01Bé
+      0b
+      A.~11aA
+      abaéa
+      azb9
+      b.éAB1
+      b0.é
+      bé
+      z
+      z
+      z
+      zaB
+      é
+      é.-0
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+
+
+      	
+      	 -b~~B
+      -A0azz
+      -b-
+      01Bé
+      0b
+      A.~11aA
+      abaéa
+      azb9
+      b.éAB1
+      b0.é
+      bé
+      z
+      z
+      z
+      zaB
+      é
+      é.-0
+      ~	  9 0
+      B	910~b
+      A	aBa
+      0AA	ab 
+       ~	bB.
+      ..A1aa 
+      .bbébb 
+      9éA 
+      . 	
+      0 	9é
+      bB -b
+      a 1ba
+      9a~- Az
+      	A9. z
+      ~a ~ A1
+      b ~z1 
+      = +0.1
+
+
+
+
+
+      	
+      z
+      z
+      z
+      é
+      ~	  9 0
+      B	910~b
+      A	aBa
+      . 	
+      0 	9é
+      	 -b~~B
+      a 1ba
+      b ~z1 
+      é.-0
+      ..A1aa 
+      A.~11aA
+      b.éAB1
+      b0.é
+      01Bé
+      -A0azz
+      	A9. z
+      0AA	ab 
+      bB -b
+      ~a ~ A1
+      zaB
+      9a~- Az
+      0b
+      -b-
+      abaéa
+      .bbébb 
+      azb9
+       ~	bB.
+      bé
+      9éA 
+      = -M
+
+
+      z
+
+
+      é
+      0b
+      z
+      z
+      bé
+      . 	
+      	
+
+      ~	  9 0
+      A.~11aA
+      a 1ba
+      abaéa
+      .bbébb 
+      bB -b
+      9a~- Az
+      0AA	ab 
+      -b-
+      A	aBa
+      zaB
+      ..A1aa 
+       ~	bB.
+      9éA 
+      azb9
+      	A9. z
+      ~a ~ A1
+      b ~z1 
+      é.-0
+      0 	9é
+      	 -b~~B
+      b0.é
+      B	910~b
+      b.éAB1
+      -A0azz
+      01Bé
+
+
+
+
+      	
+      	 -b~~B
+      # 9
+      = -m
+
+
+
+        ~bb
+       z
+      -
+      - -Bb 
+      .	9z.ab
+      .0.	b.b
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      a az
+      bA 1.
+      bz-. -
+      bé.- é-
+      z9
+      é	.
+      = -f
+
+
+
+        ~bb
+       z
+      -
+      - -Bb 
+      .	9z.ab
+      .0.	b.b
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      a az
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      bA 1.
+      bé.- é-
+      bz-. -
+      é	.
+      z9
+      = -d
+
+      -
+
+
+      .~
+      .	9z.ab
+        ~bb
+      - -Bb 
+       z
+      .0.	b.b
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      .A	B.9z
+      A0
+      A~0Aé
+      Ab
+      B-~9
+      B.zb
+      a az
+      .~ab
+      bA 1.
+      bz-. -
+      bé.- é-
+      z9
+      é	.
+      = -i
+
+
+
+        ~bb
+       z
+      -
+      - -Bb 
+      é	.
+      .0.	b.b
+      .	9z.ab
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A0
+      Ab
+      A~0Aé
+      A	~Abz
+      B-~9
+      B.zb
+      a az
+      bé.- é-
+      bA 1.
+      bz-. -
+      z9
+      = -r
+      é	.
+      z9
+      bé.- é-
+      bz-. -
+      bA 1.
+      a az
+      B.zb
+      B-~9
+      A~0Aé
+      Ab
+      A0
+      A	~Abz
+      A
+      90b
+      9
+      1b  B
+      1
+      .~ab
+      .~
+      .A	B.9z
+      .0.	b.b
+      .	9z.ab
+      - -Bb 
+      -
+       z
+        ~bb
+
+
+
+      = -n
+      bé.- é-
+      bz-. -
+      bA 1.
+      B.zb
+        ~bb
+
+
+      Ab
+      A
+      z9
+      A~0Aé
+      A	~Abz
+      A0
+      - -Bb 
+       z
+      .0.	b.b
+      a az
+      B-~9
+      é	.
+      .~
+      .A	B.9z
+      -
+      .	9z.ab
+      .~ab
+
+      1b  B
+      1
+      9
+      90b
+      = -g
+      bé.- é-
+      bz-. -
+      bA 1.
+      B.zb
+        ~bb
+
+
+      Ab
+      A
+      z9
+      A~0Aé
+      A	~Abz
+      A0
+      - -Bb 
+       z
+      .0.	b.b
+      a az
+      B-~9
+      é	.
+      .~
+      .A	B.9z
+      -
+      .	9z.ab
+      .~ab
+
+      1b  B
+      1
+      9
+      90b
+      = -u
+
+        ~bb
+       z
+      -
+      - -Bb 
+      .	9z.ab
+      .0.	b.b
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      a az
+      bA 1.
+      bz-. -
+      bé.- é-
+      z9
+      é	.
+      = -fu
+
+        ~bb
+       z
+      -
+      - -Bb 
+      .	9z.ab
+      .0.	b.b
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      a az
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      bA 1.
+      bé.- é-
+      bz-. -
+      é	.
+      z9
+      = -fr
+      z9
+      é	.
+      bz-. -
+      bé.- é-
+      bA 1.
+      B.zb
+      B-~9
+      A~0Aé
+      Ab
+      A0
+      a az
+      A	~Abz
+      A
+      90b
+      9
+      1b  B
+      1
+      .~ab
+      .~
+      .A	B.9z
+      .0.	b.b
+      .	9z.ab
+      - -Bb 
+      -
+       z
+        ~bb
+
+
+
+      = -dfi
+
+
+      é	.
+      -
+      .~
+
+        ~bb
+      - -Bb 
+       z
+      .0.	b.b
+      1
+      1b  B
+      9
+      90b
+      .	9z.ab
+      A
+      a az
+      A0
+      A~0Aé
+      A	~Abz
+      .~ab
+      Ab
+      .A	B.9z
+      bé.- é-
+      B-~9
+      bA 1.
+      bz-. -
+      B.zb
+      z9
+      = -b
+
+
+
+        ~bb
+       z
+      -
+      - -Bb 
+      .	9z.ab
+      .0.	b.b
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      a az
+      bA 1.
+      bz-. -
+      bé.- é-
+      z9
+      é	.
+      = -nr
+      90b
+      9
+      1b  B
+      1
+      bé.- é-
+        ~bb
+
+
+      Ab
+      A
+      bz-. -
+      A~0Aé
+      A	~Abz
+      A0
+      - -Bb 
+       z
+      .0.	b.b
+      a az
+      B-~9
+      bA 1.
+      .~
+      .A	B.9z
+      B.zb
+      .	9z.ab
+      .~ab
+
+      z9
+      é	.
+      -
+      = -k2
+
+
+
+        ~bb
+       z
+      -
+      .~
+      .~ab
+      1
+      9
+      90b
+      A
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      z9
+      é	.
+      .	9z.ab
+      .A	B.9z
+      .0.	b.b
+      A	~Abz
+      1b  B
+      bz-. -
+      - -Bb 
+      bA 1.
+      a az
+      bé.- é-
+      = -k2n
+
+
+
+        ~bb
+       z
+      -
+      - -Bb 
+      .0.	b.b
+      .A	B.9z
+      .~
+      .~ab
+      1
+      1b  B
+      9
+      90b
+      A
+      A	~Abz
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      a az
+      bz-. -
+      bé.- é-
+      z9
+      é	.
+      bA 1.
+      .	9z.ab
+      = -k1.2,1.3
+
+
+
+      -
+      1
+      9
+      A
+      é	.
+      .	9z.ab
+      A	~Abz
+      - -Bb 
+      a az
+        ~bb
+      B-~9
+      B.zb
+      A0
+      .0.	b.b
+      90b
+      z9
+      .A	B.9z
+      bA 1.
+      Ab
+      1b  B
+       z
+      bz-. -
+      .~
+      A~0Aé
+      .~ab
+      bé.- é-
+      = -k2,2r
+      bé.- é-
+      a az
+      bA 1.
+      - -Bb 
+      bz-. -
+      1b  B
+      A	~Abz
+      .0.	b.b
+      .A	B.9z
+      .	9z.ab
+      é	.
+
+
+
+        ~bb
+       z
+      -
+      .~
+      .~ab
+      1
+      9
+      90b
+      A
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      z9
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+        ~bb
+       z
+      -
+      .~
+      .~ab
+      1
+      9
+      90b
+      A
+      A0
+      Ab
+      A~0Aé
+      B-~9
+      B.zb
+      z9
+      é	.
+      .	9z.ab
+      .A	B.9z
+      .0.	b.b
+      A	~Abz
+      1b  B
+      bz-. -
+      - -Bb 
+      bA 1.
+      a az
+      bé.- é-
+      = +0.1
+
+
+
+      -
+      1
+      9
+      A
+      é	.
+      .	9z.ab
+      A	~Abz
+      - -Bb 
+      a az
+        ~bb
+      B-~9
+      B.zb
+      A0
+      .0.	b.b
+      90b
+      z9
+      .A	B.9z
+      bA 1.
+      Ab
+      1b  B
+       z
+      bz-. -
+      .~
+      A~0Aé
+      .~ab
+      bé.- é-
+      = -M
+       z
+      .~
+      1
+
+      z9
+
+
+      Ab
+      A
+      é	.
+      -
+      9
+      A0
+      bé.- é-
+      - -Bb 
+      bz-. -
+      .0.	b.b
+      a az
+      B-~9
+      1b  B
+      bA 1.
+      .A	B.9z
+      B.zb
+      .	9z.ab
+      .~ab
+        ~bb
+      90b
+      A~0Aé
+      A	~Abz
+
+
+
+
+        ~bb
+       z
+      # 10
+      = -m
+
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      b~
+      bé aBA
+      zB
+      é
+      ébAB
+      = -f
+
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      bé aBA
+      b~
+      é
+      ébAB
+      zB
+      = -d
+
+      -
+
+      --	.
+       ~ 0
+        b	A
+      0
+      .01B
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      b~
+      bé aBA
+      -z
+      zB
+      é
+      ébAB
+      = -i
+
+      é
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      bé aBA
+      ébAB
+      b~
+      zB
+      = -r
+      ébAB
+      é
+      zB
+      bé aBA
+      b~
+      Ba11	a
+      B 
+      A B.
+      1éz1
+      110-  
+      0
+      .01B
+      -z
+      --	.
+      -
+       ~ 0
+        b	A
+
+
+      = -n
+       ~ 0
+      -
+      bé aBA
+      -z
+        b	A
+
+      zB
+      é
+      Ba11	a
+      0
+      --	.
+      b~
+
+      A B.
+      B 
+      ébAB
+      .01B
+      1éz1
+      110-  
+      = -g
+       ~ 0
+      -
+      bé aBA
+      -z
+        b	A
+
+      zB
+      é
+      Ba11	a
+      0
+      --	.
+      b~
+
+      A B.
+      B 
+      ébAB
+      .01B
+      1éz1
+      110-  
+      = -u
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      b~
+      bé aBA
+      zB
+      é
+      ébAB
+      = -fu
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      bé aBA
+      b~
+      é
+      ébAB
+      zB
+      = -fr
+      zB
+      ébAB
+      é
+      b~
+      bé aBA
+      Ba11	a
+      B 
+      A B.
+      1éz1
+      110-  
+      0
+      .01B
+      -z
+      --	.
+      -
+       ~ 0
+        b	A
+
+
+      = -dfi
+      é
+      -
+      --	.
+
+
+       ~ 0
+        b	A
+      0
+      .01B
+      110-  
+      1éz1
+      A B.
+      b~
+      B 
+      bé aBA
+      Ba11	a
+      ébAB
+      -z
+      zB
+      = -b
+
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      b~
+      bé aBA
+      zB
+      é
+      ébAB
+      = -nr
+      110-  
+      1éz1
+      .01B
+      -
+      -z
+        b	A
+
+      zB
+      é
+      Ba11	a
+      0
+      --	.
+      b~
+      bé aBA
+      A B.
+      ébAB
+       ~ 0
+
+      B 
+      = -k2
+
+
+      -
+      -z
+      .01B
+      0
+      1éz1
+      b~
+      zB
+      é
+      ébAB
+      --	.
+        b	A
+      Ba11	a
+      B 
+      110-  
+       ~ 0
+      A B.
+      bé aBA
+      = -k2n
+
+
+        b	A
+       ~ 0
+      -
+      --	.
+      -z
+      .01B
+      0
+      110-  
+      1éz1
+      A B.
+      B 
+      Ba11	a
+      b~
+      bé aBA
+      zB
+      é
+      ébAB
+      = -k1.2,1.3
+
+
+      -
+      0
+      é
+      B 
+      A B.
+        b	A
+      --	.
+      .01B
+      110-  
+      zB
+      Ba11	a
+      ébAB
+      -z
+      b~
+       ~ 0
+      bé aBA
+      1éz1
+      = -k2,2r
+      bé aBA
+      A B.
+       ~ 0
+      110-  
+      B 
+      Ba11	a
+        b	A
+      --	.
+
+
+      -
+      -z
+      .01B
+      0
+      1éz1
+      b~
+      zB
+      é
+      ébAB
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+      -
+      -z
+      .01B
+      0
+      1éz1
+      b~
+      zB
+      é
+      ébAB
+      --	.
+        b	A
+      Ba11	a
+      B 
+      110-  
+       ~ 0
+      A B.
+      bé aBA
+      = +0.1
+
+
+      -
+      0
+      é
+      B 
+      A B.
+        b	A
+      --	.
+      .01B
+      110-  
+      zB
+      Ba11	a
+      ébAB
+      -z
+      b~
+       ~ 0
+      bé aBA
+      1éz1
+      = -M
+      b~
+      -
+       ~ 0
+      -z
+        b	A
+
+      zB
+      é
+
+      0
+      B 
+      110-  
+      bé aBA
+      .01B
+      A B.
+      1éz1
+      ébAB
+      Ba11	a
+      --	.
+
+
+        b	A
+
+        b	A
+       ~ 0
+      # 11
+      = -m
+      	 z
+      .1B 1b
+      .1aAAé1
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      = -f
+      	 z
+      .1aAAé1
+      .1B 1b
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zé~zz
+      zza 
+      = -d
+      	 z
+      .1B 1b
+      .1aAAé1
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      = -i
+      	 z
+      .1B 1b
+      .1aAAé1
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      = -r
+      zé~zz
+      zza 
+      zb9
+      B9-Bé0
+      Aé	a9 
+      .Aa.	-
+      .1aAAé1
+      .1B 1b
+      	 z
+      = -n
+      .Aa.	-
+      zb9
+      B9-Bé0
+      zé~zz
+      	 z
+      Aé	a9 
+      zza 
+      .1aAAé1
+      .1B 1b
+      = -g
+      .Aa.	-
+      zb9
+      B9-Bé0
+      zé~zz
+      	 z
+      Aé	a9 
+      zza 
+      .1aAAé1
+      .1B 1b
+      = -u
+      	 z
+      .1B 1b
+      .1aAAé1
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      = -fu
+      	 z
+      .1aAAé1
+      .1B 1b
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zé~zz
+      zza 
+      = -fr
+      zza 
+      zé~zz
+      zb9
+      B9-Bé0
+      Aé	a9 
+      .Aa.	-
+      .1B 1b
+      .1aAAé1
+      	 z
+      = -dfi
+      	 z
+      .1aAAé1
+      .1B 1b
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      = -b
+      	 z
+      .1B 1b
+      .1aAAé1
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      = -nr
+      .1aAAé1
+      .1B 1b
+      .Aa.	-
+      zb9
+      B9-Bé0
+      zé~zz
+      	 z
+      Aé	a9 
+      zza 
+      = -k2
+      	 z
+      .1aAAé1
+      B9-Bé0
+      zb9
+      zé~zz
+      .Aa.	-
+      Aé	a9 
+      zza 
+      .1B 1b
+      = -k2n
+      	 z
+      .1aAAé1
+      .Aa.	-
+      Aé	a9 
+      B9-Bé0
+      zb9
+      zza 
+      zé~zz
+      .1B 1b
+      = -k1.2,1.3
+      	 z
+      .1B 1b
+      .1aAAé1
+      B9-Bé0
+      .Aa.	-
+      zb9
+      zza 
+      Aé	a9 
+      zé~zz
+      = -k2,2r
+      .1B 1b
+      zza 
+      Aé	a9 
+      .Aa.	-
+      	 z
+      .1aAAé1
+      B9-Bé0
+      zb9
+      zé~zz
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+      	 z
+      .1aAAé1
+      B9-Bé0
+      zb9
+      zé~zz
+      .Aa.	-
+      Aé	a9 
+      zza 
+      .1B 1b
+      = +0.1
+      	 z
+      .1B 1b
+      .1aAAé1
+      B9-Bé0
+      .Aa.	-
+      zb9
+      zza 
+      Aé	a9 
+      zé~zz
+      = -M
+      	 z
+      .Aa.	-
+      zb9
+      B9-Bé0
+      zé~zz
+      .1aAAé1
+      .1B 1b
+      Aé	a9 
+      zza 
+      	 z
+      .1B 1b
+      .1aAAé1
+      	 z
+      .1aAAé1
+      .1B 1b
+      # 12
+      = -m
+
+
+
+
+
+      	a AA
+      	b1	
+        9 	
+       ..z~	
+       9 B
+       A 0
+       a
+       z. 9b-
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      b
+      b-éa z
+      bazA1
+      bézA~
+      z
+      z
+      z91
+      zBA 
+      zé Ab
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      = -f
+
+
+
+
+
+      	a AA
+      	b1	
+        9 	
+       ..z~	
+       9 B
+       a
+       A 0
+       z. 9b-
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      b
+      b-éa z
+      bazA1
+      bézA~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      z
+      z
+      z91
+      zBA 
+      zé Ab
+      ~
+      = -d
+      .
+
+      .
+
+
+      ~
+
+
+      	a AA
+      	b1	
+        9 	
+       9 B
+       A 0
+       a
+       ..z~	
+       z. 9b-
+      00
+      00Aé9z-
+      -1.
+      1	
+      9 
+      A~
+      .A
+      A .é
+      A9-	0~
+      A-z9-
+      b
+      bazA1
+      b-éa z
+      bézA~
+      z
+      z
+      z91
+      zBA 
+      zé Ab
+      é~0-.z
+      é9B-
+      é-aA9
+      éz1~a0
+      = -i
+
+
+
+
+
+        9 	
+       ..z~	
+       9 B
+       A 0
+       a
+       z. 9b-
+      -1.
+      é-aA9
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      é9B-
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      	a AA
+      b
+      b-éa z
+      	b1	
+      bazA1
+      bézA~
+      z
+      z
+      zé Ab
+      éz1~a0
+      z91
+      zBA 
+      ~
+      é~0-.z
+      = -r
+      é~0-.z
+      éz1~a0
+      é9B-
+      é-aA9
+      ~
+      zé Ab
+      zBA 
+      z91
+      z
+      z
+      bézA~
+      bazA1
+      b-éa z
+      b
+      A~
+      A9-	0~
+      A-z9-
+      A .é
+      9 
+      1	
+      00Aé9z-
+      00
+      .A
+      .
+      .
+      -1.
+       z. 9b-
+       a
+       A 0
+       9 B
+       ..z~	
+        9 	
+      	b1	
+      	a AA
+
+
+
+
+
+      = -n
+      -1.
+      zé Ab
+      A9-	0~
+       a
+      .
+      b
+      A~
+      zBA 
+      00Aé9z-
+      ~
+      é-aA9
+      A .é
+      é9B-
+
+      	b1	
+      bazA1
+      A-z9-
+      z
+       A 0
+
+      	a AA
+      z91
+      .
+
+
+
+      é~0-.z
+      z
+       z. 9b-
+      00
+      bézA~
+      b-éa z
+      éz1~a0
+       ..z~	
+      .A
+      1	
+       9 B
+      9 
+        9 	
+      = -g
+      -1.
+      zé Ab
+      A9-	0~
+       a
+      .
+      b
+      A~
+      zBA 
+      00Aé9z-
+      ~
+      é-aA9
+      A .é
+      é9B-
+
+      	b1	
+      bazA1
+      A-z9-
+      z
+       A 0
+
+      	a AA
+      z91
+      .
+
+
+
+      é~0-.z
+      z
+       z. 9b-
+      00
+      bézA~
+      b-éa z
+      éz1~a0
+       ..z~	
+      .A
+      1	
+       9 B
+      9 
+        9 	
+      = -u
+
+      	a AA
+      	b1	
+        9 	
+       ..z~	
+       9 B
+       A 0
+       a
+       z. 9b-
+      -1.
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      b
+      b-éa z
+      bazA1
+      bézA~
+      z
+      z91
+      zBA 
+      zé Ab
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      = -fu
+
+      	a AA
+      	b1	
+        9 	
+       ..z~	
+       9 B
+       a
+       A 0
+       z. 9b-
+      -1.
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      b
+      b-éa z
+      bazA1
+      bézA~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      z
+      z91
+      zBA 
+      zé Ab
+      ~
+      = -fr
+      ~
+      zé Ab
+      zBA 
+      z91
+      z
+      z
+      é~0-.z
+      éz1~a0
+      é9B-
+      é-aA9
+      bézA~
+      bazA1
+      b-éa z
+      b
+      A~
+      A9-	0~
+      A-z9-
+      A .é
+      9 
+      1	
+      00Aé9z-
+      00
+      .A
+      .
+      .
+      -1.
+       z. 9b-
+       A 0
+       a
+       9 B
+       ..z~	
+        9 	
+      	b1	
+      	a AA
+
+
+
+
+
+      = -dfi
+      ~
+      .
+
+
+
+
+      .
+
+        9 	
+       9 B
+       a
+       A 0
+       ..z~	
+       z. 9b-
+      00
+      00Aé9z-
+      é~0-.z
+      -1.
+      1	
+      9 
+      é9B-
+      .A
+      A~
+      A .é
+      	a AA
+      A9-	0~
+      é-aA9
+      A-z9-
+      b
+      	b1	
+      b-éa z
+      bazA1
+      bézA~
+      z
+      z
+      zé Ab
+      éz1~a0
+      z91
+      zBA 
+      = -b
+
+
+
+
+
+      	a AA
+      	b1	
+        9 	
+       ..z~	
+       9 B
+       A 0
+       a
+       z. 9b-
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      b
+      b-éa z
+      bazA1
+      bézA~
+      z
+      z
+      z91
+      zBA 
+      zé Ab
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      = -nr
+      9 
+       9 B
+        9 	
+      1	
+      zé Ab
+      00
+      b
+      A~
+      zBA 
+      00Aé9z-
+      ~
+      é-aA9
+      A .é
+      é9B-
+
+      	b1	
+      bazA1
+      A-z9-
+      z
+       A 0
+
+      	a AA
+      z91
+      .
+
+
+       a
+      é~0-.z
+      z
+       z. 9b-
+      bézA~
+      b-éa z
+      éz1~a0
+       ..z~	
+      .A
+      A9-	0~
+      .
+
+      -1.
+      = -k2
+
+
+
+
+
+       a
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      A-z9-
+      A~
+      b
+      bazA1
+      bézA~
+      z
+      z
+      z91
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      	b1	
+       ..z~	
+      1	
+      A9-	0~
+      9 
+      zBA 
+        9 	
+      A .é
+       A 0
+       z. 9b-
+      	a AA
+      zé Ab
+       9 B
+      b-éa z
+      = -k2n
+
+
+
+
+
+      	a AA
+      	b1	
+        9 	
+       ..z~	
+       9 B
+       A 0
+       a
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      1	
+      9 
+      A .é
+      A-z9-
+      A9-	0~
+      A~
+      b
+      b-éa z
+      bazA1
+      bézA~
+      z
+      z
+      z91
+      zBA 
+      zé Ab
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+       z. 9b-
+      = -k1.2,1.3
+
+
+
+
+
+      .
+      .
+      b
+      z
+      z
+      ~
+      1	
+      9 
+      A .é
+        9 	
+      é-aA9
+      A-z9-
+      b-éa z
+       ..z~	
+      00
+      00Aé9z-
+      -1.
+       9 B
+      A9-	0~
+      z91
+      é9B-
+      .A
+       A 0
+      zBA 
+       a
+      	a AA
+      bazA1
+      	b1	
+       z. 9b-
+      éz1~a0
+      A~
+      é~0-.z
+      zé Ab
+      bézA~
+      = -k2,2r
+      b-éa z
+       9 B
+      zé Ab
+      	a AA
+       z. 9b-
+       A 0
+      A .é
+        9 	
+      9 
+      zBA 
+      A9-	0~
+      	b1	
+       ..z~	
+      1	
+
+
+
+
+
+       a
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      A-z9-
+      A~
+      b
+      bazA1
+      bézA~
+      z
+      z
+      z91
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      = -t a
+      sort: unknown option: -a
+      = -t a -k2
+      sort: unknown option: -a
+      = +1
+
+
+
+
+
+       a
+      -1.
+      .
+      .
+      .A
+      00
+      00Aé9z-
+      A-z9-
+      A~
+      b
+      bazA1
+      bézA~
+      z
+      z
+      z91
+      ~
+      é-aA9
+      é9B-
+      éz1~a0
+      é~0-.z
+      	b1	
+       ..z~	
+      1	
+      A9-	0~
+      9 
+      zBA 
+        9 	
+      A .é
+       A 0
+       z. 9b-
+      	a AA
+      zé Ab
+       9 B
+      b-éa z
+      = +0.1
+
+
+
+
+
+      .
+      .
+      b
+      z
+      z
+      ~
+      1	
+      9 
+      A .é
+        9 	
+      é-aA9
+      A-z9-
+      b-éa z
+       ..z~	
+      00
+      00Aé9z-
+      -1.
+       9 B
+      A9-	0~
+      z91
+      é9B-
+      .A
+       A 0
+      zBA 
+       a
+      	a AA
+      bazA1
+      	b1	
+       z. 9b-
+      éz1~a0
+      A~
+      é~0-.z
+      zé Ab
+      bézA~
+      = -M
+      .
+       9 B
+
+       a
+      9 
+      b
+      A~
+
+      1	
+      ~
+      z
+        9 	
+      .A
+
+      	b1	
+      .
+
+      z
+       A 0
+
+      00
+      zé Ab
+      z91
+      -1.
+      zBA 
+      00Aé9z-
+      é-aA9
+      é~0-.z
+      A .é
+       z. 9b-
+      é9B-
+      bézA~
+      b-éa z
+      éz1~a0
+       ..z~	
+      bazA1
+      A9-	0~
+      A-z9-
+      	a AA
+
+
+
+
+      	a AA
+      	b1	
+      end
+      """
