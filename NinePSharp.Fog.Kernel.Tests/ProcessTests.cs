@@ -33,6 +33,15 @@ public sealed class ProcessTests
         await Assert.ThrowsAsync<SyscallException>(() => init.WaitAsync());
     }
 
+    // init's cpenv: $timezone is /adm/timezone/local, which a first boot makes GMT.
+    [Fact]
+    public async Task InitCopiesTheLocalZoneToTimezone()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        int fd = await init.OpenAsync("/env/timezone", NinePSharp.Constants.NinePConstants.OREAD);
+        Assert.Equal("GMT 0 GMT 0\n0\n\n", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 100)).Span));
+    }
+
     [Fact]
     public async Task ExecWithoutArgumentsIsABadArgument()
     {

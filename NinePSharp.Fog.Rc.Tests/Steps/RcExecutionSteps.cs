@@ -332,7 +332,7 @@ public sealed class RcExecutionSteps
         oracle = $"@{{rfork En; cd /; /bin/rc {string.Join(' ', arguments)} <{input} >[2=1]}}";
         await WriteAsync(Script, text + "\n");
         var (read, write) = await init!.PipeAsync();
-        long pid = init.Fork(RforkFlags.Fdg, async child =>
+        long pid = init.Fork(RforkFlags.Fdg | RforkFlags.Cenvg, async child =>
         {
             await child.DupAsync(write, 1);
             await child.DupAsync(error is null ? write : await child.OpenAsync(error, NinePConstants.OWRITE), 2);

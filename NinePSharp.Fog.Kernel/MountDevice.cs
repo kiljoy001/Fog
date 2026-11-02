@@ -9,10 +9,10 @@ namespace NinePSharp.Fog.Kernel;
 internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOperations, IResourceWStatOperations
 {
     public const string Provider = "mnt";
-    private static int mounts;
     private readonly ConcurrentDictionary<string, MountTree> trees = new(StringComparer.Ordinal);
     private readonly ConditionalWeakTable<ResourceOpenHandle, MountConnection> connections = [];
     private readonly SemaphoreSlim versioning = new(1, 1);
+    private int mounts;
 
     // Run when a file of a tree is closed, which may have been all that held it.
     public Func<Task> Collect { get; set; } = () => Task.CompletedTask;

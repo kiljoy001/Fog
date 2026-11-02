@@ -8356,9 +8356,9 @@ Feature: rc runs scripts as 9front rc does
       echo -n ab >s1; echo -n axc >s2
       cmp -l s1 s2
       echo a | cmp /fd/0 s1 5
-      ~ $status 'cmp '[0-9]*': seek' && echo seek status
+      ~ $status *'cmp '[0-9]*': seek' && echo seek status
       echo a | cmp -s /fd/0 s1 5
-      ~ $status 'cmp '[0-9]*': seek' && echo seek status
+      ~ $status *'cmp '[0-9]*': seek' && echo seek status
       seq 1 20000 >big1; sed 's/^19999$/x/' big1 >big2
       cmp big1 big2
       cmp -L big1 big2
@@ -10095,11 +10095,12 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_280
-  Scenario: date reads the time now from the clock, in the zone init copied from /adm/timezone/local
+  Scenario: date reads the time now from the clock, in the zone init copies from /adm/timezone/local, which a first boot makes GMT
     Given 9front's clock and /adm/timezone/local are its own, so this runs on Fog alone
     And the clock reads 1700000000
     When rc runs the script
       """
+      cp /adm/timezone/local /env/timezone
       date
       date -n
       date -t
