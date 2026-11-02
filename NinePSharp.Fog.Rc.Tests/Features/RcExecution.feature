@@ -11473,3 +11473,228 @@ Feature: rc runs scripts as 9front rc does
       hello
       found
       """
+
+  @FOG_RC_RUN_289
+  Scenario: sed's limits, its labels and branches, its text, files and back references, and its errors, as 9front's sed has them
+    When rc runs the script
+      """
+      mkdir /tmp/sd; cd /tmp/sd
+      seq 1 5 >f; echo abc >g
+      fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
+      sed; echo status $status
+      sed -e; sed -f; sed -x; sed -f /nonesuch
+      sed p f >[1=]
+      {echo '2{'; for(i in `{seq 1 21}) {echo 'a\'; echo x$i}; echo '}'} >ap
+      sed -u -f ap f | sed 3q
+      sed -f ap f | sed 3q
+      {echo '2{'; for(i in `{seq 1 20}) {echo 'a\'; echo x$i}; echo '}'} >ap20; sed -f ap20 f | wc -l
+      {echo '2{'; for(i in `{seq 1 21}) echo r g; echo '}'} >rp; sed -f rp f | sed 2q
+      seq 1 510 | sed 's/.*/p/' >m510; sed -n -f m510 g | wc -l
+      seq 1 511 | sed 's/.*/p/' >m511; sed -n -f m511 g | wc -l
+      seq 1 512 | sed 's/.*/p/' >m512; sed -n -f m512 g | wc -l
+      {seq 1 20 | sed 's/.*/{/'; echo p; seq 1 20 | sed 's/.*/}/'} >b20; sed -n -f b20 g
+      seq 1 48 | sed 's/.*/:l&/' >l48; sed -f l48 g
+      seq 1 49 | sed 's/.*/:l&/' >l49; sed -f l49 g
+      seq 1 48 | sed 's/.*/bm&/' >j48; {cat j48; seq 1 48 | sed 's/.*/:m&/'} >j48b; sed -f j48b g
+      seq 1 49 | sed 's/.*/bm&/' >j49; sed -f j49 g
+      sed ':abcdefg' g; sed ':abcdefgh' g; sed 'babcdefgh' g; sed ':a;:a' g; sed 'bzz' g; sed ':' g; sed '1:a' g; sed ': a' g
+      sed '}' g; sed '{' g; sed '1}' g; sed '{p;}' g; sed -n '/b/{p;p}' g
+      sed 'a' g; sed '1,2a\
+      x' g; sed 'a\
+      one\
+      	two\\three' g; sed '2,3c\
+      gone' f; sed '$i\
+      before' f; sed 'ahello' g
+      sed 'r' g; sed 'r /nonesuch' g; sed '1r g' f | sed 3q; sed 'rg' g
+      sed 'wsame' g; sed 'w /nonesuch/x' g; sed -n 'w out
+      s/b/B/w out' g; cat out
+      sed 'y/abc/xyz/' g; sed 'y/ab/x/' g; sed 'y/a\/b/x\/y/' g; sed 'y/abc' g; sed 'y/a
+      b/xy/' g
+      sed 's/b/B/g;s/a/A/p' g; sed -n 's/b/B/P' g; sed -g 's/[ab]/Z/' g; sed 's/\(a\)\(b\)/\2\1/' g; sed 's/a/\9/' g; sed 's//x/' g; sed 's/x/y' g; sed 's/a/b/q' g
+      sed 's/'`{x 511}'/y/' g; sed 's/'`{x 512}'/y/' g; sed 's/a\nb/x/' g; sed 'N;s/\n/+/' f; sed 's/a/\n/' g; sed 's/b/[&][\&]/' g
+      sed -n '10p' f; seq 1 12 | sed -n '10,11p'; sed -n '$p' f g; sed -n '/2/,/4/p' f; sed -n '0p' f; sed -n '3,1p' f; sed -n '2!p' f; sed -n '/x/,$p' f
+      sed = g; sed -n '$=' f; sed -n 'l' g; x 100 | sed -n l; echo -n 'a	b' | tr a '\177' | sed -n l; echo 'héllo' | sed -n l
+      sed 'n;d' f; sed '$!N;P;D' f; sed -n 'h;n;G;p' f; sed -n 'H;${x;p}' f; sed '2q' f; sed '2{a\
+      after
+      q}' f; sed -n 'x;p' f
+      sed ':a;s/b/x/;ta' g; sed -n '/a/b skip
+      p
+      :skip
+      =' g
+      x 40000 | sed s/x/y/ | wc -c; x 20000 | sed 'h;G' | wc -c
+      {echo '1{'; echo 'a\'; x 9997; echo; echo '}'} >t1; sed -f t1 g | wc -c
+      {echo '1{'; echo 'a\'; x 9998; echo; echo '}'} >t2; sed -f t2 g | wc -c
+      sed 's/a/'`{x 9998}'/' g | wc -c; sed 's/a/'`{x 9999}'/' g | wc -c
+      sed -n p f /nonesuch g
+      sed -e 'p' -f /dev/null f | wc -l; echo 's/a/A/' >pf; sed -f pf -e 's/b/B/' g
+      echo end
+      """
+    Then it prints
+      """
+      status 
+      sed: missing pattern
+      sed: no pattern-file
+      sed: Unknown flag: x
+      sed: Cannot open pattern-file: /nonesuch
+
+      sed: write error: fd out of range or not open
+      sed: Too many appends after line 2
+      1
+      sed: Too many appends after line 2
+      1
+      sed: Too many appends after line 2
+            1
+      sed: Too many reads after line 2
+      1
+          510
+          511
+      sed: Too many commands, last: p
+            0
+      abc
+      abc
+      sed: Too many labels: :l49
+      abc
+      sed: Too many labels: bm49
+      abc
+      sed: Label too long: :abcdefgh
+      sed: Label too long: babcdefgh
+      sed: Duplicate labels: :a;:a
+      sed: Undefined label: zz
+      sed: : command garbled: :
+      sed: No addresses allowed: 1:a
+      abc
+      sed: Too many }'s
+      sed: Too many {'s
+      sed: No addresses allowed: 1}
+      abc
+      abc
+      sed: } command garbled: /b/{p;p}
+      sed: a command garbled: a
+      sed: Only one address allowed: 1,2a\
+      x
+      abc
+      one
+      two\three
+      1
+      gone
+      4
+      5
+      1
+      2
+      3
+      4
+      before
+      5
+      sed: a command garbled: ahello
+      sed: r command garbled: r
+      abc
+      1
+      abc
+      2
+      sed: r command garbled: rg
+      sed: w command garbled: wsame
+      sed: Cannot create /nonesuch/x
+      abc
+      aBc
+      xyz
+      sed: y command garbled: y/ab/x/
+      sed: y/ command garbled: y/a\/b/x\/y/
+      sed: y command garbled: y/abc
+      sed: y command garbled: y/a
+      ABc
+      ABc
+      aBc
+      ZZc
+      abc
+      sed: Invalid back reference \9
+      sed: First RE may not be null
+      sed: s command garbled: s/x/y
+      sed: q command garbled: s/a/b/q
+      sed: Too much text: s/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxsed: Too much text: s/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxabc
+      1+2
+      3+4
+
+      bc
+      a[b][&]c
+      10
+      11
+      abc
+      2
+      3
+      4
+      sed: line number 0 is illegal
+      3
+      1
+      3
+      4
+      5
+      5
+      abc
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+      xxxxxxxxxxxxxxxxxxxxxxxxxxx
+      \x007f\tb
+      h\x00e9llo
+      1
+      3
+      5
+      1
+      2
+      3
+      4
+      5
+      2
+      1
+      4
+      3
+      sed: } command garbled: H;${x;p}
+      1
+      2
+      sed: } command garbled: q}
+
+      1
+      2
+      3
+      4
+      axc
+      1
+      sed: Output line too long
+            0
+        32768
+        10002
+        10003
+      sed: s command garbled: s/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      0
+      sed: s command garbled: s/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      0
+      sed: Can't open /nonesuch
+      1
+      2
+      3
+      4
+      5
+           10
+      ABc
+      end
+      """
+
+  @FOG_RC_RUN_290
+  Scenario: sed keeps 120 files, its output among them, for its w commands and s///w, and says so of more
+    Given 9front's kernel warns on its console of a process past 100 descriptors, and its sed faults after the first line of w's message, so this runs on Fog alone
+    When rc runs the script
+      """
+      mkdir /tmp/sd; cd /tmp/sd
+      echo abc >g
+      seq 1 119 | sed 's/.*/w \/tmp\/sd\/w&/' >w119; sed -f w119 g; echo $status
+      seq 1 119 | sed 's/.*/s\/a\/a\/w \/tmp\/sd\/v&/' >v119; sed -f v119 g; echo $status
+      seq 1 120 | sed 's/.*/s\/a\/a\/w \/tmp\/sd\/v&/' >v120; sed -f v120 g; echo $status | sed 's/[0-9]+:/N:/'
+      seq 1 120 | sed 's/.*/w \/tmp\/sd\/w&/' >w120; sed -f w120 g
+      """
+    Then it prints
+      """
+      abc
+
+      abc
+
+      sed: Too many files in w commands 1
+      sed N: error
+      sed: Too many files in w commands 2 
+      nfiles = 120; MAXF = 120
+      """
