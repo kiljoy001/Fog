@@ -10291,6 +10291,17 @@ Feature: rc runs scripts as 9front rc does
       {echo a; echo b; echo c} >m1; {echo c; echo b; echo a} >m2; diff m1 m2; diff -e m1 m2
       echo x >d2/-; cat a | diff - a d2
       mkdir d3; chmod 000 d3; diff d1 d3
+      {echo aae; echo baa} >ca; echo baa >cb; diff ca cb; {echo baa; echo aae} >cc; diff cc cb
+      {echo x; echo aae; echo y} >ce; {echo x; echo baa; echo aae; echo y} >cf; diff ce cf; diff cf ce
+      {echo 'a a e'; echo b a a} >cg; echo 'baa' >ch; diff -w cg ch; diff -b cg ch; diff -b cf ce
+      {echo 'p  q'; echo r; echo 's  t'} >w1; {echo 'p q'; echo s; echo 's t'} >w2; diff -b w1 w2; diff -w w1 w2
+      diff -m a b
+      mkdir -p n1/x/y/z n2/x/y/z; echo 1 >n1/x/y/z/f; echo 2 >n2/x/y/z/f; diff -r n1 n2; diff n1 n2
+      x=`{awk 'BEGIN { for (i = 0; i < 510; i++) printf "./" }'}; diff -r $x^d1 d2 >[2=1] | wc -c
+      diff /nonesuch a d2
+      diff - a <[0=]
+      diff - a >[0]/tmp/diffs/wo
+      diff /proc/$pid/notepg a >[2=1] | sed 's/[0-9]+/N/g'
       """
     Then it prints
       """
@@ -10637,6 +10648,66 @@ Feature: rc runs scripts as 9front rc does
       Only in d1: only1
       Only in d1: same
       Only in d1: sub
+      1,2c1
+      < aae
+      < baa
+      ---
+      > baa
+      2d1
+      < aae
+      2c2,3
+      < aae
+      ---
+      > baa
+      > aae
+      2,3c2
+      < baa
+      < aae
+      ---
+      > aae
+      1,2c1
+      < a a e
+      < b a a
+      ---
+      > baa
+      1,2c1
+      < a a e
+      < b a a
+      ---
+      > baa
+      2,3c2
+      < baa
+      < aae
+      ---
+      > aae
+      2c2
+      < r
+      ---
+      > s
+      2c2
+      < r
+      ---
+      > s
+      diff a b
+      5c5
+      < 5
+      ---
+      > five
+      8d7
+      < 8
+      10a10
+      > eleven
+      diff n1/x/y/z/f n2/x/y/z/f
+      1c1
+      < 1
+      ---
+      > 2
+      Common subdirectories: n1/x and n2/x
+         4195
+      diff: cannot stat /nonesuch: file does not exist: '/nonesuch'
+      diff: can't stat -
+      diff: can't stat -
+      diff: cannot open /proc/N/notepg: permission denied: '/proc/N/notepg'
       """
 
   @FOG_RC_RUN_284

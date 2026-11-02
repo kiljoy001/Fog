@@ -388,8 +388,17 @@ public sealed class Diff
     }
 
     // sysfatal: the message, and the output buffered so far flushed as diff exits.
+    // sysfatal: the message as its buffer of 1024 bytes holds it, whole runes to 1023 of them.
     private async Task<T> SysfatalAsync<T>(string message)
     {
+        byte[] m = Encoding.UTF8.GetBytes(message);
+        int n = Math.Min(m.Length, 1023);
+        while (n < m.Length && (m[n] & 0xc0) == 0x80)
+        {
+            n--;
+        }
+
+        message = Encoding.UTF8.GetString(m, 0, n);
         await process.WriteAsync(2, Encoding.UTF8.GetBytes($"diff: {message}\n"));
         await ExitsAsync(message);
         return default!;
