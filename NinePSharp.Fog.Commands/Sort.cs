@@ -284,13 +284,17 @@ public sealed class Sort
 
     private static bool Greater(Key ka, Key kb, int b)
     {
-        int n1 = Math.Min(ka.Klen - b, kb.Klen - b);
+        // Stryker disable once Arithmetic : a span of the first key past its end is of zeros, below the second's, so no greater
+        int na = ka.Klen - b;
+        int n1 = Math.Min(na, kb.Klen - b);
         if (n1 <= 0)
         {
             return false;
         }
 
         int n2 = ka.K[b] - kb.K[b];
+
+        // Stryker disable once Conditional : where the bytes at b differ, the spans from b compare as they do
         return (n2 == 0 ? ka.K.AsSpan(b, n1).SequenceCompareTo(kb.K.AsSpan(b, n1)) : n2) > 0;
     }
 

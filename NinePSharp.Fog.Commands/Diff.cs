@@ -316,9 +316,11 @@ public sealed class Diff
         for (int i = 1; i <= n; i++)
         {
             int j = a[i];
+
+            // Stryker disable once Block : b[0] is 0, which is no candidate's y, and b[1] begins a class, so is negative, and the loop ends there
             if (j == 0)
             {
-                // Stryker disable once Statement,Block : b[0] is 0, which is no candidate's y, and b[1] begins a class, so is negative, and the loop ends there
+                // Stryker disable once Statement : b[0] is 0, which is no candidate's y, and b[1] begins a class, so is negative, and the loop ends there
                 continue;
             }
 
@@ -941,9 +943,11 @@ public sealed class Diff
         a = Math.Max(a, 1);
         int maxb = bp == d.Input[0] ? d.Len[0] : d.Len[1];
         b = Math.Min(b, maxb);
+
+        // Stryker disable once Block : past the file's end b is below a, so nothing is fetched either way
         if (a > maxb)
         {
-            // Stryker disable once Statement,Block : past the file's end b is below a, so nothing is fetched either way
+            // Stryker disable once Statement : past the file's end b is below a, so nothing is fetched either way
             return;
         }
 

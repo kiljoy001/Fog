@@ -12206,6 +12206,9 @@ Feature: rc runs scripts as 9front rc does
       {for(i in `{seq 1 13}) echo ab$i; echo axz; echo a} | tr z '\000' | sort | xd -c | sed 3q
       {for(i in `{seq 1 13}) echo ab$i; echo a; echo axz} | tr z '\000' | sort -r | xd -c | sed 3q
       {echo axb; echo aa; echo ab} | tr x '\000' | sort -d | xd -c
+      sort -v +1.b </dev/null; sort -v -k1.b </dev/null; st option
+      {for(i in `{seq 1 13}) echo b$i; echo azx; echo a} | tr z '\000' | sort | xd -c | sed 2q
+      {for(i in `{seq 1 13}) echo ab$i; echo azx; echo a} | tr z '\000' | sort | xd -c | sed 2q
       echo end
       """
     Then it prints
@@ -12734,6 +12737,14 @@ Feature: rc runs scripts as 9front rc does
       0000020   a  b  2 \n  a  b  1  3 \n  a  b  1  2 \n  a  b
       0000000   a  a \n  a 00  b \n  a  b \n
       000000a 
+      sort +1.*b -*.*
+      =========
+      sort +0.*b -*.*
+      =========
+      0000000   a 00  x \n  a \n  b  1 \n  b  1  0 \n  b  1  1
+      0000010  \n  b  1  2 \n  b  1  3 \n  b  2 \n  b  3 \n  b
+      0000000   a 00  x \n  a \n  a  b  1 \n  a  b  1  0 \n  a
+      0000010   b  1  1 \n  a  b  1  2 \n  a  b  1  3 \n  a  b
       end
       """
 
