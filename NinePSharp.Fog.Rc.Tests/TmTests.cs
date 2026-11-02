@@ -50,12 +50,17 @@ public sealed class TmTests
         Assert.Null(await LocalAsync($"ABC 0 XYZ 3600{new string(' ', 41)}\n{pairs}"));
     }
 
-    // A format that ends in underscores ends there; 9front's reads on past its NUL.
+    // A format that ends in underscores ends there, and one that ends in a quoted run is garbled;
+    // 9front's reads on past its NUL.
     [Fact]
     public void AFormatEndsAtItsTrailingUnderscores()
     {
         Assert.Equal("2001", Encoding.UTF8.GetString(Tm.Tmtimens(1000000000, 0, null).Format("YYYY__", out _)!));
         Assert.Equal(string.Empty, Encoding.UTF8.GetString(Tm.Tmtimens(1000000000, 0, null).Format("_", out _)!));
+
+        // A backslash at the end of a quoted run escapes nothing, and the run, never closed, is garbled.
+        Assert.Null(Tm.Tmtimens(1000000000, 0, null).Format("[x\\", out string? error));
+        Assert.Equal("garbled format [x\\", error);
     }
 
     [Theory(Timeout = SecstoreHarness.TestTimeout)]
