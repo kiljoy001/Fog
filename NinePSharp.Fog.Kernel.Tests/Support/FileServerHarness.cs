@@ -22,6 +22,7 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     private readonly List<TaskCompletionSource<bool>> requestsHeld = [];
     private readonly TaskCompletionSource<bool> holdFlushed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int heldRequests;
+    private int fileReads;
     private Task serving = Task.CompletedTask;
     private Stream? stream;
 
@@ -74,6 +75,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     // A read of this file is refused with this error, and the directory read as ever.
     public (string File, string Error)? FileReadRefusal { get; set; }
+
+    // How many reads of that file are answered before they are refused.
+    public int ReadsBeforeRefusal { get; set; }
 
     // Every write is refused with this error.
     public string? WriteRefusal { get; set; }
@@ -179,7 +183,7 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
                     return new Rerror(read.Item.Tag, error);
                 }
 
-                if (FileReadRefusal is { } unread && opened.TryGetValue(read.Item.Fid, out string? file) && file == unread.File)
+                if (FileReadRefusal is { } unread && opened.TryGetValue(read.Item.Fid, out string? file) && file == unread.File && fileReads++ >= ReadsBeforeRefusal)
                 {
                     return new Rerror(read.Item.Tag, unread.Error);
                 }

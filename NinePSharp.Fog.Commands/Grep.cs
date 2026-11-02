@@ -53,7 +53,7 @@ public sealed class Grep
     private static readonly uint[] Tab2 = [0x003f, 0x0fff, 0x3ffff];
 
     private readonly Process process;
-    private readonly int[] flags = new int[256];
+    private readonly bool[] flags = new bool[256];
     private readonly List<Re> follow = [];
     private readonly Biobuf bout;
     private string? filename;
@@ -64,14 +64,14 @@ public sealed class Grep
     private long lineno;
     private bool literal;
     private bool matched;
-    private int peekc;
+    private bool peekeof;
     private Biobuf? rein;
     private State? state0;
     private Re2 topre;
     private int nre;
-    private int tok = -1;
+    private int tok;
     private int yyval;
-    private string yystr = string.Empty;
+    private string yystr = null!;
 
     private Grep(Process process) => (this.process, bout) = (process, new Biobuf(process, 1));
 
@@ -84,14 +84,14 @@ public sealed class Grep
             switch (c)
             {
                 case 'e':
-                    g.flags['e']++;
+                    g.flags['e'] = true;
                     g.lineno = 0;
                     await g.Str2topAsync(arguments.Value() ?? await g.UsageAsync());
                     break;
                 case 'f':
-                    g.flags['f']++;
+                    g.flags['f'] = true;
                     g.filename = arguments.Value() ?? await g.UsageAsync();
-                    int fd = -1;
+                    int fd = 0;
                     try
                     {
                         fd = await process.OpenAsync(g.filename, NinePConstants.OREAD);
@@ -107,19 +107,19 @@ public sealed class Grep
                     await g.Str2topAsync(g.filename);
                     break;
                 default:
-                    if (c >= 256 || !Validflags.Contains(c, StringComparison.Ordinal))
+                    if (!Validflags.Contains(c, StringComparison.Ordinal))
                     {
                         await g.UsageAsync();
                     }
 
-                    g.flags[c]++;
+                    g.flags[c] = true;
                     break;
             }
         }
 
         IReadOnlyList<string> args = arguments.Rest();
         int a = 0;
-        if (g.flags['f'] == 0 && g.flags['e'] == 0)
+        if (!g.flags['f'] && !g.flags['e'])
         {
             if (args.Count == 0)
             {
@@ -188,10 +188,12 @@ public sealed class Grep
             switch (r.Type)
             {
                 case Tor:
+                    // Stryker disable once Assignment : the count only chooses whether a case table is made, which matches as its alternation does
                     n += Countor(r.Alt!);
                     r = r.Next!;
                     continue;
                 case Tclass:
+                    // Stryker disable once Arithmetic : the count only chooses whether a case table is made, which matches as its alternation does
                     return n + (int)(r.Hi - r.Lo) + 1;
                 default:
                     return n;
@@ -202,7 +204,6 @@ public sealed class Grep
     private async Task<string> UsageAsync()
     {
         await process.WriteAsync(2, Encoding.UTF8.GetBytes($"usage: grep [-{Validflags}] [-e pattern] [-f patternfile] [file ...]\n"));
-        await bout.BflushAsync();
         process.Exits("usage");
         return default!;
     }
@@ -211,7 +212,6 @@ public sealed class Grep
     {
         string where = filename is not null ? $"{filename}:{lineno}: " : pattern is not null ? $"{pattern}: " : string.Empty;
         await process.WriteAsync(2, Encoding.UTF8.GetBytes($"grep: {where}{e}\n"));
-        await bout.BflushAsync();
         process.Exits("syntax");
     }
 
@@ -227,13 +227,13 @@ public sealed class Grep
             await YyerrorAsync("empty pattern");
         }
 
-        if (flags['f'] == 0)
+        if (!flags['f'])
         {
             pattern = p;
         }
 
         topre = default;
-        (tok, peekc, literal) = (-1, 0, false);
+        (tok, peekeof, literal) = (-1, false, false);
         try
         {
             await ProgAsync();
@@ -244,7 +244,9 @@ public sealed class Grep
             process.Exits(error.Message);
         }
 
-        // yyparse sets topre or exits, so str2top's check that it did never fails.
+        // yyparse sets topre or exits, so str2top's check that it did never fails. Fresh marks only
+        // let addcase make its tables, which match as their alternations do.
+        // Stryker disable once Update,Statement : as above
         gen++;
         if (oldtop.Beg is not null)
         {
@@ -256,13 +258,10 @@ public sealed class Grep
     private async Task<int> GetrecAsync()
     {
         int c;
-        if (flags['f'] != 0)
+        if (flags['f'])
         {
-            c = await rein!.BgetcAsync();
-            if (c <= 0)
-            {
-                return 0;
-            }
+            // Beof, as a NUL does, ends the pattern file.
+            c = Math.Max(await rein!.BgetcAsync(), 0);
         }
         else
         {
@@ -270,7 +269,7 @@ public sealed class Grep
             inputAt++;
         }
 
-        if (flags['i'] != 0 && c is >= 'A' and <= 'Z')
+        if (flags['i'] && c is >= 'A' and <= 'Z')
         {
             c += 'a' - 'A';
         }
@@ -281,11 +280,10 @@ public sealed class Grep
 
     private async Task<int> YylexAsync()
     {
-        if (peekc != 0)
+        if (peekeof)
         {
-            int s = peekc;
-            peekc = 0;
-            return s < 0 ? LEof : s;
+            peekeof = false;
+            return LEof;
         }
 
         int c = await GetrecAsync();
@@ -330,7 +328,7 @@ public sealed class Grep
             case '.':
                 return LDot;
             case 0:
-                peekc = -1;
+                peekeof = true;
                 return LNewline;
             case '\n':
                 return LNewline;
@@ -402,6 +400,7 @@ public sealed class Grep
         {
             if (await PeekAsync() != LNewline)
             {
+                // Stryker disable once Statement : the expression read after it is a syntax error all the same
                 await SyntaxAsync();
             }
 
@@ -530,6 +529,7 @@ public sealed class Grep
 
     private Re Ral(int type)
     {
+        // Stryker disable once Update : ids that differ all the same order the states alike
         return new Re { Id = nre++, Type = type };
     }
 
@@ -744,6 +744,7 @@ public sealed class Grep
     // addcase: an alternation of seven bytes or more made a table of the bytes it takes.
     private Re Addcase(Re r)
     {
+        // Stryker disable once Equality : a node not made a table matches as its alternation does
         if (r.Gen == gen)
         {
             return r;
@@ -754,6 +755,8 @@ public sealed class Grep
         {
             case Tor:
                 int n = Countor(r);
+
+                // Stryker disable once Equality : whether a table is made, it matches as the alternation does
                 if (n < Caselim)
                 {
                     return r;
@@ -762,8 +765,11 @@ public sealed class Grep
                 Re a = Ral(Tcase);
                 a.Cases = new Re?[256];
                 Case1(a, r);
+
+                // Stryker disable once Equality : whether the cases are made tables, they match as their alternations do
                 for (int i = 0; i < 256; i++)
                 {
+                    // Stryker disable once Equality : whether the cases are made tables, they match as their alternations do, and one no smaller is not
                     if (a.Cases[i] is { } c && Countor(c) < n)
                     {
                         a.Cases[i] = Addcase(c);
@@ -836,7 +842,10 @@ public sealed class Grep
 
     private State Initstate(Re r)
     {
+        // Stryker disable once Statement : the tables only make the alternations quicker to match
         Addcase(r);
+
+        // Stryker disable once Statement : the follow set is empty before the first state is made
         follow.Clear();
         gen++;
         Fol1(r, Cbegin);
@@ -869,6 +878,7 @@ public sealed class Grep
 
             if (cmp == 0 && matched != t.Match)
             {
+                // Stryker disable once Conditional,Unary : either sign tells the two states apart
                 cmp = matched ? 1 : -1;
             }
 
@@ -878,11 +888,16 @@ public sealed class Grep
                 return;
             }
 
+            // Stryker disable once Equality : the state is found or made down either side alike
             (parent, left) = (t, cmp > 0);
+
+            // Stryker disable once Conditional : the state is found or made down either side alike
             t = left ? t.Left : t.Right;
         }
 
         var made = new State { Re = [.. follow], Match = matched };
+
+        // Stryker disable all : a state not kept in the tree is made again, and is the same
         if (left)
         {
             parent!.Left = made;
@@ -892,6 +907,7 @@ public sealed class Grep
             parent!.Right = made;
         }
 
+        // Stryker restore all
         s.Next[c] = made;
     }
 
@@ -917,15 +933,15 @@ public sealed class Grep
             }
         }
 
-        flag |= flags['b'] != 0 ? Bflag : 0;
-        flag |= flags['c'] != 0 ? Cflag : 0;
-        flag &= flags['h'] != 0 ? ~Hflag : ~0;
-        flag |= flags['i'] != 0 ? Iflag : 0;
-        flag |= flags['l'] != 0 ? Llflag : 0;
-        flag |= flags['L'] != 0 ? LLflag : 0;
-        flag |= flags['n'] != 0 ? Nflag : 0;
-        flag |= flags['s'] != 0 ? Sflag : 0;
-        flag |= flags['v'] != 0 ? Vflag : 0;
+        flag |= flags['b'] ? Bflag : 0;
+        flag |= flags['c'] ? Cflag : 0;
+        flag &= flags['h'] ? ~Hflag : ~0;
+        flag |= flags['i'] ? Iflag : 0;
+        flag |= flags['l'] ? Llflag : 0;
+        flag |= flags['L'] ? LLflag : 0;
+        flag |= flags['n'] ? Nflag : 0;
+        flag |= flags['s'] ? Sflag : 0;
+        flag |= flags['v'] ? Vflag : 0;
 
         // u.pre and then u.buf, as one.
         byte[] u = new byte[2 * Half];

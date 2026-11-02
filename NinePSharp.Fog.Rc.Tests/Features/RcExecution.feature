@@ -11350,3 +11350,126 @@ Feature: rc runs scripts as 9front rc does
       27 1.41421 0.01 -8
       1024
       """
+
+  @FOG_RC_RUN_287
+  Scenario: grep's classes are ranges of runes as byte ranges, sorted and merged, its alternations tables of bytes, and its pattern files read line by line
+    When rc runs the script
+      """
+      mkdir /tmp/gr; cd /tmp/gr
+      for(c in a b c d e f g h i x y z - '^' ']' '\' é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ  𐀀 ab abc abbc ac abd) echo $c >>ch
+      echo -n D | tr D '\177' >>ch; echo >>ch
+      fn g { grep $* ch | tr '\012' ' '; echo }
+      g '[a-c]'; g '[^a]'; g '[^a-bc-d]'; g '[\]]'; g '[a\-z]'; g '[a-]'; g '[a-\z]'; g '[x-zb-da-c]'; g '[a-dc-b]'; g '[^b-df-h]'
+      g '[a-cd-f]'; g '[a-ec-f]'; g '[e-fa-b]'; g '[c-ca-b]'; g '[^x-z]'; g '[^-]'
+      g '[é-ſ]'; g '[ÿ-Ā]'; g '[Ā-ƀ]'; g '[߿-ࠀ]'; g '[ỿ-Ẁ]'; g '[ࠀ-𐀀]'; g '[^Ā-𐀀]'; g '[-é]'; g '[a-ÿ]'
+      g 'ab+c'; g 'ab?c'; g 'ab*c'; g '^a(b|c)$'; g 'a$'; g 'b$'
+      g 'a|b|c|d|e|f|g'; g '^(a|b|c|d|e|f|g|x)$'; g -i 'A|B|C|D|E|F|G'; g 'ab|ac|ad|ae|af|ag|ah'
+      g '[abcdefg]|x|y|z|-'
+      echo abc | grep '^ab'; {echo ab; echo a; echo ba} | grep 'a$'
+      grep 'a\' ch
+      g -v '[a-z]'; g -c 'a'; g -n 'b'
+      grep x ch /nonesuch; echo $status | sed 's/[0-9]+:/N:/'
+      grep -h zzz ch ch; echo $status | sed 's/[0-9]+:/N:/'
+      grep -n abc ch ch
+      grep -l abc ch /nonesuch ch; grep -L abc ch
+      echo abc | grep -e b
+      grep -e; grep -f; echo $status | sed 's/[0-9]+:/N:/'
+      grep '(a'; grep 'a)'; grep '[a'; grep '[a\'; grep ''; grep '*'
+      echo 'x
+      *a.
+      b.' >pf; grep -f pf ch | tr '\012' ' '; echo
+      echo 'a
+      (b' >pf2; grep -f pf2 ch
+      echo 'a\
+      b' >pf3; grep -f pf3 ch | tr '\012' ' '; echo
+      grep '[!"#$%&()*+,./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª«]' ch | sed 1q
+      grep '[!"#$%&()*+,./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª]' ch | sed 1q
+      echo end
+      """
+    Then it prints
+      """
+      a b c ab abc abbc ac abd 
+      b c d e f g h i x y z - ^ ] \ é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ 𐀀 ab abc abbc ac abd  
+      e f g h i x y z - ^ ] \ é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ 𐀀  
+      ] 
+      a z - ab abc abbc ac abd 
+      a ab abc abbc ac abd 
+      a b c d e f g h i x y z ab abc abbc ac abd 
+      a b c d x y z ab abc abbc ac abd 
+      a b c d ab abc abbc ac abd 
+      a e i x y z - ^ ] \ é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ 𐀀 ab abc abbc ac abd  
+      a b c d e f ab abc abbc ac abd 
+      a b c d e f ab abc abbc ac abd 
+      a b e f ab abc abbc ac abd 
+      a b c ab abc abbc ac abd 
+      a b c d e f g h i - ^ ] \ é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ 𐀀 ab abc abbc ac abd  
+      a b c d e f g h i x y z ^ ] \ é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ 𐀀 ab abc abbc ac abd  
+      é ÿ Ā ſ 
+      ÿ Ā 
+      Ā ſ ƀ 
+      ߿ ࠀ 
+
+      ࠀ ỿ Ẁ 𐀀 
+      a b c d e f g h i x y z - ^ ] \ é ÿ ab abc abbc ac abd  
+      - é 
+      a b c d e f g h i x y z é ÿ ab abc abbc ac abd  
+      abc abbc 
+      abc ac 
+      abc abbc ac 
+      ab ac 
+      a 
+      b ab 
+      a b c d e f g ab abc abbc ac abd 
+      a b c d e f g x 
+      a b c d e f g ab abc abbc ac abd 
+      ab abc abbc ac abd 
+      a b c d e f g x y z - ab abc abbc ac abd 
+      abc
+      a
+      ba
+      - ^ ] \ é ÿ Ā ſ ƀ ߿ ࠀ ỿ Ẁ 𐀀  
+      6 
+      2: b 27: ab 28: abc 29: abbc 31: abd 
+      ch:x
+      grep: can't open /nonesuch: file does not exist: '/nonesuch'
+
+      grep N: no matches
+      ch:28: abc
+      ch:28: abc
+      ch
+      grep: can't open /nonesuch: file does not exist: '/nonesuch'
+      ch
+      abc
+      usage: grep [-bchiLlnsv] [-e pattern] [-f patternfile] [file ...]
+      usage: grep [-bchiLlnsv] [-e pattern] [-f patternfile] [file ...]
+      grep N: usage
+      grep: (a: syntax error
+      grep: a): syntax error
+      grep: [a: empty pattern
+      grep: [a\: empty pattern
+      grep: empty pattern
+      grep: *: syntax error
+      x abc abbc abd 
+      grep: pf2:3: syntax error
+      a b ab abc abbc ac abd 
+      grep: internal error: class too big
+      a
+      end
+      """
+
+  @FOG_RC_RUN_288
+  Scenario: grep shows the lines it found before a read failed, once it has said so
+    Given a file server holding "notes" with "hello", on descriptor 3, whose reads after the first fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      grep l /tmp/fs/notes
+      ~ $status '' && echo found
+      """
+    Then it prints
+      """
+      grep: read error on /tmp/fs/notes: no reading
+      hello
+      found
+      """
