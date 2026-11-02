@@ -195,6 +195,14 @@ public sealed class BiobufTests : IAsyncLifetime
         bp.Bungetc();
         Assert.Equal('y', await bp.BgetcAsync());
         Assert.Equal(Biobuf.Beof, await bp.BgetcAsync());
+
+        // Before the end it leaves the next Bgetc past the buffer to read.
+        Biobuf more = Buffer(await FileAsync("/tmp/m", "x"u8.ToArray()));
+        Assert.Equal('x', await more.BgetcAsync());
+        more.Bungetc();
+        Assert.Equal('x', await more.BgetcAsync());
+        await init.PWriteAsync(await init.OpenAsync("/tmp/m", NinePConstants.OWRITE), "z"u8.ToArray(), 1);
+        Assert.Equal('z', await more.BgetcAsync());
     }
 
     // Bgetrune: an ASCII byte as it is; a rune of as many bytes as fullrune wants; a bad one the

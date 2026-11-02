@@ -1414,5 +1414,41 @@
     "mutator": "Statement mutation",
     "line": "p++;",
     "reason": "strtol's skip of blanks stays on the first"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Equality mutation",
+    "line": "if (ocount < Bsize)",
+    "reason": "Bputc flushes an empty buffer and tries again, never putting the byte"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Negate expression",
+    "line": "if (ocount < Bsize)",
+    "reason": "Bputc flushes an empty buffer and tries again, never putting the byte"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (ocount < Bsize) {",
+    "reason": "Bputc never puts the byte and flushes forever"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int p = 0; p < data.Length;)",
+    "reason": "Bwrite at the end of data copies nothing and writes the buffer forever"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Equality mutation",
+    "line": "if (n == 0)",
+    "reason": "Bwrite writes the buffer while it has room and never copies into it"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Equality mutation",
+    "line": "if (ocount == 0)",
+    "reason": "Bflush of a full buffer writes nothing, so Bputc flushes it forever"
   }
 ]

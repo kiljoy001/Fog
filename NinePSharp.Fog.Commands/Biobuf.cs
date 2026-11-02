@@ -266,6 +266,8 @@ public sealed class Biobuf(Process process, int fd)
                 }
 
                 oc = 0;
+
+                // Stryker disable once Statement : with nothing copied the loop comes round to the same test
                 continue;
             }
 
