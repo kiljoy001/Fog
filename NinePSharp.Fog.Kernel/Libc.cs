@@ -190,7 +190,7 @@ public static class Libc
         // -327 or 310; the closest double is the same without either.
         string digits = a.ToString();
         dp = unchecked((dpoint ? dp : digits.Length) + (esign ? -ex : ex));
-        double d = digits.Length == 0 ? 0 : double.Parse($"0.{digits}e{dp}", CultureInfo.InvariantCulture);
+        double d = double.Parse($"0.{digits}e{dp}", CultureInfo.InvariantCulture);
         return sign ? -d : d;
     }
 
@@ -832,8 +832,9 @@ public static class Libc
             return;
         }
 
-        // Stryker disable once Equality : a rune past the precision is not copied, as _fmtcpy stops there
         int i = 0, j = 0;
+
+        // Stryker disable once Equality : a rune past the precision is not copied, as _fmtcpy stops there
         for (; j < f.Prec && i < m.Length; j++)
         {
             i += Utf.CharToRune(out _, m.AsSpan(i));

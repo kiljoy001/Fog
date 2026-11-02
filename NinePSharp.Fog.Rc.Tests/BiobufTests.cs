@@ -155,6 +155,118 @@ public sealed class BiobufTests : IAsyncLifetime
         Assert.Equal(0, bp.Blinelen);
     }
 
+    // Bgetc: each byte, Iof before each read; at the end Beof, and once more before it reads again,
+    // when a byte added since is there; a read that fails is told once and gives Beof from then on,
+    // the byte before it not given back.
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
+    public async Task BgetcGivesBeofOnceMoreBeforeReadingAgain()
+    {
+        int fd = await FileAsync("/tmp/g", "a"u8.ToArray());
+        int iof = 0;
+        Biobuf bp = Buffer(fd);
+        bp.Iof = () => Task.FromResult(iof++);
+        Assert.Equal('a', await bp.BgetcAsync());
+        Assert.Equal(Biobuf.Beof, await bp.BgetcAsync());
+        await init.PWriteAsync(await init.OpenAsync("/tmp/g", NinePConstants.OWRITE), "b"u8.ToArray(), 1);
+        Assert.Equal(Biobuf.Beof, await bp.BgetcAsync());
+        Assert.Equal('b', await bp.BgetcAsync());
+        Assert.Equal(3, iof);
+
+        Biobuf closed = Buffer(9);
+        Assert.Equal(Biobuf.Beof, await closed.BgetcAsync());
+        Assert.Equal("fd out of range or not open", Errstr.Get(init));
+        Errstr.Set(init, string.Empty);
+        closed.Bungetc();
+        Assert.Equal(Biobuf.Beof, await closed.BgetcAsync());
+        Assert.Equal(["read error: fd out of range or not open"], errors);
+        Assert.Equal(string.Empty, Errstr.Get(init));
+    }
+
+    // Bungetc gives back the byte Bgetc gave, and at the end, a Beof no longer due.
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
+    public async Task BungetcGivesBackTheLastByte()
+    {
+        Biobuf bp = Buffer(await FileAsync("/tmp/u", "xy"u8.ToArray()));
+        Assert.Equal('x', await bp.BgetcAsync());
+        bp.Bungetc();
+        Assert.Equal('x', await bp.BgetcAsync());
+        Assert.Equal('y', await bp.BgetcAsync());
+        Assert.Equal(Biobuf.Beof, await bp.BgetcAsync());
+        bp.Bungetc();
+        Assert.Equal('y', await bp.BgetcAsync());
+        Assert.Equal(Biobuf.Beof, await bp.BgetcAsync());
+    }
+
+    // Bgetrune: an ASCII byte as it is; a rune of as many bytes as fullrune wants; a bad one the
+    // error rune, its bytes past the first given back; a NUL in a rune ends it; and a rune the
+    // input ends in, Beof.
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
+    public async Task BgetruneReadsAsManyBytesAsFullruneWants()
+    {
+        Biobuf bp = Buffer(await FileAsync("/tmp/r", [0x7f, 0xc3, 0xa9, 0x80, (byte)'a', 0xe2, (byte)'b', (byte)'c', 0xc3, 0, 0xe2, 0x82]));
+        Assert.Equal(0x7f, await bp.BgetruneAsync());
+        Assert.Equal('é', await bp.BgetruneAsync());
+        Assert.Equal(0xfffd, await bp.BgetruneAsync());
+        Assert.Equal('a', await bp.BgetruneAsync());
+        Assert.Equal(0xfffd, await bp.BgetruneAsync());
+        Assert.Equal('b', await bp.BgetruneAsync());
+        Assert.Equal('c', await bp.BgetruneAsync());
+        Assert.Equal(0xfffd, await bp.BgetruneAsync());
+        Assert.Equal(0, await bp.BgetruneAsync());
+        Assert.Equal(Biobuf.Beof, await bp.BgetruneAsync());
+    }
+
+    // Bputc fills the buffer and writes it when full, and gives Beof once that fails; Bputrune
+    // puts a rune's bytes, an ASCII one as a byte, and gives Beof when its write fails.
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
+    public async Task BputcAndBputruneWriteWhenTheBufferIsFull()
+    {
+        int fd = await FileAsync("/tmp/p", []);
+        Biobuf bp = Buffer(fd);
+        for (int i = 0; i <= Bsize; i++)
+        {
+            Assert.Equal(0, await bp.BputcAsync((byte)'x'));
+        }
+
+        Assert.Equal((ulong)Bsize, (await init.FStatAsync(fd)).Length);
+        Assert.Equal(1, await bp.BputruneAsync(0x7f));
+        Assert.Equal(2, await bp.BputruneAsync(0x80));
+        Assert.Equal(0, await bp.BflushAsync());
+        Assert.Equal((ulong)Bsize + 4, (await init.FStatAsync(fd)).Length);
+
+        Biobuf closed = Buffer(9);
+        for (int i = 0; i < Bsize; i++)
+        {
+            await closed.BputcAsync((byte)'x');
+        }
+
+        Assert.Equal(Biobuf.Beof, await closed.BputcAsync((byte)'x'));
+        Biobuf full = Buffer(9);
+        await full.BwriteAsync(new byte[Bsize - 1]);
+        Assert.Equal(Biobuf.Beof, await full.BputruneAsync('é'));
+        Assert.Equal(2, errors.Count);
+    }
+
+    // Bwrite of more than two buffers writes each whole buffer once.
+    [Fact(Timeout = SecstoreHarness.TestTimeout)]
+    public async Task BwriteWritesEachFullBufferOnce()
+    {
+        int fd = await FileAsync("/tmp/w", []);
+        Biobuf bp = Buffer(fd);
+        byte[] data = [.. Enumerable.Range(0, (2 * Bsize) + 1).Select(i => (byte)i)];
+        Assert.Equal(data.Length, await bp.BwriteAsync(data));
+        Assert.Equal(0, await bp.BflushAsync());
+        Assert.Equal(data, (await init.PReadAsync(fd, data.Length + 1, 0)).ToArray());
+    }
+
+    private async Task<int> FileAsync(string name, byte[] data)
+    {
+        int fd = await init.CreateAsync(name, NinePConstants.ORDWR, 0b110_110_110);
+        await init.PWriteAsync(fd, data, 0);
+        await init.SeekAsync(fd, 0, 0);
+        return fd;
+    }
+
     private Biobuf Buffer(int fd) => new(init, fd)
     {
         Errorf = message =>

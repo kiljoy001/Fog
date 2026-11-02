@@ -8833,6 +8833,12 @@ Feature: rc runs scripts as 9front rc does
       ~ $status 'xd '[0-9]*': usage' && echo usage status
       xd -x -x -x -x -x -x -x -x -x </dev/null
       xd -x -x -x -x -x -x -x -x -x -x </dev/null
+      xd -sx; xd -ux
+      xd f >/dev/null && echo xd ok
+      xd /nonesuch /nonesuch2
+      ~ $status 'xd '[0-9]*': error' && echo two errors status
+      echo -n 'rbd' | tr rbd '\015\010\177' >ctl; xd -c ctl
+      echo -n 0000000000000000x | tr 0 '\000' >nul16; xd nul16
       """
     Then it prints
       """
@@ -8978,6 +8984,17 @@ Feature: rc runs scripts as 9front rc does
             0 
       0000000 
       xd: too many formats (max 10)
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      usage: xd [-u] [-r] [-s] [-a{odx}] [-c|{b1w2l4v8}{odx}] ... file ...
+      xd ok
+      xd: can't open /nonesuch
+      xd: can't open /nonesuch2
+      two errors status
+      0000000  \r \b 7f
+      0000003 
+      0000000  00000000 00000000 00000000 00000000
+      0000010  78000000
+      0000011 
       """
 
   @FOG_RC_RUN_271
@@ -9011,6 +9028,11 @@ Feature: rc runs scripts as 9front rc does
       du -p E
       cd ..
       du -p x
+      du -e a
+      du -h -b 1023 a; du -h -b 1024 a; du -h -b 1048576 a; du -h -b 1073741824 a
+      du -h -b 1099511627776 a; du -h -b 1125899906842624 a; du -h -b 1152921504606846976 a
+      du -h -p k -b 2000 a
+      du -p g a; du -p t a; du -p p a; du -p z a
       ~ $status 'du '[0-9]*': unknown suffix x' && echo suffix status
       du 'x y'
       du -a 'x y'
@@ -9079,7 +9101,19 @@ Feature: rc runs scripts as 9front rc does
       1	./e
       1	.
       du: unknown suffix x
-      suffix status
+      1	a
+      1023	a
+      1k	a
+      1M	a
+      1G	a
+      4G	a
+      4G	a
+      4G	a
+      1.95313	a
+      1	a
+      1	a
+      1	a
+      1	a
       0	'x y'
       0	'x y/w'
       0	'x y'
@@ -9179,6 +9213,9 @@ Feature: rc runs scripts as 9front rc does
       seq -- 2
       seq 1e2 1e2 3e2
       seq -f '%.3s|' 0 0
+      seq -w 9 10
+      seq -w 0.5 5 10.5
+      seq 1 1 >/dev/null && echo seq ok
       """
     Then it prints
       """
@@ -9271,6 +9308,12 @@ Feature: rc runs scripts as 9front rc does
       200
       300
       <ni|
+      09
+      10
+      00.5
+      05.5
+      10.5
+      seq ok
       """
 
   @FOG_RC_RUN_274

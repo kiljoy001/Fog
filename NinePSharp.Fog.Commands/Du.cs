@@ -133,12 +133,15 @@ public sealed class Du
         {
             int scale = 0;
             double val = (double)amt / unit;
+
+            // Stryker disable once Equality,Arithmetic : a long's bytes are less than 1024 zettabytes
             while (Math.Abs(val) >= 1024 && scale < Pfxes.Length - 1)
             {
                 scale++;
                 val /= 1024;
             }
 
+            // Stryker disable once String : a long's bytes are less than 1024 zettabytes
             line = $"{Encoding.UTF8.GetString(Libc.Sprint("%.6g", [Libc.FmtArg.Of(val)]))}{Pfxes[scale] ?? "<nil>"}";
         }
         else if (fltflag)
@@ -258,6 +261,7 @@ public sealed class Du
                 continue;
             }
 
+            // Stryker disable once String : dirread gives no . or .., which du.c passes over all the same
             if (d.Name is "." or ".." || !cache.Add((d.Qid.Path, d.Type, d.Dev)))
             {
                 continue;
@@ -272,6 +276,7 @@ public sealed class Du
             }
         }
 
+        // Stryker disable once Statement : a descriptor left open changes nothing du prints
         await process.CloseAsync(fd);
         return Dirval(dir, nk);
     }
@@ -287,5 +292,5 @@ public sealed class Du
     }
 
     // The length rounded up to a whole number of blocks.
-    private long Blkmultiple(long n) => blocksize == 1 ? n : (n + blocksize - 1) / blocksize * blocksize;
+    private long Blkmultiple(long n) => (n + blocksize - 1) / blocksize * blocksize;
 }

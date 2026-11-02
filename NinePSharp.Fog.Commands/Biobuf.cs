@@ -132,6 +132,7 @@ public sealed class Biobuf(Process process, int fd)
             return Beof;
         }
 
+        // Stryker disable once Statement : keeping the bytes before them changes no byte Bgetc or Bungetc gives
         buffer.RemoveRange(0, Math.Max(0, buffer.Count - Bungetsize));
         gpos = buffer.Count;
         ReadOnlyMemory<byte> read;

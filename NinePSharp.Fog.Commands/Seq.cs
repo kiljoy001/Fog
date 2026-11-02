@@ -54,10 +54,12 @@ public sealed class Seq
         }
 
         seq.format ??= seq.Buildfmt();
+
+        // Stryker disable once Equality : an increment of 0 has been refused
         for (double val = seq.min; seq.incr > 0 ? val <= seq.max : val >= seq.max; val += seq.incr)
         {
             byte[] buf = Libc.Sprint(seq.format, [Libc.FmtArg.Of(val)]);
-            for (int j = 0; seq.constant && j < buf.Length && buf[j] == ' '; j++)
+            for (int j = 0; seq.constant && buf[j] == ' '; j++)
             {
                 buf[j] = (byte)'0';
             }
@@ -89,7 +91,11 @@ public sealed class Seq
             }
 
             int dp = buf.IndexOf('.', StringComparison.Ordinal);
+
+            // Stryker disable once Equality : %g puts a digit or a sign before any point
             maxw = Math.Max(maxw, dp < 0 ? buf.Length : dp);
+
+            // Stryker disable once Equality : %g puts a digit or a sign before any point
             maxp = Math.Max(maxp, dp < 0 ? 0 : buf.Length - dp - 1);
         }
 

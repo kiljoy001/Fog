@@ -49,6 +49,7 @@ public sealed class LibcTests
         { "%hd", [Libc.FmtArg.Of(65537L)], "31" },
         { "%hd", [Libc.FmtArg.Of(-1L)], "2d31" },
         { "%hhd", [Libc.FmtArg.Of(257L)], "31" },
+        { "%lhd", [Libc.FmtArg.Of(65537L)], "3635353337" },
         { "%hhd", [Libc.FmtArg.Of(255L)], "2d31" },
         { "%hhud", [Libc.FmtArg.Of(255L)], "323535" },
         { "%hud", [Libc.FmtArg.Of(-1L)], "3635353335" },
@@ -317,6 +318,7 @@ public sealed class LibcTests
     [InlineData(-161, "1e81fee341fc585d")]
     [InlineData(-160, "1eb67e9c127b6e74")]
     [InlineData(-159, "1eec1e43171a4a12")]
+    [InlineData(-46, "366244ce242c5561")]
     [InlineData(-1, "3fb999999999999a")]
     [InlineData(0, "3ff0000000000000")]
     [InlineData(1, "4024000000000000")]
@@ -464,5 +466,29 @@ public sealed class LibcTests
     public void SprintPrintsAsDofmtDoes(string format, Libc.FmtArg[] args, string hex)
     {
         Assert.Equal(hex, Convert.ToHexString(Libc.Sprint(format, args, "an error")).ToLowerInvariant());
+    }
+
+    // %s of bytes as they are: as far as a NUL, a byte that begins no rune the error rune, and
+    // where fullrune says the bytes left are too few for a rune, no more.
+    [Fact]
+    public void SprintTakesStringsOfBytes()
+    {
+        Assert.Equal(string.Empty, Convert.ToHexString(Libc.Sprint("%s"u8.ToArray(), [Libc.FmtArg.Of(new byte[] { 0, 0x41 })])));
+        Assert.Equal("EFBFBD41424344", Convert.ToHexString(Libc.Sprint("%s"u8.ToArray(), [Libc.FmtArg.Of(new byte[] { 0xff, 0x41, 0x42, 0x43, 0x44 })])));
+        Assert.Equal(string.Empty, Convert.ToHexString(Libc.Sprint("%s"u8.ToArray(), [Libc.FmtArg.Of(new byte[] { 0xff, 0x41 })])));
+        Assert.Equal("FF25", Convert.ToHexString(Libc.Sprint(new byte[] { 0xff, (byte)'%', (byte)'%' }, [])));
+    }
+
+    // %q and %Q, as quotefmtinstall installs them, and as no verb without it, as awk's printf
+    // prints them on 9front.
+    [Fact]
+    public void QuoteVerbsQuoteAsQuotefmtinstallsDo()
+    {
+        static string Q(string format, params string[] args)
+            => System.Text.Encoding.UTF8.GetString(Libc.Sprint(System.Text.Encoding.UTF8.GetBytes(format), [.. args.Select(Libc.FmtArg.Of)], quotefmt: true));
+
+        Assert.Equal("   ab|'a b' |a|''|'x''y'|'a '|  é|", Q("%5q|%-6q|%.1q|%q|%q|%.2q|%3q|", "ab", "a b", "abc", string.Empty, "x'y", "a b", "é"));
+        Assert.Equal("'ab'|'a\tb'|<nil>|' é'", Q("%#q|%q|%q|%Q", "ab", "a\tb", null!, " é"));
+        Assert.Equal("%q%", System.Text.Encoding.UTF8.GetString(Libc.Sprint("%q"u8.ToArray(), [Libc.FmtArg.Of("a b")])));
     }
 }
