@@ -705,12 +705,13 @@ internal sealed class Preview1Host(Process process, TimeProvider clock)
         return buffers;
     }
 
-    // With APPEND, a write at the descriptor's offset first moves it to the file's end.
+    // With APPEND, a write at the descriptor's offset first moves it to the file's end; a pipe,
+    // whose writes come at its end, refuses the seek, as sysseek does, so is not moved.
     private Errno Write(int fd, uint vector, uint count, long offset, uint written)
     {
         byte[] data = Gather(vector, count);
         memory.Check(written, 4);
-        if (offset < 0 && (flags.GetValueOrDefault(fd) & Append) != 0)
+        if (offset < 0 && (flags.GetValueOrDefault(fd) & Append) != 0 && Stat(fd).Type != '|')
         {
             Wait(process.SeekAsync(fd, 0, 2));
         }
