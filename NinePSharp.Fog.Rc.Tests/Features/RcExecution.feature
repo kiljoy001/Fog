@@ -12159,3 +12159,447 @@ Feature: rc runs scripts as 9front rc does
       b é c
       end
       """
+
+  @FOG_RC_RUN_296
+  Scenario: sort's keys as -v shows their bytes, its option forms and the status each error leaves, its temporary files and how many it merges at once
+    When rc runs the script
+      """
+      mkdir /tmp/sp; cd /tmp/sp
+      fn st { ~ $status 'sort '[0-9]*': '$1 && echo $1 status }
+      {echo 007; echo -0.0; echo .; echo 1e; echo 1e-; echo -e; echo 00.00; echo 1.50; echo 1.5; echo 1e12; echo 1e-12; echo -1e9; echo 12e3x; echo 0e0; echo -.5; echo 100} >nums
+      sort -v -n nums >[2=1]; sort -v -g nums >[2=1]; sort -v -rn nums >[2=1]
+      {echo 'aé~'; echo 'Ab'; echo 'a b'; echo '~x'; echo 'é'} >chars
+      sort -v -f chars >[2=1]; sort -v -d chars >[2=1]; sort -v -i chars >[2=1]; sort -v -r chars >[2=1]; sort -v -w chars >[2=1]; sort -v -dfir chars >[2=1]
+      sort -v -k 1b,1 -b chars >[2=1]; sort -v -k2.1,2.0 chars >[2=1]; sort -v -k,1 chars >[2=1] | sed 2q
+      {echo a; echo ab; echo a} | sort -u; {echo a; echo ab; echo a} | sort -cu; st order
+      sort +x; st option; sort -k 0; st option; sort -k 1.0; st option; sort -k 1,2Q; st option; sort -nM nums; st option; sort -k1 -n nums | sed 1q
+      sort +1 +2 +3 +4 +5 +6 +7 +8 +9 +10 +11 +12 +13 +14 +15 +16 +17 +18 +19 +20 +21 nums; st option
+      sort -o /nonesuch/x nums; st create; {sort -T /nonesuch -l 1 nums >[2=1]; st create} | sed 's/sort\.[0-9]+\./sort.N./'
+      sort -ox1 -o nums; sed 1q x1; sort -o x2 nums -T; sed 1q x2; sort -Tx -T /tmp -l 2 nums | sed 1q
+      sort -k; sort -v -k2 -k3,4 -k ,2 -1 -2 +1 -3 -.5 </dev/null; sort -l; sort -l5 nums | sed 1q; sort -t; sort -tx nums | sed 1q
+      seq 1 100 | sort -l 10 -T /tmp/sp | sed -n '1p;100p'; seq 1 110 | sort -l 10 -T /tmp/sp | sed -n '1p;110p'; ls /tmp/sp | grep -c '^sort\.'
+      for(i in 1 2 3 4 5 6 7) {echo X$i; echo x$i} >>f14; sort -f f14 | sed 3q; echo Xz >>f14; sort -f f14 | sed 3q; echo xz >>f14; sort -f f14 | sed 3q
+      echo end
+      """
+    Then it prints
+      """
+      sort -n
+      007
+       30 40 41 37 00
+      -0.0
+       20 00
+      .
+       20 00
+      1e
+       30 40 41 31 00
+      1e-
+       30 40 41 31 00
+      -e
+       20 00
+      00.00
+       20 00
+      1.50
+       30 40 41 31 35 00
+      1.5
+       30 40 41 31 35 00
+      1e12
+       30 40 41 31 00
+      1e-12
+       30 40 41 31 00
+      -1e9
+       10 bf be ce ff
+      12e3x
+       30 40 42 31 32 00
+      0e0
+       20 00
+      -.5
+       10 bf bf ca ff
+      100
+       30 40 43 31 00
+      =========
+      -1e9
+      -.5
+      -0.0
+      .
+      0e0
+      -e
+      00.00
+      1e12
+      1e-12
+      1e
+      1e-
+      1.50
+      1.5
+      007
+      12e3x
+      100
+      sort -g
+      007
+       30 40 41 37 00
+      -0.0
+       20 00
+      .
+       20 00
+      1e
+       30 40 41 31 00
+      1e-
+       30 40 41 31 00
+      -e
+       20 00
+      00.00
+       20 00
+      1.50
+       30 40 41 31 35 00
+      1.5
+       30 40 41 31 35 00
+      1e12
+       30 40 4d 31 00
+      1e-12
+       30 40 35 31 00
+      -1e9
+       10 bf b5 ce ff
+      12e3x
+       30 40 45 31 32 00
+      0e0
+       20 00
+      -.5
+       10 bf bf ca ff
+      100
+       30 40 43 31 00
+      =========
+      -1e9
+      -.5
+      -0.0
+      .
+      0e0
+      -e
+      00.00
+      1e-12
+      1e
+      1e-
+      1.50
+      1.5
+      007
+      100
+      12e3x
+      1e12
+      sort -n -r
+      007
+       10 bf be c8 ff
+      -0.0
+       20 00
+      .
+       20 00
+      1e
+       10 bf be ce ff
+      1e-
+       10 bf be ce ff
+      -e
+       20 00
+      00.00
+       20 00
+      1.50
+       10 bf be ce ca ff
+      1.5
+       10 bf be ce ca ff
+      1e12
+       10 bf be ce ff
+      1e-12
+       10 bf be ce ff
+      -1e9
+       30 40 41 31 00
+      12e3x
+       10 bf bd ce cd ff
+      0e0
+       20 00
+      -.5
+       30 40 40 35 00
+      100
+       10 bf bc ce ff
+      =========
+      100
+      12e3x
+      007
+      1.50
+      1.5
+      1e12
+      1e-12
+      1e
+      1e-
+      -0.0
+      .
+      -e
+      00.00
+      0e0
+      -.5
+      -1e9
+      	 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f
+      	 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+      	 20 21 22 23 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f
+      	 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3e 3f
+      	 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f
+      	 60 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 7b 7c 7d 7e 7f
+      	 80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f
+      	 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f
+      	 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af
+      	 b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ba bb bc bd be bf
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f d7 4f 55 55 55 55 59 de df
+      	 41 41 41 41 41 41 41 43 45 45 45 45 49 49 49 49
+      	 44 4e 4f 4f 4f 4f 4f f7 4f 55 55 55 55 59 fe ff
+      sort -f
+      aé~
+       41 45 7e 00
+      Ab
+       41 42 00
+      a b
+       41 20 42 00
+      ~x
+       7e 58 00
+      é
+       45 00
+      =========
+      a b
+      Ab
+      aé~
+      é
+      ~x
+      	 00 00 00 00 00 00 00 00 00 09 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 30 31 32 33 34 35 36 37 38 39 00 00 00 00 00 00
+      	 00 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 00 00 00 00 00
+      	 00 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f
+      	 70 71 72 73 74 75 76 77 78 79 7a 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 c0 c1 c2 c3 c4 c5 c6 c7 c8 c9 ca cb cc cd ce cf
+      	 d0 d1 d2 d3 d4 d5 d6 00 d8 d9 da db dc dd 00 00
+      	 e0 e1 e2 e3 e4 e5 e6 e7 e8 e9 ea eb ec ed ee ef
+      	 f0 f1 f2 f3 f4 f5 f6 00 f8 f9 fa fb fc fd 00 00
+      sort -d
+      aé~
+       61 c3 a9 00
+      Ab
+       41 62 00
+      a b
+       61 20 62 00
+      ~x
+       78 00
+      é
+       c3 a9 00
+      =========
+      Ab
+      a b
+      aé~
+      ~x
+      é
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 20 21 22 23 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f
+      	 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3e 3f
+      	 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f
+      	 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f
+      	 70 71 72 73 74 75 76 77 78 79 7a 7b 7c 7d 7e 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      sort -i
+      aé~
+       61 7e 00
+      Ab
+       41 62 00
+      a b
+       61 20 62 00
+      ~x
+       7e 78 00
+      é
+       00
+      =========
+      é
+      Ab
+      a b
+      aé~
+      ~x
+      sort -r
+      aé~
+       9e 3c 56 81 ff
+      Ab
+       be 9d ff
+      a b
+       9e df 9d ff
+      ~x
+       81 87 ff
+      é
+       3c 56 ff
+      =========
+      é
+      ~x
+      aé~
+      a b
+      Ab
+      	 00 01 02 03 04 05 06 07 08 00 0a 0b 0c 0d 0e 0f
+      	 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+      	 00 21 22 23 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f
+      	 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3e 3f
+      	 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f
+      	 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f
+      	 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f
+      	 70 71 72 73 74 75 76 77 78 79 7a 7b 7c 7d 7e 7f
+      	 80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f
+      	 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f
+      	 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af
+      	 b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ba bb bc bd be bf
+      	 c0 c1 c2 c3 c4 c5 c6 c7 c8 c9 ca cb cc cd ce cf
+      	 d0 d1 d2 d3 d4 d5 d6 d7 d8 d9 da db dc dd de df
+      	 e0 e1 e2 e3 e4 e5 e6 e7 e8 e9 ea eb ec ed ee ef
+      	 f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 fa fb fc fd fe ff
+      sort -w
+      aé~
+       61 c3 a9 7e 00
+      Ab
+       41 62 00
+      a b
+       61 62 00
+      ~x
+       7e 78 00
+      é
+       c3 a9 00
+      =========
+      Ab
+      a b
+      aé~
+      ~x
+      é
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 df 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 cf ce cd cc cb ca c9 c8 c7 c6 00 00 00 00 00 00
+      	 00 be bd bc bb ba b9 b8 b7 b6 b5 b4 b3 b2 b1 b0
+      	 af ae ad ac ab aa a9 a8 a7 a6 a5 00 00 00 00 00
+      	 00 be bd bc bb ba b9 b8 b7 b6 b5 b4 b3 b2 b1 b0
+      	 af ae ad ac ab aa a9 a8 a7 a6 a5 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      	 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      sort -d -f -i -r
+      aé~
+       be ff
+      Ab
+       be bd ff
+      a b
+       be df bd ff
+      ~x
+       a7 ff
+      é
+       ff
+      =========
+      ~x
+      Ab
+      a b
+      aé~
+      é
+      sort: global field set after -k
+      sort -b +0.*b -1.*
+      aé~
+       61 c3 a9 7e 00
+       61 c3 a9 7e 00
+      Ab
+       41 62 00
+       41 62 00
+      a b
+       61 00
+       61 20 62 00
+      ~x
+       7e 78 00
+       7e 78 00
+      é
+       c3 a9 00
+       c3 a9 00
+      =========
+      Ab
+      a b
+      aé~
+      ~x
+      é
+      sort +1.0 -2.0
+      aé~
+       00
+       61 c3 a9 7e 00
+      Ab
+       00
+       41 62 00
+      a b
+       20 62 00
+       61 20 62 00
+      ~x
+       00
+       7e 78 00
+      é
+       00
+       c3 a9 00
+      =========
+      Ab
+      aé~
+      ~x
+      é
+      a b
+      sort +*.* -1.*
+      aé~
+      a
+      ab
+      sort: -c file not in sort
+      order status
+      sort: unknown option: +x
+      option status
+      sort: field offset must be positive
+      option status
+      sort: character offset must be positive
+      option status
+      sort: unknown option: field.Q
+      option status
+      sort: illegal combination of flags: c0
+      option status
+      sort: global field set after -k
+      -1e9
+      sort: too many fields specified
+      option status
+      sort: create /nonesuch/x: file does not exist: '/nonesuch'
+      create status
+      sort: create /nonesuch/sort.N.0000: file does not exist: '/nonesuch'
+      create status
+      sed: Can't open x1
+      sort +1.* -*.* +2.* -4.* +*.* -2.* +*.* -1.* +*.* -2.* +1.* -3.* +*.* -*.5
+      =========
+      1
+      99
+      1
+      99
+      0
+      X1
+      x1
+      X2
+      X1
+      x1
+      X2
+      X1
+      x1
+      X2
+      end
+      """
