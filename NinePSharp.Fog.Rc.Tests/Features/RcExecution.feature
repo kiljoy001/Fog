@@ -8885,6 +8885,10 @@ Feature: rc runs scripts as 9front rc does
       ~ $status 'xd '[0-9]*': error' && echo two errors status
       echo -n 'rbd' | tr rbd '\015\010\177' >ctl; xd -c ctl
       echo -n 0000000000000000x | tr 0 '\000' >nul16; xd nul16
+      xd -r nul16; echo -n 00000000000000000000000000000000 | tr 0 '\000' | xd -r
+      xd f u >/dev/null && echo two files ok
+      xd -x -x -x -x -x -x -x -x -x -x </dev/null; ~ $status 'xd '[0-9]*': usage' && echo formats status
+      echo end
       """
     Then it prints
       """
@@ -9041,6 +9045,17 @@ Feature: rc runs scripts as 9front rc does
       0000000  00000000 00000000 00000000 00000000
       0000010  78000000
       0000011 
+      0000000  00000000 00000000 00000000 00000000
+      0000010  78000000
+      0000011 
+      0000000  00000000 00000000 00000000 00000000
+      *
+      0000020 
+      0000020 
+      two files ok
+      xd: too many formats (max 10)
+      formats status
+      end
       """
 
   @FOG_RC_RUN_271
@@ -9073,8 +9088,8 @@ Feature: rc runs scripts as 9front rc does
       du -p Y
       du -p E
       cd ..
-      du -p x
-      du -e a
+      du -p x; ~ $status 'du '[0-9]*': unknown suffix x' && echo suffix status x
+      du -e a; du -e -p m a; du -e -b 1 a
       du -h -b 1023 a; du -h -b 1024 a; du -h -b 1048576 a; du -h -b 1073741824 a
       du -h -b 1099511627776 a; du -h -b 1125899906842624 a; du -h -b 1152921504606846976 a
       du -h -p k -b 2000 a
@@ -9147,7 +9162,10 @@ Feature: rc runs scripts as 9front rc does
       1	./e
       1	.
       du: unknown suffix x
+      suffix status x
       1	a
+      0.000976563	a
+      0.00488281	a
       1023	a
       1k	a
       1M	a
@@ -11857,4 +11875,21 @@ Feature: rc runs scripts as 9front rc does
             29: héllo wörld
              0: abcdefgh
       end
+      """
+
+  @FOG_RC_RUN_293
+  Scenario: du warns of a directory it cannot read and counts it as empty
+    Given a file server holding "notes" with "hello", on descriptor 3, whose directory's reads fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      du -a /tmp/fs
+      ~ $status '' && echo du status
+      """
+    Then it prints
+      """
+      du: /tmp/fs: no reading
+      0	/tmp/fs
+      du status
       """

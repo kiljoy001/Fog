@@ -647,15 +647,25 @@ public sealed partial class Process
         }
     }
 
+    // dirreadall: the entries read until a read ends them; a read that fails fails it only when
+    // nothing came before.
     public async ValueTask<IReadOnlyList<Stat>> DirReadAsync(int fd)
     {
         var entries = new List<Stat>();
-        for (ReadOnlyMemory<byte> block; !(block = await ReadAsync(fd, 8192)).IsEmpty;)
+        bool read = false;
+        try
         {
-            for (int offset = 0; offset < block.Length;)
+            for (ReadOnlyMemory<byte> block; !(block = await ReadAsync(fd, 8192)).IsEmpty;)
             {
-                entries.Add(new Stat(block.Span, ref offset));
+                read = true;
+                for (int offset = 0; offset < block.Length;)
+                {
+                    entries.Add(new Stat(block.Span, ref offset));
+                }
             }
+        }
+        catch (SyscallException) when (read)
+        {
         }
 
         return entries;

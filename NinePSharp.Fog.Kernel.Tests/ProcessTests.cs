@@ -42,6 +42,27 @@ public sealed class ProcessTests
         Assert.Equal("GMT 0 GMT 0\n0\n\n", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 100)).Span));
     }
 
+    // dirreadall: what came before a read that fails is kept, and only a first read's failure is
+    // the call's.
+    [Fact]
+    public async Task ADirectoryReadKeepsTheEntriesBeforeAReadThatFails()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        init.Notify(note => note == "interrupt");
+        (int r, int w) = await init.PipeAsync();
+        var stat = new NinePSharp.Messages.Stat(0, 0, 0, new NinePSharp.Constants.Qid(NinePSharp.Constants.QidType.QTFILE, 0, 1), 0b110_100_100, 0, 0, 0, "x", "glenda", "glenda", "glenda");
+        await init.WriteAsync(w, KernelFileStats.Encode(stat));
+        Task<IReadOnlyList<NinePSharp.Messages.Stat>> kept = init.DirReadAsync(r).AsTask();
+        await Task.Delay(100);
+        Assert.True(init.PostNote("interrupt"));
+        Assert.Equal(["x"], (await kept.WaitAsync(TimeSpan.FromSeconds(5))).Select(entry => entry.Name));
+
+        Task<IReadOnlyList<NinePSharp.Messages.Stat>> none = init.DirReadAsync(r).AsTask();
+        await Task.Delay(100);
+        Assert.True(init.PostNote("interrupt"));
+        Assert.Equal("interrupted", (await Assert.ThrowsAsync<SyscallException>(() => none.WaitAsync(TimeSpan.FromSeconds(5)))).Message);
+    }
+
     [Fact]
     public async Task ExecWithoutArgumentsIsABadArgument()
     {

@@ -182,6 +182,7 @@ public sealed class Xd
             await ExitsAsync("usage");
         }
 
+        // Stryker disable once Equality : a format a flag names has its address format set again after its letters, and the default's narg is 1, below 2 either way
         arg[ap] = new Arg { Afmt = (narg > 1, abase) };
     }
 
@@ -209,6 +210,8 @@ public sealed class Xd
         }
 
         addr = 0;
+
+        // Stryker disable once Boolean : the first block, at address 0, is never a repeat, and clears it before it is read
         bool star = false;
         while ((ndata = await bp.BreadAsync(data, 16)) >= 0)
         {

@@ -242,43 +242,61 @@ public sealed class Du
             return await WarnAsync(name, error.Message);
         }
 
-        IReadOnlyList<Stat> entries = [];
-        try
-        {
-            entries = await process.DirReadAsync(fd);
-        }
-        catch (SyscallException error)
-        {
-            await WarnAsync(name, error.Message);
-        }
-
+        // dirread a block at a time, each block's entries counted before a read that fails is warned of.
         long nk = 0;
-        foreach (Stat d in entries)
+        for (List<Stat> entries; (entries = await DirreadAsync(name, fd)).Count > 0;)
         {
-            if ((d.Qid.Type & QidType.QTDIR) == 0)
+            foreach (Stat d in entries)
             {
-                nk += await DufileAsync(name, d);
-                continue;
-            }
+                if ((d.Qid.Type & QidType.QTDIR) == 0)
+                {
+                    nk += await DufileAsync(name, d);
+                    continue;
+                }
 
-            // Stryker disable once String : dirread gives no . or .., which du.c passes over all the same
-            if (d.Name is "." or ".." || !cache.Add((d.Qid.Path, d.Type, d.Dev)))
-            {
-                continue;
-            }
+                // Stryker disable once String : dirread gives no . or .., which du.c passes over all the same
+                if (d.Name is "." or ".." || !cache.Add((d.Qid.Path, d.Type, d.Dev)))
+                {
+                    continue;
+                }
 
-            string file = $"{name}/{d.Name}";
-            long t = await DuAsync(file, d);
-            nk += t;
-            if (!sflag)
-            {
-                await PrintamtAsync(Dirval(d, t), file);
+                string file = $"{name}/{d.Name}";
+                long t = await DuAsync(file, d);
+                nk += t;
+                if (!sflag)
+                {
+                    await PrintamtAsync(Dirval(d, t), file);
+                }
             }
         }
 
         // Stryker disable once Statement : a descriptor left open changes nothing du prints
         await process.CloseAsync(fd);
         return Dirval(dir, nk);
+    }
+
+    // dirread: the entries of the next block, none at the end or, once warned of, after a read that
+    // fails.
+    private async Task<List<Stat>> DirreadAsync(string name, int fd)
+    {
+        var entries = new List<Stat>();
+        ReadOnlyMemory<byte> block;
+        try
+        {
+            block = await process.ReadAsync(fd, 8192);
+        }
+        catch (SyscallException error)
+        {
+            await WarnAsync(name, error.Message);
+            return entries;
+        }
+
+        for (int offset = 0; offset < block.Length;)
+        {
+            entries.Add(new Stat(block.Span, ref offset));
+        }
+
+        return entries;
     }
 
     private async Task<long> WarnAsync(string s, string error)
