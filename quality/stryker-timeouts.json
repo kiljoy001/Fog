@@ -1504,5 +1504,17 @@
     "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
     "line": "=> await PReadAsync(fd, count, -1, cancellationToken);",
     "reason": "a read at offset 1 gives the same bytes again, and a program reading to the end never meets it"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fss.Lock.WaitAsync();",
+    "reason": "a conversation's lock let go that was never taken is over its count, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
   }
 ]
