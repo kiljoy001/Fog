@@ -152,6 +152,9 @@ public sealed class RcExecutionSteps
     [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3, whose directory's reads fail with ""(.*)""$")]
     public Task GivenUnreadableDirectory(string file, string text, string error) => ServeAsync(file, text, new FileServerHarness { FileReadRefusal = (string.Empty, error) });
 
+    [Given(@"^a file server holding ""(.*)"" with ""(.*)"", on descriptor 3, whose opens of it are refused with ""(.*)""$")]
+    public Task GivenRefusingFileServer(string file, string text, string error) => ServeAsync(file, text, new FileServerHarness { Refusal = (file, error) });
+
     [Then("the file server was asked to open nothing")]
     public void ThenOpenedNothing() => Assert.Empty(server!.OpenModes);
 

@@ -24270,3 +24270,32 @@ Feature: rc runs scripts as 9front rc does
       	b1	
       end
       """
+
+  @FOG_RC_RUN_299
+  Scenario: rc passes over a variable of /env whose name, cut with its path to 127 bytes, it cannot open
+    When rc runs the script
+      """
+      n=`{awk 'BEGIN { for (i = 0; i < 130; i++) printf "v" }'}
+      echo -n long >/env/$n
+      ls /env | grep -c vvvvvvvvvv
+      rc -c 'echo child ran'
+      echo end
+      """
+    Then it prints
+      """
+      /tmp/s:2: > can't create: /env/vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv: name too long: '...vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv'
+      """
+
+  @FOG_RC_RUN_300
+  Scenario: rc passes over a variable of /env it cannot open
+    Given a file server holding "x" with "hidden", on descriptor 3, whose opens of it are refused with "no opening"
+    When rc runs the script
+      """
+      mount -c /fd/3 /env
+      rc -c 'echo child ran; echo $#x'
+      """
+    Then it prints
+      """
+      child ran
+      0
+      """

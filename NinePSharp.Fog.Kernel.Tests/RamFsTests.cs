@@ -45,4 +45,19 @@ public sealed class RamFsTests
         Assert.Equal("permission denied", (await Assert.ThrowsAsync<IOException>(() => fs.RemoveAsync(f, null, Context, default).AsTask())).Message);
         Assert.Equal(f, await fs.WalkAsync(d, "f", default));
     }
+
+    // /env's names, as envcreate takes them: one and its NUL in genbuf's 128 bytes, counted in bytes;
+    // any other ramfs takes a longer one.
+    [Fact]
+    public async Task EnvTakesNamesOfUpTo127Bytes()
+    {
+        var env = new RamFs("env", "#e", "glenda", changeable: false);
+        await env.CreateAndOpenAsync(env.Root, new string('v', 127), 0b110_110_110, 1, Context, default);
+        await env.CreateAndOpenAsync(env.Root, new string('é', 63) + "v", 0b110_110_110, 1, Context, default);
+        Assert.Equal("name too long", (await Assert.ThrowsAsync<IOException>(() => env.CreateAndOpenAsync(env.Root, new string('v', 128), 0b110_110_110, 1, Context, default).AsTask())).Message);
+        Assert.Equal("name too long", (await Assert.ThrowsAsync<IOException>(() => env.CreateAndOpenAsync(env.Root, new string('é', 64), 0b110_110_110, 1, Context, default).AsTask())).Message);
+
+        var ram = new RamFs("ram", "#R", "glenda");
+        await ram.CreateAndOpenAsync(ram.Root, new string('v', 200), 0b110_110_110, 1, Context, default);
+    }
 }

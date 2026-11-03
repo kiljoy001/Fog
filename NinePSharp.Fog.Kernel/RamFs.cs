@@ -1,3 +1,4 @@
+using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Namespaces;
 
@@ -186,6 +187,12 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
 
     public ValueTask<ResourceOpenHandle> CreateAndOpenAsync(ResourceHandle directory, string name, uint permissions, byte mode, ResourceOperationContext context, CancellationToken cancellationToken)
     {
+        // envcreate: a name and its NUL in genbuf's 128 bytes.
+        if (!changeable && Encoding.UTF8.GetByteCount(name) >= 128)
+        {
+            throw new IOException(Errors.TooLong);
+        }
+
         lock (gate)
         {
             // lib9p's screate: the directory must be writable, before any name is looked for.
