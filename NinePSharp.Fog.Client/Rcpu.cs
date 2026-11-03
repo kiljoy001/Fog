@@ -248,6 +248,8 @@ public static class Rcpu
                 byte[] read = new byte[buffer.Length];
                 int n = await Task.Run(() => inner.Read(read, 0, read.Length), cancellationToken);
                 read.AsSpan(0, n).CopyTo(buffer.Span);
+
+                // Stryker disable once Block : as the statement within
                 if (n == 0)
                 {
                     // Stryker disable once Statement : fog ends with the conversation, whether or not the reads it served are let go first

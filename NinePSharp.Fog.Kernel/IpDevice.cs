@@ -418,10 +418,18 @@ internal sealed class IpDevice(FogKernel kernel) : IResourceDataOperations
         {
             accepted = await Host(() => socket.AcceptAsync(cancellationToken).AsTask());
         }
-        catch (IOException) when (listening.State != State.Announced)
+        catch (IOException)
         {
-            // ipopen gives up on a conversation hung up while it waits.
-            throw new IOException("listen hungup");
+            // ipopen gives up on a conversation hung up while it waits; a hangup wakes the accept before it says so, under the lock.
+            lock (listening)
+            {
+                if (listening.State != State.Announced)
+                {
+                    throw new IOException("listen hungup");
+                }
+            }
+
+            throw;
         }
 
         Conversation call = Clone(context.User, accepted);
