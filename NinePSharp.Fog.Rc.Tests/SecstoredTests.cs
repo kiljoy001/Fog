@@ -298,8 +298,10 @@ public sealed class SecstoredTests : IAsyncLifetime
         await c.WriteAsync("100");
         await c.WriteAsync("abc");
         await c.FreeAsync();
-        await WaitAsync(async () => (await h.LogsAsync()).Contains("empty file chunk", StringComparison.Ordinal));
-        Assert.Contains("failed PUT glenda/f", await h.LogsAsync(), StringComparison.Ordinal);
+
+        // The failed PUT is logged after the empty chunk, as a line of its own.
+        await WaitAsync(async () => (await h.LogsAsync()).Contains("failed PUT glenda/f", StringComparison.Ordinal));
+        Assert.Contains("empty file chunk", await h.LogsAsync(), StringComparison.Ordinal);
         Assert.Equal("abc", await h.FileAsync("/adm/secstore/store/glenda/f"));
     }
 
@@ -486,7 +488,7 @@ public sealed class SecstoredTests : IAsyncLifetime
         Assert.Equal(-1, (await Pak.ClientAsync(h.Init, "secstore", false, c, "glenda", "wrongpw")).Rc);
         Assert.Equal((-1, "couldn't read verifier"), await c.ReadstrAsync());
         Assert.Equal((-1, "connection read error"), await c.ReadstrAsync());
-        await WaitAsync(async () => (await h.LogsAsync()).Contains("secstore denied for glenda", StringComparison.Ordinal));
+        await WaitAsync(async () => (await h.LogsAsync()) is var logs && logs.Contains("secstore denied for glenda", StringComparison.Ordinal) && logs.Contains("secstore from 127.0.0.1!", StringComparison.Ordinal));
         Assert.DoesNotContain("AUTH", await h.LogsAsync(), StringComparison.Ordinal);
         Assert.DoesNotContain("\n\n", await h.LogsAsync(), StringComparison.Ordinal);
         Assert.Equal(string.Empty, h.Console.Text);
