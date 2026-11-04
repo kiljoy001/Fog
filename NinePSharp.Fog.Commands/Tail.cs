@@ -43,6 +43,8 @@ public sealed class Tail
                 switch (a.Length > 1 ? a[1] : '\0')
                 {
                     case 'c' or 'n':
+
+                        // Stryker disable once Assignment : chars set a second time is set before a second count, which is refused
                         tail.chars |= a[1] == 'c';
                         if (await tail.GetnumberAsync(a[2..]))
                         {
@@ -61,6 +63,8 @@ public sealed class Tail
                         tail.rev = true;
                         continue;
                     case 'f':
+
+                        // Stryker disable once Update : follow is only ever asked whether it is 0
                         tail.follow++;
                         continue;
                     case '-':
@@ -82,6 +86,7 @@ public sealed class Tail
             tail.count = tail.rev ? int.MaxValue : 10;
         }
 
+        // Stryker disable once Equality : a count of -1 skips no lines, as one of 0 does
         if (tail.beg && !tail.chars && tail.count > 0)
         {
             tail.count--;
@@ -176,6 +181,7 @@ public sealed class Tail
             await FatalAsync("too big");
         }
 
+        // Stryker disable once Assignment : chars set a second time is set before a second count, which is refused
         chars |= c is 'b' or 'c';
         p += c is 'b' or 'c' or 'l' ? 1 : 0;
         switch (p < s.Length ? s[p] : '\0')
@@ -184,6 +190,8 @@ public sealed class Tail
                 rev = true;
                 return;
             case 'f':
+
+                // Stryker disable once Update : follow is only ever asked whether it is 0
                 follow++;
                 return;
             case '\0':
@@ -251,6 +259,7 @@ public sealed class Tail
         byte[] buf = [];
         for (int n = 1; n != 0;)
         {
+            // Stryker disable once Equality : the buffer grown a read sooner holds the same
             if (len + Bsize > bufsiz)
             {
                 bufsiz += 2 * Bsize;
@@ -262,6 +271,7 @@ public sealed class Tail
                 n = await TreadAsync(buf, len, bufsiz - len);
             }
 
+            // Stryker disable once Equality : a count as long as what is kept keeps all of it either way
             if (count >= len)
             {
                 continue;
@@ -273,6 +283,7 @@ public sealed class Tail
             }
             else
             {
+                // Stryker disable once Conditional : a last byte that is no newline is passed over by the loop either way
                 j = buf[len - 1] == '\n' ? len - 1 : len;
                 for (int k = 0; j > 0; j--)
                 {
@@ -299,6 +310,8 @@ public sealed class Tail
                 if (buf[j - 1] == '\n')
                 {
                     await TwriteAsync(buf, j, len - j);
+
+                    // Stryker disable once Equality,Statement : what is kept is no more than count lines, so the loop ends before count does
                     if (--count <= 0)
                     {
                         return;
@@ -321,10 +334,14 @@ public sealed class Tail
         int len = 0, n = 0, bufsiz = 0;
         byte[] buf = [];
         long pos = await TseekAsync(0, 2);
+
+        // Stryker disable once Boolean : after the first block, the line kept ends in the newline the first one ended in
         for (bool first = true; pos > 0 && count > 0; first = false)
         {
             n = (int)Math.Min(pos, Bsize);
             pos -= n;
+
+            // Stryker disable once Equality : the buffer grown a block sooner holds the same
             if (len + n > bufsiz)
             {
                 bufsiz += 2 * Bsize;

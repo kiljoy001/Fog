@@ -131,12 +131,14 @@ public sealed class Cmp
         {
             if (b1s >= b1e)
             {
+                // Stryker disable once Conditional : a buffer refilled from its start holds what it would from where it was read to, and is compared from there
                 b1s = b1s >= Buf ? 0 : b1s;
                 b1e = await FillAsync(f1, buf1, b1s);
             }
 
             if (b2s >= b2e)
             {
+                // Stryker disable once Conditional : a buffer refilled from its start holds what it would from where it was read to, and is compared from there
                 b2s = b2s >= Buf ? 0 : b2s;
                 b2e = await FillAsync(f2, buf2, b2s);
             }

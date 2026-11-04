@@ -99,6 +99,7 @@ public sealed class Comm
             }
         }
 
+        // Stryker disable once Equality : the loop ends only where the bytes differ
         return (sbyte)a[i] < (sbyte)b[i] ? 1 : 2;
     }
 

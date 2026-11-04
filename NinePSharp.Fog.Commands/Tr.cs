@@ -442,8 +442,10 @@ public sealed class Tr
 
         public int Current { get; set; }
 
+        // Stryker disable once Unary : Rewind sets it again before any parse
         public long Last { get; set; } = -1;
 
+        // Stryker disable once Unary : Rewind sets it again before any parse
         public long Final { get; set; } = -1;
 
         public byte this[int i] => i < strings.Length ? strings[i] : (byte)0;

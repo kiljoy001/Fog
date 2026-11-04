@@ -60,4 +60,20 @@ public sealed class RamFsTests
         var ram = new RamFs("ram", "#R", "glenda");
         await ram.CreateAndOpenAsync(ram.Root, new string('v', 200), 0b110_110_110, 1, Context, default);
     }
+
+    // ramfs: an append-only file is not truncated by an open with OTRUNC, and is written at its
+    // end whatever the offset; any other file is truncated and written where it is asked.
+    [Fact]
+    public async Task AnAppendOnlyFileIsNotTruncatedAndIsWrittenAtItsEnd()
+    {
+        var fs = new RamFs("ram", "#R", "glenda");
+        foreach ((uint mode, string expected) in new[] { (0x40000000u | 0b110_110_110, "oldnew"), (0b110_110_110u, "new") })
+        {
+            ResourceOpenHandle created = await fs.CreateAndOpenAsync(fs.Root, $"f{mode}", mode, 1, Context, default);
+            await fs.WriteAsync(created, 0, "old"u8.ToArray(), Context, default);
+            ResourceOpenHandle opened = await fs.OpenAsync(created.Resource, NinePSharp.Constants.NinePConstants.OWRITE | NinePSharp.Constants.NinePConstants.OTRUNC, Context, default);
+            await fs.WriteAsync(opened, 0, "new"u8.ToArray(), Context, default);
+            Assert.Equal(expected, System.Text.Encoding.UTF8.GetString((await fs.ReadAsync(opened, 0, 100, default)).Span));
+        }
+    }
 }

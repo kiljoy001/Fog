@@ -12,6 +12,7 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
     private const int Read = 4;
     private const int Write = 2;
     private const int Execute = 1;
+    private const uint Append = 0x40000000;
     private readonly object gate = new();
     private readonly string provider;
     private readonly string device;
@@ -93,7 +94,8 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
                 throw new IOException(Errors.Permission);
             }
 
-            if ((mode & NinePConstants.OTRUNC) != 0)
+            // fsopen: an append-only file is never truncated.
+            if ((file.Permissions & Append) == 0 && (mode & NinePConstants.OTRUNC) != 0)
             {
                 Truncate(file, 0);
                 Access(file, Write);
@@ -150,6 +152,8 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
                 return ValueTask.FromResult(0u);
             }
 
+            // fswrite: an append-only file is written at its end, whatever the offset.
+            offset = (node.Permissions & Append) != 0 ? node.Length : offset;
             ulong top = offset + (ulong)data.Length;
             if (top > MaxFileSize)
             {

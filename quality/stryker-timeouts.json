@@ -1522,5 +1522,35 @@
     "mutator": "PreIncrementExpression to PreDecrementExpression mutation",
     "line": "user = args[++i];",
     "reason": "-u after another option takes the option before it as its value and steps back onto -u, so the options are read again forever"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (await BflushAsync() == Beof) {",
+    "reason": "a put whose flush fails flushes again, and a write that keeps failing never lets it end"
+  },
+  {
+    "file": "Biobuf.cs",
+    "mutator": "Boolean mutation",
+    "line": "(inactive, ocount) = (true, Bsize);",
+    "reason": "a buffer left active after a failed write is full, so each put flushes and fails again for ever"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Equality mutation",
+    "line": "for (long m = 0; m < Count;)",
+    "reason": "read -c reads once more past its count, a read of nothing that waits on a pipe for what may never come"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await (Write?.Invoke(r) ?? RespondAsync(r, \"write prohibited\"));",
+    "reason": "a write left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Test.cs",
+    "mutator": "String mutation",
+    "line": "[\"-s\"] = async b => await DirstatAsync(b) is { Length: > 0 },",
+    "reason": "test -s is never true, and a script waiting with it for a file to fill waits for ever"
   }
 ]

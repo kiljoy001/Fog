@@ -24299,3 +24299,253 @@ Feature: rc runs scripts as 9front rc does
       child ran
       0
       """
+
+  @FOG_RC_RUN_301
+  Scenario: tail of a pipe read in pieces, a last line without its newline, and a line longer than two of its blocks
+    When rc runs the script
+      """
+      mkdir /tmp/tt; cd /tmp/tt
+      {echo a; sleep 1; echo -n b; sleep 1; echo c; echo d; echo e} | tail +4
+      echo -n 'a
+      b' >nn
+      tail -1 nn; echo
+      tail -2 nn | tr '\x0a' ' '; echo
+      tail -r nn | tr '\x0a' ' '; echo
+      cat /dev/null | tail -r; echo st $status
+      awk 'BEGIN { for(i = 0; i < 70000; i++) printf "%d", i % 10; print "" }' >long
+      {echo a; cat long} >lf
+      tail -1 lf | cmp /fd/0 long && echo same long
+      seq 1 20000 >s
+      tail -r s | tail -r | cmp /fd/0 s && echo same reversed
+      tail -r s | sed 2q
+      """
+    Then it prints
+      """
+      e
+      b
+      a b
+      b a 
+      st 
+      same long
+      same reversed
+      20000
+      19999
+      """
+
+  @FOG_RC_RUN_302
+  Scenario: tail counting back through a file whose read gives less than its length is a length error
+    Given a file server holding "notes" with "abcdef", on descriptor 3, giving at most 2 bytes a read
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      tail -1 /tmp/fs/notes
+      ~ $status 'tail '[0-9]*': length error' && echo length status
+      """
+    Then it prints
+      """
+      tail: length error: 
+      length status
+      """
+
+  @FOG_RC_RUN_303
+  Scenario: cmp of a pipe read in pieces, one of them longer than its buffer, counting lines as it goes
+    When rc runs the script
+      """
+      mkdir /tmp/cp; cd /tmp/cp
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      {echo -n x; echo $a} >f
+      {echo -n x; sleep 1; echo $a} | cmp /fd/0 f && echo same piped
+      {echo -n x; sleep 1; echo $a} | cmp -L f /fd/0 && echo same counted
+      echo 'a
+      c' >g
+      {echo a; sleep 1; echo b} | cmp -L /fd/0 g
+      """
+    Then it prints
+      """
+      same piped
+      same counted
+      /fd/0 g differ: char 3 line 2
+      """
+
+  @FOG_RC_RUN_304
+  Scenario: cmp names the file whose read failed after its first, the first file
+    Given a file server holding "notes" with "abc", on descriptor 3, whose reads after the first fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      echo abc >/tmp/abc
+      cmp /tmp/fs/notes /tmp/abc
+      ~ $status 'cmp '[0-9]*': read error' && echo read error status
+      """
+    Then it prints
+      """
+      error on /tmp/fs/notes after 4 bytes
+      read error status
+      """
+
+  @FOG_RC_RUN_304
+  Scenario: cmp names the file whose read failed after its first, the second file
+    Given a file server holding "notes" with "abc", on descriptor 3, whose reads after the first fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      echo abc >/tmp/abc
+      cmp /tmp/abc /tmp/fs/notes
+      ~ $status 'cmp '[0-9]*': read error' && echo read error status
+      """
+    Then it prints
+      """
+      error on /tmp/fs/notes after 4 bytes
+      read error status
+      """
+
+  @FOG_RC_RUN_305
+  Scenario: comm of lines alike in their first bytes, and of files that end after a common line
+    When rc runs the script
+      """
+      mkdir /tmp/cm; cd /tmp/cm
+      echo 'ab
+      ac' >a; echo 'ac
+      ad' >b
+      comm a b
+      echo x >one; echo 'x
+      y' >two
+      comm one two
+      comm two one
+      """
+    Then it prints
+      """
+      ab
+      		ac
+      	ad
+      		x
+      	y
+      		x
+      y
+      """
+
+  @FOG_RC_RUN_306
+  Scenario: strings parts its runs at a no-break space and goes on past a NUL, and uniq skips fields to a line's end
+    When rc runs the script
+      """
+      mkdir /tmp/sg; cd /tmp/sg
+      echo abcdefgXhijklmn | tr X '\xa0' >nb
+      strings nb
+      echo abcdefgYhijklmn | tr Y '\x00' >nul
+      xd -c nul
+      strings nul
+      {echo x; echo -n 'a   '} | uniq -2
+      """
+    Then it prints
+      """
+             0: abcdefg
+             9: hijklmn
+      0000000   a  b  c  d  e  f  g 00  h  i  j  k  l  m  n \n
+      0000010 
+      0000010 
+             0: abcdefg
+             8: hijklmn
+      x
+      """
+
+  @FOG_RC_RUN_307
+  Scenario: tr across a rune split between reads, from a range starting at NUL, to strings holding a NUL or starting with a minus
+    When rc runs the script
+      """
+      mkdir /tmp/tr; cd /tmp/tr
+      a=aaaaaaaaaaaaaaaa
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
+      {echo -n é; echo $a$a$a} >ef
+      {read -c 1; sleep 1; cat} <ef | tr a b | wc -c
+      echo abc | tr '\000-b' x
+      echo hello | tr -cs a '\000z' | xd -c
+      echo abc | tr ab '-z'
+      echo a | tr a '\x01' | tr -d b | xd -c
+      """
+    Then it prints
+      """
+        12291
+      xxcx0000000   z  z  z  z  z  z
+      0000006 
+      -zc
+      0000000  01 \n
+      0000002 
+      """
+
+  @FOG_RC_RUN_308
+  Scenario: ls -l shows every permission, chmod takes a letter twice, and mv replaces an append-only file, keeps the file it truncates, and moves to and from ..
+    When rc runs the script
+      """
+      mkdir /tmp/lm; cd /tmp/lm
+      for(m in 0 1 2 3 4 5 6 7) { touch f$m; chmod $m$m$m f$m }
+      ls -l f? | awk '{print $1}'
+      mkdir c; touch c/a c/l c/t
+      chmod +aa c/a; chmod +ll c/l; chmod +tt c/t
+      ls -l c/a c/l | awk '{print $1}'
+      cat c | xd -1x | awk '
+      function hex(s,  v, i) { v = 0; for(i = 1; i <= length(s); i++) v = 16 * v + index("0123456789abcdef", substr(s, i, 1)) - 1; return v }
+      { for(i = 2; i <= NF; i++) b[n++] = $i }
+      END {
+      	for(p = 0; p < n; p += hex(b[p]) + 256 * hex(b[p + 1]) + 2) {
+      		name = ""
+      		for(j = 0; j < hex(b[p + 41]); j++) name = name sprintf("%c", hex(b[p + 43 + j]))
+      		print name, b[p + 24]
+      	}
+      }' | sort
+      touch ap; chmod +a ap; echo x >ap; echo y >ap; cat ap
+      mkdir a b
+      echo new >a/x; echo old >b/x; chmod +a b/x
+      mv a/x b/x; cat b/x
+      echo new >a/y; echo old >b/y
+      q=`{ls -q b/y}
+      mv a/y b/y; cat b/y
+      r=`{ls -q b/y}
+      ~ $q(1) $r(1) && echo same file
+      mkdir d; cd d; mkdir e
+      mv .. x
+      mv e ..
+      ls /tmp/lm
+      """
+    Then it prints
+      """
+      -----------
+      ----x--x--x
+      ---w--w--w-
+      ---wx-wx-wx
+      --r--r--r--
+      --r-xr-xr-x
+      --rw-rw-rw-
+      --rwxrwxrwx
+      a-rw-rw-rw-
+      -lrw-rw-rw-
+      a 40
+      l 20
+      t 04
+      x
+      y
+      new
+      new
+      same file
+      mv: .. is a directory, not copied to ./x
+      mv: e is a directory, not copied to ../.
+      /tmp/lm/a
+      /tmp/lm/ap
+      /tmp/lm/b
+      /tmp/lm/c
+      /tmp/lm/d
+      /tmp/lm/f0
+      /tmp/lm/f1
+      /tmp/lm/f2
+      /tmp/lm/f3
+      /tmp/lm/f4
+      /tmp/lm/f5
+      /tmp/lm/f6
+      /tmp/lm/f7
+      """
