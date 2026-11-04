@@ -1582,5 +1582,113 @@
     "mutator": "Negate expression",
     "line": "if (literal)",
     "reason": "the end's 0, not literal, is taken for a rune, so the parse never reaches its end"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Equality mutation",
+    "line": "if (p0 <= m && p1 > m)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Logical mutation",
+    "line": "if (p0 <= m && p1 > m)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Negate expression",
+    "line": "if (p0 <= m && p1 > m)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "return Re2or(Rclass(p0, m), Rclass(m + 1, p1));",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Bitwise mutation",
+    "line": "if ((p0 & ~m) != (p1 & ~m))",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "BitwiseNotExpression to un-BitwiseNotExpression mutation",
+    "line": "if ((p0 & ~m) != (p1 & ~m))",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Equality mutation",
+    "line": "if ((p0 & ~m) != (p1 & ~m))",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Bitwise mutation",
+    "line": "if ((p0 & m) != 0)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Equality mutation",
+    "line": "if ((p0 & m) != 0)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "return Re2or(Rclass(p0, p0 | m), Rclass((p0 | m) + 1, p1));",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Bitwise mutation",
+    "line": "return Re2or(Rclass(p0, p0 | m), Rclass((p0 | m) + 1, p1));",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Bitwise mutation",
+    "line": "if ((p1 & m) != m)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Equality mutation",
+    "line": "if ((p1 & m) != m)",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "return Re2or(Rclass(p0, (p1 & ~m) - 1), Rclass(p1 & ~m, p1));",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Bitwise mutation",
+    "line": "return Re2or(Rclass(p0, (p1 & ~m) - 1), Rclass(p1 & ~m, p1));",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "BitwiseNotExpression to un-BitwiseNotExpression mutation",
+    "line": "return Re2or(Rclass(p0, (p1 & ~m) - 1), Rclass(p1 & ~m, p1));",
+    "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Block removal mutation",
+    "line": "if (r.Gen == gen) {",
+    "reason": "addcase visits a node again, and a cycle of alternations for ever"
   }
 ]

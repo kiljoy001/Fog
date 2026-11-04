@@ -188,11 +188,13 @@ public sealed class Grep
             switch (r.Type)
             {
                 case Tor:
+
                     // Stryker disable once Assignment : the count only chooses whether a case table is made, which matches as its alternation does
                     n += Countor(r.Alt!);
                     r = r.Next!;
                     continue;
                 case Tclass:
+
                     // Stryker disable once Arithmetic : the count only chooses whether a case table is made, which matches as its alternation does
                     return n + (int)(r.Hi - r.Lo) + 1;
                 default:
@@ -282,6 +284,7 @@ public sealed class Grep
     {
         if (peekeof)
         {
+            // Stryker disable once Boolean : a pattern's parse ends at the end it peeked at, and the next pattern's begins with it unset
             peekeof = false;
             return LEof;
         }
@@ -360,6 +363,8 @@ public sealed class Grep
             {
                 q.Add((byte)c);
                 c = await GetrecAsync();
+
+                // Stryker disable once Statement : the NUL kept, the read past it is 0 again, and ends the class as this does
                 if (c == 0)
                 {
                     break;
@@ -400,7 +405,7 @@ public sealed class Grep
         {
             if (await PeekAsync() != LNewline)
             {
-                // Stryker disable once Statement : the expression read after it is a syntax error all the same
+                // Stryker disable once Statement,Block : the expression read after it is a syntax error all the same
                 await SyntaxAsync();
             }
 
@@ -567,6 +572,7 @@ public sealed class Grep
 
         foreach (uint m in Tab1)
         {
+            // Stryker disable once Equality : a range from m itself is broken at the same place by tab2's masks
             if (p0 <= m && p1 > m)
             {
                 return Re2or(Rclass(p0, m), Rclass(m + 1, p1));
@@ -657,6 +663,7 @@ public sealed class Grep
             p = Next(s, ref at);
         }
 
+        // Stryker disable once Logical,Arithmetic : ranges from the same rune merge into one whatever their order
         pairs.Sort((a, b) => (int)(a.Lo - b.Lo) is int n && n != 0 ? n : (int)(a.Hi - b.Hi));
         var q = new List<(uint Lo, uint Hi)>();
         for (int i = 0; i < pairs.Count; i++)
@@ -665,6 +672,8 @@ public sealed class Grep
             if (i == 0)
             {
                 q.Add((lo, hi));
+
+                // Stryker disable once Statement : the first range merges with itself to itself
                 continue;
             }
 
@@ -673,9 +682,13 @@ public sealed class Grep
                 continue;
             }
 
+            // The ranges are in order from their starts, so one that starts at or past the last is never wholly before it.
+            // Stryker disable once Equality : a range that touches the last or lies within it at its start excludes the same, merged or apart
             if (lo > q[^1].Hi || hi < q[^1].Lo)
             {
                 q.Add((lo, hi));
+
+                // Stryker disable once Statement : a range just added merges with itself to itself
                 continue;
             }
 
@@ -756,7 +769,7 @@ public sealed class Grep
             case Tor:
                 int n = Countor(r);
 
-                // Stryker disable once Equality : whether a table is made, it matches as the alternation does
+                // Stryker disable once Equality,Boolean : whether a table is made, it matches as the alternation does
                 if (n < Caselim)
                 {
                     return r;
@@ -797,6 +810,8 @@ public sealed class Grep
             switch (r.Type)
             {
                 case Tcase:
+
+                    // Stryker disable once Equality : c is a byte or Cbegin, never 256
                     if (c < 256 && r.Cases![c] is { } r1)
                     {
                         follow.Add(r1);
@@ -847,9 +862,13 @@ public sealed class Grep
 
         // Stryker disable once Statement : the follow set is empty before the first state is made
         follow.Clear();
+
+        // Stryker disable once Update : this walk marks again every node addcase marked that a step from it reaches
         gen++;
         Fol1(r, Cbegin);
         follow.Add(r);
+
+        // Stryker disable once Statement : an unordered state is never found again, and is made again the same
         follow.Sort((a, b) => a.Id.CompareTo(b.Id));
         return new State { Re = [.. follow] };
     }
@@ -865,8 +884,11 @@ public sealed class Grep
             Fol1(r, (uint)c);
         }
 
+        // Stryker disable once Statement : an unordered state is never found again, and is made again the same
         follow.Sort((a, b) => a.Id.CompareTo(b.Id));
         State? parent = null;
+
+        // Stryker disable once Boolean : the loop sets it before it is read, state0 being made first
         bool left = false;
         for (State? t = state0; t is not null;)
         {

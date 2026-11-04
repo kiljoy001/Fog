@@ -24549,3 +24549,124 @@ Feature: rc runs scripts as 9front rc does
       /tmp/lm/f6
       /tmp/lm/f7
       """
+
+  @FOG_RC_RUN_309
+  Scenario: grep of files that all match, a class past its limits, classes of runes past ASCII and ranges that touch, overlap or run backwards
+    When rc runs the script
+      """
+      mkdir /tmp/gp; cd /tmp/gp
+      echo a >f; echo a >g; echo b >h
+      grep a f g; echo status $status
+      grep a f h; echo status $status
+      grep -c a f g h; echo status $status
+      awk 'BEGIN { printf "["; for(i = 0; i < 16379; i++) printf "a"; print "]" }' >long
+      awk 'BEGIN { printf "["; for(i = 0; i < 16378; i++) printf "a"; print "]" }' >shorter
+      grep -f long f
+      ~ $status 'grep '[0-9]*': class too long' && echo too long status
+      grep -f shorter f
+      ~ $status 'grep '[0-9]*': class too big' && echo too big status
+      echo 'é
+      a
+      ~' >u
+      grep '^[^ -~]$' u
+      grep '^[^a]$' u
+      grep '^[é-ü]$' u
+      grep '^[ -é]$' u
+      grep -c '[a-cb-d]' f g h
+      grep -c '[a-bc-d]' f g h
+      grep -c '[c-a]' f g h
+      grep -c '[a-ab-b]' f g h
+      grep -c '[^a-bb-c]' f g h u
+      grep -c '[^a-ac-c]' f g h u
+      grep -c '[^c-a]' f g h u
+      grep -c '[ba]' f g h
+      grep -c '[aab]' f g h
+      grep -c '[aba]' f g h
+      grep -c '[ab]' f g h
+      echo d >d
+      grep -c '[^a-db-c]' d
+      grep -c '[^a-cb-d]' d
+      grep -c 'a|b|c|d|e|f|g' f h d u
+      grep -c '^(a|b|c|d|e|f|g)$' f h d u
+      grep -c '[a\' f
+      echo ac >ac
+      grep '(a|b)c' ac
+      grep '^(a|b)c$' ac
+      grep 'x|(a|b)c' ac
+      grep 'a\' f
+      ~ $status 'grep '[0-9]*': no matches' && echo no matches status
+      """
+    Then it prints
+      """
+      f:a
+      g:a
+      status 
+      f:a
+      status 
+      f:1
+      g:1
+      h:0
+      status 
+      grep: internal error: class too long
+      too long status
+      grep: internal error: class too big
+      too big status
+      é
+      é
+      ~
+      é
+      é
+      a
+      ~
+      f:1
+      g:1
+      h:1
+      f:1
+      g:1
+      h:1
+      f:0
+      g:0
+      h:0
+      f:1
+      g:1
+      h:1
+      f:0
+      g:0
+      h:0
+      u:2
+      f:0
+      g:0
+      h:1
+      u:2
+      f:1
+      g:1
+      h:1
+      u:3
+      f:1
+      g:1
+      h:1
+      f:1
+      g:1
+      h:1
+      f:1
+      g:1
+      h:1
+      f:1
+      g:1
+      h:1
+      0
+      0
+      f:1
+      h:1
+      d:1
+      u:1
+      f:1
+      h:1
+      d:1
+      u:1
+      grep: [a\: empty pattern
+      ac
+      ac
+      ac
+      no matches status
+      """
