@@ -1516,5 +1516,11 @@
     "mutator": "Statement mutation",
     "line": "await fss.Lock.WaitAsync();",
     "reason": "a conversation's lock let go that was never taken is over its count, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Rcpu.cs",
+    "mutator": "PreIncrementExpression to PreDecrementExpression mutation",
+    "line": "user = args[++i];",
+    "reason": "-u after another option takes the option before it as its value and steps back onto -u, so the options are read again forever"
   }
 ]
