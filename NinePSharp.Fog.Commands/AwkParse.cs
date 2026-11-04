@@ -584,11 +584,11 @@ public sealed partial class Awk
         {
             (_, int sub, int type) = Keywords[n];
             yylval.I = sub;
+
+            // word's case FSYSTEM is never a keyword's type, system's being BLTIN, so -safe leaves
+            // system as it is.
             switch (type)
             {
-                case Bltin when sub == Fsystem && safe:
-                    await SyntaxAsync("system is unsafe");
-                    return type;
                 case Func when infunc != 0:
                     await SyntaxAsync("illegal nested function");
                     return type;
@@ -770,9 +770,12 @@ public sealed partial class Awk
 
     private Yystype V(int yypt, int k) => yyv[yypt - k];
 
-    private Node Np(int yypt, int k) => (Node)V(yypt, k).P!;
+    // yacc's recovery from a syntax error leaves in a value's place what was there, a variable's
+    // cell among them, which C's union reads as a node; no program is run after one, so an empty
+    // node stands in.
+    private Node Np(int yypt, int k) => V(yypt, k).P is not (null or Node) ? new Node() : (Node)V(yypt, k).P!;
 
-    private Node? NpN(int yypt, int k) => (Node?)V(yypt, k).P;
+    private Node? NpN(int yypt, int k) => V(yypt, k).P is not (null or Node) ? new Node() : (Node?)V(yypt, k).P;
 
     // The grammar's actions.
     private async Task ActionAsync(int yym, int t)

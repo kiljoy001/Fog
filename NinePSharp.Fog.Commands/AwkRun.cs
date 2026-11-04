@@ -853,7 +853,8 @@ public sealed partial class Awk
                 i -= j * v;
                 break;
             case Uminus:
-                i = -i;
+                // 6c negates by subtracting from 0, so neither 0 nor -0 is made -0.
+                i = 0 - i;
                 break;
             default:
                 i = j >= 0 && Modf(j, out _) == 0.0 ? Ipow(i, Ci(j)) ?? await OverflowAsync() : await ErrcheckAsync(Math.Pow(i, j), "pow");

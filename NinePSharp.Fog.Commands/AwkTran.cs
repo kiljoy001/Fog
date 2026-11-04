@@ -31,6 +31,11 @@ public sealed partial class Awk
     private string inputFS = " ";
     private int nfields = Maxfld;
     private bool donefld;
+
+    // Whether $0's text is lib.c's record, which getrec empties before it reads into it, rather than a
+    // string of its own that an assignment gave it.
+    private bool recordHeld = true;
+
     private bool donerec;
     private int lastfld;
     private int argno = 1;
@@ -362,7 +367,7 @@ public sealed partial class Awk
         }
         else if ((vp.Tval & Rec) != 0)
         {
-            (donefld, donerec) = (false, true);
+            (donefld, donerec, recordHeld) = (false, true, false);
         }
 
         vp.Tval = (vp.Tval & ~Str) | Num;
@@ -387,7 +392,7 @@ public sealed partial class Awk
         }
         else if ((vp.Tval & Rec) != 0)
         {
-            (donefld, donerec) = (false, true);
+            (donefld, donerec, recordHeld) = (false, true, false);
         }
 
         string t = Cstr(s);
@@ -582,6 +587,7 @@ public sealed partial class Awk
         if (isrecord)
         {
             (donefld, donerec) = (false, true);
+            fldtab[0].Sval = recordHeld ? string.Empty : fldtab[0].Sval;
         }
 
         while (argno < argcloc.Fval || infile == stdin)
@@ -621,7 +627,7 @@ public sealed partial class Awk
                 if (isrecord)
                 {
                     Cell f0 = fldtab[0];
-                    (f0.Sval, f0.Tval) = (Cstr(buf), Rec | Str | Dontfree);
+                    (f0.Sval, f0.Tval, recordHeld) = (Cstr(buf), Rec | Str | Dontfree, true);
                     if (ToNumber(f0.Sval, out double f))
                     {
                         (f0.Fval, f0.Tval) = (f, f0.Tval | Num);
@@ -899,7 +905,7 @@ public sealed partial class Awk
             }
         }
 
-        (fldtab[0].Sval, fldtab[0].Tval) = (r.ToString(), Rec | Str | Dontfree);
+        (fldtab[0].Sval, fldtab[0].Tval, recordHeld) = (r.ToString(), Rec | Str | Dontfree, true);
         donerec = true;
     }
 
