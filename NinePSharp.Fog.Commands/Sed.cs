@@ -58,6 +58,8 @@ public sealed class Sed
     private bool delflag;
     private int lnum;
     private Biobuf? f;
+
+    // Stryker disable once Unary : opendata sets it before gline reads it
     private int ffd = -1;
     private long peekc;
     private int lab = 1;
@@ -204,6 +206,7 @@ public sealed class Sed
     }
 
     // The rune at i in a buffer, or 0 past it, where sed.c reads what follows.
+    // Stryker disable once Conditional,Equality : what sed reads ends at the line's NUL, never past it
     private static uint R(uint[] buf, int i) => i < buf.Length ? buf[i] : 0;
 
     // trans: how l shows a rune it cannot print.
@@ -293,10 +296,12 @@ public sealed class Sed
         progFile = file;
         if (!file)
         {
+            // Stryker disable once Conditional : arguments gives a name for each -e, never none
             (progCurr, progAt) = (name is null ? null : [.. Encoding.UTF8.GetBytes(name), 0], 0);
             return;
         }
 
+        // Stryker disable once Unary : open's failure quits before fd is read
         int fd = -1;
         try
         {
@@ -307,6 +312,7 @@ public sealed class Sed
             await QuitAsync($"Cannot open pattern-file: {name}\n");
         }
 
+        // Stryker disable once Conditional : the program is read before anything is written that a flush could send
         progBp = new Biobuf(process, fd) { Errorf = SysfatalAsync, Iof = uflag ? FlushoutAsync : null };
     }
 
@@ -358,6 +364,7 @@ public sealed class Sed
 
                 if ((c = await GetruneAsync()) < 0)
                 {
+                    // Stryker disable once Statement : a line the program's end cuts short is not compiled either way
                     break;
                 }
 
@@ -381,6 +388,7 @@ public sealed class Sed
 
     private async Task FcompAsync()
     {
+        // Stryker disable once Equality : rline gives 1 or -1
         while (await RlineAsync() >= 0)
         {
             cp = 0;
@@ -405,6 +413,7 @@ public sealed class Sed
             await AddressAsync(com.Ad1);
             if (com.Ad1.Type != At.None)
             {
+                // Stryker disable once Assignment : dollars is only asked whether it is 0
                 dollars += com.Ad1.Type == At.Dol ? 1 : 0;
                 if (com.Ad1.Type == At.Last)
                 {
@@ -416,6 +425,7 @@ public sealed class Sed
                     (com.Ad1.Type, com.Ad1.Rp) = (At.Re, lastre);
                 }
 
+                // Stryker disable once Block : a command's second address is none until it is set
                 if (L(cp) is ',' or ';')
                 {
                     cp++;
@@ -545,6 +555,7 @@ public sealed class Sed
                         await OneAddressAsync(com);
                     }
 
+                    // Stryker disable once Conditional : only a newline may follow, and a rune skipped that is not one is garbled all the same
                     cp += L(cp) == '\\' ? 1 : 0;
                     if (L(cp++) != '\n')
                     {
@@ -746,7 +757,10 @@ public sealed class Sed
 
         if (L(cp) is 0 or ';')
         {
+            // Stryker disable once Statement : a branch left at -1 ends the commands as a branch to the end does
             Chain(ltab[0]);
+
+            // Stryker disable once Statement : the name is empty, and branches to the end all the same
             return;
         }
 
@@ -789,10 +803,14 @@ public sealed class Sed
         if (label.Chain < 0)
         {
             label.Chain = rep;
+
+            // Stryker disable once Statement : the link to itself is replaced as dechain resolves the chain
             return;
         }
 
         int pt = label.Chain;
+
+        // Stryker disable once Equality : the first command never follows another in a chain
         while (pspace[pt].Lb1 >= 0)
         {
             pt = pspace[pt].Lb1;
@@ -810,6 +828,7 @@ public sealed class Sed
         }
         catch (SyscallException)
         {
+            // Stryker disable once Unary : create or quit sets it before it is read
             fd = -1;
             try
             {
@@ -836,6 +855,7 @@ public sealed class Sed
         {
             if (r == '\\')
             {
+                // Stryker disable once Equality,Block : the rune after a backslash at the limit is refused just after
                 if (rhs >= Addsize)
                 {
                     return null;
@@ -856,6 +876,7 @@ public sealed class Sed
                 return rhs;
             }
 
+            // Stryker disable once Equality,Block : the delimiter after a rune at the limit is refused just after
             if (rhs >= Addsize)
             {
                 return null;
@@ -882,6 +903,7 @@ public sealed class Sed
         {
             if (c is 0 or '\n')
             {
+                // Stryker disable once Statement : the expression read on past the line's end is too much text at put all the same
                 await QuitAsync($"Too much text: {Line()}");
             }
 
@@ -902,6 +924,8 @@ public sealed class Sed
         {
             // A C string, as far as a NUL a backslash may have put in it.
             int nul = expbuf.IndexOf(0);
+
+            // Stryker disable once Equality : an expression never begins with a NUL, which would have ended its line
             return lastre = Regexp.Regcomp(Encoding.UTF8.GetString([.. nul < 0 ? expbuf : expbuf[..nul]]));
         }
         catch (Regexp.RegerrorException)
@@ -971,6 +995,7 @@ public sealed class Sed
             uint r = L(cp++);
             if (r == '\\' && (r = L(cp++)) == 0)
             {
+                // Stryker disable once Statement : a backslash at the end of the name adds a NUL the name ends at anyway
                 break;
             }
 
@@ -1000,6 +1025,7 @@ public sealed class Sed
         {
             if (L(cp) == '\\' && L(++cp) == 0)
             {
+                // Stryker disable once Statement : a backslash at the end of the text adds a NUL the text ends at anyway
                 break;
             }
 
@@ -1077,6 +1103,8 @@ public sealed class Sed
             }
 
             rp[c] = t;
+
+            // Stryker disable once Logical : a short or unended second string fails the check of its end just after
             if (t == seof || t == 0)
             {
                 return false;
@@ -1116,6 +1144,7 @@ public sealed class Sed
                     jflag = false;
                     if ((ipc = pspace[ipc].Lb1) < 0)
                     {
+                        // Stryker disable once Statement : a branch is resolved to a command or the end, never -1
                         break;
                     }
                 }
@@ -1130,6 +1159,7 @@ public sealed class Sed
                 await PutlineAsync(fout, linebuf, spend);
             }
 
+            // Stryker disable once Equality : arout of nothing writes nothing
             if (abuf.Count > 0)
             {
                 await AroutAsync();
@@ -1145,6 +1175,7 @@ public sealed class Sed
     {
         if (ipc.Active != 0)
         {
+            // Stryker disable once Conditional : Active is 1 or 2 here
             ipc.Active = ipc.Active == 1 ? 2 : ipc.Active;
             switch (ipc.Ad2.Type)
             {
@@ -1156,6 +1187,7 @@ public sealed class Sed
                 case At.Line:
                     if (lnum <= ipc.Ad2.Line)
                     {
+                        // Stryker disable once Conditional : a range by line ended here ends on the next line all the same
                         ipc.Active = ipc.Ad2.Line == lnum ? 0 : ipc.Active;
                         return !ipc.Negfl;
                     }
@@ -1184,6 +1216,7 @@ public sealed class Sed
                 return !ipc.Negfl;
         }
 
+        // Stryker disable once Statement : it awaits nothing
         await Task.CompletedTask;
         return ipc.Negfl;
     }
@@ -1193,6 +1226,7 @@ public sealed class Sed
     {
         if (pattern is null)
         {
+            // Stryker disable once Boolean : an expression to match is always compiled
             return false;
         }
 
@@ -1203,6 +1237,7 @@ public sealed class Sed
             return true;
         }
 
+        // Stryker disable once Unary : a failed match's place is never read
         (loc1, loc2) = (-1, -1);
         return false;
     }
@@ -1228,6 +1263,7 @@ public sealed class Sed
             await DosubAsync(ipc.Rhs);
             if (linebuf[loc2] == 0)
             {
+                // Stryker disable once Statement : the check a step on ends it at the line's end
                 break;
             }
 
@@ -1262,6 +1298,8 @@ public sealed class Sed
             if (c == Runemax && (c = addspace[rp++]) >= '1' && c < Maxsub + '0')
             {
                 int n = (int)(c - '0');
+
+                // Stryker disable once Logical : a subexpression's start and end are set together
                 if (subexp[n].Sp < 0 || subexp[n].Ep < 0)
                 {
                     await QuitAsync($"Invalid back reference \\{n}");
@@ -1378,6 +1416,7 @@ public sealed class Sed
                     await PutlineAsync(fout, linebuf, spend);
                 }
 
+                // Stryker disable once Equality : arout of nothing writes nothing
                 if (abuf.Count > 0)
                 {
                     await AroutAsync();
@@ -1393,6 +1432,8 @@ public sealed class Sed
                 spend = execp;
                 break;
             case Cmd.CN:
+
+                // Stryker disable once Equality : arout of nothing writes nothing
                 if (abuf.Count > 0)
                 {
                     await AroutAsync();
@@ -1400,6 +1441,8 @@ public sealed class Sed
 
                 linebuf[spend++] = '\n';
                 int more = await GlineAsync(spend);
+
+                // Stryker disable once Equality : the line joined holds at least its newline
                 if (more < 0)
                 {
                     delflag = true;
@@ -1420,6 +1463,7 @@ public sealed class Sed
                     await PutlineAsync(fout, linebuf, spend);
                 }
 
+                // Stryker disable once Equality : arout of nothing writes nothing
                 if (abuf.Count > 0)
                 {
                     await AroutAsync();
@@ -1582,6 +1626,8 @@ public sealed class Sed
         do
         {
             int p = addr;
+
+            // Stryker disable once Conditional : a peeked NUL is dropped as a read one is
             for (long c = peekc != 0 ? peekc : await f!.BgetruneAsync(); c >= 0; c = await f!.BgetruneAsync())
             {
                 if (c == '\n')
@@ -1606,11 +1652,17 @@ public sealed class Sed
             {
                 linebuf[p] = 0;
                 peekc = -1;
-                dolflag |= fhead.Count == 0;
+                if (fhead.Count == 0)
+                {
+                    dolflag = true;
+                }
+
                 return p;
             }
 
             peekc = 0;
+
+            // Stryker disable once Equality : standard input is never closed by sed's own descriptor
             if (ffd > 0)
             {
                 await process.CloseAsync(ffd);
@@ -1691,10 +1743,12 @@ public sealed class Sed
     // A label: its name, the branches to it before it is defined, and its command, or -1.
     private sealed class Label
     {
+        // Stryker disable once String : a label's name is set before it is looked for
         public string Uninm { get; set; } = string.Empty;
 
         public int Chain { get; set; } = -1;
 
+        // Stryker disable once Unary : a label's address is set before dechain reads it
         public int Address { get; set; } = -1;
     }
 }

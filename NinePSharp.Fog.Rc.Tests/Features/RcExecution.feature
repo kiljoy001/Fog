@@ -11615,7 +11615,7 @@ Feature: rc runs scripts as 9front rc does
       sed 'y/abc/xyz/' g; sed 'y/ab/x/' g; sed 'y/a\/b/x\/y/' g; sed 'y/abc' g; sed 'y/a
       b/xy/' g
       sed 's/b/B/g;s/a/A/p' g; sed -n 's/b/B/P' g; sed -g 's/[ab]/Z/' g; sed 's/\(a\)\(b\)/\2\1/' g; sed 's/a/\9/' g; sed 's//x/' g; sed 's/x/y' g; sed 's/a/b/q' g
-      sed 's/'`{x 511}'/y/' g; sed 's/'`{x 512}'/y/' g; sed 's/a\nb/x/' g; sed 'N;s/\n/+/' f; sed 's/a/\n/' g; sed 's/b/[&][\&]/' g
+      sed 's/'^`{x 511}^'/y/' g; sed 's/'^`{x 512}^'/y/' g; sed 's/a\nb/x/' g; sed 'N;s/\n/+/' f; sed 's/a/\n/' g; sed 's/b/[&][\&]/' g
       sed -n '10p' f; seq 1 12 | sed -n '10,11p'; sed -n '$p' f g; sed -n '/2/,/4/p' f; sed -n '0p' f; sed -n '3,1p' f; sed -n '2!p' f; sed -n '/x/,$p' f
       sed = g; sed -n '$=' f; sed -n 'l' g; x 100 | sed -n l; echo -n 'a	b' | tr a '\177' | sed -n l; echo 'héllo' | sed -n l
       sed 'n;d' f; sed '$!N;P;D' f; sed -n 'h;n;G;p' f; sed -n 'H;${x;p}' f; sed '2q' f; sed '2{a\
@@ -11628,7 +11628,7 @@ Feature: rc runs scripts as 9front rc does
       x 40000 | sed s/x/y/ | wc -c; x 20000 | sed 'h;G' | wc -c
       {echo '1{'; echo 'a\'; x 9997; echo; echo '}'} >t1; sed -f t1 g | wc -c
       {echo '1{'; echo 'a\'; x 9998; echo; echo '}'} >t2; sed -f t2 g | wc -c
-      sed 's/a/'`{x 9998}'/' g | wc -c; sed 's/a/'`{x 9999}'/' g | wc -c
+      sed 's/a/'^`{x 9998}^'/' g | wc -c; sed 's/a/'^`{x 9999}^'/' g | wc -c
       sed -n p f /nonesuch g
       sed -e 'p' -f /dev/null f | wc -l; echo 's/a/A/' >pf; sed -f pf -e 's/b/B/' g
       echo end
@@ -11714,7 +11714,9 @@ Feature: rc runs scripts as 9front rc does
       sed: First RE may not be null
       sed: s command garbled: s/x/y
       sed: q command garbled: s/a/b/q
-      sed: Too much text: s/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxsed: Too much text: s/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxabc
+      abc
+      abc
+      abc
       1+2
       3+4
 
@@ -11766,8 +11768,8 @@ Feature: rc runs scripts as 9front rc does
         32768
         10002
         10003
-      sed: s command garbled: s/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      0
-      sed: s command garbled: s/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      0
+        10001
+        10002
       sed: Can't open /nonesuch
       1
       2
@@ -24669,4 +24671,415 @@ Feature: rc runs scripts as 9front rc does
       ac
       ac
       no matches status
+      """
+
+  @FOG_RC_RUN_310
+  Scenario: sed again, at the edges of its addresses, blocks, branches, text, files and limits
+    When rc runs the script
+      """
+      mkdir /tmp/se; cd /tmp/se
+      seq 1 3 >f; echo abc >g
+      fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
+      {echo a; sleep 2; echo b} | sed -u '/./s/^/x/' & sleep 1; echo mid; wait
+      {echo a; sleep 2; echo b} | sed -u -n '$p' & sleep 1; echo mid; wait
+      sed -n
+      ~ $status 'sed '[0-9]*': error' && echo error status
+      echo 'aXbYc' | tr XY '\x08\x0d' | sed -n l
+      sed -n 'N;N;l' f
+      sed -n ';;p' g; sed -n '  ; p' g
+      sed '//p' g
+      sed -n '/b/p;//p' g; sed -n '/1/,//p' f; sed -n '1;2p' f
+      sed -n '/1/{p};/2/{p};/3/{p}' f; sed -n '1{p};p' f
+      sed '1a
+      text' g
+      sed '1,2r g' f
+      sed -n '/2/b;p' f; sed -n '2b
+      p' f
+      echo abbb | sed ':a;s/b/x/;ta'; echo abbb | sed -n ':a;s/b/x/;ta;p'
+      sed -n '/1/bx;/2/bx;p;:x' f; sed -n '/1/tx;/2/bx;/3/bx;p;:x' f
+      echo old >o; sed 'w o' g; cat o
+      sed 's/a/'^`{x 10000}^'/' g | wc -c
+      {seq 1 511 | sed 's/.*/p/'; echo '{'; echo '}'} >c512; sed -n -f c512 g | wc -l
+      {seq 1 510 | sed 's/.*/p/'; echo '{'; echo '}'} >c511; sed -n -f c511 g | wc -l
+      sed -n '$!N;l' f; sed '$d' f; sed -n '2,$p' f; sed -n '/2/,3p' f; sed -n '1,/x/p' f
+      sed -n '2,1p' f; sed -n '/1/,1p' f; sed '2!d' f; sed -n '1!G;h;$p' f
+      sed 'y/abc/\nxy/' g | sed -n l; sed 'y/a\nb/xyz/' g
+      sed 's/b/\
+      /' g; sed 's/\(b\)\(c\)/\2\1\2/g' g; sed 's/b*/x/g' g; sed 's/^/>/;s/$/</' g
+      sed -n 's/x/y/;t
+      p' g
+      sed 'i\
+      before' g; sed -n 'c\
+      changed' g; sed '1c\
+      first' f
+      x 33000 | sed 's/x/yy/' | wc -c; x 32767 | sed 's/x/yy/' | wc -c; x 32766 | sed 's/x/yy/' | wc -c
+      x 32766 | sed 's/x*/&&/' | wc -c
+      x 32760 | sed 's/x*/&/' | wc -c
+      x 32767 | sed 'h;H;x' | wc -c
+      echo end
+      """
+    Then it prints
+      """
+      xa
+      mid
+      xb
+      mid
+      b
+      sed: missing pattern
+      error status
+      a\bb\rc
+      1\n2\n3
+      abc
+      abc
+      sed: First RE may not be null
+      abc
+      abc
+      1
+      2
+      3
+      1
+      2
+      sed: };/2/{p};/3/{p} command garbled: /1/{p};/2/{p};/3/{p}
+      sed: };p command garbled: 1{p};p
+      sed: a command garbled: 1a
+      sed: Only one address allowed: 1,2r g
+      1
+      3
+      1
+      3
+      axxx
+      axxx
+      3
+      1
+      abc
+      old
+      abc
+      sed: s command garbled: s/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      0
+      sed: Too many commands: {
+            0
+          510
+      1\n2
+      3
+      1
+      2
+      2
+      3
+      2
+      3
+      1
+      2
+      3
+      2
+      1
+      2
+      3
+      2
+      1
+
+      xy
+      xzc
+      a
+      c
+      abc
+      xaxxc
+      >abc<
+      abc
+      before
+      abc
+      first
+      2
+      3
+      sed: Output line too long
+            0
+      sed: Output line too long
+            0
+        32768
+      sed: Output line too long
+            0
+        32761
+        32770
+      end
+      """
+
+  @FOG_RC_RUN_311
+  Scenario: sed exits "error" when its w commands want more files than it keeps
+    Given 9front's sed faults printing its count of files, so this runs on Fog alone
+    When rc runs the script
+      """
+      cd /tmp
+      awk 'BEGIN { for (i = 1; i <= 121; i++) print "w o" i }' >w121
+      echo abc | sed -f w121 >[2]/dev/null
+      ~ $status 'sed '[0-9]*': error' && echo error status
+      """
+    Then it prints
+      """
+      error status
+      """
+
+  @FOG_RC_RUN_312
+  Scenario: sed's w to standard output, ranges ended by the last expression, blanks and NULs in its program, lines at its buffer's end, blocks and labels branched to twice
+    When rc runs the script
+      """
+      mkdir /tmp/se; cd /tmp/se
+      seq 1 3 >f; echo abc >g
+      sed -n 'w ' g
+      {echo 1; echo x; echo 1; echo y; echo z} >ry; sed -n '/1/,//p' ry
+      sed -n '1 p' g
+      echo 'pYx' | tr Y '\x00' >pf; echo p >>pf; sed -n -f pf g
+      echo '#\Y' | tr Y '\x00' >pf2; echo p >>pf2; sed -n -f pf2 g
+      sed -n 'p
+
+      #c
+      p' g
+      awk 'BEGIN { for (i = 0; i < 32768; i++) printf " "; print "p" }' >longp; sed -n -f longp g
+      awk 'BEGIN { for (i = 0; i < 32767; i++) printf " "; print "p" }' >longp1; sed -n -f longp1 g
+      awk 'BEGIN { for (i = 0; i < 32768; i++) printf " "; print "\\p" }' >longq; sed -n -f longq g
+      sed -n '/1/{p
+      }
+      /2/{p
+      p
+      }
+      /3/{p
+      }' f
+      sed -n '/1/bx
+      /2/bx
+      p
+      :x
+      p' f
+      sed -n '2bx
+      /3/bx
+      p
+      :x
+      =' f
+      """
+    Then it prints
+      """
+      abc
+      1
+      x
+      1
+      abc
+      abc
+      abc
+      abc
+      abc
+      abc
+      abc
+      abc
+      sed: Unrecognized command:                                                                                                                                                                                                                                     1
+      2
+      2
+      3
+      1
+      2
+      3
+      3
+      1
+      1
+      2
+      3
+      """
+
+  @FOG_RC_RUN_313
+  Scenario: sed exits with what a failed read of its input or its program file says
+    Given a file server holding "notes" with "p", on descriptor 3, whose reads fail with "no reading"
+    When rc runs the script
+      """
+      mkdir /tmp/fs
+      mount /fd/3 /tmp/fs
+      cd /tmp/fs
+      sed p notes
+      ~ $status 'sed '[0-9]*': read error: no reading' && echo read error status
+      sed -f notes /dev/null
+      ~ $status 'sed '[0-9]*': read error: no reading' && echo read error status
+      """
+    Then it prints
+      """
+      sed: read error: no reading
+      read error status
+      sed: read error: no reading
+      read error status
+      """
+
+  @FOG_RC_RUN_314
+  Scenario: sed a third time, at the edges of its file names, text, expressions, substitutions, ranges and input
+    When rc runs the script
+      """
+      mkdir /tmp/se; cd /tmp/se
+      seq 1 3 >f; seq 1 5 >f5; echo abc >g
+      fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
+      sed -n '/1/{p
+      } p' f
+      sed 's/a/b/wfile' g
+      sed 's/abc' g
+      echo 's/a\Yb/x/' | tr Y '\x00' >pr; sed -f pr g
+      sed '/(/p' g; sed 's/*/x/' g
+      sed 's/'^`{x 513}^'/y/' g
+      seq 1 20 | sed -n '9p;19p'
+      sed -n 'w  sp' g; cat sp
+      sed -n 'w a\ b' g; cat 'a b'
+      sed -n 'w c\' g; ls
+      sed 'a\
+         indented' g
+      sed 'a\
+      text\' g
+      {echo '1{'; echo 'a\'; x 9999; echo; echo '}'} >t3; sed -f t3 g | wc -c
+      sed '1a\
+      first
+      1a\
+      second' g
+      sed 'y/ab/xyz/' g
+      echo abc | sed 's/x*/-/g'; echo abc | sed 's/c*$/X/g'; echo abc | sed 's/$/X/g'
+      sed 's/a/\:/' g
+      sed 's/\(x\)*a/[\1]/' g; sed 's/\(a\)/<\1>/' g; sed 's/\(\)a/<\1>/' g
+      x 32760 | sed 's/$/12345678/' | wc -c; x 32760 | sed 's/$/1234567/' | wc -c
+      x 16384 | sed 's/.*/&&/' | wc -c; x 16383 | sed 's/.*/&&/' | wc -c
+      {echo; echo a} | sed '$!N;P;D'
+      seq 1 3 | sed '$!N;P;D;p'
+      sed '1a\
+      txt
+      n' f
+      sed '1a\
+      txt
+      N' f
+      sed '1a\
+      txt
+      q' f
+      sed '2,4c\
+      gone' f5
+      {echo a; echo; echo b} | sed 'n;s/^/X/'
+      echo 'aYb' | tr Y '\x00' | sed p
+      {echo a; echo 'Yb' | tr Y '\x00'} | sed -n '$p'
+      echo -n x >nn; sed -n '$p' nn; sed -n '$p' f nn
+      x 32767 | sed p | wc -c; x 32768 | sed p | wc -c; x 32769 | sed p | wc -c
+      """
+    Then it prints
+      """
+      1
+      1
+      2
+      3
+      sed: s command garbled: s/a/b/wfile
+      sed: Too much text: s/abc
+      xbc
+      sed: r.e.-using command garbled: /(/p
+      sed: r.e.-using command garbled: s/*/x/
+      sed: Too much text: s/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx9
+      19
+      abc
+      abc
+      'a b'
+      f
+      f5
+      g
+      pr
+      sp
+      abc
+      indented
+      abc
+        10004
+      abc
+      first
+      second
+      sed: y command garbled: y/ab/xyz/
+      -a-b-c
+      abX
+      abcX
+      :bc
+      abc
+      abc
+      abc
+      sed: Output line too long
+            0
+        32768
+      sed: Output line too long
+            0
+        32767
+
+      a
+      1
+      2
+      3
+      1
+      txt
+      2
+      3
+      txt
+      1
+      2
+      1
+      txt
+      1
+      gone
+      5
+      a
+      X
+      b
+      ab
+      ab
+      b
+      x
+      x
+        65536
+        65538
+        65538
+      """
+
+  @FOG_RC_RUN_315
+  Scenario: sed's file names with blanks and newlines, text at its limit, a global substitution past a shorter line, back references, and a branch into a label followed by t
+    When rc runs the script
+      """
+      mkdir /tmp/se; cd /tmp/se
+      seq 1 3 >f; echo abc >g
+      fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
+      sed -n 'w x y' g; ls x*
+      sed -n 'w n\
+         m' g
+      {echo '1{'; echo 'a\'; x 10000; echo; echo '}'} >t4; sed -f t4 g | wc -c
+      {echo abcdef; echo abc} | sed 's/x*/-/g'
+      sed 's/(x)*a/[\1]/' g; sed 's/(a)/<\1>/' g; echo bc | sed 's/(a*)b/<\1>/'
+      sed -n '/1/bx
+      p
+      :x
+      s/1/one/
+      ty
+      p
+      :y
+      =' f
+      """
+    Then it prints
+      """
+      'x y'
+      sed: Cannot create n
+      m
+      sed: Too much text: a\
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx      0
+      -a-b-c-d-e-f
+      -a-b-c
+      sed: Invalid back reference \1
+      <a>bc
+      <>c
+      1
+      2
+      2
+      2
+      3
+      3
+      3
+      """
+
+  @FOG_RC_RUN_316
+  Scenario: sed shows a surrogate in its program as the error rune, which a .NET string can hold where 9front prints the surrogate's bytes
+    Given 9front prints the bytes of a surrogate sed cannot read as a rune, so this runs on Fog alone
+    When rc runs the script
+      """
+      echo XY | tr XY '\xd800\xdfff' >/tmp/p
+      sed -f /tmp/p /dev/null >[2=1] | xd -c
+      """
+    Then it prints
+      """
+      0000000   s  e  d  :     U  n  r  e  c  o  g  n  i  z  e
+      0000010   d     c  o  m  m  a  n  d  :    ef bf bd ef bf
+      0000020  bd \n
+      0000022 
       """
