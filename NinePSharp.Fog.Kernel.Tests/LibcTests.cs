@@ -518,6 +518,17 @@ public sealed class LibcTests
     {
         static string S(string format, byte[] s) => System.Text.Encoding.UTF8.GetString(Libc.Sprint(System.Text.Encoding.UTF8.GetBytes(format), [Libc.FmtArg.Of(s)], quotefmt: true));
 
-        Assert.Equal("ab|'a b'||''|''", S("%s|", [0x61, 0x62, 0, 0x63]) + S("%q|", [0x61, 0x20, 0x62, 0, 0x63]) + S("%s|", [0, 0x61]) + S("%q|", [0, 0x61]) + S("%.1q", [0, 0x61]));
+        Assert.Equal("ab|'a b'||''|''||", S("%s|", [0x61, 0x62, 0, 0x63]) + S("%q|", [0x61, 0x20, 0x62, 0, 0x63]) + S("%s|", [0, 0x61]) + S("%q|", [0, 0x61]) + S("%.1q|", [0, 0x61]) + S("%.2s|", [0, 0x61]));
+    }
+
+    // A byte of 0x80 in a quoted string is Runeerror, as 9front's chartorune has it, and at the
+    // end of the string, where fullrune wants another byte, nothing.
+    [Fact]
+    public void AQuotedByteOf0x80IsRuneerrorOrAtTheEndNothing()
+    {
+        static string S(byte[] s) => Convert.ToHexStringLower(Libc.Sprint("%q"u8.ToArray(), [Libc.FmtArg.Of(s)], quotefmt: true));
+
+        Assert.Equal("2720efbfbd6127", S([0x20, 0x80, 0x61]));
+        Assert.Equal("272027", S([0x20, 0x80]));
     }
 }

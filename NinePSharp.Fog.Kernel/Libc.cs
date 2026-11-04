@@ -891,6 +891,8 @@ public static class Libc
             {
                 m++;
             }
+
+            // Stryker disable once Equality : UtfMax bytes are always a full rune
             else if (nbytesin - m >= Utf.UtfMax || Utf.FullRune(s.AsSpan(m, nbytesin - m)))
             {
                 m += Utf.CharToRune(out r, s.AsSpan(m, nbytesin - m));

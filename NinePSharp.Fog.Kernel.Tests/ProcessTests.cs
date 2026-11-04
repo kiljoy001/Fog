@@ -45,15 +45,18 @@ public sealed class ProcessTests
     }
 
     // dirreadall: what came before a read that fails is kept, and only a first read's failure is
-    // the call's.
+    // the call's. The pipe is read once first, so that a pipe that gave the same block again would
+    // give the directory read that byte, which is no entry, rather than the entry for ever.
     [Fact]
     public async Task ADirectoryReadKeepsTheEntriesBeforeAReadThatFails()
     {
         Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
         init.Notify(note => note == "interrupt");
         (int r, int w) = await init.PipeAsync();
+        await init.WriteAsync(w, "-"u8.ToArray()).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("-", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(r, 8192)).Span));
         var stat = new NinePSharp.Messages.Stat(0, 0, 0, new NinePSharp.Constants.Qid(NinePSharp.Constants.QidType.QTFILE, 0, 1), 0b110_100_100, 0, 0, 0, "x", "glenda", "glenda", "glenda");
-        await init.WriteAsync(w, KernelFileStats.Encode(stat));
+        await init.WriteAsync(w, KernelFileStats.Encode(stat)).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Task<IReadOnlyList<NinePSharp.Messages.Stat>> kept = init.DirReadAsync(r).AsTask();
         await Task.Delay(100);
         Assert.True(init.PostNote("interrupt"));
@@ -149,6 +152,31 @@ public sealed class ProcessTests
         string status = System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 512)).Span);
         waiting.SetResult();
         Assert.Equal("Running", status[56..63]);
+    }
+
+    // A process in one of its calls has the call's name for its state, as devproc gives psstate.
+    [Fact]
+    public async Task AProcessInACallHasTheCallsNameInItsStatus()
+    {
+        Process init = await FogKernel.InMemory(new Dictionary<string, ProgramMain>()).BootAsync();
+        var started = new TaskCompletionSource();
+        long pid = init.Fork(RforkFlags.Proc, async child =>
+        {
+            started.SetResult();
+            await child.SleepAsync(2000);
+        });
+        await started.Task;
+        string state = "Running";
+        for (int i = 0; i < 100 && state.TrimEnd() == "Running"; i++)
+        {
+            await Task.Delay(10);
+            int fd = await init.OpenAsync($"/proc/{pid}/status", NinePConstants.OREAD);
+            state = System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 512)).Span)[56..67];
+            await init.CloseAsync(fd);
+        }
+
+        Assert.Equal("Sleep      ", state);
+        await init.WaitAsync();
     }
 
     [Fact]
