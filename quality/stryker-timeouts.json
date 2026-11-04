@@ -1552,5 +1552,35 @@
     "mutator": "String mutation",
     "line": "[\"-s\"] = async b => await DirstatAsync(b) is { Length: > 0 },",
     "reason": "test -s is never true, and a script waiting with it for a file to fill waits for ever"
+  },
+  {
+    "file": "Regexp.cs",
+    "mutator": "Block removal mutation",
+    "line": "while (n.Left!.Op == TCat) {",
+    "reason": "a concatenation left unrotated is rotated again for ever"
+  },
+  {
+    "file": "Regexp.cs",
+    "mutator": "Boolean mutation",
+    "line": "literal = false;",
+    "reason": "every rune is literal, the end's 0 among them, so the parse never reaches its end"
+  },
+  {
+    "file": "Regexp.cs",
+    "mutator": "Boolean mutation",
+    "line": "(literal, rune) = (false, 0);",
+    "reason": "the end's 0 is literal, a rune like any other, so the parse never reaches its end"
+  },
+  {
+    "file": "Regexp.cs",
+    "mutator": "Boolean mutation",
+    "line": "peek = false;",
+    "reason": "a token peeked at is given again for ever"
+  },
+  {
+    "file": "Regexp.cs",
+    "mutator": "Negate expression",
+    "line": "if (literal)",
+    "reason": "the end's 0, not literal, is taken for a rune, so the parse never reaches its end"
   }
 ]

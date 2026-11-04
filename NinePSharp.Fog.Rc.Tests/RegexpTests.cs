@@ -80,6 +80,40 @@ public sealed class RegexpTests
         { "c", $"[{new string('a', 201)}]", "a", "&", "err Class too big\n|nil" },
     };
 
+    // As above, with newlines in the expression and subject, and rregsub given fewer
+    // subexpressions than were matched, none, or no match at all (-1).
+    public static TheoryData<string, string, string, string, int, string> MoreVectors => new()
+    {
+        { "c", "a.c", "a\nc", "&", 10, "0" },
+        { "n", "a.c", "a\nc", "&", 10, "1 0:0,3 [a\nc]" },
+        { "c", "a[^x]c", "a\nc", "&", 10, "0" },
+        { "n", "a[^x]c", "a\nc", "&", 10, "0" },
+        { "l", "a.c", "a\nc", "&", 10, "0" },
+        { "l", "a.c", "a.c", "&", 10, "1 0:0,3 [a.c]" },
+        { "c", "a(b)c", "abc", @"<\2|\1|&>", 2, "1 0:0,3 1:1,2 [<|b|abc>]" },
+        { "c", "a(b)c", "abc", @"<\1|&>", 0, "1 0:0,3 1:1,2 [<|>]" },
+        { "c", "a(b)c", "abc", @"<\1|&>", -1, "1 0:0,3 1:1,2 [<|>]" },
+        { "c", "a|", "a", "&", 10, "err regexp a|: parsing error|nil" },
+        { "c", "(", "a", "&", 10, "err regexp (: parsing error|nil" },
+        { "c", new string('a', 120) + "|*", "a", "&", 10, $"err regexp {new string('a', 120)}|nil" },
+        { "c", new string('a', 121) + "|*", "a", "&", 10, $"err regexp {new string('a', 120)}|nil" },
+        { "c", new string('é', 60) + "|*", "a", "&", 10, $"err regexp {new string('é', 60)}|nil" },
+        { "c", "[a-c-e]", "d", "&", 10, "err Malformed class|nil" },
+        { "c", $"[{string.Concat(Enumerable.Repeat("a-b", 150))}]", "b", "&", 10, "1 0:0,1 [b]" },
+        { "c", $"[{string.Concat(Enumerable.Repeat("a-b", 101))}]", "b", "&", 10, "1 0:0,1 [b]" },
+        { "c", "[a-a]", "a", "&", 10, "1 0:0,1 [a]" },
+        { "c", "[a-bc-d]", "c", "&", 10, "1 0:0,1 [c]" },
+        { "c", "[^a-bc-d]", "ce", "&", 10, "1 0:1,2 [e]" },
+        { "c", "[^a-cc-d]", "ce", "&", 10, "1 0:1,2 [e]" },
+        { "c", "[^a-cb-d]", "be", "&", 10, "1 0:1,2 [e]" },
+        { "c", "[ac]", "b", "&", 10, "0" },
+        { "c", "[^ac]", "ab", "&", 10, "1 0:1,2 [b]" },
+        { "c", "(a)(b)(c)", "abc", @"<\2>", 2, "1 0:0,3 1:0,1 2:1,2 3:2,3 [<>]" },
+        { "c", "[a]", "\U0010FFFFa", "&", 10, "1 0:1,2 [a]" },
+        { "c", "[a]", "\U0010FFFEa", "&", 10, "1 0:1,2 [a]" },
+        { "c", "[^a]", "\U0010FFFFa", "&", 10, "1 0:0,1 [\U0010FFFF]" },
+    };
+
     [Theory]
     [MemberData(nameof(Vectors))]
     public void MatchesAndSubstitutesAs9frontDoes(string mode, string pattern, string subject, string template, string expected)
@@ -87,7 +121,42 @@ public sealed class RegexpTests
         Assert.Equal(expected, Run(mode, pattern, subject, template));
     }
 
-    private static string Run(string mode, string pattern, string subject, string template)
+    [Theory]
+    [MemberData(nameof(MoreVectors))]
+    public void MatchesAndSubstitutesAs9frontDoesAcrossLinesAndWithFewerSubexpressions(string mode, string pattern, string subject, string template, int msize, string expected)
+    {
+        Assert.Equal(expected, Run(mode, pattern, subject, template, msize));
+    }
+
+    // regcomp of bytes is regcomp: its . is no newline, as regcompnl's is.
+    [Fact]
+    public void RegcompOfBytesMatchesNoNewlineWithItsDot()
+    {
+        Assert.Equal(0, Regcomp("a.c"u8.ToArray()).Regexec("a\nc"u8.ToArray(), null, 0));
+        Assert.Equal(1, Regcompnl("a.c").Regexec("a\nc"u8.ToArray(), null, 0));
+    }
+
+    // A template whose runes end without a NUL ends at its last, a backslash there with it.
+    [Fact]
+    public void ATemplateWithoutItsNulEndsAtItsLastRune()
+    {
+        Assert.Equal("ab", string.Concat(Rregsub(['a', 'b'], 16, [0], null, 0).Select(c => (char)c)));
+        Assert.Equal("a", string.Concat(Rregsub(['a', '\\'], 16, [0], null, 0).Select(c => (char)c)));
+    }
+
+    // regerror: the message on standard error, and exits "regerr".
+    [Fact]
+    public async Task RegerrorSaysWhatAndExitsRegerr()
+    {
+        NinePSharp.Fog.Kernel.Process init = await NinePSharp.Fog.Kernel.FogKernel.InMemory(new Dictionary<string, NinePSharp.Fog.Kernel.ProgramMain>()).BootAsync();
+        (int r, int w) = await init.PipeAsync();
+        await init.DupAsync(w, 2);
+        var exit = await Assert.ThrowsAsync<NinePSharp.Fog.Kernel.ExitException>(() => RegerrorAsync(init, "bad"));
+        Assert.Equal("regerr", exit.Message);
+        Assert.Equal("regerror: bad\n", Encoding.UTF8.GetString((await init.ReadAsync(r, 100)).Span));
+    }
+
+    private static string Run(string mode, string pattern, string subject, string template, int msize = 10)
     {
         Regexp p;
         try
@@ -119,7 +188,7 @@ public sealed class RegexpTests
         if (r != 0)
         {
             line.Append(" [");
-            foreach (uint c in Rregsub(Runes(template), 16, s, m, 10))
+            foreach (uint c in Rregsub(Runes(template), 16, s, msize < 0 ? null : m, msize < 0 ? 10 : msize))
             {
                 line.Append(char.ConvertFromUtf32((int)c));
             }

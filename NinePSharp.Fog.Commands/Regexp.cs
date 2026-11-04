@@ -61,6 +61,7 @@ public sealed class Regexp
     // error rune.
     public static Regexp Regcomp(byte[] s) => Regcomp1(s, false, false);
 
+    // Stryker disable once Boolean : a literal expression has no . or class for nl to change
     public static Regexp Regcomplit(string s) => Regcomp1(Encoding.UTF8.GetBytes(s), false, true);
 
     public static Regexp Regcompnl(string s) => Regcomp1(Encoding.UTF8.GetBytes(s), true, false);
@@ -87,6 +88,8 @@ public sealed class Regexp
                 if (c is >= '0' and <= '9')
                 {
                     int i = (int)(c - '0');
+
+                    // Stryker disable once Equality : a subexpression that ends at 0 starts there too, and copies nothing either way
                     if (match is not null && i < msize && match[i].Ep >= 0)
                     {
                         Copy(dst, ep, str, match[i]);
@@ -491,6 +494,7 @@ public sealed class Regexp
         // *tail = list: the rest of the free threads hung after the last, as regexec leaves them.
         public void Tail(Rethread? list)
         {
+            // Stryker disable once Equality,Block : the list is cleared just after, so where the free threads go matters only to their reuse, and Take makes a thread when none is free
             if (last is null)
             {
                 Head = list;
@@ -652,6 +656,8 @@ public sealed class Regexp
             if (done)
             {
                 rune = 0;
+
+                // Stryker disable once Statement : a read past the last rune reads its NUL again, rune 0 as here
                 return;
             }
 
@@ -668,6 +674,8 @@ public sealed class Regexp
             if (done)
             {
                 (literal, rune) = (false, 0);
+
+                // Stryker disable once Statement : a read past the last rune reads its NUL again, rune 0 as here
                 return;
             }
 
@@ -677,6 +685,7 @@ public sealed class Regexp
         // chartorune at rawexp, and done once the rune is the last.
         private void Read()
         {
+            // Stryker disable once Arithmetic : a read is made only before the last rune is done
             rawexp += Utf.CharToRune(out rune, raw.AsSpan(Math.Min(rawexp, raw.Length - 1)));
             done = rawexp >= raw.Length - 1;
         }
@@ -768,6 +777,7 @@ public sealed class Regexp
                         Getnextrlit();
                     }
 
+                    // Stryker disable once Equality : a range of one rune is the same either way round
                     (lo, hi) = lo > rune ? (rune, lo) : (lo, rune);
                     Getnextrlit();
                 }
@@ -780,10 +790,12 @@ public sealed class Regexp
                 pairs.Add((lo, hi));
             }
 
+            // Stryker disable once Conditional : ranges from the same rune merge into one whatever their order
             pairs.Sort((a, b) => a.Lo != b.Lo ? b.Lo.CompareTo(a.Lo) : b.Hi.CompareTo(a.Hi));
             cpairs.Clear();
             foreach ((uint lo, uint hi) in pairs)
             {
+                // Stryker disable once Arithmetic,Equality,Statement : ranges that touch match the same runes merged or apart, and a range just added merges with itself to itself
                 if (cpairs.Count == 0 || hi < cpairs[^2] - 1)
                 {
                     cpairs.Add(lo);
@@ -805,6 +817,8 @@ public sealed class Regexp
             for (int p = 0; p < cpairs.Count; p += 2)
             {
                 n = Node(TClass, n, null);
+
+                // Stryker disable once Equality : the count is even and p is, so p + 3 is never it
                 (n.R, n.R1, n.Nclass) = (p + 3 < cpairs.Count ? cpairs[p + 3] + 1 : 0, cpairs[p] - 1, i++);
             }
 
