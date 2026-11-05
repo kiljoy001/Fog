@@ -80,7 +80,7 @@ internal sealed class MountTree
 
     public async Task<IReadOnlyList<ResourceDirectoryEntry>> ReadDirectoryAsync(ResourceHandle directory, CancellationToken cancellationToken)
     {
-        (uint fid, uint iounit) = await OpenFidAsync(directory, NinePConstants.OREAD, cancellationToken);
+        (uint fid, uint iounit, _) = await OpenFidAsync(directory, NinePConstants.OREAD, cancellationToken);
         var records = new List<byte>();
         try
         {
@@ -123,11 +123,13 @@ internal sealed class MountTree
     public async Task<ResourceStat> StatOpenAsync(ResourceOpenHandle handle, CancellationToken cancellationToken)
         => await StatFidAsync(Opened(handle).Fid, cancellationToken);
 
-    // mntopen: a clone of the file's fid, opened, which the open file keeps until it is closed.
+    // mntopen: a clone of the file's fid, opened, which the open file keeps until it is closed; the
+    // open file's qid is the one the open gave, as mntopencreate sets the channel's. What is done
+    // to the open file is done through its fid, so the tree need not know that qid.
     public async Task<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, CancellationToken cancellationToken)
     {
-        (uint fid, uint iounit) = await OpenFidAsync(resource, mode, cancellationToken);
-        return Open(resource, fid, iounit, mode);
+        (uint fid, uint iounit, Qid qid) = await OpenFidAsync(resource, mode, cancellationToken);
+        return Open(Handle(qid), fid, iounit, mode);
     }
 
     // mntcreate: a clone of the directory's fid becomes the created file, open.
@@ -249,13 +251,13 @@ internal sealed class MountTree
         return new ResourceStat(Handle(stat.Qid), stat.Name, stat.Mode, stat.Atime, stat.Mtime, stat.Length, stat.Uid, stat.Gid, stat.Muid);
     }
 
-    private async Task<(uint Fid, uint IoUnit)> OpenFidAsync(ResourceHandle resource, byte mode, CancellationToken cancellationToken)
+    private async Task<(uint Fid, uint IoUnit, Qid Qid)> OpenFidAsync(ResourceHandle resource, byte mode, CancellationToken cancellationToken)
     {
         uint fid = await CloneAsync(resource, cancellationToken);
         try
         {
             var open = new Ropen(await Connection.RpcAsync(tag => new Topen(tag, fid, mode), MessageTypes.Ropen, cancellationToken));
-            return (fid, IoUnit(open.Iounit));
+            return (fid, IoUnit(open.Iounit), open.Qid);
         }
         catch
         {

@@ -857,35 +857,23 @@ public sealed partial class Process
     }
 
     // procfds: the process's dot, then each open descriptor as procfdprint prints it: its number,
-    // mode, device and its number, qid, iounit, offset and name.
+    // mode, device and its number, qid, iounit, offset and name. All of it is the channel's, its qid
+    // as its open gave it, so no file's server is asked, and one that does not answer holds nothing up.
     internal async Task<string> FdsAsync()
     {
         var text = new StringBuilder($"{Clean(NameOf(process.CurrentDirectory))}\n");
         foreach (DescriptorSlot slot in process.Descriptors.Snapshot().OrderBy(slot => slot.Number))
         {
-            Stat d;
+            ResourceHandle resource = slot.Handle.Resource;
+            long offset;
             try
             {
-                int at = 0;
-                d = new Stat((await calls.FStatAsync(slot.Number, ushort.MaxValue)).Span, ref at);
+                offset = await calls.SeekAsync(slot.Number, 0, Plan9SeekWhence.Current);
             }
             catch (ArgumentException)
             {
                 // Closed since.
                 continue;
-            }
-            catch (IOException)
-            {
-                // A file removed since it was opened has no stat; procfdprint takes all it prints
-                // from the channel, and so does this, which then has only its name.
-                (char type, uint dev) = KernelFileStats.Device(slot.Handle.Resource);
-                d = new Stat(0, type, dev, slot.Handle.Resource.Qid, 0, 0, 0, 0, string.Empty, string.Empty, string.Empty, string.Empty);
-            }
-
-            long offset;
-            try
-            {
-                offset = await calls.SeekAsync(slot.Number, 0, Plan9SeekWhence.Current);
             }
             catch (NamespaceFidException)
             {
@@ -896,8 +884,11 @@ public sealed partial class Process
             // %.2s of "r w rw" from the mode's place: two letters, or none for exec.
             int m = (slot.Handle.Mode & 3) * 2;
             string mode = "r w rw".Substring(Math.Min(m, 6), Math.Max(0, Math.Min(2, 6 - m)));
-            string name = kernel.Names.TryGetValue(slot.Handle, out string? named) ? named : $"#|/{d.Name}";
-            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"{slot.Number,3} {mode} {(char)d.Type} {d.Dev,4} ({d.Qid.Path:x16} {d.Qid.Version} {(byte)d.Qid.Type:x2}) {slot.Handle.IoUnit,5} {offset,8} {name}\n");
+            (char type, uint dev) = KernelFileStats.Device(resource);
+
+            // Only pipe's ends are not opened by a name; devpipe names them data and data1.
+            string name = kernel.Names.TryGetValue(slot.Handle, out string? named) ? named : resource.Identity.Path == 0 ? "#|/data" : "#|/data1";
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"{slot.Number,3} {mode} {type} {dev,4} ({resource.Qid.Path:x16} {resource.Qid.Version} {(byte)resource.Qid.Type:x2}) {slot.Handle.IoUnit,5} {offset,8} {name}\n");
         }
 
         return text.ToString();

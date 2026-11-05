@@ -3,6 +3,8 @@ using System.Numerics;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel.Tests.Support;
+using NinePSharp.Interfaces;
+using NinePSharp.Messages;
 using NinePSharp.Namespaces;
 using Xunit;
 
@@ -168,6 +170,34 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal($"{srv,3} w  s    0 (0000000000000004 0 00)     0        0 /srv/gone\n", lines[srv + 1]);
     }
 
+    // procfdprint takes all it prints from the channel, so a file on a mount whose server answers
+    // nothing more is listed, with the qid its open gave and an iounit of msize less IOHDRSZ for
+    // the open's 0, and its server is asked nothing.
+    [Fact]
+    public async Task FdAsksNothingOfTheServerOfAMountedFile()
+    {
+        await BootAsync();
+        (int client, int server) = await init.PipeAsync();
+        Task mounted = init.MountAsync(client, -1, "/n", MountFlags.Replace, string.Empty).AsTask();
+        await AnswerAsync(server, MessageTypes.Tattach);
+        await mounted.WaitAsync(KernelDriver.Bound);
+        Task<int> opening = init.OpenAsync("/n/x", NinePConstants.OREAD).AsTask();
+        await AnswerAsync(server, MessageTypes.Topen);
+        int x = await opening.WaitAsync(KernelDriver.Bound);
+        Task<ReadOnlyMemory<byte>> asked = init.ReadAsync(server, 8192).AsTask();
+
+        int fd = await init.OpenAsync($"/proc/{init.Pid}/fd", NinePConstants.OREAD);
+        var lines = new List<string>();
+        for (string line; (line = Encoding.UTF8.GetString((await init.ReadAsync(fd, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Span)).Length > 0;)
+        {
+            lines.Add(line);
+        }
+
+        Assert.StartsWith($"{x,3} r  M ", lines[x + 1], StringComparison.Ordinal);
+        Assert.EndsWith(" (0000000000001234 3 00)  8168        0 /n/x\n", lines[x + 1], StringComparison.Ordinal);
+        Assert.False(asked.IsCompleted);
+    }
+
     [Fact]
     public async Task FdGivesDotAndEachOpenDescriptorALineAtATime()
     {
@@ -193,7 +223,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         Assert.Equal(
             [
                 "/tmp\n",
-                "  0 rw R    0 (000000000000000b 2 00)     0        5 /tmp/f\n",
+                "  0 rw R    0 (000000000000000b 0 00)     0        5 /tmp/f\n",
                 "  1 r  R    0 (0000000000000005 0 80)     0        0 /tmp\n",
                 "  2 r  p    0 (000000000000000b 0 00)     0      123 /proc/1/fd\n",
                 "  3  R    0 (000000000000000c 0 00)     0        0 /tmp/x\n",
@@ -334,6 +364,26 @@ public sealed class ProcDeviceTests : IAsyncDisposable
         catch (IOException error)
         {
             return error.Message;
+        }
+    }
+
+    // The requests on the server's end of a mount answered, up to one of the type given: its file
+    // x has the version 7 to a walk and 3 to its open.
+    private async Task AnswerAsync(int server, MessageTypes last)
+    {
+        for (MessageTypes type = 0; type != last;)
+        {
+            byte[] request = (await init.ReadAsync(server, 8192).AsTask().WaitAsync(KernelDriver.Bound)).ToArray();
+            type = ScriptedPeer.Type(request);
+            ushort tag = ScriptedPeer.Tag(request);
+            ISerializable reply = type switch
+            {
+                MessageTypes.Tversion => new Rversion(tag, 8192, "9P2000"),
+                MessageTypes.Tattach => new Rattach(tag, new Qid(QidType.QTDIR, 0, 0)),
+                MessageTypes.Twalk => new Rwalk(tag, [.. new Twalk(request).Wname.Select(_ => new Qid(QidType.QTFILE, 7, 0x1234))]),
+                _ => new Ropen(tag, new Qid(QidType.QTFILE, 3, 0x1234), 0),
+            };
+            await init.WriteAsync(server, ScriptedPeer.Encode(reply));
         }
     }
 }

@@ -7211,6 +7211,35 @@ Feature: rc runs scripts as 9front rc does
         6 rw I    0 (0000000000000006 0 00)     0        0 /net/tcp/clone
       """
 
+  @FOG_RC_RUN_328
+  Scenario: /proc's fd gives a descriptor's qid as its open gave it, not as the file's is since
+    When rc runs the script
+      """
+      rm -rf /tmp/qv; mkdir /tmp/qv; cd /tmp/qv
+      echo a >f
+      ls -q f | awk '{ print "before", $2 }'
+      {
+          echo b
+          echo c
+          rc -c 'awk ''$1 == 1 { print "open", $6, $10 >"/fd/2" }'' /proc/$pid/fd'
+      } >>f >[2]g
+      cat g
+      ls -q f | awk '{ print "after", $2 }'
+      {
+          echo d >[1=3]
+          rc -c 'awk ''$1 == 3 { print "created", $6, $10 }'' /proc/$pid/fd'
+      } >[3]h
+      ls -q h | awk '{ print "now", $2 }'
+      """
+    Then it prints
+      """
+      before 2
+      open 2 /tmp/qv/f
+      after 6
+      created 0 /tmp/qv/h
+      now 2
+      """
+
   @FOG_RC_RUN_235
   Scenario: aux/listen1's command and a relaying aux/trampoline hold only the descriptors they work with
     Given 9front's devices and qids are its own, so this runs on Fog alone
@@ -7800,7 +7829,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: chmod sets a mode in octal or by who, op and permissions, and says which it cannot take
     When rc runs the script
       """
-      mkdir /tmp/cm; cd /tmp/cm
+      rm -rf /tmp/cm; mkdir /tmp/cm; cd /tmp/cm
       >f
       chmod 755 f; ls -F f
       chmod a-x f; ls -F f
@@ -8060,7 +8089,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: cp copies a file to another or files into a directory, keeping the mode, and with -x the time
     When rc runs the script
       """
-      mkdir /tmp/cp /tmp/cp/d; cd /tmp/cp
+      rm -rf /tmp/cp; mkdir /tmp/cp /tmp/cp/d; cd /tmp/cp
       echo hello >a
       cp a b; cat b
       cp a b d; ls d
@@ -9384,7 +9413,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: sed edits its input by addresses, substitutions, the hold space, branches and the texts it adds
     When rc runs the script
       """
-      mkdir /tmp/sd; cd /tmp/sd
+      rm -rf /tmp/sd; mkdir /tmp/sd; cd /tmp/sd
       for(i in one two three four five six) echo $i >>f
       sed -n 2p f
       sed 2d f
@@ -9771,7 +9800,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: grep shows the lines its expression matches, or does not, counted, numbered or named by file
     When rc runs the script
       """
-      mkdir /tmp/gp; cd /tmp/gp
+      rm -rf /tmp/gp; mkdir /tmp/gp; cd /tmp/gp
       for(i in apple banana cherry date elderberry fig grape) echo $i >>f
       echo 'Apple pie' >>f
       echo 'kiwi
@@ -11582,7 +11611,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: sed's limits, its labels and branches, its text, files and back references, and its errors, as 9front's sed has them
     When rc runs the script
       """
-      mkdir /tmp/sd; cd /tmp/sd
+      rm -rf /tmp/sd; mkdir /tmp/sd; cd /tmp/sd
       seq 1 5 >f; echo abc >g
       fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
       sed; echo status $status
@@ -11786,7 +11815,7 @@ Feature: rc runs scripts as 9front rc does
     Given 9front's kernel warns on its console of a process past 100 descriptors, and its sed faults after the first line of w's message, so this runs on Fog alone
     When rc runs the script
       """
-      mkdir /tmp/sd; cd /tmp/sd
+      rm -rf /tmp/sd; mkdir /tmp/sd; cd /tmp/sd
       echo abc >g
       seq 1 119 | sed 's/.*/w \/tmp\/sd\/w&/' >w119; sed -f w119 g; echo $status
       seq 1 119 | sed 's/.*/s\/a\/a\/w \/tmp\/sd\/v&/' >v119; sed -f v119 g; echo $status
@@ -11809,7 +11838,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: comm prints the lines of two sorted files in three columns, leaving out those its flags name, its lines cut after 2047 bytes and compared as signed chars
     When rc runs the script
       """
-      mkdir /tmp/cm; cd /tmp/cm
+      rm -rf /tmp/cm; mkdir /tmp/cm; cd /tmp/cm
       {echo a; echo b; echo d; echo f} >x; {echo b; echo c; echo d; echo g; echo h} >y
       comm x y
       comm -1 x y; comm -2 x y; comm -3 x y
@@ -24354,7 +24383,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: cmp of a pipe read in pieces, one of them longer than its buffer, counting lines as it goes
     When rc runs the script
       """
-      mkdir /tmp/cp; cd /tmp/cp
+      rm -rf /tmp/cp; mkdir /tmp/cp; cd /tmp/cp
       a=aaaaaaaaaaaaaaaa
       a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
       a=$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a$a
@@ -24411,7 +24440,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: comm of lines alike in their first bytes, and of files that end after a common line
     When rc runs the script
       """
-      mkdir /tmp/cm; cd /tmp/cm
+      rm -rf /tmp/cm; mkdir /tmp/cm; cd /tmp/cm
       echo 'ab
       ac' >a; echo 'ac
       ad' >b
@@ -24556,7 +24585,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: grep of files that all match, a class past its limits, classes of runes past ASCII and ranges that touch, overlap or run backwards
     When rc runs the script
       """
-      mkdir /tmp/gp; cd /tmp/gp
+      rm -rf /tmp/gp; mkdir /tmp/gp; cd /tmp/gp
       echo a >f; echo a >g; echo b >h
       grep a f g; echo status $status
       grep a f h; echo status $status
@@ -24677,7 +24706,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: sed again, at the edges of its addresses, blocks, branches, text, files and limits
     When rc runs the script
       """
-      mkdir /tmp/se; cd /tmp/se
+      rm -rf /tmp/se; mkdir /tmp/se; cd /tmp/se
       seq 1 3 >f; echo abc >g
       fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
       {echo a; sleep 2; echo b} | sed -u '/./s/^/x/' & sleep 1; echo mid; wait
@@ -24820,7 +24849,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: sed's w to standard output, ranges ended by the last expression, blanks and NULs in its program, lines at its buffer's end, blocks and labels branched to twice
     When rc runs the script
       """
-      mkdir /tmp/se; cd /tmp/se
+      rm -rf /tmp/se; mkdir /tmp/se; cd /tmp/se
       seq 1 3 >f; echo abc >g
       sed -n 'w ' g
       {echo 1; echo x; echo 1; echo y; echo z} >ry; sed -n '/1/,//p' ry
@@ -24905,7 +24934,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: sed a third time, at the edges of its file names, text, expressions, substitutions, ranges and input
     When rc runs the script
       """
-      mkdir /tmp/se; cd /tmp/se
+      rm -rf /tmp/se; mkdir /tmp/se; cd /tmp/se
       seq 1 3 >f; seq 1 5 >f5; echo abc >g
       fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
       sed -n '/1/{p
@@ -25029,7 +25058,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: sed's file names with blanks and newlines, text at its limit, a global substitution past a shorter line, back references, and a branch into a label followed by t
     When rc runs the script
       """
-      mkdir /tmp/se; cd /tmp/se
+      rm -rf /tmp/se; mkdir /tmp/se; cd /tmp/se
       seq 1 3 >f; echo abc >g
       fn x { awk 'BEGIN { for (i = 0; i < '$1'; i++) printf "x" }' }
       sed -n 'w x y' g; ls x*
@@ -25088,7 +25117,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's options, its syntax and fatal errors, warnings and escapes, as 9front's awk has them
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       echo 'a	b:c' >d
       awk
       ~ $status 'awk '[0-9]*': usage' && echo usage status
@@ -25247,7 +25276,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's variables, numbers from strings, ARGV and assignments, escapes, fields, separators and records
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       echo 'a b c' >r
       echo '  lead  and  trail  ' >sp
       awk 'BEGIN { print NF, NR, FNR, RSTART, RLENGTH, length(NF), length(FILENAME) "|" FILENAME "|" }'
@@ -25473,7 +25502,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's functions, printf, arithmetic, substr, split, sub and gsub, its regular expressions, getline, redirections, close and system
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       echo 'a b c' >r
       awk 'function f(a, b) { return a + b } BEGIN { print f(1, 2), f(1), f(), f(1, 2, 3) }'
       awk 'function g(a) { a[1] = 5 } BEGIN { g(x); print x[1] }'
@@ -25689,7 +25718,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's grammar: -safe, misplaced functions and statements, escapes, operators, control flow and builtins
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       echo 'a b c' >r
       awk -safe 'BEGIN { system("echo no") }'
       awk -safe 'BEGIN { "echo no" | getline }'
@@ -25928,7 +25957,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's errors at a line before the program's last, its options at their edges, its standard files closed, letters at the ends of their ranges, the indefinite integer, infinity converted, runes cut short and its seed
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       awk 'BEGIN { print 1/0 }
       END { }'
       echo 'ab c' | awk -F '' '{ print $1 }'
@@ -26010,7 +26039,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's assignments' escapes, ENVIRON, SYMTAB's cells, numbers with blanks after them, ARGV's files, fields past their table, tables rehashed and deleted from, and fields and records rebuilt when read
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       awk -v 'x=\b\f\r\n\t\\\\\q\101\1012\12\7\9\777' 'BEGIN { printf "%s", x }' | xd -c
       awk -v 'x=a\' 'BEGIN { print x }'
       awk -v 'x=a
@@ -26151,7 +26180,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's program from standard input and files that end in an error, names and escapes at their edges, $ in functions, carriage returns, bytes the grammar has no token for, loops and break, pat,pat's limit, its stack's depth and a number pushed back too far
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       echo 'BEGIN { print 1' >pe; awk -f pe
       echo 'BEGIN { print "stdin" }' | awk -f -
       awk 'BEGIN { x = $'
@@ -26291,7 +26320,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's standard input by name, pipes waited for, fields and records rebuilt when executed, END's jumps, functions' arguments, locals and arrays made in them, getline's flushes and values, printf's redirections and arguments, regular expressions converted, its own pipes, fflush and its seeds
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       echo 10 >n10; echo q >pr
       echo q | awk 'BEGIN { getline x < "/dev/stdin"; print x }'
       awk 'BEGIN { print "x" | "sleep 1; cat" }'; echo after
@@ -26498,7 +26527,7 @@ Feature: rc runs scripts as 9front rc does
   Scenario: awk's locals made arrays, a scalar deleted, strings returned, an array returned, classes and escapes at their edges, the commands of system and pipes, its seed's digits, writes that fail and its standard files closed
     When rc runs the script
       """
-      mkdir /tmp/ak; cd /tmp/ak
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
       awk 'function f(a, l) { l[1] = 1; return l } BEGIN { print f(1) "|" }'
       awk 'function d(a) { delete a; return length(a) } BEGIN { print d(12) }'
       awk 'function f() { x = "10"; return x } function g() { x = "10"; y = x + 0; return x } BEGIN { print (f() < 9), (g() < 9) }'
