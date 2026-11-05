@@ -100,22 +100,20 @@ public sealed class ListenTests : IAsyncLifetime
 
     // listen sleeps (pid*10)%200 ms before it announces each service, so that the listens a
     // machine starts together do not announce at once; on a clock that stands still, nothing is
-    // announced until the clock passes that sleep.
+    // announced until the clock passes that sleep, nor a millisecond short of it.
     [Fact]
     public async Task EachServiceIsAnnouncedOnlyOnceListensSleepHasPassed()
     {
         await ServiceAsync("tcp17151", "echo late");
         await ListenAsync("-q", "-t", "/tmp/svc", "-a", "127.0.0.1");
-        Process serving = kernel.Processes.Values.Single(p => p.Args.StartsWith("listen [tcp ", StringComparison.Ordinal));
+        Process serving = await NamedAsync("listen [tcp ");
         long sleep = (serving.Pid * 10) % 200;
-        Assert.True(sleep > 0, $"listen's pid {serving.Pid} sleeps for none");
-        for (int i = 0; i < 20; i++)
-        {
-            await Task.Delay(100);
-            Assert.DoesNotContain(kernel.Processes.Values, p => p.Args.EndsWith("!17151]", StringComparison.Ordinal));
-        }
+        Assert.True(sleep > 1, $"listen's pid {serving.Pid} sleeps for {sleep} ms");
+        await NotAnnouncedAsync(17151);
+        clock.Advance(TimeSpan.FromMilliseconds(sleep - 1));
+        await NotAnnouncedAsync(17151);
 
-        clock.Advance(TimeSpan.FromMilliseconds(sleep));
+        clock.Advance(TimeSpan.FromMilliseconds(1));
         Assert.Equal("late\n", await CallWhenAnsweredAsync(17151));
     }
 
@@ -348,6 +346,33 @@ public sealed class ListenTests : IAsyncLifetime
         {
             clock.Advance(TimeSpan.FromSeconds(1));
             await Task.Delay(10);
+        }
+    }
+
+    // The one process whose name starts so, once it has set it, the clock standing still.
+    private async Task<Process> NamedAsync(string name)
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            Process[] named = [.. kernel.Processes.Values.Where(p => p.Args.StartsWith(name, StringComparison.Ordinal))];
+            if (named.Length > 0)
+            {
+                return Assert.Single(named);
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new InvalidOperationException($"no process is named {name}; processes: {string.Join(" | ", kernel.Processes.Values.Select(p => $"{p.Pid}:{p.Args}"))}");
+    }
+
+    // Nothing announces the port over two seconds, time enough for a sleep fallen due to be taken.
+    private async Task NotAnnouncedAsync(int port)
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            await Task.Delay(100);
+            Assert.DoesNotContain(kernel.Processes.Values, p => p.Args.EndsWith($"!{port}]", StringComparison.Ordinal));
         }
     }
 
