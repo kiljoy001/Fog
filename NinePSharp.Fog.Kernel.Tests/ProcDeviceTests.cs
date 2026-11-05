@@ -383,7 +383,7 @@ public sealed class ProcDeviceTests : IAsyncDisposable
                 MessageTypes.Twalk => new Rwalk(tag, [.. new Twalk(request).Wname.Select(_ => new Qid(QidType.QTFILE, 7, 0x1234))]),
                 _ => new Ropen(tag, new Qid(QidType.QTFILE, 3, 0x1234), 0),
             };
-            await init.WriteAsync(server, ScriptedPeer.Encode(reply));
+            await init.WriteAsync(server, ScriptedPeer.Encode(reply)).AsTask().WaitAsync(KernelDriver.Bound);
         }
     }
 }

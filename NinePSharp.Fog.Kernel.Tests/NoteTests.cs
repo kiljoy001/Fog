@@ -240,7 +240,7 @@ public sealed class NoteTests : IAsyncDisposable
         Assert.Equal(Errors.Interrupted, (await Assert.ThrowsAsync<SyscallException>(() => first.WaitAsync(KernelDriver.Bound))).Message);
 
         Task<ReadOnlyMemory<byte>> second = await child.BeginAsync(p => p.ReadAsync(read, 1).AsTask());
-        await init.WriteAsync(write, "x"u8.ToArray());
+        await init.WriteAsync(write, "x"u8.ToArray()).AsTask().WaitAsync(KernelDriver.Bound);
 
         Assert.Equal("x", Encoding.ASCII.GetString((await second.WaitAsync(KernelDriver.Bound)).Span));
     }

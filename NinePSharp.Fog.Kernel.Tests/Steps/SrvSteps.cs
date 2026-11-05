@@ -51,7 +51,7 @@ public sealed class SrvSteps(KernelDriver driver)
     public Task WhenClosesFirst() => Init.CloseAsync(pipe.First).AsTask();
 
     [When(@"^the process writes ""(.*)"" to the opened /srv file$")]
-    public Task WhenWrites(string text) => Init.WriteAsync(opened, Encoding.UTF8.GetBytes(text)).AsTask();
+    public Task WhenWrites(string text) => Init.WriteAsync(opened, Encoding.UTF8.GetBytes(text)).AsTask().WaitAsync(KernelDriver.Bound);
 
     [When(@"^the process creates ""(.*)"" for (reading|writing)$")]
     public Task WhenCreates(string path, string how) => RecordAsync(async () => await Init.CreateAsync(path, how == "reading" ? NinePConstants.OREAD : NinePConstants.OWRITE, Mode));
@@ -288,7 +288,7 @@ public sealed class SrvSteps(KernelDriver driver)
     [Then(@"^the opened /srv file is the pipe's first end$")]
     public async Task ThenSameChannel()
     {
-        await Init.WriteAsync(opened, "x"u8.ToArray());
+        await Init.WriteAsync(opened, "x"u8.ToArray()).AsTask().WaitAsync(KernelDriver.Bound);
         Assert.Equal("x", Encoding.UTF8.GetString((await Init.ReadAsync(pipe.Second, 64).AsTask().WaitAsync(KernelDriver.Bound)).Span));
     }
 
