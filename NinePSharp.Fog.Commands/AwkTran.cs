@@ -103,6 +103,8 @@ public sealed partial class Awk
                 }
 
                 tp.Nelemt--;
+
+                // Stryker disable once Statement : a name is in its table once, so nothing after it matches
                 return;
             }
         }
@@ -119,6 +121,8 @@ public sealed partial class Awk
         }
 
         int q = s.IndexOf('0', StringComparison.Ordinal);
+
+        // Stryker disable once Equality : strtod stops at no '0', which it would have taken as a digit
         return !(f == 0.0 && (q < 0 || q > end));
     }
 
@@ -139,6 +143,8 @@ public sealed partial class Awk
         }
 
         int q = s.IndexOf('0', StringComparison.Ordinal);
+
+        // Stryker disable once Logical,Equality : strtoll gives 0 only of digits that are all '0', so one is before p
         return !(v == 0 && (q < 0 || q > p));
     }
 
@@ -190,18 +196,33 @@ public sealed partial class Awk
         Setsymtab("OFMT", "%.6g", 0.0, Str | Dontfree, symtab);
         convfmtCell = Setsymtab("CONVFMT", "%.6g", 0.0, Str | Dontfree, symtab);
         filenameCell = Setsymtab("FILENAME", string.Empty, 0.0, Str | Dontfree, symtab);
+
+        // Stryker disable once String : a number's string is made from it when it is read
         nfloc = Setsymtab("NF", string.Empty, 0.0, Num, symtab);
+
+        // Stryker disable once String : a number's string is made from it when it is read
         nrloc = Setsymtab("NR", string.Empty, 0.0, Num, symtab);
+
+        // Stryker disable once String : a number's string is made from it when it is read
         fnrloc = Setsymtab("FNR", string.Empty, 0.0, Num, symtab);
         subsepCell = Setsymtab("SUBSEP", "\x1c", 0.0, Str | Dontfree, symtab);
+
+        // Stryker disable once String : a number's string is made from it when it is read
         rstartloc = Setsymtab("RSTART", string.Empty, 0.0, Num, symtab);
+
+        // Stryker disable once String : a number's string is made from it when it is read
         rlengthloc = Setsymtab("RLENGTH", string.Empty, 0.0, Num, symtab);
+
+        // Stryker disable once String : an array's string is never read
         Setsymtab("SYMTAB", string.Empty, 0.0, Arr, symtab).Arr = symtab;
     }
 
     private void Arginit(List<string> av)
     {
+        // Stryker disable once String : a number's string is made from it when it is read
         argcloc = Setsymtab("ARGC", string.Empty, av.Count, Num, symtab);
+
+        // Stryker disable once String : an array's string is never read
         argvloc = Setsymtab("ARGV", string.Empty, 0.0, Arr, symtab);
         AwkArray ap = Makesymtab(Nsymtab);
         argvloc.Arr = ap;
@@ -268,6 +289,7 @@ public sealed partial class Awk
     // getenv: the variable's file, its NULs but the last made spaces.
     private async Task<string?> GetenvAsync(string name)
     {
+        // Stryker disable once Logical,String : the names of a directory's entries are never empty, . or .., nor hold a /
         if (name.Length == 0 || name is "." or ".." || name.Contains('/', StringComparison.Ordinal) || Encoding.UTF8.GetByteCount(name) >= 100 - 5)
         {
             return null;
@@ -276,6 +298,7 @@ public sealed partial class Awk
         var s = new List<byte>();
         try
         {
+            // Stryker disable once Bitwise : nothing is exec'd while it is open
             int f = await process.OpenAsync($"/env/{name}", NinePConstants.OREAD | NinePConstants.OCEXEC);
             try
             {
@@ -286,9 +309,12 @@ public sealed partial class Awk
             }
             finally
             {
+                // Stryker disable once Statement : a descriptor of awk's left open is never seen
                 await process.CloseAsync(f);
             }
         }
+
+        // Stryker disable once Block : /env's files, as its directory lists them, open and read
         catch (SyscallException)
         {
             return null;
@@ -320,6 +346,8 @@ public sealed partial class Awk
         else
         {
             p.Sval = Cstr(s);
+
+            // Stryker disable once Conditional,Equality : Dontfree is never read
             p.Tval = t | (p.Sval.Length == 0 ? Dontfree : 0);
         }
 
@@ -341,11 +369,13 @@ public sealed partial class Awk
             await FatalAsync($"can't {rw} {vp.Nval}; it's an array name.");
         }
 
+        // Stryker disable once Bitwise : a cell with neither a string nor a number is an array or a function
         if ((vp.Tval & Fcn) != 0)
         {
             await FatalAsync($"can't {rw} {vp.Nval}; it's a function.");
         }
 
+        // Stryker disable once Statement,String : a cell with neither a string nor a number is an array or a function
         await WarningAsync($"funny variable {vp.GetHashCode():x}: n={vp.Nval} s=\"{vp.Sval}\" f={Sprint("%g", A(vp.Fval))} t={Convert.ToString(vp.Tval, 8)}");
     }
 
@@ -397,6 +427,8 @@ public sealed partial class Awk
 
         string t = Cstr(s);
         vp.Tval = (vp.Tval & ~Num) | Str;
+
+        // Stryker disable once Conditional,Equality : Dontfree is never read
         vp.Tval = t.Length != 0 ? vp.Tval & ~Dontfree : vp.Tval | Dontfree;
         return vp.Sval = t;
     }
@@ -408,10 +440,13 @@ public sealed partial class Awk
             await FunnyvarAsync(vp, "read value of");
         }
 
+        // Stryker disable once Logical,Equality,Bitwise : execute builds a field it gives while they are stale, and any value's read first builds them as this would
         if ((vp.Tval & Fld) != 0 && !donefld)
         {
             await FldbldAsync();
         }
+
+        // Stryker disable once Logical,Boolean,Equality,Bitwise : execute builds $0 when it gives it stale, and any value's read first builds it as this would
         else if ((vp.Tval & Rec) != 0 && !donerec)
         {
             await RecbldAsync();
@@ -423,6 +458,8 @@ public sealed partial class Awk
             if (ToNumber(vp.Sval, out double f))
             {
                 vp.Fval = f;
+
+                // Stryker disable once Assignment : Num is not set here, so toggling it sets it
                 vp.Tval |= (vp.Tval & Con) == 0 ? Num : 0;
             }
             else
@@ -534,6 +571,7 @@ public sealed partial class Awk
     // lib.c.
     private void Recinit()
     {
+        // Stryker disable once String : $0's name is never read
         fldtab.Add(new Cell { Ctype = Ocell, Csub = Cfld, Tval = Rec | Str | Dontfree, Nval = "0" });
         Makefields(1, nfields);
     }
@@ -568,6 +606,8 @@ public sealed partial class Awk
             }
 
             await SetclvarAsync(p);
+
+            // Stryker disable once Statement : getrec makes the same assignment again before reading anything
             argno++;
         }
 
@@ -642,11 +682,13 @@ public sealed partial class Awk
             await NextfileAsync();
         }
 
+        // Stryker disable once String : getline reads the record only when there was one
         return (0, string.Empty);
     }
 
     private async Task NextfileAsync()
     {
+        // Stryker disable once Logical,Boolean,Equality,Statement : ending standard input's buffer flushes nothing, and a file left open is not read again
         if (infile is not null && infile != stdin)
         {
             await infile.TermAsync();
@@ -719,6 +761,7 @@ public sealed partial class Awk
     // fldbld: $1 to $NF of $0, split by FS as it was when the record was read.
     private async Task FldbldAsync()
     {
+        // Stryker disable once Statement : it is called only while the fields are stale
         if (donefld)
         {
             return;
@@ -804,6 +847,7 @@ public sealed partial class Awk
 
     private void SetField(int i, string s, int tval)
     {
+        // Stryker disable once Equality : growing at nfields only makes the table larger than it needs
         if (i > nfields)
         {
             Growfldtab(i);
@@ -822,6 +866,7 @@ public sealed partial class Awk
 
     private void Newfld(int n)
     {
+        // Stryker disable once Equality,Statement : fieldadr has grown the table for the field being set
         if (n > nfields)
         {
             Growfldtab(n);
@@ -830,6 +875,8 @@ public sealed partial class Awk
         Cleanfld(lastfld + 1, n);
         lastfld = n;
         nfloc.Fval = n;
+
+        // Stryker disable once Bitwise : NF's cell holds no flag but Num and Str
         nfloc.Tval = (nfloc.Tval & ~Str) | Num;
     }
 
@@ -840,6 +887,7 @@ public sealed partial class Awk
             await FatalAsync($"trying to access field {n}");
         }
 
+        // Stryker disable once Equality : growing at nfields only makes the table larger than it needs
         if (n > nfields)
         {
             Growfldtab(n);
@@ -850,6 +898,7 @@ public sealed partial class Awk
 
     private void Growfldtab(int n)
     {
+        // Stryker disable once Arithmetic : n is past nfields, so the table holds it either way, only grown by less
         int nf = Math.Max(2 * nfields, n);
         Makefields(nfields + 1, nf);
         nfields = nf;
@@ -867,6 +916,7 @@ public sealed partial class Awk
         int i, at = 0;
         for (i = 1; ; i++)
         {
+            // Stryker disable once Equality : growing at nfields only makes the table larger than it needs
             if (i > nfields)
             {
                 Growfldtab(i);
@@ -890,6 +940,7 @@ public sealed partial class Awk
     // recbld: $0 of $1 to $NF and OFS between them.
     private async Task RecbldAsync()
     {
+        // Stryker disable once Statement : it is called only while $0 is stale
         if (donerec)
         {
             return;

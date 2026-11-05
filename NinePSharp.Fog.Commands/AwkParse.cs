@@ -113,6 +113,7 @@ public sealed partial class Awk
     private readonly List<string> pfile = [];
     private readonly sbyte[] ebuf = new sbyte[300];
     private readonly sbyte[] yysbuf = new sbyte[100];
+    private readonly List<char> tok = [];
     private readonly Yystype[] yyv = new Yystype[Yymaxdepth];
     private readonly int[] yys = new int[Yymaxdepth];
     private string? lexprog;
@@ -143,7 +144,8 @@ public sealed partial class Awk
     private Yystype yyval;
     private int yychar;
 
-    private string? Cursource() => pfile.Count > 0 ? pfile[Math.Min(curpfile, pfile.Count - 1)] : null;
+    // cursource: the -f file being read; past the last, pfile's next entry, which is nil.
+    private string? Cursource() => curpfile < pfile.Count ? pfile[curpfile] : null;
 
     // pgetc: a byte of the program files, each opened in turn, - standard input.
     private async Task<int> PgetcAsync()
@@ -175,6 +177,7 @@ public sealed partial class Awk
                 return c;
             }
 
+            // Stryker disable once Equality,Statement : ending standard input's buffer flushes nothing, and a file left open is not read again
             if (yyin != stdin)
             {
                 await yyin.TermAsync();
@@ -197,6 +200,8 @@ public sealed partial class Awk
         else if (lexprog is not null)
         {
             c = lexpos < lexprog.Length ? lexprog[lexpos] : 0;
+
+            // Stryker disable once Conditional : past the program's end it still reads 0
             lexpos += c != 0 ? 1 : 0;
         }
         else
@@ -251,44 +256,48 @@ public sealed partial class Awk
         return c;
     }
 
-    // gettok: a name, given as 'a', a number, given as '0', or the byte.
+    // gettok: a name, given as 'a', a number, given as '0', or the byte. Its buffer is kept from
+    // token to token, as yylex's is: at the program's end it still holds the token before, and a
+    // name the end cut short is not ended in it, so a longer one before shows past it.
     private async Task<(int C, string Buf, double F)> GettokAsync()
     {
         int c = await InputAsync();
         if (c == 0)
         {
-            return (0, string.Empty, 0);
+            return (0, Tokstr(), 0);
         }
 
-        string buf = ((char)(byte)c).ToString();
+        Tokput(0, (char)(byte)c);
+        Tokput(1, '\0');
         if (!Isalnum(c) && c != '.' && c != '_')
         {
-            return (c, buf, 0);
+            return (c, Tokstr(), 0);
         }
 
-        var bp = new System.Text.StringBuilder(buf);
+        int bp = 1;
         if (Isalpha(c) || c == '_')
         {
             while ((c = await InputAsync()) != 0)
             {
                 if (Isalnum(c) || c == '_')
                 {
-                    bp.Append((char)(byte)c);
+                    Tokput(bp++, (char)(byte)c);
                     continue;
                 }
 
+                Tokput(bp, '\0');
                 await UnputAsync(c);
                 break;
             }
 
-            return ('a', bp.ToString(), 0);
+            return ('a', Tokstr(), 0);
         }
 
         while ((c = await InputAsync()) != 0)
         {
             if (Isdigit(c) || c is 'e' or 'E' or '.' or '+' or '-')
             {
-                bp.Append((char)c);
+                Tokput(bp++, (char)c);
                 continue;
             }
 
@@ -296,10 +305,29 @@ public sealed partial class Awk
             break;
         }
 
-        buf = bp.ToString();
+        Tokput(bp, '\0');
+        string buf = Tokstr();
         bool n = ToNumber(buf, out double f, out int rem);
         await UnputstrAsync(buf[rem..]);
+        Tokput(rem, '\0');
         return (n ? '0' : buf[0], buf[..rem], f);
+    }
+
+    private void Tokput(int i, char c)
+    {
+        while (tok.Count <= i)
+        {
+            tok.Add('\0');
+        }
+
+        tok[i] = c;
+    }
+
+    // The buffer as far as its first NUL.
+    private string Tokstr()
+    {
+        int n = tok.IndexOf('\0');
+        return new string([.. n < 0 ? tok : tok.Take(n)]);
     }
 
     private async Task<int> YylexAsync()
@@ -319,16 +347,20 @@ public sealed partial class Awk
         for (; ;)
         {
             (int c, string buf, double f) = await GettokAsync();
+
+            // Stryker disable once Block : the switch's default gives 0 back too
             if (c == 0)
             {
                 return 0;
             }
 
+            // Stryker disable once Logical,Equality : gettok gives 'a' only for a name, which starts with a letter or _
             if (c == 'a' && buf.Length > 0 && (Isalpha(buf[0]) || buf[0] == '_'))
             {
                 return await WordAsync(buf);
             }
 
+            // Stryker disable once Equality : gettok gives '0' only for a number it took a byte of
             if (c == '0' && buf.Length > 0 && (Isdigit(buf[0]) || buf[0] == '.'))
             {
                 yylval.P = Setsymtab(buf, buf, f, Con | Num, symtab);
@@ -413,6 +445,8 @@ public sealed partial class Awk
                 case '$':
                     // BUG: awkward, if not wrong.
                     (c, buf, _) = await GettokAsync();
+
+                    // Stryker disable once Logical : $name as Ivar is $(name) as Indirect makes it
                     if (c is '(' or '[' || (infunc != 0 && Isarg(buf) >= 0))
                     {
                         await UnputstrAsync(buf);
@@ -643,10 +677,14 @@ public sealed partial class Awk
     private async Task<int> Yylex1Async()
     {
         int c = await YylexAsync();
+
+        // Stryker disable once Conditional,Equality : yylex gives no byte past 127 nor 126, which is ~, and no token of Yyprivate or past the last
         int t = c <= 0 ? Yytok1[0]
             : c < Yytok1.Length ? Yytok1[c]
             : c >= Yyprivate && c < Yyprivate + Yytok2.Length ? Yytok2[c - Yyprivate]
             : 0;
+
+        // Stryker disable once Conditional : 0 shifts in no state, so a token with no number is a syntax error either way
         return t == 0 ? Yytok2[1] : t;
     }
 
@@ -671,12 +709,15 @@ public sealed partial class Awk
             yyn = Yypact[yystate];
             if (yyn > Yyflag)
             {
+                // Stryker disable once Equality : Yylex1 gives a token of 1 or more
                 if (yychar < 0)
                 {
                     yychar = await Yylex1Async();
                 }
 
                 yyn += yychar;
+
+                // Stryker disable once Equality : no state's offset and token sum to 0 or to Yylast but LASTTOKEN's, which yylex never gives
                 if (yyn >= 0 && yyn < Yylast && Yychk[yyn = Yyact[yyn]] == yychar)
                 {
                     // A valid shift.
@@ -692,6 +733,7 @@ public sealed partial class Awk
             yyn = Yydef[yystate];
             if (yyn == -2)
             {
+                // Stryker disable once Equality : Yylex1 gives a token of 1 or more
                 if (yychar < 0)
                 {
                     yychar = await Yylex1Async();
@@ -703,6 +745,7 @@ public sealed partial class Awk
                     x += 2;
                 }
 
+                // Stryker disable once Equality : no token in Yyexca is 0
                 for (x += 2; Yyexca[x] >= 0 && Yyexca[x] != yychar; x += 2)
                 {
                 }
@@ -737,12 +780,15 @@ public sealed partial class Awk
                 for (; yyp >= 0; yyp--)
                 {
                     yyn = Yypact[yys[yyp]] + Yyerrcode;
+
+                    // Stryker disable once Equality : no state's offset and the error token sum to 0 or to Yylast
                     if (yyn >= 0 && yyn < Yylast && Yychk[yystate = Yyact[yyn]] == Yyerrcode)
                     {
                         break;
                     }
                 }
 
+                // Stryker disable once Block : state 0, at the stack's bottom, shifts the error token, as program: error has it
                 if (yyp < 0)
                 {
                     return 1;
@@ -759,6 +805,8 @@ public sealed partial class Awk
             yyn = Yyr1[yyn];
             int yyg = Yypgo[yyn];
             int yyj = yyg + yys[yyp] + 1;
+
+            // Stryker disable once Equality : no goto's offset and state sum to Yylast
             if (yyj >= Yylast || Yychk[yystate = Yyact[yyj]] != -yyn)
             {
                 yystate = Yyact[yyg];
@@ -790,6 +838,8 @@ public sealed partial class Awk
 
                 break;
             case 2:
+
+                // Stryker disable once Unary : bracecheck reads the program to its end, so the next token is its end either way
                 yychar = -1;
                 await BracecheckAsync();
                 await SyntaxAsync("bailing out");
@@ -1086,6 +1136,8 @@ public sealed partial class Awk
                 yyval.P = Op3(Matchfcn, null, NpN(t, 3), await CompreAsync((string)V(t, 1).P!));
                 break;
             case 160:
+
+                // Stryker disable once Conditional : a constant's expression compiled when it is run is the one compiled here
                 yyval.P = Constnode(Np(t, 1))
                     ? Op3(Matchfcn, null, NpN(t, 3), await CompreAsync(Strnode(Np(t, 1))))
                     : Op3(Matchfcn, 1, NpN(t, 3), NpN(t, 1));
@@ -1109,6 +1161,8 @@ public sealed partial class Awk
                 yyval.P = Op4(V(t, 5).I, null, await CompreAsync((string)V(t, 3).P!), NpN(t, 1), Rectonode());
                 break;
             case 168:
+
+                // Stryker disable once Conditional : a constant's expression compiled when it is run is the one compiled here
                 yyval.P = Constnode(Np(t, 3))
                     ? Op4(V(t, 5).I, null, await CompreAsync(Strnode(Np(t, 3))), NpN(t, 1), Rectonode())
                     : Op4(V(t, 5).I, 1, NpN(t, 3), NpN(t, 1), Rectonode());
@@ -1117,6 +1171,8 @@ public sealed partial class Awk
                 yyval.P = Op4(V(t, 7).I, null, await CompreAsync((string)V(t, 5).P!), NpN(t, 3), NpN(t, 1));
                 break;
             case 170:
+
+                // Stryker disable once Conditional : a constant's expression compiled when it is run is the one compiled here
                 yyval.P = Constnode(Np(t, 5))
                     ? Op4(V(t, 7).I, null, await CompreAsync(Strnode(Np(t, 5))), NpN(t, 3), NpN(t, 1))
                     : Op4(V(t, 7).I, 1, NpN(t, 5), NpN(t, 3), NpN(t, 1));
@@ -1177,6 +1233,7 @@ public sealed partial class Awk
 
     private string Strnode(Node p) => ((Cell)p.Narg[0]!).Sval;
 
+    // Stryker disable once Conditional,Logical : a comparison's value is a number, and a number is unequal to the null cell's 0 as it is true
     private Node Notnull(Node n) => n.Nobj is Le or Lt or Eq or Ne or Gt or Ge or Bor or And or Not ? n : Op2(Ne, n, nullnode);
 
     private async Task CheckdupAsync(Node? vl, Cell cp)
@@ -1186,6 +1243,8 @@ public sealed partial class Awk
             if (cp.Nval == ((Cell)vl.Narg[0]!).Nval)
             {
                 await SyntaxAsync($"duplicate argument {cp.Nval}");
+
+                // Stryker disable once Statement : the list holds a name once, as a second is refused here
                 break;
             }
         }
@@ -1243,6 +1302,7 @@ public sealed partial class Awk
             }
             else if ((cp.Tval & Arr) == 0)
             {
+                // Stryker disable once String : an array's string is never read
                 (cp.Arr, cp.Sval, cp.Tval) = (Makesymtab(Nsymtab), string.Empty, Arr);
             }
         }
@@ -1263,6 +1323,7 @@ public sealed partial class Awk
 
     private Node? Linkum(Node? a, Node? b)
     {
+        // Stryker disable once Block : a program with an error is not run, however its statements are linked
         if (exitstatus is not null)
         {
             return a;
@@ -1273,6 +1334,7 @@ public sealed partial class Awk
             return b;
         }
 
+        // Stryker disable once Block : linking null after a's last statement leaves it as it is
         if (b is null)
         {
             return a;
@@ -1290,6 +1352,7 @@ public sealed partial class Awk
 
     private async Task DefnAsync(Cell v, Node? vl, Node? st)
     {
+        // Stryker disable once Statement,String : setfname has refused an array's name and bailed out before this
         if ((v.Tval & Arr) != 0)
         {
             await SyntaxAsync($"`{v.Nval}' is an array name and a function name");

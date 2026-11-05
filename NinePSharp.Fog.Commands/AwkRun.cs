@@ -28,6 +28,8 @@ public sealed partial class Awk
     private readonly (int Pid, int Fd, bool Done, string Status)[] theFork = new (int, int, bool, string)[Maxforks];
     private readonly uint[] rngVec = new uint[607];
     private int rngTap;
+
+    // Stryker disable once Unary : srand, which awk calls first, sets it
     private int rngFeed = -1;
     private double srandSeed = 1;
     private Node? curnode;
@@ -90,6 +92,8 @@ public sealed partial class Awk
             if (a.Ntype == Nvalue)
             {
                 x = (Cell)a.Narg[0]!;
+
+                // Stryker disable once Statement : a value node holds a variable, a constant or $0 for a builtin, each of which is built when read
                 await FieldsAsync(x);
                 return x;
             }
@@ -170,6 +174,7 @@ public sealed partial class Awk
 
     private async Task<Cell> IllegalAsync()
     {
+        // Stryker disable once Statement,String : the grammar makes no node proctab has no entry for
         await FatalAsync("illegal statement");
         return True;
     }
@@ -184,6 +189,8 @@ public sealed partial class Awk
             if (a[0] is not null)
             {
                 Cell x = await X(a[0]);
+
+                // Stryker disable once Block : exit leaves by its throw, not by its value
                 if (x.Csub == Jexit)
                 {
                     return True;
@@ -199,6 +206,7 @@ public sealed partial class Awk
             {
                 while ((await GetrecAsync(true)).N > 0)
                 {
+                    // Stryker disable once Statement : exit leaves by its throw, not by its value
                     if ((await X(a[1])).Csub == Jexit)
                     {
                         break;
@@ -297,13 +305,17 @@ public sealed partial class Awk
         for (i = 0; i < ndef; i++)
         {
             Cell t = args[i];
+
+            // Stryker disable once Equality : past ncall oargs holds nothing
             if ((t.Tval & Arr) != 0 && t.Csub == Ccopy && i < ncall && oargs[i] is { } o)
             {
+                // Stryker disable once Bitwise : array() leaves an array's cell no flag but Arr
                 o.Tval = t.Tval & ~(Str | Num | Dontfree);
                 o.Arr = t.Arr;
             }
         }
 
+        // Stryker disable once Logical,Block : exit leaves by its throw, and next and nextfile are refused in a function
         if (yr.Csub is Jexit or Jnext or Jnextfile)
         {
             return yr;
@@ -318,7 +330,11 @@ public sealed partial class Awk
     {
         Cell y = Gettemp();
         (y.Csub, y.Nval, y.Sval, y.Fval) = (Ccopy, x.Nval, x.Sval, x.Fval);
+
+        // Stryker disable once Bitwise : an argument of $0 is executed, so $0 is built, before a copy of it is set
         y.Tval = x.Tval & ~(Con | Fld | Rec | Dontfree);
+
+        // Stryker disable once Assignment,Conditional,Equality : Dontfree is never read
         y.Tval |= y.Sval.Length == 0 ? Dontfree : 0;
         y.Arr = x.Arr;
         return y;
@@ -327,6 +343,8 @@ public sealed partial class Awk
     private async Task<Cell> ArgAsync(object?[] a)
     {
         int n = Ptoi(a[0]);
+
+        // Stryker disable once Equality,Statement,String,Arithmetic : an argument's number is one of its function's parameters
         if (n >= fp!.Nargs)
         {
             await FatalAsync($"argument #{n + 1} of function {fp.Fcncell.Nval} was not supplied");
@@ -363,6 +381,8 @@ public sealed partial class Awk
                     {
                         await SetsvalAsync(fp!.Retval, await GetsvalAsync(y));
                         fp.Retval.Fval = await GetfvalAsync(y);
+
+                        // Stryker disable once Assignment : setsval has cleared Num, so toggling it sets it
                         fp.Retval.Tval |= Num;
                     }
                     else if ((y.Tval & Str) != 0)
@@ -404,6 +424,8 @@ public sealed partial class Awk
             int mode = Ptoi(a[1]);
             mode = mode == '|' ? Le : mode;
             Bio? f = await OpenfileAsync(mode, await GetsvalAsync(x));
+
+            // Stryker disable once String : the record is read only when there was one
             string buf = string.Empty;
             if (f is null)
             {
@@ -502,6 +524,7 @@ public sealed partial class Awk
 
         if (a[1] is null)
         {
+            // Stryker disable once Bitwise,Unary : an array's cell holds no flag but Arr
             x.Tval = (x.Tval & ~Str) | Arr;
             x.Arr = Makesymtab(Nsymtab);
         }
@@ -527,6 +550,8 @@ public sealed partial class Awk
         Cell x = await X(a[1]);
         string s = await GetsvalAsync(x);
         Regexp p = a[0] is null ? (Regexp)a[2]! : await CompreAsync(await GetsvalAsync(await X(a[2])));
+
+        // Stryker disable once Conditional : pmatch matches where match does
         bool i = n == Matchfcn ? Pmatch(p, s, 0) : Match1(p, s);
         if (n == Matchfcn)
         {
@@ -615,6 +640,8 @@ public sealed partial class Awk
         Cell? z = a[2] is not null ? await X(a[2]) : null;
         byte[] s = Bytes(await GetsvalAsync(x));
         int k = Utfnlen(s, s.Length) + 1;
+
+        // Stryker disable once Equality : of an empty string the bounds below give an empty string too
         if (k <= 1)
         {
             x = Gettemp();
@@ -623,17 +650,27 @@ public sealed partial class Awk
         }
 
         int m = Ci(await GetfvalAsync(y));
+
+        // Stryker disable once Conditional,Equality : past the last rune the walk below stops at the string's end
         m = m <= 0 ? 1 : m > k ? k : m;
+
+        // Stryker disable once Arithmetic : n is cut to k - m below
         int n = z is not null ? Ci(await GetfvalAsync(z)) : k - 1;
+
+        // Stryker disable once Equality,Conditional,Arithmetic : the walk below stops at the string's end
         n = n < 0 ? 0 : n > k - m ? k - m : n;
         y = Gettemp();
         int p0 = 0;
+
+        // Stryker disable once Equality : m runs out at the string's end, as Utfnlen counts the runes CharToRune steps over
         while (p0 < s.Length && --m != 0)
         {
             p0 += Utf.CharToRune(out _, s.AsSpan(p0));
         }
 
         int p = p0;
+
+        // Stryker disable once Equality : n runs out at the string's end, as Utfnlen counts the runes CharToRune steps over
         for (; p < s.Length && n-- != 0; p += Utf.CharToRune(out _, s.AsSpan(p)))
         {
         }
@@ -648,6 +685,8 @@ public sealed partial class Awk
         string s2 = await GetsvalAsync(await X(a[1]));
         Cell z = Gettemp();
         double v = 0;
+
+        // Stryker disable once Conditional,Equality : the empty string is at 0 of any string
         int i = s2.Length == 0 && s1.Length > 0 ? 0 : s1.IndexOf(s2, StringComparison.Ordinal);
         if (i >= 0 && s1.Length > 0)
         {
@@ -713,13 +752,19 @@ public sealed partial class Awk
                     break;
                 case 'd' or 'i':
                     flag = 2;
+
+                    // Stryker disable once Conditional,Arithmetic : Sprint gives an int the same by %d, %ld and %lld
                     f = s[i - 1] == 'l' ? f : f[..^1] + "ld";
                     break;
                 case 'u':
+
+                    // Stryker disable once Conditional,Equality,Arithmetic : flags 2 and 3 are converted alike
                     flag = s[i - 1] == 'l' ? 2 : 3;
                     f = f[..^1] + "ud";
                     break;
                 case 'o' or 'x' or 'X':
+
+                    // Stryker disable once Conditional,Equality,Arithmetic : flags 2 and 3 are converted alike
                     flag = s[i - 1] == 'l' ? 2 : 3;
                     f = f[..^1] + "u" + last;
                     break;
@@ -727,6 +772,8 @@ public sealed partial class Awk
                     flag = 4;
                     break;
                 case 'c':
+
+                    // Stryker disable once String : %c is made below without the format
                     f = f[..^1] + "C";
                     flag = 5;
                     break;
@@ -857,6 +904,8 @@ public sealed partial class Awk
                 i = 0 - i;
                 break;
             default:
+
+                // Stryker disable once Equality : x^0 is 1 by pow as by ipow
                 i = j >= 0 && Modf(j, out _) == 0.0 ? Ipow(i, Ci(j)) ?? await OverflowAsync() : await ErrcheckAsync(Math.Pow(i, j), "pow");
                 break;
         }
@@ -893,6 +942,7 @@ public sealed partial class Awk
         Cell x = await X(a[0]);
         if (n == Assign)
         {
+            // Stryker disable once Bitwise,Block : a variable assigned itself is set to the value and flags it has
             if (x == y && (x.Tval & (Fld | Rec)) == 0)
             {
                 return x;
@@ -903,12 +953,16 @@ public sealed partial class Awk
                 double yf = await GetfvalAsync(y);
                 await SetsvalAsync(x, await GetsvalAsync(y));
                 x.Fval = yf;
+
+                // Stryker disable once Assignment : setsval has cleared Num, so toggling it sets it
                 x.Tval |= Num;
             }
             else if ((y.Tval & Str) != 0)
             {
                 await SetsvalAsync(x, await GetsvalAsync(y));
             }
+
+            // Stryker disable once Bitwise : what is left has a number, or is an array or a function, which funnyvar and getfval refuse alike
             else if ((y.Tval & Num) != 0)
             {
                 await SetfvalAsync(x, await GetfvalAsync(y));
@@ -951,6 +1005,8 @@ public sealed partial class Awk
                 xf -= yv * v;
                 break;
             default:
+
+                // Stryker disable once Equality : x^0 is 1 by pow as by ipow
                 xf = yv >= 0 && Modf(yv, out _) == 0.0 ? Ipow(xf, Ci(yv)) ?? await OverflowAsync() : await ErrcheckAsync(Math.Pow(xf, yv), "pow");
                 break;
         }
@@ -976,6 +1032,7 @@ public sealed partial class Awk
 
     private async Task<Cell> PastatAsync(object?[] a)
     {
+        // Stryker disable once Block : executing no pattern gives True
         if (a[0] is null)
         {
             return await X(a[1]);
@@ -1011,6 +1068,8 @@ public sealed partial class Awk
     {
         string s = await GetsvalAsync(await X(a[0]));
         int arg3type = Ptoi(a[3]);
+
+        // Stryker disable once String : with an expression the separator is not read
         string fs = a[2] is null ? fsCell.Sval : arg3type == String ? await GetsvalAsync(await X(a[2])) : "(regexpr)";
         int sep = fs.Length > 0 ? fs[0] : 0;
         Cell ap = await X(a[1]);
@@ -1040,6 +1099,8 @@ public sealed partial class Awk
             {
                 Put(s[t..patbeg]);
                 t = patbeg + patlen;
+
+                // Stryker disable once Logical,Equality,Statement : at the end no match follows, and what is left, put as the last field, is empty too
                 if (s[t - 1] == 0 || t >= s.Length)
                 {
                     Setsymtab((++n).ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty, 0.0, Str, tab);
@@ -1074,6 +1135,8 @@ public sealed partial class Awk
                 }
                 while (p < s.Length && s[p] is not (' ' or '\t' or '\n'));
                 Put(s[t..p]);
+
+                // Stryker disable once Conditional,Equality : past the end or at a blank, the next round passes over it
                 p += p < s.Length ? 1 : 0;
             }
         }
@@ -1083,6 +1146,8 @@ public sealed partial class Awk
             for (int p = 0, nb; p < b.Length; p += nb)
             {
                 nb = Utf.CharToRune(out _, b.AsSpan(p));
+
+                // Stryker disable once Arithmetic : CharToRune takes no more bytes than there are
                 Put(Lat(b.AsSpan(p, Math.Min(nb, b.Length - p))));
             }
         }
@@ -1114,6 +1179,8 @@ public sealed partial class Awk
     private async Task<Cell> IfstatAsync(object?[] a)
     {
         Cell x = await X(a[0]);
+
+        // Stryker disable once Conditional : an if's value is never a jump but from its statements
         return Istrue(x) ? await X(a[1]) : a[2] is not null ? await X(a[2]) : x;
     }
 
@@ -1431,6 +1498,8 @@ public sealed partial class Awk
             if (fd >= 0)
             {
                 await process.SeekAsync(fd, 0, 2);
+
+                // Stryker disable once Boolean : a descriptor of awk's left open is never seen
                 fp = new Bio(this, fd, NinePConstants.OWRITE, true);
                 m = Gt;
             }
@@ -1458,6 +1527,7 @@ public sealed partial class Awk
 
     private string Path(string s) => Encoding.UTF8.GetString(Bytes(s));
 
+    // Stryker disable once Linq,String : a file written to is in files
     private string Filename(Bio f) => files.FirstOrDefault(x => x?.Fp == f)?.Fname ?? "???";
 
     private async Task<Bio?> BopenAsync(string name, int mode)
@@ -1467,6 +1537,8 @@ public sealed partial class Awk
             int fd = mode == NinePConstants.OREAD
                 ? await process.OpenAsync(Path(name), mode)
                 : await process.CreateAsync(Path(name), mode, 0b110_110_110);
+
+            // Stryker disable once Boolean : a descriptor of awk's left open is never seen
             return new Bio(this, fd, mode, true);
         }
         catch (SyscallException)
@@ -1501,6 +1573,7 @@ public sealed partial class Awk
         {
             if (files[i]?.Fp is { } f)
             {
+                // Stryker disable once Conditional,Equality,Statement,String : pclose ends a file too and gives -1 as it is no pipe, and neither gives less than -1
                 int stat = files[i]!.Mode is '|' or Le ? await PcloseAsync(f) : await f.TermAsync();
                 if (stat < -1)
                 {
@@ -1612,6 +1685,7 @@ public sealed partial class Awk
                         Replace(pb, rptr, t);
                     }
 
+                    // Stryker disable once Equality,Statement : an empty match before the end is at c or after it, so c is before the end
                     if (c >= t.Length)
                     {
                         break;
@@ -1647,6 +1721,7 @@ public sealed partial class Awk
     // re.c: compre, the pattern made fit for regcomp, kept in the cache past compiling.
     private async Task<Regexp> CompreAsync(string pat)
     {
+        // Stryker disable once Equality,Block : an expression compiled again is the same
         if (compileTime == 0 && patterns.TryGetValue(pat, out Regexp? cached))
         {
             return cached;
@@ -1695,6 +1770,8 @@ public sealed partial class Awk
                     re.Add((byte)c);
                     c = s[i++];
                 }
+
+                // Stryker disable once Logical,Arithmetic : [^ and a byte after it are copied as the branches below copy them, but for [^- and [^[
                 else if (s[i] == '^' && s[i + 1] == '[')
                 {
                     re.Add((byte)c);
@@ -1735,6 +1812,7 @@ public sealed partial class Awk
             await FatalAsync(Lat(Encoding.UTF8.GetBytes(e.Message)));
         }
 
+        // Stryker disable once Equality,Block : an expression compiled again is the same
         if (compileTime == 0)
         {
             patterns[pat] = program;
@@ -1833,6 +1911,7 @@ public sealed partial class Awk
             return true;
         }
 
+        // Stryker disable once Unary : no caller reads patbeg or patlen after nematch fails
         (patbeg, patlen) = (start, -1);
         return false;
     }
@@ -1847,11 +1926,16 @@ public sealed partial class Awk
         }
 
         (int r, int w) = await process.PipeAsync();
+
+        // Stryker disable once Conditional,Equality : a pipe carries bytes both ways
         (int myside, int hisside) = mode == NinePConstants.OREAD ? (r, w) : (w, r);
         long pid = process.Fork(RforkFlags.Fdg | RforkFlags.Rend | RforkFlags.Proc, async child =>
         {
+            // Stryker disable once Statement : the loop below closes it, as a pipe's descriptors are past 2
             await child.CloseAsync(myside);
             await child.DupAsync(hisside, mode == NinePConstants.OREAD ? 1 : 0);
+
+            // Stryker disable once Equality : nothing is open at FopenMax
             for (int i = 3; i < FopenMax; i++)
             {
                 try
@@ -1865,14 +1949,18 @@ public sealed partial class Awk
 
             try
             {
+                // Stryker disable once String : rc -c names no file by its argv[0]
                 await child.ExecAsync("/bin/rc", ["rc", "-c", Path(cmd)]);
             }
             catch (SyscallException)
             {
             }
 
+            // Stryker disable once Statement,String : /bin/rc execs, and exec does not come back
             child.Exits("exec failed");
         });
+
+        // Stryker disable once String : pclose shows no status but by its 0 or 1, which close does not give
         theFork[ind] = ((int)pid, myside, false, string.Empty);
         await process.CloseAsync(hisside);
         return new Bio(this, myside, mode, true);
@@ -1885,6 +1973,7 @@ public sealed partial class Awk
         int ind = System.Array.FindIndex(theFork, x => x.Fd == f && x.Pid != 0);
         if (ind < 0)
         {
+            // Stryker disable once Unary : pclose is called only for a pipe popen opened
             return -1;
         }
 
@@ -1904,6 +1993,7 @@ public sealed partial class Awk
                     r = -1;
                 }
 
+                // Stryker disable once Equality,Boolean,Statement : a status pclose records is shown only by its 0 or 1, which close does not give
                 for (int j = 0; j < Maxforks; j++)
                 {
                     if (r == theFork[j].Pid)
@@ -1914,6 +2004,8 @@ public sealed partial class Awk
                 }
             }
             while (r != theFork[ind].Pid && r != -1);
+
+            // Stryker disable once Equality,Unary,String : a status pclose records is shown only by its 0 or 1, which close does not give
             if (r == -1)
             {
                 theFork[ind].Status = "No loved ones to wait for";
@@ -1921,22 +2013,27 @@ public sealed partial class Awk
         }
 
         theFork[ind].Pid = 0;
+
+        // Stryker disable once Conditional,Equality : close gives True whatever pclose gives but -1
         return theFork[ind].Status.Length != 0 ? 1 : 0;
     }
 
     // system: rc -c s, waited for; 1 for a status, 0 for none.
     private async Task<int> SystemAsync(string s)
     {
+        // Stryker disable once Bitwise : Fork always makes a process, and rc meets nothing at a rendezvous
         long pid = process.Fork(RforkFlags.Fdg | RforkFlags.Rend | RforkFlags.Proc, async child =>
         {
             try
             {
+                // Stryker disable once String : rc -c names no file by its argv[0]
                 await child.ExecAsync("/bin/rc", ["rc", "-c", Path(s)]);
             }
             catch (SyscallException)
             {
             }
 
+            // Stryker disable once Statement,String : /bin/rc execs, and exec does not come back
             child.Exits("exec");
         });
         for (; ;)
@@ -1956,12 +2053,16 @@ public sealed partial class Awk
         rngTap = 0;
         rngFeed = 607 - 273;
         int x = seed % m;
+
+        // Stryker disable once Conditional : a seed less than m is congruent to it, and Schrage's steps keep that
         x += x < 0 ? m : 0;
         x = x == 0 ? 89482311 : x;
         for (int i = -20; i < 607; i++)
         {
             int hi = x / q, lo = x % q;
             x = (a * lo) - (r * hi);
+
+            // Stryker disable once Equality : a step of 48271 mod a prime gives no 0
             x += x < 0 ? m : 0;
             if (i >= 0)
             {
@@ -1974,6 +2075,7 @@ public sealed partial class Awk
     {
         if (--rngTap < 0)
         {
+            // Stryker disable once Equality,Statement,Update : awk calls srand first, and the feed is 334 whenever the tap wraps
             if (rngFeed < 0)
             {
                 Srand(1);

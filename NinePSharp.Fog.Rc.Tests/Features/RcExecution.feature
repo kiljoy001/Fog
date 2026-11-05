@@ -25923,3 +25923,625 @@ Feature: rc runs scripts as 9front rc does
       awk: syntax error at line 2
       awk: illegal statement at line 2
       """
+
+  @FOG_RC_RUN_322
+  Scenario: awk's errors at a line before the program's last, its options at their edges, its standard files closed, letters at the ends of their ranges, the indefinite integer, infinity converted, runes cut short and its seed
+    When rc runs the script
+      """
+      mkdir /tmp/ak; cd /tmp/ak
+      awk 'BEGIN { print 1/0 }
+      END { }'
+      echo 'ab c' | awk -F '' '{ print $1 }'
+      echo 'a:b' | awk -F : '{ print $2 }'
+      awk -v
+      awk 'BEGIN { print "a"; close("/dev/stdout"); print "b" }'
+      awk 'BEGIN { close("/dev/stderr"); print 1/0 }'
+      awk 'BEGIN { close("/dev/stdout"); print "a" > "/dev/stdout"; printf "b\n" > "/dev/stderr" }' >[2=1]
+      awk 'BEGIN { Z = 1; print Z }'
+      awk 'BEGIN { print "\x4'^A^'\x4'^F^'" }'
+      awk 'BEGIN { printf "%c%c", 1e30, 2^63 }' | xd -c
+      awk 'BEGIN { CONVFMT = "<%g>"; x = "1e400" + 0; print (x "") }'
+      awk 'BEGIN { print length("a\303"), length("\303\251") }'
+      awk 'BEGIN { print rand(), srand(2) }'
+      awk - </dev/null
+      awk -safe -safe 'BEGIN { print "x" > "f" }'
+      cat f >[2]/dev/null
+      awk 'BEGIN { printf "out "; print log(-1) }' >[2=1]
+      awk 'BEGIN { printf "out "; print 1/0 }' >[2=1]
+      echo a | awk '{ print 1/0 }' -
+      awk 'BEGIN { x = ; y[1] = 2 }'
+      awk 'BEGIN { print 1 }}'
+      awk 'BEGIN { { print 1'
+      """
+    Then it prints
+      """
+      awk: division by zero
+       source line 1
+      ab
+      awk: field separator FS is empty
+
+      b
+      awk: no program given
+
+      a
+      b
+      awk: can't open file /dev/stdout
+       source line 1
+      1
+      JO
+      0000000  00 00
+      0000002 
+      Inf
+      1 1
+      0.748951 1
+      awk: syntax error at line 1
+       context is
+      	 >>>  <<< 
+      awk: bailing out at line 1
+      awk: print > is unsafe at line 1
+       context is
+      	BEGIN { print "x" > "f" >>>  } <<< 
+      out 1
+      awk: log argument out of domain
+       source line 1
+      out awk: division by zero
+       source line 1
+      awk: division by zero
+       input record number 1
+       source line 1
+      awk: syntax error at line 1
+       context is
+      	BEGIN { x = >>>  ; <<< 
+      awk: illegal statement at line 1
+      awk: extra } at line 1
+       context is
+      	BEGIN { print 1 >>>  }} <<< 
+      awk: syntax error at line 1
+      	extra }
+      awk: bailing out at line 1
+      awk: syntax error at line 1
+       context is
+      	 >>>  <<< 
+      awk: illegal statement at line 1
+      	2 missing }'s
+      """
+
+  @FOG_RC_RUN_323
+  Scenario: awk's assignments' escapes, ENVIRON, SYMTAB's cells, numbers with blanks after them, ARGV's files, fields past their table, tables rehashed and deleted from, and fields and records rebuilt when read
+    When rc runs the script
+      """
+      mkdir /tmp/ak; cd /tmp/ak
+      awk -v 'x=\b\f\r\n\t\\\\\q\101\1012\12\7\9\777' 'BEGIN { printf "%s", x }' | xd -c
+      awk -v 'x=a\' 'BEGIN { print x }'
+      awk -v 'x=a
+      b' 'BEGIN { print x }'
+      e=5 l=(a b) awk 'BEGIN { print ENVIRON["e"], ENVIRON["l"] "|" }'
+      e=5 awk -safe 'BEGIN { print ENVIRON["e"] "|" }'
+      awk 'BEGIN { for (i = 0; i < 94; i++) e = e "e"; print 1 > ("/env/" e); print 2 > ("/env/" e "f") }'
+      awk 'BEGIN { for (k in ENVIRON) if (length(k) > 90) print length(k) }'
+      awk 'BEGIN { print ("OFMT" in SYMTAB), SYMTAB["OFMT"], ("$zero&null" in SYMTAB), ("0" in SYMTAB) }'
+      awk 'BEGIN { print SYMTAB["NF"], SYMTAB["NR"], SYMTAB["FNR"], SYMTAB["RSTART"], SYMTAB["RLENGTH"], SYMTAB["ARGC"] }'
+      awk 'BEGIN { print "0" "|" "" "|", ("" == 0), ("0" == 0) }'
+      awk 'BEGIN { x = "10"; y = x + 0; print (x < 9); z = "10" + 0; print ("10" < 9) }'
+      awk 'BEGIN { x[1]; SYMTAB["x"] = "s" }'
+      awk 'BEGIN { x[1]; SYMTAB["x"] = 1 }'
+      awk 'BEGIN { x[1]; print SYMTAB["x"] + 0 }'
+      awk 'BEGIN { x[1]; print SYMTAB["x"] }'
+      awk 'function f() { } BEGIN { print SYMTAB["f"] }'
+      awk 'function f() { } BEGIN { SYMTAB["f"] = 1 }'
+      echo 1e-400 | awk '{ print ($1 == 0) }'
+      awk 'BEGIN { n = split("1 ,1\t,1\n,1\f,1\r,1\v,1 x", a, ","); for (i = 1; i <= n; i++) printf "%d", (a[i] == 1); print "" }'
+      awk 'END { print NR }' '9=x'
+      awk 'END { print NR }' 'x==1'
+      awk 'END { print x "|", _y }' 'x=' '_y=2' </dev/null
+      awk 'END { print (x < 9), (y < 9) }' 'x=10' 'y=abc' </dev/null
+      awk 'BEGIN { delete ARGV[1] } { print } END { print "end" }' nonesuch
+      awk '{ print } END { print x, FILENAME "|" }' 'x=1' </dev/null
+      awk 'BEGIN { FILENAME = "q" } END { print FILENAME "|" }' ''
+      awk 'BEGIN { ARGV[2] = "nonesuch" } END { print NR }' /dev/null
+      echo a | awk -F `{awk 'BEGIN { for (i = 0; i < 100; i++) printf "x" }'} '{ print }'
+      echo 'a b' | awk '{ print $1 ($0 = "q r"); print $1 }'
+      echo '1 2' | awk '{ print ($1 == ($0 = 5)) }'
+      echo 'a b' | awk '{ print $0 ($1 = "z") }'
+      echo 1 | awk '{ print ($0 == ($1 = 7)) }'
+      echo 'a b' | awk '{ $1 = "z"; y = "s"; print $0; print $1 }'
+      echo 'a b' | awk '{ $1 = "z"; y = 1; print $0; print $1 }'
+      echo 'a b' | awk '{ $0 = 5; print $1 }'
+      echo '1 2' | awk '{ print ($2 < 10) }'
+      echo 'a b c' | awk '{ NF = 1; $3 = "x"; print; print $2 "|" }'
+      awk 'BEGIN { for (i = 1; i <= 450; i++) s = s " " i; $0 = s; print NF, $201, $450 }'
+      awk 'BEGIN { $201 = "x"; print NF; $0 = ""; $500 = "y"; print NF }'
+      awk 'BEGIN { for (i = 1; i <= 450; i++) s = s "ab" i; FS = "ab"; $0 = s; print NF, $451 }'
+      echo 'aab1ab2' | awk -F 'ab' '{ print NF, $2 }'
+      echo | awk -F 'ab' '{ print NF }'
+      awk 'BEGIN { for (i = 1; i <= 100; i++) a[i]; for (k in a) printf "%s ", k; print ""; b[0]; for (i = 1; i <= 100; i++) b[i]; for (k in b) printf "%s ", k; print "" }'
+      awk 'BEGIN { for (i = 1; i <= 100; i++) a[i]; for (i = 1; i <= 100; i += 2) delete a[i]; n = 0; for (k in a) n++; print n, length(a) }'
+      awk 'BEGIN { printf "out "; x = log(-1); close("/dev/stderr"); print "end" }' >[2=1]
+      awk 'BEGIN { close("/dev/stdout"); printf "b"; print 1/0 }' >[2=1]
+      awk 'BEGIN { close("/dev/stderr"); print "x" > "/dev/stderr" }'
+      awk 'BEGIN { close("/dev/stdout"); printf "a" > "/fd/2"; printf "e\n" > "/dev/stderr" }' >[2=1]
+      awk 'BEGIN { print 1 }} x[1] = 2'
+      awk 'BEGIN { print 1 }}
+      x[1] = 2'
+      """
+    Then it prints
+      """
+      0000000  \b 0c \r \n \t  \  \  q  A  A  2 \n 07 \t
+      000000e 
+      a\
+      awk: newline in string a
+      b... at line 1
+      5 a b|
+      |
+      94
+      1 %.6g 1 1
+      0 0 0 0 0 1
+      0|| 0 1
+      0
+      1
+      awk: can't assign to x; it's an array name.
+       source line 1
+      awk: can't assign to x; it's an array name.
+       source line 1
+      awk: can't read value of x; it's an array name.
+       source line 1
+      awk: can't read value of x; it's an array name.
+       source line 1
+      awk: can't read value of f; it's a function.
+       source line 1
+      awk: can't assign to f; it's a function.
+       source line 1
+      1
+      11101110
+      awk: can't open file 9=x
+       source line 1
+      awk: can't open file x==1
+       source line 1
+      | 2
+      0 0
+      end
+      1 |
+      |
+      0
+      awk: field separator xxxxxxxxxx... is too long
+       source line 1
+      qq r
+      q
+      0
+      z bz
+      0
+      z b
+      z
+      z b
+      z
+      5
+      1
+      a b x
+      b|
+      450 201 450
+      201
+      500
+      1 
+      3 1
+      0
+      59 22 2 23 3 24 4 70 25 5 71 26 6 72 27 7 73 28 8 74 29 9 75 76 77 40 78 41 79 42 43 44 90 45 91 46 92 47 10 93 48 11 94 49 12 95 13 96 14 97 60 15 98 61 16 99 62 17 100 63 18 64 19 65 66 67 30 68 31 69 32 33 34 80 35 81 36 82 37 83 38 84 39 85 86 87 50 88 51 89 52 53 54 55 56 57 20 58 21 1 
+      22 23 24 25 26 27 28 29 90 91 92 93 94 95 96 97 98 99 100 30 31 32 33 34 35 36 37 38 39 0 1 2 3 4 5 6 7 8 9 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 10 11 12 13 14 15 16 17 18 19 80 81 82 83 84 85 86 87 88 89 20 21 
+      50 50
+      out awk: log argument out of domain
+       source line 1
+      end
+      bawk: division by zero
+       source line 1
+      ae
+      awk: extra } at line 1
+       context is
+      	BEGIN { print 1 >>>  }} <<< 
+      awk: syntax error at line 1
+      	extra }
+      awk: bailing out at line 1
+      awk: extra } at line 1
+       context is
+      	BEGIN { print 1 >>>  }} <<< 
+      awk: syntax error at line 1
+      	extra }
+      awk: bailing out at line 2
+      """
+
+  @FOG_RC_RUN_324
+  Scenario: awk's program from standard input and files that end in an error, names and escapes at their edges, $ in functions, carriage returns, bytes the grammar has no token for, loops and break, pat,pat's limit, its stack's depth and a number pushed back too far
+    When rc runs the script
+      """
+      mkdir /tmp/ak; cd /tmp/ak
+      echo 'BEGIN { print 1' >pe; awk -f pe
+      echo 'BEGIN { print "stdin" }' | awk -f -
+      awk 'BEGIN { x = $'
+      awk 'BEGIN { abcnt = 7; print abc'
+      echo r | awk 'BEGIN { abcnt = 7 } abc'
+      awk '.'
+      awk 'BEGIN { _x = 1; print _x }'
+      awk 'BEGIN { print 1 & 1 }'
+      echo 'x y' | awk 'function f(a, b) { return $a $b } { i = 1; print f(2, 1), $i }'
+      echo 'x y' | awk 'function g() { return $x } { x = 2; print g() }'
+      echo a | awk '{ print $zz; print zz "|" }'
+      awk 'BEGIN { printf "%s", "\23\100\118" }' | xd -c
+      awk 'BEGIN { print length("\xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") }'
+      awk -safe 'BEGIN { "echo no" | getline x }'
+      awk 'BEGIN { x = "b"; s = "abc"; sub(x, "X", s); print s; t = "abc"; gsub(x "|c", "Y", t); print t }'
+      awk 'function f(a, a, a) { }'
+      awk 'BEGIN { x[1] = 1 } function x () { } END { x[2] = 2 }'
+      awk 'function f(f) { } END { f[1] = 1 }'
+      awk 'BEGIN { x = 1 @ 2 }'
+      awk 'BEGIN { printf "BEGIN { x = 1 %c }\n", 127 > "pdel" }'; awk -f pdel
+      awk 'BEGIN { printf "BEGIN { x = 1 \\\r\n+ ; }\n" > "pcr" }'; awk -f pcr
+      awk 'BEGIN { printf "BEGIN { x = 1 \\\r\n+ 2; print x }\n" > "pcr2" }'; awk -f pcr2
+      awk 'BEGIN { while (0) ; break }'
+      awk 'BEGIN { do ; while (0); break }'
+      awk 'BEGIN { for (i = 0; i < 1; i++) ; break }'
+      awk 'BEGIN { for (;;) break; break }'
+      awk 'BEGIN { for (k in a) ; break }'
+      awk 'BEGIN { for (i = 0; i < 50; i++) print "NR==1,NR==2" > "pp50"; print "NR==1,NR==2" > "pp51" }'
+      cat pp50 >>pp51; awk -f pp50 </dev/null; echo 50 ok; awk -f pp51 </dev/null
+      for(n in 142 143) awk -v 'n='^$n 'BEGIN { for (i = 0; i < n; i++) { l = l "("; r = r ")" }; print "BEGIN { x = " l 1 r " }" > ("pd" n) }'
+      for(n in 142 143) { echo $n; awk -f pd^$n }
+      awk 'BEGIN { print "BEGIN {" > "pw"; for (i = 0; i < 47; i++) print "x = 1" > "pw"; print "    x = 1e y = ; }" > "pw" }'; awk -f pw
+      awk 'BEGIN { x = 1eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee }'
+      """
+    Then it prints
+      """
+      awk: syntax error at line 2
+       context is
+      	 >>>  <<< 
+      awk: illegal statement at line 2
+      	missing }
+      stdin
+      awk: yacc stack overflow at line 1
+       context is
+      	BEGIN { x = >>>  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ <<< 
+      	missing }
+      awk: syntax error at line 1
+       context is
+      	 >>>  <<< 
+      awk: illegal statement at line 1
+      	missing }
+      r
+      awk: syntax error at line 1
+       context is
+      	 >>> . <<< 
+      awk: bailing out at line 1
+      1
+      awk: syntax error at line 1
+       context is
+      	BEGIN { print 1 >>>  & <<<  1 }
+      awk: illegal statement at line 1
+      yx x
+      y
+      awk: illegal field $(), name "zz"
+       input record :1
+       source line 1
+      0000000  13  @ \t  8
+      0000004 
+      0
+      awk: cmd | getline is unsafe at line 1
+       context is
+      	BEGIN { "echo no" | getline x >>>  } <<< 
+      aXc
+      aYY
+      awk: duplicate argument a at line 1 in function f
+       context is
+      	function f(a, >>>  a <<< , a) { }
+      awk: syntax error at line 1 in function f
+      awk: bailing out at line 1 in function f
+      awk: x is an array, not a function at line 1
+       context is
+      	BEGIN { x[1] = 1 } function >>>  x <<<  () { } END { x[2] = 2 }
+      awk: syntax error at line 1 in function x
+      awk: bailing out at line 1 in function x
+      awk: `f' is both function name and argument name at line 1
+       context is
+      	function f(f) { >>>  } <<< 
+      awk: syntax error at line 1
+       context is
+      	BEGIN { x = 1 >>>  @ <<< 
+      awk: illegal statement at line 1
+      awk: syntax error at pdel:1
+       context is
+      	BEGIN { x = 1 >>>   <<< 
+      awk: illegal statement at pdel:1
+      awk: syntax error at pcr:3
+       context is
+      	+ >>>  ; <<< 
+      awk: illegal statement at pcr:3
+      3
+      awk: break illegal outside of loops at line 1
+       context is
+      	BEGIN { while (0) ; break >>>  } <<< 
+      awk: break illegal outside of loops at line 1
+       context is
+      	BEGIN { do ; while (0); break >>>  } <<< 
+      awk: break illegal outside of loops at line 1
+       context is
+      	BEGIN { for (i = 0; i < 1; i++) ; break >>>  } <<< 
+      awk: break illegal outside of loops at line 1
+       context is
+      	BEGIN { for (;;) break; break >>>  } <<< 
+      awk: break illegal outside of loops at line 1
+       context is
+      	BEGIN { for (k in a) ; break >>>  } <<< 
+      50 ok
+      awk: limited to 50 pat,pat statements at pp51:52
+       context is
+      	NR==1,NR==2 >>> 
+       <<< 
+      142
+      143
+      awk: yacc stack overflow at pd143:1
+       context is
+      	BEGIN { x = >>>  (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1) <<< 
+      awk: syntax error at pw:49
+       context is
+      	 y >>>  = <<<  ; }
+      awk: illegal statement at pw:50
+      awk: pushed back too much:  eeeeeeeeeeeeeeeeeee...
+       source line 1
+       context is
+      	BEGIN { x = >>>  1ee <<< eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee }
+      """
+
+  @FOG_RC_RUN_325
+  Scenario: awk's standard input by name, pipes waited for, fields and records rebuilt when executed, END's jumps, functions' arguments, locals and arrays made in them, getline's flushes and values, printf's redirections and arguments, regular expressions converted, its own pipes, fflush and its seeds
+    When rc runs the script
+      """
+      mkdir /tmp/ak; cd /tmp/ak
+      echo 10 >n10; echo q >pr
+      echo q | awk 'BEGIN { getline x < "/dev/stdin"; print x }'
+      awk 'BEGIN { print "x" | "sleep 1; cat" }'; echo after
+      echo '1 2' | awk '{ $0 = "a b"; x = $1; print (x < 5) }'
+      echo 1 | awk '{ $1 = 5; print ($0 < 10) }'
+      awk 'END { next }' </dev/null
+      awk 'END { nextfile; print "nf" }' </dev/null
+      awk 'function u(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,v,w,x,y,z,a1) { return 1 } BEGIN { print u(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24) }'
+      awk 'function u(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,v,w,x,y,z,a1) { return 1 } BEGIN { print u(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25) }'
+      awk 'function f(a, l) { return l "|" } BEGIN { print f(1) }'
+      awk 'function g(a) { a[1] = 5; a[2] = 6 } function h(b) { return length(b) } BEGIN { g(x); print length(x), h(x); x = 1 }'
+      echo 'a   b' | awk 'function f(a) { a = "q" } { f($1); print }'
+      echo 'a b' | awk 'function f(a) { $2 = "y"; a = "q" } { f($0); print }'
+      awk 'function f() { return "10" } BEGIN { print (f() < 9) }'
+      awk 'BEGIN { printf "a"; "echo b >[1=2]; echo c" | getline x; print x }' >[2=1]
+      awk 'BEGIN { getline < "n10"; print ($0 < 9) }'
+      awk 'BEGIN { v = "keep"; getline v; print v }' </dev/null
+      awk 'function d(a) { delete a; return a } BEGIN { print d(1) }'
+      awk 'function h(b) { return length(b) } BEGIN { a[1]; delete a; print length(a), h(a) }'
+      awk 'function t(a) { return (1 in a) } BEGIN { print t(z) }'
+      awk 'BEGIN { print match("abc", /x*/), RSTART, RLENGTH; print (substr("", 1) == 0) }'
+      echo a | awk '{ print $("abc") }'
+      awk 'BEGIN { printf "a%5" }'; echo
+      awk 'BEGIN { printf "%s\n", "a", x++; print x; printf ""; print "ok" }'
+      awk 'BEGIN { printf "r\n" > "pf"; close("pf"); getline l < "pf"; print l }'
+      awk 'BEGIN { printf "a" > "/fd/1"; print "b" }'
+      awk 'BEGIN { a[1]; x = a }'
+      awk 'BEGIN { x = -8; x ^= 0.5; print x }'
+      awk 'function s(a) { n = split("x y", a); return a[2] } BEGIN { print s(z) }'
+      awk 'function s(a) { split("x", a); return a "" } BEGIN { print s(z) }'
+      awk 'BEGIN { split("10 x", a); print (a[1] < 9); n = split("a,", b, /,/); print n, b[2] "|" }'
+      echo a | awk '{ i = 0; while (i++ < 3) { print i; next } }'
+      awk 'BEGIN { do { print i++; break } while (i < 3) }'
+      awk 'FNR == 1 { i = 0; do { print FILENAME, i++; nextfile } while (i < 3) }' n10 pr
+      echo a | awk '{ do { print i++; next } while (i < 3) }'
+      awk 'function fi(a) { for (k in a) n++; return n + 0 } BEGIN { print fi(1) }'
+      echo a | awk '{ a[1]; a[2]; for (k in a) { print "k"; next } }'
+      awk 'BEGIN { ORS = ""; print "a"; OFS = ""; print "b", "c" }'; echo
+      awk 'BEGIN { print "x" > "pw2"; r = (getline l < "pw2"); print r, l }'
+      awk 'BEGIN { getline l < "pr"; print "y" > "pr"; print l }'
+      awk 'BEGIN { print "x" > "pw3"; getline l < "n10"; print fflush("pw3"), fflush("n10"), fflush("pr") }'
+      awk 'BEGIN { close("/dev/stdin"); print "x" > "pz"; close("pz"); getline l < "pz"; print l }'
+      awk 'BEGIN { printf "a"; print "b" > "/fd/1" }'
+      awk 'BEGIN { print "x" >> "/nonesuch/f" }'
+      awk 'BEGIN { print "x" >> "newf"; close("newf"); getline l < "newf"; print l }'
+      awk 'BEGIN { print "y" >> "pz3" }' <[0=]; cat pz3
+      awk 'BEGIN { print "" > "/fd/1"; printf "a"; fflush(); print "b" > "/fd/1" }'
+      awk 'BEGIN { s = "q"; sub(/q/, "\\\\x&", s); print s }'
+      awk 'BEGIN { print ("ab" ~ /a()b/), ("-" ~ /[-a]/), ("b" ~ /[-a]/), ("-" ~ /[^-a]/), ("b" ~ /[^-a]/) }'
+      awk 'BEGIN { print ("[" ~ /[[a]/), ("[" ~ /[^[a]/), ("b" ~ /[^[a]/), match("a", /[]()a/), ("(" ~ /[x()]/) }'
+      awk 'BEGIN { print ("a" ~ /x[]/), ("x" ~ /x[]/), ("x]" ~ /x[]]/) }'
+      awk 'BEGIN { for (i = 0; i < 511; i++) r = r "a"; print ("a" ~ r); print ("a\t" ~ (r "\\t")) }'
+      awk 'BEGIN { for (i = 0; i < 510; i++) r = r "a"; print ("a\t" ~ (r "\\t")); print ("a" ~ (r "aa")) }'
+      awk 'BEGIN { print ("J" ~ /\x4a/), ("é" ~ /^\x0e9$/), ("ẞa" ~ /^\x1e9ea$/), ("J" ~ /\x4'^A^'/), ("K" ~ /\x4b/) }'
+      awk 'BEGIN { print ("?" ~ /^\77$/), ("x" ~ /^\170$/), ("A" ~ /^\101$/), ("\0018" ~ /^\18$/), ("\0118" ~ /^\118$/) }'
+      awk 'BEGIN { print ("é" ~ /\é/), ("a" ~ /\é/); r = "\\\200"; print ("\200" ~ r) }'
+      awk 'BEGIN { n = split("abc", a, /x*/); print n, a[1] }'
+      awk 'BEGIN { for (i = 0; i < 21; i++) print "x" | ("cat >/dev/null # " i) }'
+      awk 'BEGIN { print "a" | "cat"; print "b" | "sort"; close("cat"); close("sort") }'
+      awk 'BEGIN { "echo $0" | getline x; print x; system("echo $0") }'
+      awk 'BEGIN { print "p" | "cat"; close("cat"); "echo a" | getline; system(""); close("echo a") }'
+      awk 'BEGIN { srand(-5); a = rand(); srand(0); b = rand(); srand(2147483647); c = rand(); print a, b, c }'
+      awk -v 'p='^$pid 'BEGIN { print "junk" > ("/proc/" p "/ctl") }' >[2=1] | sed 's/[0-9]+/N/'
+      awk -v 'p='^$pid 'BEGIN { printf "junk" > ("/proc/" p "/ctl"); close("/proc/" p "/ctl") }' >[2=1] | sed 's/[0-9]+/N/'
+      awk -v 'p='^$pid 'BEGIN { printf "%9000s", "j" > ("/proc/" p "/ctl") }' >[2=1] | sed 's/[0-9]+/N/'
+      echo '1 2' | awk '{ a[($0 = "5 6")] += $1; for (k in a) print k, a[k] }'
+      echo '1 2' | awk '{ a[($1 = 7)] += $0; for (k in a) print k, a[k] }'
+      echo 'a b c' | awk '{ NF = 1; $1 = "x"; $0 = "p"; print $2 "|" $3 }'
+      echo 'a b c' | awk '{ NF = 1; $1 = 5; $0 = "p"; print $2 "|" $3 }'
+      echo 'a b' | awk '{ $5 = "x"; NF = 2; $4 = "y"; $7 = "z"; print; print $5 "|" }'
+      awk 'BEGIN { for (i = 1; i <= 450; i++) printf "ab%d", i; print "" }' | awk -F ab '{ print NF, $451 }'
+      echo 1e-999 | awk '{ print ($1 == 0), ($1 < 1) }'
+      """
+    Then it prints
+      """
+      q
+      x
+      after
+      0
+      0
+      awk: illegal break, continue, next or nextfile from END
+       source line 1
+      1
+      awk: function u has 51 arguments, limit 50
+       source line 1
+      |
+      2 2
+      awk: can't assign to x; it's an array name.
+       source line 1
+      a   b
+      a y
+      1
+      ab
+      c
+      0
+      keep
+      1
+      0 0
+      0
+      1 1 0
+      0
+      awk: illegal field $(abc), name "abc "
+       input record :1
+       source line 1
+      awk: weird printf conversion %5
+       source line 1
+      awk: not enough args in printf(a%5)
+       source line 1
+
+      a
+      1
+      ok
+      r
+      ab
+      awk: can't read value of a; it's an array name.
+       source line 1
+      1
+      awk: pow argument out of domain
+       source line 1
+      y
+      0
+      0
+      2 |
+      1
+      0
+      n10 0
+      pr 0
+      0
+      0
+      k
+      abc
+      1 x
+      q
+      0 -1 -1
+      x
+      ab
+      awk: can't open file /nonesuch/f
+       source line 1
+      x
+      y
+
+      ab
+      \\xq
+      1 1 0 0 1
+      1 0 1 1 1
+      0 1 1
+      0
+      awk: regular expression too big
+       source line 1
+      0
+      awk: regular expression too big
+       source line 1
+      1 1 1 1 1
+      1 1 1 1 1
+      1 0
+      1
+      1 abc
+      awk: can't open file cat >/dev/null # 20
+       source line 1
+      a
+      b
+      /rc/lib/rcmain
+      /rc/lib/rcmain
+      p
+      0.255247 0.183204 0.183204
+      awk: write error on /proc/N/ctl
+       source line N
+      awk: i/o error occurred closing /proc/N/ctl
+       source line N
+      5 6 5
+      7 7
+      |
+      |
+      a b  y   z
+      |
+      451 450
+      0 0
+      """
+
+  @FOG_RC_RUN_326
+  Scenario: awk's context of an error at the end of its 300 bytes, and its output written before an overflow traps it
+    Given 9front's eprint reads past its buffer there, and its trap gives its registers' addresses, so this runs on Fog alone
+    When rc runs the script
+      """
+      awk 'BEGIN { x =                                                                                                                                                                                                                                                                                                ; }'
+      awk 'BEGIN { printf "before"; x = 2^2000 }'
+      awk 'BEGIN { x = /b
+      y = 1 }' </dev/null
+      """
+    Then it prints
+      """
+      awk: syntax error at line 1
+       context is
+      	BEGIN { x =                                                                                                                                                                                                                                                                                                >>>  ; <<< 
+      awk: illegal statement at line 1
+      beforesys: fp: numeric overflow
+      awk: newline in regular expression b... at line 2
+       context is
+      	BEGIN { x = /b >>> 
+       <<< 
+      """
+
+  @FOG_RC_RUN_327
+  Scenario: awk's locals made arrays, a scalar deleted, strings returned, an array returned, classes and escapes at their edges, the commands of system and pipes, its seed's digits, writes that fail and its standard files closed
+    When rc runs the script
+      """
+      mkdir /tmp/ak; cd /tmp/ak
+      awk 'function f(a, l) { l[1] = 1; return l } BEGIN { print f(1) "|" }'
+      awk 'function d(a) { delete a; return length(a) } BEGIN { print d(12) }'
+      awk 'function f() { x = "10"; return x } function g() { x = "10"; y = x + 0; return x } BEGIN { print (f() < 9), (g() < 9) }'
+      awk 'function f(a) { a[1] = 1; return a } BEGIN { f(1) }'
+      awk 'BEGIN { print ("_" ~ /[^-a]/), ("x" ~ /[^[]/), ("[" ~ /[^[]/), ("x" ~ /[^[^]/), ("a\nb" ~ /a\012b/), ("O" ~ /^\117$/) }'
+      awk 'BEGIN { print "\x'^00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041bc^'" }'
+      awk 'BEGIN { system("echo e >/dev/null"); print "after" }'
+      awk 'BEGIN { "echo a" | getline; system("sleep 1"); close("echo a"); print "closed" }'
+      awk 'BEGIN { for (i = 0; i < 3; i++) printf "%.12f ", rand(); srand(-5); printf "%.12f\n", rand() }'
+      awk -v 'p='^$pid 'BEGIN { print sprintf("%40000s", "j") > ("/proc/" p "/ctl") }' >[2=1] | sed 's/[0-9]+/N/'
+      awk -v 'p='^$pid 'BEGIN { while (i++ < 8000) s = s "junk "; printf "%s", s > ("/proc/" p "/ctl") }' >[2=1] | sed 's/[0-9]+/N/'
+      awk -v 'p='^$pid 'BEGIN { OFS = sprintf("%40000s", "j"); print "a", system("echo side") > ("/proc/" p "/ctl") }' >[2=1] | sed 's/[0-9]+/N/'
+      awk 'BEGIN { c = "echo c; sleep 1; echo b >[1=2]; echo d"; c | getline x; printf "a"; c | getline y; print x y }' >[2=1]
+      awk 'BEGIN { print ("x*" ~ /^x[]$/), ("x]]" ~ /^x[]$/), ("x]" ~ /^x[]$/), ("x" ~ /^x[]$/), ("x[]" ~ /^x[]$/) }'
+      awk 'BEGIN { "echo x" | getline; print "b" | "sleep 1; cat"; close("sleep 1; cat"); print "after"; close("echo x") }'
+      awk 'BEGIN { close("/dev/stderr"); print "x" > "/fd/2" }'
+      awk 'BEGIN { close("/dev/stdout"); printf "b" }'
+      echo end
+      """
+    Then it prints
+      """
+      awk: bad type variable 16
+       source line 1
+      2
+      1 0
+      awk: bad type variable 16
+       source line 1
+      1 1 0 1 1 1
+      Abc
+      after
+      closed
+      0.748950596244 0.886943623729 0.486155997140 0.255247017848
+      awk: write error on /proc/N/ctl
+       source line N
+      awk: write error on /proc/N/ctl
+       source line N
+      awk: write error on /proc/N/ctl
+       source line N
+      ab
+      cd
+      0 0 0 1 0
+      b
+      after
+      x
+      end
+      """

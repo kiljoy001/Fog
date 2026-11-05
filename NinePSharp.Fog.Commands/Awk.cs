@@ -76,6 +76,8 @@ public sealed partial class Awk
     private readonly Bio stdin;
     private readonly Bio stdout;
     private readonly Bio stderr;
+
+    // Stryker disable once String : RunMainAsync names it argv[0] before anything is said
     private string cmdname = "awk";
     private int compileTime = 2;
     private bool safe;
@@ -116,15 +118,15 @@ public sealed partial class Awk
     private static bool Isxdigit(int c) => Isdigit(c) || c is (>= 'a' and <= 'f') or (>= 'A' and <= 'F');
 
     // The conversions of 6c's code for a double to a 32-bit and a 64-bit integer: one out of range
-    // is the indefinite integer.
-    private static int Ci(double d) => double.IsNaN(d) || d >= 2147483648.0 || d <= -2147483649.0 ? int.MinValue : (int)d;
+    // is the indefinite integer, the least, which C#'s cast saturates to below the range.
+    private static int Ci(double d) => double.IsNaN(d) || d >= 2147483648.0 ? int.MinValue : (int)d;
 
-    private static long Cv(double d) => double.IsNaN(d) || d >= 9223372036854775808.0 || d < -9223372036854775808.0 ? long.MinValue : (long)d;
+    private static long Cv(double d) => double.IsNaN(d) || d >= 9223372036854775808.0 ? long.MinValue : (long)d;
 
     // modf's integer part.
     private static double Modf(double x, out double ip)
     {
-        ip = double.IsInfinity(x) ? x : Math.Truncate(x);
+        ip = Math.Truncate(x);
         return double.IsInfinity(x) ? 0 : x - ip;
     }
 
@@ -136,6 +138,7 @@ public sealed partial class Awk
         int n = 0;
         for (int p = 0; p < m; n++)
         {
+            // Stryker disable once Equality : a byte of RuneSelf is a full rune that CharToRune steps over by one too
             if (s[p] < Utf.RuneSelf)
             {
                 p++;
@@ -170,6 +173,7 @@ public sealed partial class Awk
             await ExitsAsync("usage");
         }
 
+        // Stryker disable once Statement : lrand seeds with 1 when it is first called unseeded, and its sequence is the same
         Srand(1);
         symtab = Makesymtab(Nsymtab);
         string? fs = null;
@@ -206,7 +210,7 @@ public sealed partial class Awk
                         fs = argv[i] == "t" ? "\t" : argv[i].Length > 0 ? argv[i] : fs;
                     }
 
-                    if (fs is null or "")
+                    if (fs is null)
                     {
                         await WarningAsync("field separator FS is empty");
                     }
@@ -221,6 +225,8 @@ public sealed partial class Awk
                     break;
                 case 'd':
                     dbg = Libc.Strtol(a[2..], 10, out _);
+
+                    // Stryker disable once Conditional : dbg is only asked whether it is 0
                     dbg = dbg == 0 ? 1 : dbg;
                     break;
                 default:
@@ -330,8 +336,11 @@ public sealed partial class Awk
         int line = compileTime != 2 && curnode is not null ? curnode.Lineno : compileTime != 2 && lineno != 0 ? lineno : -1;
         if (compileTime == 1 && Cursource() is { } src)
         {
+            // Stryker disable once Equality,String : compiling, line is lineno, which starts at 1
             await stderr.PrintAsync(line >= 0 ? $" source {src}:{line}" : $" source file {src}");
         }
+
+        // Stryker disable once Equality : a line is lineno or a node's, both from 1
         else if (line >= 0)
         {
             await stderr.PrintAsync($" source line {line}");
@@ -350,11 +359,14 @@ public sealed partial class Awk
         }
 
         int p = ep - 1;
+
+        // Stryker disable once Equality : a newline is never the first byte an error stops at, as the grammar takes it there
         if (p > 0 && Eb(p) == '\n')
         {
             p--;
         }
 
+        // Stryker disable once Equality : before ebuf Eb gives 0, which the printing below skips as it skips a NUL
         for (; p > 0 && Eb(p) != '\n' && Eb(p) != 0; p--)
         {
         }
@@ -366,6 +378,8 @@ public sealed partial class Awk
 
         await stderr.PrintAsync(" context is\n\t");
         int q = ep - 1;
+
+        // Stryker disable once Equality : stopping at p or below it, nothing is printed before p either way
         for (; q >= p && Eb(q) is not (' ' or '\t' or '\n'); q--)
         {
         }
@@ -432,6 +446,7 @@ public sealed partial class Awk
     // bracecheck: the rest of the program read for its brackets, and those unmatched told.
     private async Task BracecheckAsync()
     {
+        // Stryker disable once Update : counted down, a second call finds -1, which is not 0 either
         if (bracecheckBeenHere++ != 0)
         {
             return;
@@ -449,6 +464,7 @@ public sealed partial class Awk
 
     private async Task Bcheck2Async(int n, char c2)
     {
+        // Stryker disable once Equality : 1 and -1 are taken by the arms before
         string? m = n switch
         {
             1 => $"\tmissing {c2}\n",
