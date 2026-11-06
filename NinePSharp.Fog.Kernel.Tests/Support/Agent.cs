@@ -35,33 +35,15 @@ internal sealed class Agent(Process parent, bool? continues, RforkFlags flags = 
         await started.Task.WaitAsync(KernelDriver.Bound);
     }
 
-    public async Task<T> Do<T>(Func<Process, Task<T>> call)
-    {
-        var result = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await calls.Writer.WriteAsync(async process =>
-        {
-            try
-            {
-                result.SetResult(await call(process));
-            }
-            catch (ExitException)
-            {
-                result.SetCanceled();
-                throw;
-            }
-            catch (Exception error)
-            {
-                result.SetException(error);
-            }
-        });
-        return await result.Task;
-    }
+    // The call's result, within the bound, so a call that never returns fails its test rather than
+    // holding up the run.
+    public Task<T> Do<T>(Func<Process, Task<T>> call) => CallAsync(call).WaitAsync(KernelDriver.Bound);
 
     // Starts the call and waits until it has begun, past the delivery of any note waiting for it.
     public async Task<Task<T>> BeginAsync<T>(Func<Process, Task<T>> call)
     {
         var begun = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task<T> result = Do(process =>
+        Task<T> result = CallAsync(process =>
         {
             Task<T> running = call(process);
             begun.TrySetResult();
@@ -98,6 +80,28 @@ internal sealed class Agent(Process parent, bool? continues, RforkFlags flags = 
     }
 
     public void Stop() => calls.Writer.TryComplete();
+
+    private async Task<T> CallAsync<T>(Func<Process, Task<T>> call)
+    {
+        var result = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await calls.Writer.WriteAsync(async process =>
+        {
+            try
+            {
+                result.SetResult(await call(process));
+            }
+            catch (ExitException)
+            {
+                result.SetCanceled();
+                throw;
+            }
+            catch (Exception error)
+            {
+                result.SetException(error);
+            }
+        });
+        return await result.Task;
+    }
 
     private async Task RunAsync(Process process)
     {

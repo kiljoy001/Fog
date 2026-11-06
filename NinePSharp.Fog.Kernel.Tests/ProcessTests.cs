@@ -54,7 +54,7 @@ public sealed class ProcessTests
         init.Notify(note => note == "interrupt");
         (int r, int w) = await init.PipeAsync();
         await init.WriteAsync(w, "-"u8.ToArray()).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal("-", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(r, 8192)).Span));
+        Assert.Equal("-", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(r, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Span));
         var stat = new NinePSharp.Messages.Stat(0, 0, 0, new NinePSharp.Constants.Qid(NinePSharp.Constants.QidType.QTFILE, 0, 1), 0b110_100_100, 0, 0, 0, "x", "glenda", "glenda", "glenda");
         await init.WriteAsync(w, KernelFileStats.Encode(stat)).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Task<IReadOnlyList<NinePSharp.Messages.Stat>> kept = init.DirReadAsync(r).AsTask();
@@ -105,10 +105,10 @@ public sealed class ProcessTests
         await init.RemoveAsync("/tmp/t");
         await init.RforkAsync(RforkFlags.Fdg);
         init.Fork(RforkFlags.Proc, _ => Task.CompletedTask);
-        await init.WaitAsync();
+        await init.WaitAsync().WaitAsync(KernelDriver.Bound);
         await init.SleepAsync(0);
         await init.AlarmAsync(0);
-        await init.HostAsync(_ => Task.FromResult(0));
+        await init.HostAsync(_ => Task.FromResult(0)).WaitAsync(KernelDriver.Bound);
         Assert.Equal(
             "Create Pwrite Pread Fstat Seek Fd2path Dup Dup Close Fwstat Close Stat Wstat Open Close Pipe Chdir Bind Open Close Unmount Remove Rfork Rfork Await Sleep Alarm none",
             string.Join(' ', names.Select(n => n ?? "none")));
@@ -147,7 +147,7 @@ public sealed class ProcessTests
             started.SetResult();
             await waiting.Task;
         });
-        await started.Task;
+        await started.Task.WaitAsync(KernelDriver.Bound);
         int fd = await init.OpenAsync($"/proc/{pid}/status", NinePConstants.OREAD);
         string status = System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 512)).Span);
         waiting.SetResult();
@@ -165,7 +165,7 @@ public sealed class ProcessTests
             started.SetResult();
             await child.SleepAsync(2000);
         });
-        await started.Task;
+        await started.Task.WaitAsync(KernelDriver.Bound);
         string state = "Running";
         for (int i = 0; i < 100 && state.TrimEnd() == "Running"; i++)
         {
@@ -176,7 +176,7 @@ public sealed class ProcessTests
         }
 
         Assert.Equal("Sleep      ", state);
-        await init.WaitAsync();
+        await init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     [Fact]
