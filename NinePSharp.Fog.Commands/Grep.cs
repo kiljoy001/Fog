@@ -364,7 +364,7 @@ public sealed class Grep
                 q.Add((byte)c);
                 c = await GetrecAsync();
 
-                // Stryker disable once Statement : the NUL kept, the read past it is 0 again, and ends the class as this does
+                // Stryker disable once Statement,Block : the NUL kept, the read past it is 0 again, and ends the class as this does
                 if (c == 0)
                 {
                     break;
@@ -403,9 +403,9 @@ public sealed class Grep
         Re2 x = await Expr0Async();
         for (; ;)
         {
+            // Stryker disable once Statement,Block : the expression read after it is a syntax error all the same
             if (await PeekAsync() != LNewline)
             {
-                // Stryker disable once Statement,Block : the expression read after it is a syntax error all the same
                 await SyntaxAsync();
             }
 

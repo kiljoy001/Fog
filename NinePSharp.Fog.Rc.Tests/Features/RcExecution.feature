@@ -8435,10 +8435,10 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_266
-  Scenario: uniq gives each run of equal lines once, counted, or only the repeated or the single ones
+  Scenario: uniq gives each run of equal lines once, counted, or only the repeated or the single ones, past more fields than a line has
     When rc runs the script
       """
-      mkdir /tmp/uq; cd /tmp/uq
+      rm -rf /tmp/uq; mkdir /tmp/uq; cd /tmp/uq
       echo 'a
       a
       b
@@ -8482,6 +8482,7 @@ Feature: rc runs scripts as 9front rc does
       uniq -c -1 k
       uniq -2 k
       uniq +2 k
+      uniq -3 k
       """
     Then it prints
       """
@@ -8536,6 +8537,7 @@ Feature: rc runs scripts as 9front rc does
       z	 a
       w b
       v  b
+       x a
       """
 
   @FOG_RC_RUN_267
@@ -26501,14 +26503,15 @@ Feature: rc runs scripts as 9front rc does
       """
 
   @FOG_RC_RUN_326
-  Scenario: awk's context of an error at the end of its 300 bytes, and its output written before an overflow traps it
-    Given 9front's eprint reads past its buffer there, and its trap gives its registers' addresses, so this runs on Fog alone
+  Scenario: awk's context of an error at the end of its 300 bytes, and its output written before an overflow traps it, and a name that ends the program at its buffer's end
+    Given 9front's eprint reads past its buffer there, and its trap gives its registers' addresses, and its gettok reads a name the program's end cut short at its buffer's end on past it, so this runs on Fog alone
     When rc runs the script
       """
       awk 'BEGIN { x =                                                                                                                                                                                                                                                                                                ; }'
       awk 'BEGIN { printf "before"; x = 2^2000 }'
       awk 'BEGIN { x = /b
       y = 1 }' </dev/null
+      awk 'END { for (k in SYMTAB) if (k ~ /^qq/) print k } qqqqqqq' </dev/null
       """
     Then it prints
       """
@@ -26521,6 +26524,7 @@ Feature: rc runs scripts as 9front rc does
        context is
       	BEGIN { x = /b >>> 
        <<< 
+      qqqqqqq
       """
 
   @FOG_RC_RUN_327
@@ -26572,5 +26576,55 @@ Feature: rc runs scripts as 9front rc does
       b
       after
       x
+      end
+      """
+
+  @FOG_RC_RUN_329
+  Scenario: awk's program files, ARGV's files, /env's, and files closed by close, closed once read, $0 a number made a string and $0 rebuilt kept and emptied by a getline at the end, a name after a number's part, standard output whose flush failed closed at the end, and standard input's buffer kept by nextfile, dropped by close and read again past its end
+    When rc runs the script
+      """
+      rm -rf /tmp/ak; mkdir /tmp/ak; cd /tmp/ak
+      echo a >a; echo b >b
+      echo 'END { e = ENVIRON["home"]; getline p < "/dev/pid"; f = "/proc/" p+0 "/fd"; while ((getline l < f) > 0) { if (l ~ /\/env\/|\/tmp\/ak\//) print l; n++ }; print "fds", (n > 3) }' >fd.awk
+      awk -f fd.awk a b
+      echo 'BEGIN { print "x" >> "ap"; close("ap"); print "y" > "wr"; close("wr"); getline q < "a"; close("a") }' >op.awk
+      awk -f op.awk -f fd.awk </dev/null
+      echo a | awk 'END { $0 = 5; x = $0 ""; getline; print $0 }'
+      echo a b | awk 'END { $1 = "x"; y = $0; getline; print "[" $0 "]" }'
+      awk 'END { for (k in SYMTAB) if (k ~ /^ee/) print k } 100ee' </dev/null
+      awk 'BEGIN { printf "junk" }' >[2=1] >/proc/$pid/ctl
+      echo 'a
+      b
+      c' | awk '{ print; nextfile } END { while ((getline l < "-") > 0) print "rest", l }'
+      echo 'a
+      b
+      c' | awk 'NR == 1 { close("/dev/stdin") } { print }'
+      echo 'a
+      b
+      c' | awk 'NR == 1 { getline x < "-"; print "x", x; close("-") } { print }'
+      echo 'a
+      b
+      c' | awk 'BEGIN { getline x < "-"; close("-"); while ((getline y < "-") > 0) print "y", y; print "x", x }'
+      echo a >g; awk 'BEGIN { while ((getline l < "-") > 0) print l; system("echo b >>g"); close("-"); while ((getline l < "-") > 0) print l }' <g
+      echo a >g; awk 'BEGIN { while ((getline l < "-") > 0) print l; system("echo b >>g"); while ((getline l < "-") > 0) print l }' <g
+      echo end
+      """
+    Then it prints
+      """
+      fds 1
+      fds 1
+      5
+      []
+      ee0
+      a
+      rest b
+      rest c
+      a
+      x b
+      a
+      x a
+      a
+      b
+      a
       end
       """

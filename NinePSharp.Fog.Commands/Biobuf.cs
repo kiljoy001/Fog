@@ -288,6 +288,10 @@ public sealed class Biobuf(Process process, int fd)
             return Beof;
         }
 
+        // A buffer being read drops what it holds unread, and reads again past an end Bgetc met, as
+        // Bractive's and Bracteof's do.
+        buffer.Clear();
+        (bracteof, gpos) = (false, 0);
         if (ocount == 0)
         {
             return 0;

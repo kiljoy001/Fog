@@ -34,6 +34,7 @@ public sealed partial class Awk
 
     // Whether $0's text is lib.c's record, which getrec empties before it reads into it, rather than a
     // string of its own that an assignment gave it.
+    // Stryker disable once Boolean : $0 is empty until something sets it, and each that does says which it is
     private bool recordHeld = true;
 
     private bool donerec;
@@ -309,7 +310,6 @@ public sealed partial class Awk
             }
             finally
             {
-                // Stryker disable once Statement : a descriptor of awk's left open is never seen
                 await process.CloseAsync(f);
             }
         }
@@ -688,7 +688,6 @@ public sealed partial class Awk
 
     private async Task NextfileAsync()
     {
-        // Stryker disable once Logical,Boolean,Equality,Statement : ending standard input's buffer flushes nothing, and a file left open is not read again
         if (infile is not null && infile != stdin)
         {
             await infile.TermAsync();
@@ -866,7 +865,7 @@ public sealed partial class Awk
 
     private void Newfld(int n)
     {
-        // Stryker disable once Equality,Statement : fieldadr has grown the table for the field being set
+        // Stryker disable once Equality,Statement,Block : fieldadr has grown the table for the field being set
         if (n > nfields)
         {
             Growfldtab(n);
@@ -940,7 +939,7 @@ public sealed partial class Awk
     // recbld: $0 of $1 to $NF and OFS between them.
     private async Task RecbldAsync()
     {
-        // Stryker disable once Statement : it is called only while $0 is stale
+        // Stryker disable once Statement,Block : it is called only while $0 is stale
         if (donerec)
         {
             return;

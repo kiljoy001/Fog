@@ -248,7 +248,9 @@ public sealed class BiobufTests : IAsyncLifetime
             await closed.BputcAsync((byte)'x');
         }
 
-        Assert.Equal(Biobuf.Beof, await closed.BputcAsync((byte)'x'));
+        // On a thread of its own and within a bound, as a write that fails does so at once, so a Bputc
+        // that tries it for good fails the test rather than holding up the run.
+        Assert.Equal(Biobuf.Beof, await Task.Run(() => closed.BputcAsync((byte)'x')).WaitAsync(TimeSpan.FromSeconds(3)));
         Biobuf full = Buffer(9);
         await full.BwriteAsync(new byte[Bsize - 1]);
         Assert.Equal(Biobuf.Beof, await full.BputruneAsync('é'));

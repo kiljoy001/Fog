@@ -153,7 +153,9 @@ public sealed class RegexpTests
         await init.DupAsync(w, 2);
         var exit = await Assert.ThrowsAsync<NinePSharp.Fog.Kernel.ExitException>(() => RegerrorAsync(init, "bad"));
         Assert.Equal("regerr", exit.Message);
-        Assert.Equal("regerror: bad\n", Encoding.UTF8.GetString((await init.ReadAsync(r, 100)).Span));
+
+        // Within a bound, so a regerror that writes nothing fails the test rather than holding up the run.
+        Assert.Equal("regerror: bad\n", Encoding.UTF8.GetString((await init.ReadAsync(r, 100).AsTask().WaitAsync(TimeSpan.FromSeconds(3))).Span));
     }
 
     private static string Run(string mode, string pattern, string subject, string template, int msize = 10)

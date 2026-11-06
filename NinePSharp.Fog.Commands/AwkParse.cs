@@ -177,7 +177,6 @@ public sealed partial class Awk
                 return c;
             }
 
-            // Stryker disable once Equality,Statement : ending standard input's buffer flushes nothing, and a file left open is not read again
             if (yyin != stdin)
             {
                 await yyin.TermAsync();
@@ -327,6 +326,8 @@ public sealed partial class Awk
     private string Tokstr()
     {
         int n = tok.IndexOf('\0');
+
+        // Stryker disable once Equality : the buffer's first byte is a token's, never NUL, once one is read
         return new string([.. n < 0 ? tok : tok.Take(n)]);
     }
 
@@ -821,6 +822,7 @@ public sealed partial class Awk
     // yacc's recovery from a syntax error leaves in a value's place what was there, a variable's
     // cell among them, which C's union reads as a node; no program is run after one, so an empty
     // node stands in.
+    // Stryker disable once Conditional : what recovery leaves is a statement's, which NpN reads; every value Np reads is a node a rule made
     private Node Np(int yypt, int k) => V(yypt, k).P is not (null or Node) ? new Node() : (Node)V(yypt, k).P!;
 
     private Node? NpN(int yypt, int k) => V(yypt, k).P is not (null or Node) ? new Node() : (Node?)V(yypt, k).P;
@@ -1352,7 +1354,7 @@ public sealed partial class Awk
 
     private async Task DefnAsync(Cell v, Node? vl, Node? st)
     {
-        // Stryker disable once Statement,String : setfname has refused an array's name and bailed out before this
+        // Stryker disable once Statement,String,Block : setfname has refused an array's name and bailed out before this
         if ((v.Tval & Arr) != 0)
         {
             await SyntaxAsync($"`{v.Nval}' is an array name and a function name");

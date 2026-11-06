@@ -362,6 +362,7 @@ public sealed class Sed
                     linebuf[buf++] = r;
                 }
 
+                // Stryker disable once Block : a line the program's end cuts short is not compiled either way
                 if ((c = await GetruneAsync()) < 0)
                 {
                     // Stryker disable once Statement : a line the program's end cuts short is not compiled either way
@@ -755,6 +756,7 @@ public sealed class Sed
             cp++;
         }
 
+        // Stryker disable once Block : a branch left at -1 ends the commands as a branch to the end does, and the empty name finds the end's label
         if (L(cp) is 0 or ';')
         {
             // Stryker disable once Statement : a branch left at -1 ends the commands as a branch to the end does
@@ -993,6 +995,8 @@ public sealed class Sed
         while (L(cp) != 0)
         {
             uint r = L(cp++);
+
+            // Stryker disable once Block : a backslash at the end of the name adds a NUL the name ends at anyway
             if (r == '\\' && (r = L(cp++)) == 0)
             {
                 // Stryker disable once Statement : a backslash at the end of the name adds a NUL the name ends at anyway
@@ -1023,6 +1027,7 @@ public sealed class Sed
 
         while (L(cp) != 0)
         {
+            // Stryker disable once Block : a backslash at the end of the text adds a NUL the text ends at anyway
             if (L(cp) == '\\' && L(++cp) == 0)
             {
                 // Stryker disable once Statement : a backslash at the end of the text adds a NUL the text ends at anyway
@@ -1142,6 +1147,8 @@ public sealed class Sed
                 if (jflag)
                 {
                     jflag = false;
+
+                    // Stryker disable once Block : a branch is resolved to a command or the end, never -1
                     if ((ipc = pspace[ipc].Lb1) < 0)
                     {
                         // Stryker disable once Statement : a branch is resolved to a command or the end, never -1
@@ -1224,6 +1231,7 @@ public sealed class Sed
     // match: the expression from buf in the line, ^ only at its start; loc1 and loc2 the match.
     private bool Match(Regexp? pattern, int buf)
     {
+        // Stryker disable once Block : an expression to match is always compiled
         if (pattern is null)
         {
             // Stryker disable once Boolean : an expression to match is always compiled
@@ -1261,6 +1269,8 @@ public sealed class Sed
         {
             int len = loc2 - loc1;
             await DosubAsync(ipc.Rhs);
+
+            // Stryker disable once Block : the check a step on ends it at the line's end
             if (linebuf[loc2] == 0)
             {
                 // Stryker disable once Statement : the check a step on ends it at the line's end

@@ -492,6 +492,7 @@ public sealed class Regexp
         }
 
         // *tail = list: the rest of the free threads hung after the last, as regexec leaves them.
+        // Stryker disable once Block : the list is cleared just after, so where the free threads go matters only to their reuse, and Take makes a thread when none is free
         public void Tail(Rethread? list)
         {
             // Stryker disable once Equality,Block : the list is cleared just after, so where the free threads go matters only to their reuse, and Take makes a thread when none is free
@@ -653,6 +654,8 @@ public sealed class Regexp
         private void Getnextr()
         {
             literal = false;
+
+            // Stryker disable once Block : a read past the last rune reads its NUL again, rune 0 as here
             if (done)
             {
                 rune = 0;

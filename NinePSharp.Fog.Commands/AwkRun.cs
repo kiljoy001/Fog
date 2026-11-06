@@ -172,6 +172,7 @@ public sealed partial class Awk
         return 0;
     }
 
+    // Stryker disable once Block : the grammar makes no node proctab has no entry for
     private async Task<Cell> IllegalAsync()
     {
         // Stryker disable once Statement,String : the grammar makes no node proctab has no entry for
@@ -206,7 +207,7 @@ public sealed partial class Awk
             {
                 while ((await GetrecAsync(true)).N > 0)
                 {
-                    // Stryker disable once Statement : exit leaves by its throw, not by its value
+                    // Stryker disable once Statement,Block : exit leaves by its throw, not by its value
                     if ((await X(a[1])).Csub == Jexit)
                     {
                         break;
@@ -344,7 +345,7 @@ public sealed partial class Awk
     {
         int n = Ptoi(a[0]);
 
-        // Stryker disable once Equality,Statement,String,Arithmetic : an argument's number is one of its function's parameters
+        // Stryker disable once Equality,Statement,String,Arithmetic,Block : an argument's number is one of its function's parameters
         if (n >= fp!.Nargs)
         {
             await FatalAsync($"argument #{n + 1} of function {fp.Fcncell.Nval} was not supplied");
@@ -1499,7 +1500,6 @@ public sealed partial class Awk
             {
                 await process.SeekAsync(fd, 0, 2);
 
-                // Stryker disable once Boolean : a descriptor of awk's left open is never seen
                 fp = new Bio(this, fd, NinePConstants.OWRITE, true);
                 m = Gt;
             }
@@ -1538,9 +1538,10 @@ public sealed partial class Awk
                 ? await process.OpenAsync(Path(name), mode)
                 : await process.CreateAsync(Path(name), mode, 0b110_110_110);
 
-            // Stryker disable once Boolean : a descriptor of awk's left open is never seen
             return new Bio(this, fd, mode, true);
         }
+
+        // Stryker disable once Block : what an empty catch would return
         catch (SyscallException)
         {
             return null;
@@ -1577,6 +1578,7 @@ public sealed partial class Awk
                 int stat = files[i]!.Mode is '|' or Le ? await PcloseAsync(f) : await f.TermAsync();
                 if (stat < -1)
                 {
+                    // Stryker disable once Statement,String : neither gives less than -1
                     await WarningAsync($"i/o error occurred while closing {files[i]!.Fname}");
                 }
             }
@@ -1685,7 +1687,7 @@ public sealed partial class Awk
                         Replace(pb, rptr, t);
                     }
 
-                    // Stryker disable once Equality,Statement : an empty match before the end is at c or after it, so c is before the end
+                    // Stryker disable once Equality,Statement,Block : an empty match before the end is at c or after it, so c is before the end
                     if (c >= t.Length)
                     {
                         break;
@@ -2075,7 +2077,7 @@ public sealed partial class Awk
     {
         if (--rngTap < 0)
         {
-            // Stryker disable once Equality,Statement,Update : awk calls srand first, and the feed is 334 whenever the tap wraps
+            // Stryker disable once Equality,Statement,Update,Block : awk calls srand first, and the feed is 334 whenever the tap wraps
             if (rngFeed < 0)
             {
                 Srand(1);
