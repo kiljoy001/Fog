@@ -84,7 +84,10 @@ mutate() {
   local config="$2"
   local output=".artifacts/$3"
   rm -rf "$output"
-  (cd "$tests" && dotnet stryker --config-file "../$config" --reporter json --reporter progress --output "../$output" --skip-version-check --break-on-initial-test-failure --verbosity error ${STRYKER_CONCURRENCY:+--concurrency "$STRYKER_CONCURRENCY"})
+  # Each test host's heap is held to 12 GiB, twice what a healthy one takes, so a mutant that adds
+  # without end, as an awk Makefields counting down, runs out of memory in its own host in a minute
+  # rather than taking the gate's 128 GB with it before its timeout.
+  (cd "$tests" && DOTNET_GCHeapHardLimit=0x300000000 dotnet stryker --config-file "../$config" --reporter json --reporter progress --output "../$output" --skip-version-check --break-on-initial-test-failure --verbosity error ${STRYKER_CONCURRENCY:+--concurrency "$STRYKER_CONCURRENCY"})
   python3 tools/mutation_summary.py --output-dir "$output" --min-score "$MIN_MUTATION" --accepted-timeouts quality/stryker-timeouts.json
 }
 
