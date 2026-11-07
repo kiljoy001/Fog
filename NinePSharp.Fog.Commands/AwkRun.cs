@@ -1576,6 +1576,8 @@ public sealed partial class Awk
             {
                 // Stryker disable once Conditional,Equality,Statement,String : pclose ends a file too and gives -1 as it is no pipe, and neither gives less than -1
                 int stat = files[i]!.Mode is '|' or Le ? await PcloseAsync(f) : await f.TermAsync();
+
+                // Stryker disable once Block : neither gives less than -1
                 if (stat < -1)
                 {
                     // Stryker disable once Statement,String : neither gives less than -1
