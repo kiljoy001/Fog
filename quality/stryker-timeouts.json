@@ -1224,6 +1224,12 @@
     "reason": "the child starts at the instruction that forked it, the &, backquote or subshell, so it forks again, without end"
   },
   {
+    "file": "RcShell.Fork.cs",
+    "mutator": "Bitwise mutation",
+    "line": "long pid = process.Fork(RforkFlags.Fdg | RforkFlags.Rend, async forked =>",
+    "reason": "the child shares the shell's descriptors, so each one pushopen dups to is one a redirection waiting to run sets, and it moves it again until the stack overflows"
+  },
+  {
     "file": "Libauth.cs",
     "mutator": "Boolean mutation",
     "line": "while (true)",
