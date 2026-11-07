@@ -203,7 +203,7 @@ public sealed class ConsoleSteps(KernelDriver driver)
     public async Task ThenHostOwner(string user)
     {
         Assert.Null(failure);
-        Assert.Equal(user, await ReadAsync(driver.Init, "/dev/hostowner", 100));
+        Assert.Equal(user, await driver.Bounded(new ValueTask<string>(ReadAsync(driver.Init, "/dev/hostowner", 100))));
     }
 
     [Then(@"^the host's nvram holds ""(.*)""$")]
@@ -220,7 +220,7 @@ public sealed class ConsoleSteps(KernelDriver driver)
     public async Task ThenReadingZeros(int count, string path, int zeros)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(new byte[zeros], (await driver.Init.ReadAsync(fd, count)).ToArray());
+        Assert.Equal(new byte[zeros], (await driver.Bounded(driver.Init.ReadAsync(fd, count))).ToArray());
     }
 
     [Then("the child read its own number and then the parent's, each in twelve bytes")]
@@ -235,7 +235,7 @@ public sealed class ConsoleSteps(KernelDriver driver)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
         var read = new List<byte>();
-        for (ReadOnlyMemory<byte> block; !(block = await driver.Init.ReadAsync(fd, piece)).IsEmpty;)
+        for (ReadOnlyMemory<byte> block; !(block = await driver.Bounded(driver.Init.ReadAsync(fd, piece))).IsEmpty;)
         {
             read.AddRange(block.ToArray());
         }
@@ -276,7 +276,7 @@ public sealed class ConsoleSteps(KernelDriver driver)
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
         try
         {
-            return (await driver.Init.PReadAsync(fd, count, offset)).ToArray();
+            return (await driver.Bounded(driver.Init.PReadAsync(fd, count, offset))).ToArray();
         }
         finally
         {
