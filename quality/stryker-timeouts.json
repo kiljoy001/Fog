@@ -1696,5 +1696,11 @@
     "mutator": "Block removal mutation",
     "line": "if (r.Gen == gen) {",
     "reason": "addcase visits a node again, and a cycle of alternations for ever"
+  },
+  {
+    "file": "Aescbc.cs",
+    "mutator": "Equality mutation",
+    "line": "for (byte[] more; (more = await BreadAsync(Buf)).Length > 0;)",
+    "reason": "a read at the end of the input gives nothing, and the loop reads again without end"
   }
 ]
