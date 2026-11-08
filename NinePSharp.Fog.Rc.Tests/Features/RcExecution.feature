@@ -6499,16 +6499,17 @@ Feature: rc runs scripts as 9front rc does
     Given 9front's oracle has no route to its loopback, so this runs on Fog alone
     When rc runs the script, its \x escapes bytes
       """
+      rm -f /tmp/tlate
       aux/listen1 -1tq 'tcp!127.0.0.1!17106' /bin/rc -c 'echo -n ''\x07\x00\x00\x00ab\x0A\x07\x00\x00\x00cd\x0A\x0A\x00''' &
       sleep 1
-      aux/listen1 -1tq 'tcp!127.0.0.1!17147' /bin/rc -c 'echo -n ''\x06\x00\x00\x00ab''; sleep 5' >[2]/dev/null &
+      aux/listen1 -1tq 'tcp!127.0.0.1!17147' /bin/rc -c 'echo -n ''\x06\x00\x00\x00ab''; sleep 2; echo >/tmp/tlate; sleep 3' >[2]/dev/null &
       aux/listen1 -1tq 'tcp!127.0.0.1!17148' /bin/rc -c 'for(m in a b c){ echo -n ''\x05\x00\x00\x00''$m; sleep 0.4 }; echo -n ''\x0A\x00\x00\x00ef''' >[2]/dev/null &
       sleep 1
       aux/trampoline -9 'tcp!127.0.0.1!17106' < <{sleep 2 >[2]/dev/null} >/tmp/out
       ~ $status '' && echo clean
       {read -c 4 >/dev/null; read -c 3; read -c 4 >/dev/null; cat} </tmp/out
       aux/trampoline -9 'tcp!127.0.0.1!17147' < <{sleep 5 >[2]/dev/null} >[1=]
-      echo a write that fails ends it
+      test -e /tmp/tlate || echo a write that fails ends it, before what it relays goes on
       aux/trampoline -9 -t 600 'tcp!127.0.0.1!17148' < <{sleep 2 >[2]/dev/null} >/tmp/out
       {for(i in 1 2 3){ read -c 4 >/dev/null; read -c 1 }; cat} </tmp/out
       echo
@@ -6518,7 +6519,7 @@ Feature: rc runs scripts as 9front rc does
       clean
       ab
       cd
-      a write that fails ends it
+      a write that fails ends it, before what it relays goes on
       abc
       """
 
