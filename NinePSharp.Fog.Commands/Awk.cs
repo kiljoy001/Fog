@@ -327,7 +327,9 @@ public sealed partial class Awk
     private async Task ErrorAsync()
     {
         await stderr.PrintAsync("\n");
-        if (compileTime != 2 && nrloc is not null && nrloc.Fval > 0)
+
+        // NR is made just before compiling, so once compileTime is no longer 2 it is there.
+        if (compileTime != 2 && nrloc.Fval > 0)
         {
             await stderr.PrintAsync(filenameCell.Sval != "-" ? $" input record {filenameCell.Sval}:{Ci(fnrloc.Fval)}" : $" input record number {Ci(fnrloc.Fval)}");
             await stderr.PrintAsync("\n");
