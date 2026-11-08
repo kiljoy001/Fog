@@ -1702,5 +1702,65 @@
     "mutator": "Equality mutation",
     "line": "for (byte[] more; (more = await BreadAsync(Buf)).Length > 0;)",
     "reason": "a read at the end of the input gives nothing, and the loop reads again without end"
+  },
+  {
+    "file": "AwkRun.cs",
+    "mutator": "Equality mutation",
+    "line": "if (n <= 0)",
+    "reason": "ipow halves n to 0 and calls itself again for 0, without end, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Logical mutation",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Negate expression",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Equality mutation",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Bitwise mutation",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "for (int i = 1; i <= nfloc.Fval; i++)",
+    "reason": "the rebuild counts down to $0, whose read rebuilds the record again, until the stack overflows"
+  },
+  {
+    "file": "Du.cs",
+    "mutator": "Logical mutation",
+    "line": "if (d.Name is \".\" or \"..\" || !cache.Add((d.Qid.Path, d.Type, d.Dev)))",
+    "reason": "du goes again into a directory it has seen, round a cycle, until the stack overflows"
+  },
+  {
+    "file": "Du.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "reason": "du goes again into a directory it has seen, round a cycle, until the stack overflows"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Sed.cs",
+    "mutator": "Equality mutation",
+    "line": "if (p != addr)",
+    "reason": "the end of the input is taken as an empty last line again and again, so sed writes lines without end"
   }
 ]
