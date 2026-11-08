@@ -17,10 +17,14 @@ public sealed class RcExecutionSteps
 {
     private const string Script = "/tmp/s";
     private const int MaxOutput = 1 << 20;
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(3);
+
+    // Stryker's coverage pass records each mutant a command passes through, which makes a script that
+    // builds its input with awk's loops run for minutes, so a read waits up to two minutes before the
+    // script is taken to have stopped; at three seconds, its later commands were never seen covered.
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(120);
 
     // Each read is bounded, and so is the whole run, so an rc that keeps printing fails the scenario too.
-    private static readonly TimeSpan RunBound = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan RunBound = TimeSpan.FromSeconds(1200);
     private readonly ManualClock clock = new() { Now = DateTimeOffset.UtcNow };
     private readonly FakeHostNetwork host = new();
     private readonly FakeHostConsole console = new();
