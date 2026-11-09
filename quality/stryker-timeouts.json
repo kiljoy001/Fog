@@ -1762,5 +1762,17 @@
     "mutator": "Equality mutation",
     "line": "if (p != addr)",
     "reason": "the end of the input is taken as an empty last line again and again, so sed writes lines without end"
+  },
+  {
+    "file": "RcShell.Fork.cs",
+    "mutator": "Statement mutation",
+    "line": "await CloseAsync(sidefd);",
+    "reason": "the shell keeps the pipe's other end, so whatever reads it never sees its end and waits for good"
+  },
+  {
+    "file": "RcShell.Trap.cs",
+    "mutator": "Statement mutation",
+    "line": "--trap[i];",
+    "reason": "the trap's count is never taken down, so its function runs again without end"
   }
 ]
