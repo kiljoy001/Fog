@@ -1774,5 +1774,17 @@
     "mutator": "Statement mutation",
     "line": "--trap[i];",
     "reason": "the trap's count is never taken down, so its function runs again without end"
+  },
+  {
+    "file": "Secstore.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int cur = 0; cur < memfile.Length;)",
+    "reason": "at the end an empty line is found again, so secstore writes it to factotum without end"
+  },
+  {
+    "file": "Secstore.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "int end = next < 0 ? memfile.Length : next + 1;",
+    "reason": "a line is cut before its newline, which is found again, so secstore writes nothing to factotum without end"
   }
 ]
