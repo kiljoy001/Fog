@@ -253,7 +253,22 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   `/bin` with creation, so a program copied there is kept. `#/` has no `boot` directory.
 - The store is served in the host's own process rather than by gefs speaking 9P on
   `/srv/boot`; its files stat as the mount driver's, device `M`.
-- Until the store's `/adm/users` is read, each user is the only member of its own group.
+- The store's `/adm/users` is read at boot and by the host's `users` command, as gefs reads it,
+  but Fog's files name their users rather than numbering them, so a user and a group are found by
+  name, and group leaders are checked only to exist. A store reamed before Fog read its users has
+  no `/adm/users`, and each user is then the only member of its own group. The host reams it with
+  the group `sys`, whose members may write the store's `/bin`.
+- Every member of `adm` may change a file's owner and group, where gefs permits that only through
+  an attach whose name starts with `%`, as `%main`.
+- The host's boot is the end of bootrc for a cpu server and init's cpustart: the host owner's
+  factotum with `-S`, then Fog's `/rc/bin/cpurc`, which is 9front's without the devices, usb,
+  swap, partitions, ip configuration, dns, timesync, apm and `/cfg` Fog does not have, and starts
+  `auth/secstored` as an auth server's `/cfg/$sysname/cpurc` does.
+- `/sys/lib/newuser` is 9front's without `$cputype`'s directories, mail, cron, gefs's other
+  dataset and the plumber, and its profile starts none of the terminal's programs.
+- `/lib/namespace` mounts `/srv/cs` on `/net` but has no `dns`, `#l` or `#a`, and does not bind the
+  user's `tmp` on `/tmp`.
+- `#e` is devenv's: every variable is the host owner's with the mode 666, whoever made it.
 - The mount driver names files by qid, as the rest of Fog's namespace does, so it holds a fid for
   an open file but only a bounded cache of fids for files it has walked to, walking to one again by
   its names from the attached root when needed.

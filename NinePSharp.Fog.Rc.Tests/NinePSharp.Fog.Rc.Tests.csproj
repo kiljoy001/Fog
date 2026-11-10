@@ -24,6 +24,7 @@
     <ProjectReference Include="..\NinePSharp.Fog.Commands\NinePSharp.Fog.Commands.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Auth\NinePSharp.Fog.Auth.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Client\NinePSharp.Fog.Client.csproj" />
+    <ProjectReference Include="..\NinePSharp.Fog.Host\NinePSharp.Fog.Host.csproj" />
   </ItemGroup>
 
   <ItemGroup>

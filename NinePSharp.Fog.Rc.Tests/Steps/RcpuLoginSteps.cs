@@ -16,6 +16,7 @@ using NinePSharp.Fog.Rc.Tests.Support;
 using Reqnroll;
 using Reqnroll.UnitTestProvider;
 using Xunit;
+using static NinePSharp.Fog.Rc.Tests.Support.FogWords;
 
 namespace NinePSharp.Fog.Rc.Tests.Steps;
 
@@ -649,49 +650,6 @@ public sealed class RcpuLoginSteps
         await t.RunAsync($"echo 'key proto=dp9ik dom={Domain} user={user} !password={password}' >/mnt/factotum/ctl");
     }
 
-    private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal);
-
-    // rc's words: blanks separate them, and single quotes hold blanks, '' a quote.
-    private static string[] Words(string line)
-    {
-        var words = new List<string>();
-        var word = new StringBuilder();
-        bool quoted = false, any = false;
-        for (int i = 0; i < line.Length; i++)
-        {
-            char c = line[i];
-            if (c == '\'' && quoted && i + 1 < line.Length && line[i + 1] == '\'')
-            {
-                word.Append('\'');
-                i++;
-            }
-            else if (c == '\'')
-            {
-                (quoted, any) = (!quoted, true);
-            }
-            else if (c == ' ' && !quoted)
-            {
-                if (any || word.Length > 0)
-                {
-                    words.Add(word.ToString());
-                }
-
-                (word, any) = (new StringBuilder(), false);
-            }
-            else
-            {
-                word.Append(c);
-            }
-        }
-
-        if (any || word.Length > 0)
-        {
-            words.Add(word.ToString());
-        }
-
-        return [.. words];
-    }
-
     // What the command left after #errors and #status, split.
     private void Collect(string all)
     {
@@ -917,7 +875,7 @@ public sealed class RcpuLoginSteps
                     using var stream = new NetworkStream(socket, ownsSocket: true);
                     try
                     {
-                        await new AuthServerConnection(stream, new Database(passwords), "127.0.0.1", []).ServeAsync(stopping.Token);
+                        await new AuthServerConnection(stream, new PasswordDatabase(passwords), "127.0.0.1", []).ServeAsync(stopping.Token);
                     }
                     catch (Exception error) when (error is IOException or OperationCanceledException or EndOfStreamException)
                     {
@@ -935,84 +893,5 @@ public sealed class RcpuLoginSteps
         int f = await init.CreateAsync(path, NinePConstants.OWRITE, 0b111_111_101);
         await init.WriteAsync(f, Encoding.UTF8.GetBytes(text));
         await init.CloseAsync(f);
-    }
-
-    // keyfs as authsrv sees it: each user's key from a password, hashed for the user.
-    private sealed class Database(Dictionary<string, string> passwords) : IAuthDatabase
-    {
-        public Dp9ik.AuthKey? FindKey(string user)
-        {
-            if (!passwords.TryGetValue(user, out string? password))
-            {
-                return null;
-            }
-
-            Dp9ik.AuthKey key = Dp9ik.AuthKey.FromPassword(password);
-            key.ApplyAuthPakHash(user);
-            return key;
-        }
-
-        public bool SetKey(string user, Dp9ik.AuthKey key) => false;
-
-        public bool SetSecret(string user, string secret) => false;
-
-        public void Succeed(string user)
-        {
-        }
-    }
-
-    // A stream that keeps what is written to it, for its text to be read while it is written.
-    private sealed class Recorded : Stream
-    {
-        private readonly List<byte> written = [];
-
-        public string Text
-        {
-            get
-            {
-                lock (written)
-                {
-                    return Encoding.UTF8.GetString([.. written]);
-                }
-            }
-        }
-
-        public override bool CanRead => false;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => true;
-
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            lock (written)
-            {
-                written.AddRange(buffer.AsSpan(offset, count));
-            }
-        }
-
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            lock (written)
-            {
-                written.AddRange(buffer.Span);
-            }
-
-            return ValueTask.CompletedTask;
-        }
-
-        public override void Flush()
-        {
-        }
-
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }
