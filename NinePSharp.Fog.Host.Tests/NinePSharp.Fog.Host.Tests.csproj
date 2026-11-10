@@ -20,4 +20,8 @@
     <ProjectReference Include="..\NinePSharp.Fog.Host\NinePSharp.Fog.Host.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\NinePSharp.Fog.Kernel.Tests\Support\TypingConsole.cs" Link="Support\TypingConsole.cs" />
+  </ItemGroup>
+
 </Project>

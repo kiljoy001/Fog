@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
+using NinePSharp.Fog.Kernel.Tests.Support;
 using NinePSharp.Messages;
 using Reqnroll;
 using Xunit;
@@ -13,10 +14,17 @@ public sealed class BootSteps : IDisposable
 {
     private const string Owner = "glenda";
     private readonly string directory = Path.Combine(Path.GetTempPath(), $"fog-host-{Guid.NewGuid():N}");
+    private readonly StringWriter log = new();
+    private readonly TypingConsole console = new();
+    private readonly HostNetwork network = new();
+    private readonly Dictionary<string, string> files = new(StringComparer.Ordinal);
     private FogHost? host;
     private Exception? failure;
     private IReadOnlyDictionary<string, ProgramMain> programs = new Dictionary<string, ProgramMain>();
     private TimeProvider clock = TimeProvider.System;
+    private IReadOnlyList<string> boot = [];
+    private byte[] nvram = [];
+    private string? printed;
 
     private string StoreFile => Path.Combine(directory, "fog.gefs");
 
@@ -32,7 +40,18 @@ public sealed class BootSteps : IDisposable
         try
         {
             failure = null;
-            host = await FogHost.BootAsync(new FogHostSettings(StoreFile, Owner) { StoreBlocks = 4096, Programs = programs, Clock = clock });
+            host = await FogHost.BootAsync(new FogHostSettings(StoreFile, Owner)
+            {
+                StoreBlocks = 4096,
+                Programs = programs,
+                Clock = clock,
+                Files = files,
+                Boot = boot,
+                Host = network,
+                Console = console,
+                Nvram = new HostNvram(nvram),
+                Log = log,
+            });
         }
         catch (Exception error)
         {
@@ -123,8 +142,86 @@ public sealed class BootSteps : IDisposable
     public async Task ThenReading(string path, string contents)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(contents, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 8192)).Span));
+        Assert.Equal(Unescape(contents), Encoding.UTF8.GetString((await Init.ReadAsync(fd, 8192)).Span));
     }
+
+    [Given(@"^""(.*)"" holds ""([^""]*)""$")]
+    public Task GivenHolds(string path, string contents) => WriteAsync(path, Encoding.UTF8.GetBytes(Unescape(contents)));
+
+    [Given(@"^""(.*)"" holds (\d+) bytes of ""(.)""$")]
+    public Task GivenHoldsBytes(string path, int count, char c) => WriteAsync(path, Encoding.UTF8.GetBytes(new string(c, count)));
+
+    [Given(@"^the process has removed ""(.*)""$")]
+    public async Task GivenRemoved(string path) => await Init.RemoveAsync(path);
+
+    [Given("the console has run users")]
+    [When("the console runs users")]
+    public async Task WhenUsers() => printed = await host!.RefreshUsersAsync();
+
+    [Then(@"^the console prints ""([^""]*)""$")]
+    public void ThenPrints(string text) => Assert.Equal(Unescape(text), printed);
+
+    [Then(@"^the host's log says ""([^""]*)""$")]
+    public void ThenLog(string text) => Assert.Equal(Unescape(text), log.ToString());
+
+    [Then(@"^""(.*)"" has the group ""(.*)"" and the mode (\d+)$")]
+    public async Task ThenGroupAndMode(string path, string group, string mode)
+    {
+        Stat d = await Init.StatAsync(path);
+        Assert.Equal((group, Convert.ToUInt32(mode, 8)), (d.Gid, d.Mode & 0b111_111_111));
+    }
+
+    [Then(@"^""(.*)"" has the mode (\d+)$")]
+    public async Task ThenMode(string path, string mode) => Assert.Equal(Convert.ToUInt32(mode, 8), (await Init.StatAsync(path)).Mode & 0b111_111_111);
+
+    [Given(@"^the host is to install ""(.*)"" holding ""(.*)"" and ""(.*)"" holding ""(.*)""$")]
+    public void GivenFiles(string first, string firstText, string second, string secondText)
+    {
+        files[first] = Unescape(firstText);
+        files[second] = Unescape(secondText);
+    }
+
+    // The boot's program writes its arguments where its descriptors 1 and 2 are, and to 3, which
+    // only shows if init gave it more than the console's three.
+    [Given(@"^the host is to run ""(.*)"" at boot, a program that writes its arguments to descriptors 1 and 2 and to 3, and exits ""(.*)""$")]
+    public void GivenBoot(string argv, string status)
+    {
+        boot = argv.Split(' ');
+        programs = new Dictionary<string, ProgramMain>
+        {
+            [boot[0]] = async (process, args) =>
+            {
+                byte[] line = Encoding.UTF8.GetBytes(string.Join(' ', args) + "\n");
+                foreach (int fd in new[] { 1, 2, 3 })
+                {
+                    try
+                    {
+                        await process.WriteAsync(fd, line);
+                    }
+                    catch (SyscallException)
+                    {
+                    }
+                }
+
+                process.Exits(status);
+            },
+        };
+    }
+
+    [Then(@"^the console shows ""(.*)""$")]
+    public void ThenConsole(string text) => Assert.Equal(Unescape(text), console.Written);
+
+    [Then(@"^the boot status ends with ""(.*)""$")]
+    public void ThenBootStatus(string status) => Assert.EndsWith(status, host!.BootStatus, StringComparison.Ordinal);
+
+    [Then("the boot status is empty")]
+    public void ThenBootStatusEmpty() => Assert.Equal(string.Empty, host!.BootStatus);
+
+    [Given(@"^the host's nvram holds ""(.*)""$")]
+    public void GivenNvram(string contents) => nvram = Encoding.UTF8.GetBytes(contents);
+
+    [Then("the kernel's network and console are the host's")]
+    public void ThenDevices() => Assert.True(ReferenceEquals(network, host!.Kernel.Host) && ReferenceEquals(console, host.Kernel.Console));
 
     [Then(@"^the boot fails with ""(.*)""$")]
     public void ThenBootFails(string message) => Assert.Equal(message, failure?.Message);
@@ -133,6 +230,15 @@ public sealed class BootSteps : IDisposable
     {
         host?.Dispose();
         Directory.Delete(directory, recursive: true);
+    }
+
+    private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\t", "\t", StringComparison.Ordinal);
+
+    private async Task WriteAsync(string path, byte[] contents)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.OWRITE | NinePConstants.OTRUNC);
+        await Init.WriteAsync(fd, contents);
+        await Init.CloseAsync(fd);
     }
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
