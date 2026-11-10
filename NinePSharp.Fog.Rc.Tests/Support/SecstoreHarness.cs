@@ -57,7 +57,6 @@ internal sealed class SecstoreHarness : IAsyncDisposable
         }
 
         // The logs syslog appends to, so that what it logs goes to them alone.
-        await harness.MkdirAsync("#R/sys");
         await harness.MkdirAsync("#R/sys/log");
         await harness.WriteFileAsync("/sys/log/secstore", []);
         await harness.WriteFileAsync("/sys/log/auth", []);

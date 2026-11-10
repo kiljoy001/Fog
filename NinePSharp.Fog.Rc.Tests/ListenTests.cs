@@ -25,7 +25,6 @@ public sealed class ListenTests : IAsyncLifetime
         init = await kernel.BootAsync();
         await MkdirAsync("/root/rc/lib");
         await WriteAsync("/root/rc/lib/rcmain", RcProgram.Rcmain);
-        await MkdirAsync("#R/sys");
         await MkdirAsync("#R/sys/log");
         await WriteAsync("/sys/log/listen", string.Empty, 0b110_110_110);
         await MkdirAsync("/tmp/svc");

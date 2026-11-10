@@ -153,7 +153,6 @@ public sealed class CsTests : IAsyncLifetime
     [Fact]
     public async Task TheOwnerTurnsDebuggingAndEachIpVersionsLookupsOnAndOffAndOthersAskForThemAsAddresses()
     {
-        await MkdirAsync("#R/sys");
         await MkdirAsync("#R/sys/log");
         await WriteFileAsync("/sys/log/cs", string.Empty);
         host.Names["two.example"] = [IPAddress.Parse("10.9.9.9"), IPAddress.Parse("2001:db8::9")];
@@ -1122,7 +1121,6 @@ public sealed class CsTests : IAsyncLifetime
     // /sys/log/cs, made in the store's root, which / is a union with.
     private async Task LogAsync()
     {
-        await MkdirAsync("#R/sys");
         await MkdirAsync("#R/sys/log");
         await WriteFileAsync("/sys/log/cs", string.Empty);
     }

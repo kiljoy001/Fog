@@ -210,7 +210,10 @@ internal sealed class RamFs : IResourceDataOperations, IResourceWStatOperations
                 throw new ResourceCreateRejectedException("file already exists");
             }
 
-            ResourceHandle created = Add(directory.Identity.Path, name, permissions, context.User);
+            // devenv keeps no owner: a variable is the host owner's, its mode 666 whatever was asked.
+            ResourceHandle created = changeable
+                ? Add(directory.Identity.Path, name, permissions, context.User)
+                : Add(directory.Identity.Path, name, 0b110_110_110, owner);
             return ValueTask.FromResult(new ResourceOpenHandle(created, HandleId(context), mode, 0));
         }
     }

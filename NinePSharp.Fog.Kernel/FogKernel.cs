@@ -38,6 +38,7 @@ public sealed class FogKernel
 
         # internal networks
         bind -a #I /net
+        mount -a /srv/cs /net
 
         cd /usr/$user
 
@@ -48,7 +49,7 @@ public sealed class FogKernel
     // 9front's /adm/timezone/GMT.
     private const string GmtZone = "GMT 0 GMT 0\n0\n\n";
 
-    private static readonly string[] StoreDirectories = ["adm", "bin", "lib", "rc", "tmp", "usr"];
+    private static readonly string[] StoreDirectories = ["adm", "bin", "lib", "rc", "sys", "tmp", "usr"];
     private readonly IReadOnlyDictionary<string, ProgramMain> programs;
     private readonly ResourceHandle store;
     private readonly string session = Guid.NewGuid().ToString();

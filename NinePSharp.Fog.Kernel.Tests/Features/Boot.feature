@@ -16,7 +16,7 @@ Feature: The kernel boots its root as 9front's bootrc and /lib/namespace build i
 
   @FOG_KERNEL_038
   Scenario: The root lists the root device's mount points and the store's directories
-    Then the names in "/" are "adm bin dev env fd lib mnt n net net.alt proc rc root shr srv tmp usr"
+    Then the names in "/" are "adm bin dev env fd lib mnt n net net.alt proc rc root shr srv sys tmp usr"
 
   @FOG_KERNEL_038
   Scenario: The store is mounted on /root

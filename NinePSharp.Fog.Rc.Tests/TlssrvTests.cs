@@ -117,7 +117,6 @@ public sealed class TlssrvTests : IAsyncLifetime
     [Fact(Timeout = SecstoreHarness.TestTimeout)]
     public async Task WithMinusDTheHandshakeIsReportedToTheLogOrStandardError()
     {
-        await MkdirAsync("#R/sys");
         await MkdirAsync("#R/sys/log");
         await WriteAsync("/sys/log/tls", string.Empty, 0b110_110_110);
         await ServiceAsync("exec tlssrv -D -a -l tls -r far /bin/rc -c server");
