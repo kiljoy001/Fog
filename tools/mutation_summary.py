@@ -93,6 +93,7 @@ def main() -> int:
 
     accepted_count = 0
     seen = set()
+    elsewhere = set()
     files = set()
     unaccepted = []
     for path, info in data.get("files", {}).items():
@@ -101,8 +102,11 @@ def main() -> int:
         for mutant in info.get("mutants", []):
             status = mutant.get("status", "?")
             counts[status] = counts.get(status, 0) + 1
+            key = site(path, lines, mutant)
+            if status in ("Ignored", "CompileError"):
+                # Mutated in another scope, or not at all: no word on whether it still times out.
+                elsewhere.add(key)
             if status == "Timeout":
-                key = site(path, lines, mutant)
                 if key in accepted:
                     accepted_count += 1
                     seen.add(key)
@@ -138,7 +142,7 @@ def main() -> int:
             entry = {"file": name, "mutator": mutator, "line": line, "commit": args.commit, "print": mark}
             print(f"- `{json.dumps(entry)}`")
 
-    unseen = [entry for key, entry in accepted.items() if key[0] in files and key not in seen]
+    unseen = [entry for key, entry in accepted.items() if key[0] in files and key not in seen | elsewhere]
     if unseen:
         # Its code changed, or its mutant no longer times out: review it again, or take it off the list.
         print("\n### Accepted timeouts not seen\n")

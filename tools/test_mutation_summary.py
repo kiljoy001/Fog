@@ -73,6 +73,13 @@ class MutationSummaryTests(unittest.TestCase):
         self.assertIn("**Score:** 50.00%", result.stdout)
         self.assertIn("### Accepted timeouts not seen", result.stdout)
 
+    def test_an_accepted_timeout_killed_is_named_but_one_mutated_elsewhere_is_not(self):
+        killed = self.summarize(["Killed"], self.accepted())
+        self.assertEqual(0, killed.returncode, killed.stdout)
+        self.assertIn("### Accepted timeouts not seen", killed.stdout)
+        ignored = self.summarize(["Ignored"], self.accepted())
+        self.assertNotIn("### Accepted timeouts not seen", ignored.stdout)
+
     def test_an_edit_far_from_the_line_keeps_it(self):
         near = SOURCE + "class A\n{\n}\n"
         entry = self.accepted(print=site_print(near.splitlines(), 3))
