@@ -3886,5 +3886,69 @@
     "commit": "ad73d86f2a50",
     "print": "59222f3c5b805bf3",
     "reason": "a line is cut before its newline, which is found again, so secstore writes nothing to factotum without end"
+  },
+  {
+    "file": "AwkRun.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "for (int i = -20; i < 607; i++)",
+    "commit": "6a656c192e53",
+    "print": "63b746b084cdccb5",
+    "reason": "srand counts down through two billion steps before i wraps, so each awk start takes minutes and only then is rand's sequence wrong"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Bitwise mutation",
+    "line": "if ((vp.Tval & Fld) != 0 && !donefld)",
+    "commit": "6a656c192e53",
+    "print": "c25e696d456519a2",
+    "reason": "every value read builds the fields, whose build reads $0, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Bitwise mutation",
+    "line": "vp.Tval = (vp.Tval & ~Num) | Str;",
+    "commit": "6a656c192e53",
+    "print": "d7af50744a598853",
+    "reason": "a value set gets every flag but Num, field and record among them, and building one reads the other until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Bitwise mutation",
+    "line": "vp.Tval = t.Length != 0 ? vp.Tval & ~Dontfree : vp.Tval | Dontfree;",
+    "commit": "6a656c192e53",
+    "print": "9ef554fcdd7fb1f0",
+    "reason": "a value set gets every flag but Dontfree, field and record among them, and building one reads the other until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Equality mutation",
+    "line": "if ((vp.Tval & Fld) != 0 && !donefld)",
+    "commit": "6a656c192e53",
+    "print": "c25e696d456519a2",
+    "reason": "a value read that is not a field builds the fields, whose build reads $0, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Logical mutation",
+    "line": "if ((vp.Tval & Fld) != 0 && !donefld)",
+    "commit": "6a656c192e53",
+    "print": "c25e696d456519a2",
+    "reason": "any value read while the fields are stale builds them, whose build reads $0, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Negate expression",
+    "line": "if ((vp.Tval & Fld) != 0 && !donefld)",
+    "commit": "6a656c192e53",
+    "print": "c25e696d456519a2",
+    "reason": "a value read that is not a stale field builds the fields, whose build reads $0, until the stack overflows"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Negate expression",
+    "line": "if (block.IsEmpty)",
+    "commit": "6a656c192e53",
+    "print": "17d9f17946648224",
+    "reason": "read -c writes an empty read at the end of its input and reads again without end"
   }
 ]
