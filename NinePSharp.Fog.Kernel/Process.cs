@@ -455,36 +455,67 @@ public sealed partial class Process
         }
     }
 
+    // sysfauth: the descriptor's connection, versioned the first time, asked to authenticate the
+    // caller for aname; the channel it gives is read and written to authenticate, and is closed on
+    // exec.
+    public async ValueTask<int> FauthAsync(int fd, string aname)
+    {
+        using Return returning = new(this, "Fauth");
+        DescriptorLease transport = await TransportAsync(fd);
+        ResourceOpenHandle channel;
+        using (Interruption interruptible = Interruptible(CancellationToken.None))
+        {
+            try
+            {
+                MountConnection connection = await kernel.Mounts.ConnectAsync(transport, devices.Device(transport.Handle.Resource), () => kernel.Context(Pid, User), interruptible.Token);
+                channel = await kernel.Mounts.AuthAsync(connection, User, aname);
+            }
+            catch (IOException error)
+            {
+                throw new SyscallException(error.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new SyscallException(Errors.Interrupted);
+            }
+        }
+
+        ResourceOperationContext close = kernel.Context(Pid, User);
+        try
+        {
+            return process.Descriptors.Install(channel, () => kernel.Mounts.ClunkAsync(channel, close, CancellationToken.None), closeOnExec: true);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            await kernel.Mounts.ClunkAsync(channel, close, CancellationToken.None);
+            throw new SyscallException(Errors.NoFd);
+        }
+    }
+
     // bindmount for mount: the descriptor's connection is versioned the first time, attached as the
-    // caller, and what it attached bound on old; then the descriptor is closed. Mounting with an
-    // authentication descriptor is not implemented yet.
+    // caller, authenticated by afd's channel if afd is one, and what it attached bound on old; then
+    // the descriptor is closed.
     public async ValueTask MountAsync(int fd, int afd, string old, MountFlags flags, string aname)
     {
         using Return returning = new(this, "Mount");
-        if (afd >= 0)
-        {
-            throw new NotSupportedException("mount with an authentication descriptor is not implemented");
-        }
-
         if (process.ProcessGroup.MountTable.MountsDisabled)
         {
             throw new SyscallException(Errors.NoAttach);
         }
 
-        DescriptorLease transport;
-        try
+        DescriptorLease transport = await TransportAsync(fd);
+        uint afid = NinePConstants.NoFid;
+        if (afd >= 0)
         {
-            transport = process.Descriptors.Acquire(fd);
-        }
-        catch (ArgumentException)
-        {
-            throw new SyscallException(Errors.BadFd);
-        }
-
-        if ((transport.Handle.Mode & 3) != NinePConstants.ORDWR)
-        {
-            await transport.DisposeAsync();
-            throw new SyscallException(Errors.BadUseFd);
+            try
+            {
+                afid = await AuthenticatorAsync(afd, transport.Handle);
+            }
+            catch (SyscallException)
+            {
+                await transport.DisposeAsync();
+                throw;
+            }
         }
 
         // The server's version is waited for only until a note interrupts it, as mntversion's read is;
@@ -495,7 +526,7 @@ public sealed partial class Process
             try
             {
                 MountConnection connection = await kernel.Mounts.ConnectAsync(transport, devices.Device(transport.Handle.Resource), () => kernel.Context(Pid, User), interruptible.Token);
-                tree = await kernel.Mounts.AttachAsync(connection, User, aname, kernel.MountFids);
+                tree = await kernel.Mounts.AttachAsync(connection, afid, User, aname, kernel.MountFids);
             }
             catch (IOException error)
             {
@@ -1043,6 +1074,38 @@ public sealed partial class Process
         {
             throw new SyscallException(Errors.BadUseFd);
         }
+    }
+
+    // fdtochan(fd, ORDWR, 0, 1): a channel open to read and write, held while it is used.
+    private async Task<DescriptorLease> TransportAsync(int fd)
+    {
+        DescriptorLease transport;
+        try
+        {
+            transport = process.Descriptors.Acquire(fd);
+        }
+        catch (ArgumentException)
+        {
+            throw new SyscallException(Errors.BadFd);
+        }
+
+        if ((transport.Handle.Mode & 3) != NinePConstants.ORDWR)
+        {
+            await transport.DisposeAsync();
+            throw new SyscallException(Errors.BadUseFd);
+        }
+
+        return transport;
+    }
+
+    // mntattach's ac: a channel of the mount driver on the same connection as the mount, whose fid
+    // the attach names as its afid.
+    private async Task<uint> AuthenticatorAsync(int afd, ResourceOpenHandle transport)
+    {
+        await using DescriptorLease ac = await TransportAsync(afd);
+        return kernel.Mounts.Opened(ac.Handle) is { } opened && opened.Connection.Transport == transport
+            ? opened.Fid
+            : throw new SyscallException(Errors.BadUseFd);
     }
 
     private async ValueTask<int> OpenPipeAsync(ResourceHandle end)

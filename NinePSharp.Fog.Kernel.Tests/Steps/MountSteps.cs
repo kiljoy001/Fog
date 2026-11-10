@@ -26,6 +26,8 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     private int fidsBefore;
     private int walksBefore;
     private string deepest = string.Empty;
+    private int afd = -1;
+    private FileServerHarness? other;
 
     private Process Init => driver.Init;
 
@@ -290,6 +292,85 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     [When(@"^the process duplicates descriptor (\d+) as descriptor (\d+)$")]
     public Task WhenDuplicates(int fd, int target) => Init.DupAsync(fd, target).AsTask();
 
+    [Given("the server authenticates")]
+    public void GivenAuthenticates() => server.Authenticates = true;
+
+    [When(@"^the process authenticates on descriptor (\d+) for ""(.*)""$")]
+    public async Task WhenAuthenticates(int fd, string aname) => afd = await Init.FauthAsync(fd, aname).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process tries to authenticate on descriptor (\d+) for ""(.*)""$")]
+    public async Task WhenTriesAuthenticate(int fd, string aname)
+    {
+        try
+        {
+            await Init.FauthAsync(fd, aname).AsTask().WaitAsync(Bound);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
+    }
+
+    [Then(@"^the server was asked to authenticate ""(.*)"" for ""(.*)""$")]
+    public void ThenAskedToAuthenticate(string user, string aname) => Assert.Equal([(user, aname)], server.Auths);
+
+    [Then(@"^reading the authentication descriptor gives ""(.*)""$")]
+    public async Task ThenAuthenticationReads(string contents)
+        => Assert.Equal(contents, Encoding.UTF8.GetString((await Init.ReadAsync(afd, 100).AsTask().WaitAsync(Bound)).Span));
+
+    [When(@"^the process writes ""(.*)"" to the authentication descriptor$")]
+    public Task WhenWritesAuthentication(string contents) => Init.WriteAsync(afd, Encoding.UTF8.GetBytes(contents)).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process mounts descriptor (\d+) on ""(.*)"" for ""(.*)"", authenticated$")]
+    public Task WhenMountsAuthenticated(int fd, string old, string aname) => Init.MountAsync(fd, afd, old, MountFlags.Replace, aname).AsTask().WaitAsync(Bound);
+
+    [When(@"^the process tries to mount descriptor (\d+) on ""(.*)"" for ""(.*)"", authenticated$")]
+    public Task WhenTriesMountAuthenticated(int fd, string old, string aname) => TryMountAsync(fd, afd, old, aname);
+
+    [When(@"^the process tries to mount descriptor (\d+) on ""(.*)"" with descriptor (\d+) to authenticate$")]
+    public Task WhenTriesMountWith(int fd, string old, int with) => TryMountAsync(fd, with, old, string.Empty);
+
+    [Then("the attach named the authentication's fid")]
+    public void ThenAttachAfid() => Assert.Equal(server.GivenAfids, server.AttachAfids);
+
+    [Then("the attach named no fid to authenticate with")]
+    public void ThenAttachNoAfid() => Assert.Equal([NinePConstants.NoFid], server.AttachAfids);
+
+    [Then("the authentication descriptor is closed on exec")]
+    public void ThenCloseOnExec()
+        => Assert.True(driver.Kernel.Table.Get(Init.Pid).Descriptors.Snapshot().Single(slot => slot.Number == afd).CloseOnExec);
+
+    [When("the process closes the authentication descriptor")]
+    public Task WhenClosesAuthentication() => Init.CloseAsync(afd).AsTask();
+
+    [Then("the server clunked the authentication's fid")]
+    public void ThenAfidClunked() => Assert.Equal(server.GivenAfids, server.AfidsClunked);
+
+    [Given(@"^the process has a pipe as descriptors (\d+) and (\d+)$")]
+    public async Task GivenPipeAt(int first, int second)
+    {
+        var (a, b) = await Init.PipeAsync();
+        await MoveAsync(a, first);
+        await MoveAsync(b, second);
+    }
+
+    [Given(@"^the process has ""(.*)"" open for reading as descriptor (\d+)$")]
+    public async Task GivenOpenForReading(string path, int fd)
+    {
+        await WriteFileAsync(path, "data"u8.ToArray());
+        await MoveAsync(await Init.OpenAsync(path, NinePConstants.OREAD), fd);
+    }
+
+    // A second server, authenticating, on a connection of its own, whose afid is not this one's.
+    [Given(@"^another connection's authentication descriptor is descriptor (\d+)$")]
+    public async Task GivenOtherAuthentication(int fd)
+    {
+        other = new FileServerHarness { Authenticates = true };
+        var (client, end) = await Init.PipeAsync();
+        other.Serve(Init, end);
+        await MoveAsync(await Init.FauthAsync(client, string.Empty).AsTask().WaitAsync(Bound), fd);
+    }
+
     [When(@"^the process tries to mount descriptor (\d+) on ""(.*)""$")]
     public async Task WhenTriesMount(int fd, string old)
     {
@@ -478,6 +559,10 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
         server.Release();
         cancel.Dispose();
         await server.DisposeAsync();
+        if (other is not null)
+        {
+            await other.DisposeAsync();
+        }
     }
 
     private static Stat Moded(string mode)
@@ -492,6 +577,25 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
         string contents = Encoding.UTF8.GetString((await process.ReadAsync(fd, 8192).AsTask().WaitAsync(Bound)).Span);
         await process.CloseAsync(fd);
         return contents;
+    }
+
+    // The descriptor renumbered as fd, as dup and close would.
+    private async Task MoveAsync(int at, int fd)
+    {
+        await Init.DupAsync(at, fd);
+        await Init.CloseAsync(at);
+    }
+
+    private async Task TryMountAsync(int fd, int with, string old, string aname)
+    {
+        try
+        {
+            await Init.MountAsync(fd, with, old, MountFlags.Replace, aname).AsTask().WaitAsync(Bound);
+        }
+        catch (SyscallException error)
+        {
+            failure = error.Message;
+        }
     }
 
     private async Task WriteFileAsync(string path, byte[] contents)

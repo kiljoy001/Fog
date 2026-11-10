@@ -17,6 +17,9 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     private readonly ConcurrentDictionary<uint, byte> fids = new();
     private readonly ConcurrentDictionary<ushort, CancellationTokenSource> held = new();
     private readonly ConcurrentDictionary<uint, string> opened = new();
+
+    // Each afid the server has given, and what its user has written to it.
+    private readonly ConcurrentDictionary<uint, string> afids = new();
     private readonly CancellationTokenSource hangup = new();
     private readonly TaskCompletionSource<bool> release = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<TaskCompletionSource<bool>> requestsHeld = [];
@@ -43,6 +46,19 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     // Each attach's user and tree.
     public ConcurrentQueue<(string User, string Name)> Attaches { get; } = [];
+
+    // Each Tauth's user and tree, each attach's afid, and each afid clunked.
+    public ConcurrentQueue<(string User, string Name)> Auths { get; } = [];
+
+    public ConcurrentQueue<uint> GivenAfids { get; } = [];
+
+    public ConcurrentQueue<uint> AttachAfids { get; } = [];
+
+    public ConcurrentQueue<uint> AfidsClunked { get; } = [];
+
+    // Whether the server authenticates: an afid reads "proof?" and an attach through it succeeds once
+    // its user's name has been written to it. Otherwise Tauth is refused, as lib9p's is without auth.
+    public bool Authenticates { get; set; }
 
     public int LiveFids => fids.Count;
 
@@ -127,6 +143,11 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
 
     public async Task<object> DispatchAsync(string sessionId, NinePMessage message, NinePDialect dialect, X509Certificate2? certificate = null)
     {
+        if (Authentication(message) is { } answered)
+        {
+            return answered;
+        }
+
         switch (message)
         {
             case NinePMessage.MsgTversion version:
@@ -216,6 +237,42 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
         if (stream is not null)
         {
             await stream.DisposeAsync();
+        }
+    }
+
+    // The server's side of authentication: Tauth, and reads, writes and clunks of an afid.
+    private object? Authentication(NinePMessage message)
+    {
+        switch (message)
+        {
+            case NinePMessage.MsgTauth auth:
+                Auths.Enqueue((auth.Item.Uname, auth.Item.Aname));
+                if (!Authenticates)
+                {
+                    return new Rerror(auth.Item.Tag, "authentication not required");
+                }
+
+                afids[auth.Item.Afid] = string.Empty;
+                GivenAfids.Enqueue(auth.Item.Afid);
+                return new Rauth(auth.Item.Tag, new Qid(QidType.QTAUTH, 0, 0xA000 + auth.Item.Afid));
+            case NinePMessage.MsgTread read when afids.ContainsKey(read.Item.Fid):
+                return new Rread(read.Item.Tag, "proof?"u8.ToArray());
+            case NinePMessage.MsgTwrite write when afids.ContainsKey(write.Item.Fid):
+                afids[write.Item.Fid] += System.Text.Encoding.UTF8.GetString(write.Item.Data.Span);
+                return new Rwrite(write.Item.Tag, write.Item.Count);
+            case NinePMessage.MsgTclunk clunk when afids.TryRemove(clunk.Item.Fid, out _):
+                AfidsClunked.Enqueue(clunk.Item.Fid);
+                return new Rclunk(clunk.Item.Tag);
+            case NinePMessage.MsgTattach attach:
+                AttachAfids.Enqueue(attach.Item.Afid);
+                if (Authenticates && (!afids.TryGetValue(attach.Item.Afid, out string? proof) || proof != attach.Item.Uname))
+                {
+                    return new Rerror(attach.Item.Tag, "authentication failed");
+                }
+
+                return null;
+            default:
+                return null;
         }
     }
 

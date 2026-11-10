@@ -167,6 +167,6 @@ public sealed class MountTreeTests : IAsyncDisposable
     {
         var connection = new MountConnection(server.Peer, server.Peer.Handle, server.Peer, () => ScriptedPeer.Context);
         await Bounded(connection.VersionAsync());
-        return await Bounded(MountTree.AttachAsync(connection, "#M0", "glenda", string.Empty, bound));
+        return await Bounded(MountTree.AttachAsync(connection, "#M0", NinePConstants.NoFid, "glenda", string.Empty, bound));
     }
 }

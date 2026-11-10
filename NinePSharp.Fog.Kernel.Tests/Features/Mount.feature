@@ -8,7 +8,10 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
   in pieces no larger than what the open file's iounit allows, and a file's stat shows device M.
   An error from the server is the call's error. A server that hangs up fails every call still
   waiting with "mount rpc error", and every later call with "i/o on hungup channel", as its request
-  cannot be written. A call cancelled while it waits is flushed, and the mount goes on.
+  cannot be written. A call cancelled while it waits is flushed, and the mount goes on. fauth asks
+  the server on a descriptor to authenticate the caller, as mntauth does, and gives a descriptor,
+  closed on exec, for the auth file; a mount attaches through it if its afd is a channel of the
+  mount driver on the same connection, and refuses any other.
 
   Fog's channels name a file by its qid, so the driver does not hold a fid for each channel as
   devmnt does. An open file keeps a fid of its own until it is closed. For the files it has only
@@ -360,3 +363,63 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     And the process unmounts everything from "/n"
     And the process mounts descriptor 4 on "/n"
     Then reading "/n/notes" gives "hello"
+
+  @FOG_KERNEL_081
+  Scenario: fauth gives a channel on the connection to authenticate on, and mount attaches through it
+    Given the server authenticates
+    When the process authenticates on descriptor 3 for "main"
+    Then the server was asked to authenticate "none" for "main"
+    And reading the authentication descriptor gives "proof?"
+    When the process writes "none" to the authentication descriptor
+    And the process mounts descriptor 3 on "/n" for "main", authenticated
+    Then reading "/n/notes" gives "hello"
+    And the attach named the authentication's fid
+
+  @FOG_KERNEL_081
+  Scenario: An attach the server does not accept fails with the server's error
+    Given the server authenticates
+    When the process authenticates on descriptor 3 for "main"
+    And the process tries to mount descriptor 3 on "/n" for "main", authenticated
+    Then the call fails with "authentication failed"
+
+  @FOG_KERNEL_081
+  Scenario: A server that needs no authentication refuses fauth, and a mount without it goes on
+    When the process tries to authenticate on descriptor 3 for "main"
+    Then the call fails with "authentication not required"
+    When the process mounts descriptor 3 on "/n"
+    Then reading "/n/notes" gives "hello"
+    And the attach named no fid to authenticate with
+
+  @FOG_KERNEL_081
+  Scenario: The authentication's channel is closed on exec, and closing it clunks its fid while the mount goes on
+    Given the server authenticates
+    When the process authenticates on descriptor 3 for "main"
+    Then the authentication descriptor is closed on exec
+    When the process writes "none" to the authentication descriptor
+    And the process mounts descriptor 3 on "/n" for "main", authenticated
+    And the process closes the authentication descriptor
+    Then the server clunked the authentication's fid
+    And reading "/n/notes" gives "hello"
+
+  @FOG_KERNEL_081
+  Scenario Outline: mount refuses an authentication descriptor that is not one on the connection
+    Given the server authenticates
+    And <afd>
+    When the process tries to mount descriptor 3 on "/n" with descriptor <fd> to authenticate
+    Then the call fails with "<error>"
+    And the server is still connected
+
+    Examples:
+      | afd                                                           | fd | error                         |
+      | the process has a pipe as descriptors 5 and 6                 | 5  | inappropriate use of fd       |
+      | the process has "/tmp/f" open for reading as descriptor 5     | 5  | inappropriate use of fd       |
+      | the process has a pipe as descriptors 5 and 6                 | 9  | fd out of range or not open   |
+      | another connection's authentication descriptor is descriptor 5 | 5  | inappropriate use of fd       |
+
+  @FOG_KERNEL_081
+  Scenario: fauth refuses a descriptor not open to read and write, and one not open at all
+    Given the process has "/tmp/f" open for reading as descriptor 5
+    When the process tries to authenticate on descriptor 5 for "main"
+    Then the call fails with "inappropriate use of fd"
+    When the process tries to authenticate on descriptor 9 for "main"
+    Then the call fails with "fd out of range or not open"

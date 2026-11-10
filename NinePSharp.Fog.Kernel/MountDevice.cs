@@ -94,12 +94,28 @@ internal sealed class MountDevice : IResourceDataOperations, IResourceOpenStatOp
         }
     }
 
-    public async Task<MountTree> AttachAsync(MountConnection connection, string user, string aname, int bound)
+    public async Task<MountTree> AttachAsync(MountConnection connection, uint afid, string user, string aname, int bound)
     {
-        MountTree tree = await MountTree.AttachAsync(connection, $"#M{Interlocked.Increment(ref mounts)}", user, aname, bound);
+        MountTree tree = await MountTree.AttachAsync(connection, $"#M{Interlocked.Increment(ref mounts)}", afid, user, aname, bound);
         trees[tree.Device] = tree;
         return tree;
     }
+
+    // mntauth: the authentication's channel, kept as a tree of its own until it is closed.
+    public async Task<ResourceOpenHandle> AuthAsync(MountConnection connection, string user, string aname)
+    {
+        (MountTree tree, ResourceOpenHandle channel) = await MountTree.AuthAsync(connection, $"#M{Interlocked.Increment(ref mounts)}", user, aname);
+        tree.Pending = false;
+        trees[tree.Device] = tree;
+        return channel;
+    }
+
+    // The connection and fid of an open file of a mount, as mntattach takes ac->mchan and ac->fid;
+    // null for a channel that is not the mount driver's.
+    public (MountConnection Connection, uint Fid)? Opened(ResourceOpenHandle handle)
+        => handle.Resource.Identity.Provider == Provider && trees.TryGetValue(handle.Resource.Identity.Device, out MountTree? tree) && tree.FidOf(handle) is { } fid
+            ? (tree.Connection, fid)
+            : null;
 
     // The trees attached through the connection speaking on a channel, as cunmount finds a mount by
     // its mchan.

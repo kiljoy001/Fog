@@ -31,7 +31,8 @@ Programs interact with the kernel using asynchronous C# APIs that match Plan 9 s
 * `rfork(RforkFlags flags)`: Creates a child process. Flags determine whether the child shares or duplicates the parent's file descriptor table (`RFFDG`), namespace mount table (`RFNAMEG`), environment (`RFENVG`), or runs detached without wait requirements (`RFNOWAIT`).
 * `exec(string name, string[] argv)`: Replaces the current process program with a new binary or WASM application.
 * `bind(string name, string old, int flag)`: Rebinds a file or directory into a namespace. Flags support `MREPL` (replace), `MBEFORE` (union before), and `MAFTER` (union after).
-* `mount(int fd, int afd, string old, int flag, string aname)`: Attaches a remote or in-process 9P file server into the current namespace hierarchy.
+* `fauth(int fd, string aname)`: Asks the 9P file server on a descriptor to authenticate the caller for an attach name, and returns a descriptor for the auth file, whose reads and writes are the authentication's conversation.
+* `mount(int fd, int afd, string old, int flag, string aname)`: Attaches a remote or in-process 9P file server into the current namespace hierarchy, authenticated by `afd`'s auth file when `afd` is one.
 
 ---
 

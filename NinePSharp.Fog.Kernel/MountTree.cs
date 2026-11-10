@@ -18,13 +18,17 @@ internal sealed class MountTree
     private readonly ConcurrentDictionary<string, (uint Fid, uint IoUnit)> opened = new(StringComparer.Ordinal);
     private readonly int bound;
 
-    private MountTree(MountConnection connection, string device, uint fid, Qid root, int bound)
+    // An authentication's tree is its afid alone, open as the channel fauth gives.
+    private readonly bool auth;
+
+    private MountTree(MountConnection connection, string device, uint fid, Qid root, int bound, bool auth = false)
     {
         Connection = connection;
         Device = device;
         RootFid = fid;
         Root = Handle(root);
         this.bound = bound;
+        this.auth = auth;
     }
 
     public MountConnection Connection { get; }
@@ -42,13 +46,27 @@ internal sealed class MountTree
     // Stryker disable once Boolean : only a collection that runs between a mount's attach and its bind sees it
     public bool Pending { get; set; } = true;
 
-    // mntattach: a new fid on the connection's root for this user and attach name.
-    public static async Task<MountTree> AttachAsync(MountConnection connection, string device, string user, string aname, int bound)
+    // mntattach: a new fid on the connection's root for this user and attach name, authenticated by
+    // afid, or NOFID for none.
+    public static async Task<MountTree> AttachAsync(MountConnection connection, string device, uint afid, string user, string aname, int bound)
     {
         uint fid = connection.NewFid();
-        byte[] reply = await connection.RpcAsync(tag => new Tattach(tag, fid, NinePConstants.NoFid, user, aname), MessageTypes.Rattach, CancellationToken.None);
+        byte[] reply = await connection.RpcAsync(tag => new Tattach(tag, fid, afid, user, aname), MessageTypes.Rattach, CancellationToken.None);
         return new MountTree(connection, device, fid, new Rattach(reply).Qid, bound);
     }
+
+    // mntauth: a new fid on the connection for the user and attach name to authenticate with, open to
+    // read and write as the channel fauth returns.
+    public static async Task<(MountTree Tree, ResourceOpenHandle Channel)> AuthAsync(MountConnection connection, string device, string user, string aname)
+    {
+        uint afid = connection.NewFid();
+        byte[] reply = await connection.RpcAsync(tag => new Tauth(tag, afid, user, aname), MessageTypes.Rauth, CancellationToken.None);
+        var tree = new MountTree(connection, device, afid, new Rauth(reply).Aqid, 0, auth: true);
+        return (tree, tree.Open(tree.Root, afid, 0, NinePConstants.ORDWR));
+    }
+
+    // The fid an open file of the tree speaks through, as a channel's c->fid.
+    public uint? FidOf(ResourceOpenHandle handle) => opened.TryGetValue(handle.HandleId, out (uint Fid, uint IoUnit) open) ? open.Fid : null;
 
     public ResourceHandle Handle(Qid qid) => new(new ResourceIdentity(MountDevice.Provider, Device, qid.Path), qid.Type, qid.Version);
 
@@ -190,9 +208,15 @@ internal sealed class MountTree
         return done;
     }
 
-    // The tree let go: the fids it holds, its root's and the walked files', clunked.
+    // The tree let go: the fids it holds, its root's and the walked files', clunked. An
+    // authentication's afid was clunked when its channel was closed.
     public async Task CloseAsync()
     {
+        if (auth)
+        {
+            return;
+        }
+
         uint[] held;
         lock (gate)
         {
