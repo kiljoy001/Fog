@@ -3,1788 +3,3888 @@
     "file": "Errors.cs",
     "mutator": "Arithmetic mutation",
     "line": "if (length >= ErrMax / 3 && length + error.Length >= 2 * ErrMax / 3)",
+    "commit": "e4b6f0d9f55a",
+    "print": "03672477e10653b9",
     "reason": "namelenerror trims the path in a loop that no longer reaches its end"
   },
   {
     "file": "Errors.cs",
     "mutator": "Logical mutation",
     "line": "if (length >= ErrMax / 3 && length + error.Length >= 2 * ErrMax / 3)",
+    "commit": "e4b6f0d9f55a",
+    "print": "03672477e10653b9",
     "reason": "namelenerror trims the path in a loop that no longer reaches its end"
   },
   {
     "file": "Errors.cs",
     "mutator": "Negate expression",
     "line": "if (length >= ErrMax / 3 && length + error.Length >= 2 * ErrMax / 3)",
+    "commit": "e4b6f0d9f55a",
+    "print": "03672477e10653b9",
     "reason": "namelenerror trims the path in a loop that no longer reaches its end"
   },
   {
     "file": "Errors.cs",
     "mutator": "Arithmetic mutation",
     "line": "while (length - next < ErrMax / 3 || length - next + error.Length < 2 * ErrMax / 3);",
+    "commit": "e4b6f0d9f55a",
+    "print": "b5a30100e1e1a0ce",
     "reason": "the do-while trimming the name never meets its bound"
   },
   {
     "file": "Errors.cs",
     "mutator": "Equality mutation",
     "line": "while (length - next < ErrMax / 3 || length - next + error.Length < 2 * ErrMax / 3);",
+    "commit": "e4b6f0d9f55a",
+    "print": "b5a30100e1e1a0ce",
     "reason": "the do-while trimming the name never meets its bound"
   },
   {
     "file": "Errors.cs",
     "mutator": "Equality mutation",
     "line": "while (next > 0 && path[--next] != '/')",
+    "commit": "e4b6f0d9f55a",
+    "print": "85bbb271c1be3578",
     "reason": "the backward search for / never stops"
   },
   {
     "file": "Errors.cs",
     "mutator": "Logical mutation",
     "line": "while (next > 0 && path[--next] != '/')",
+    "commit": "e4b6f0d9f55a",
+    "print": "85bbb271c1be3578",
     "reason": "the backward search for / never stops"
   },
   {
     "file": "Errors.cs",
     "mutator": "Negate expression",
     "line": "while (next > 0 && path[--next] != '/')",
+    "commit": "e4b6f0d9f55a",
+    "print": "85bbb271c1be3578",
     "reason": "the backward search for / never stops"
   },
   {
     "file": "PipeQueue.cs",
     "mutator": "Equality mutation",
     "line": "while (sofar < data.Length);",
+    "commit": "e4b6f0d9f55a",
+    "print": "fd292566231f6824",
     "reason": "a write of nothing left keeps writing empty blocks"
   },
   {
     "file": "CapDevice.cs",
     "mutator": "Statement mutation",
     "line": "capalloc.RemoveAt(0);",
+    "commit": "e35738aa1568",
+    "print": "5c9ac7f27aee22b7",
     "reason": "a capability to let go is never let go, so trimming never ends"
   },
   {
     "file": "IpDevice.cs",
     "mutator": "Statement mutation",
     "line": "end++;",
+    "commit": "eb03a662c8ee",
+    "print": "c77c8fe53f437721",
     "reason": "the port's digits are never passed, so the scan for its end never ends"
   },
   {
     "file": "Process.cs",
     "mutator": "Conditional (false) mutation",
     "line": "var child = new Process(kernel, forked, waited ? this : null, EnvironmentFor(flags), Text, User, (flags & RforkFlags.Noteg) != 0 ? 0 : NoteId);",
+    "commit": "eb03a662c8ee",
+    "print": "166ecbdcbde33dcf",
     "reason": "a child forked to be waited for has no parent to tell of its end, so the wait never ends"
   },
   {
     "file": "Process.cs",
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "line": "for (ReadOnlyMemory<byte> block; !(block = await ReadAsync(fd, 8192)).IsEmpty;)",
+    "commit": "e35738aa1568",
+    "print": "2b4adf41a6576e59",
     "reason": "a listing that reads nothing leaves the scenarios that wait for an entry waiting"
   },
   {
     "file": "Process.cs",
     "mutator": "Statement mutation",
     "line": "entries.Add(new Stat(block.Span, ref offset));",
+    "commit": "e4b6f0d9f55a",
+    "print": "1735b9191d6090f2",
     "reason": "the directory read never advances its offset"
   },
   {
     "file": "RcCompiler.cs",
     "mutator": "Statement mutation",
     "line": "Outcode(c0, false);",
+    "commit": "e4b6f0d9f55a",
+    "print": "b28361c1ae698577",
+    "reason": "a while's condition is not compiled, and an empty condition is while(true)"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c0, false);",
+    "commit": "e4b6f0d9f55a",
+    "print": "44d93482430046df",
+    "reason": "a while's condition is not compiled, and an empty condition is while(true)"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c0, false);",
+    "commit": "e4b6f0d9f55a",
+    "print": "ad260a638ad4ff79",
+    "reason": "a while's condition is not compiled, and an empty condition is while(true)"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c0, false);",
+    "commit": "e4b6f0d9f55a",
+    "print": "72f2f41d37ef40da",
     "reason": "a while's condition is not compiled, and an empty condition is while(true)"
   },
   {
     "file": "RcCompiler.cs",
     "mutator": "Statement mutation",
     "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "27931e313a8fc3f2",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "915e60fdfca5ec10",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "0bd014ff66a744e3",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "05cab1fde6a0c33a",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "37e179d58fa528ee",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "7b76d235d4fe4279",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "7acb27d5611369fc",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "de282881272c7bb3",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "cf5c2d518ef0bc69",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "063d3cf0d94e09d8",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "f09b8d26093468a2",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "70177f98c05d0c42",
+    "reason": "a while's body is not compiled, so nothing ends the loop"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Statement mutation",
+    "line": "Outcode(c1, eflag);",
+    "commit": "e4b6f0d9f55a",
+    "print": "0d5dc0cf561a9c94",
     "reason": "a while's body is not compiled, so nothing ends the loop"
   },
   {
     "file": "RcCompiler.cs",
     "mutator": "Equality mutation",
     "line": "for (t = assignment; t.Type == '='; t = t.Child[2]!)",
+    "commit": "e4b6f0d9f55a",
+    "print": "0d07f1fc2e51e15b",
+    "reason": "the walk down a chain of assignments never ends"
+  },
+  {
+    "file": "RcCompiler.cs",
+    "mutator": "Equality mutation",
+    "line": "for (t = assignment; t.Type == '='; t = t.Child[2]!)",
+    "commit": "e4b6f0d9f55a",
+    "print": "2d8c042efa1225f6",
     "reason": "the walk down a chain of assignments never ends"
   },
   {
     "file": "RcInput.cs",
     "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
     "line": "return new(() => ValueTask.FromResult(next < bytes.Length ? bytes[next++] : -1));",
+    "commit": "e4b6f0d9f55a",
+    "print": "ea5dbf0e5a4ee4e6",
     "reason": "the test input source never reaches end of file"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Boolean mutation",
     "line": "LastWord = false;",
+    "commit": "e4b6f0d9f55a",
+    "print": "80af653765aa040b",
+    "reason": "the lexer stops advancing through its input"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Boolean mutation",
+    "line": "LastWord = false;",
+    "commit": "e4b6f0d9f55a",
+    "print": "c8a5338528dc3fc1",
+    "reason": "the lexer stops advancing through its input"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Boolean mutation",
+    "line": "LastWord = false;",
+    "commit": "e4b6f0d9f55a",
+    "print": "f4c20c96bb09b3bc",
     "reason": "the lexer stops advancing through its input"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Statement mutation",
     "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "7b9dbdf6f8ff6f4b",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "ac692a05af37d4bb",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "1c2d1d328ba7a33a",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "18e37f66fceea87d",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "3a3e29990ef1524b",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "8ef9ea9bf4ba2aa1",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "7361a1252f64e309",
+    "reason": "the lexer reads the same character forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "await AdvanceAsync();",
+    "commit": "e4b6f0d9f55a",
+    "print": "03b04d6f9998e803",
     "reason": "the lexer reads the same character forever"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Statement mutation",
     "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "97eb2d53e56998af",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "627bfd34d590df0b",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "c693318e467fb335",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "f745a0f16da152ed",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "333b2269b90cd4c7",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "6327a9016096e94e",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "a1b4b0826384272d",
+    "reason": "a scanning loop never leaves"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "e4b6f0d9f55a",
+    "print": "4ca155acc44cf949",
     "reason": "a scanning loop never leaves"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "line": "if (afterDollar ? !IdChar(c) : !WordChar(c))",
+    "commit": "e4b6f0d9f55a",
+    "print": "b1964b933a471940",
     "reason": "a word never ends"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Negate expression",
     "line": "if (afterDollar ? !IdChar(c) : !WordChar(c))",
+    "commit": "e4b6f0d9f55a",
+    "print": "b1964b933a471940",
     "reason": "a word never ends"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Equality mutation",
     "line": "if (c == '\\\\' && !inQuote)",
+    "commit": "e4b6f0d9f55a",
+    "print": "58fed655484d77e6",
     "reason": "the lexer stops advancing through its input"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Logical mutation",
     "line": "if (c == '\\\\' && !inQuote)",
+    "commit": "e4b6f0d9f55a",
+    "print": "58fed655484d77e6",
     "reason": "the lexer stops advancing through its input"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Negate expression",
     "line": "if (c == '\\\\' && !inQuote)",
+    "commit": "e4b6f0d9f55a",
+    "print": "58fed655484d77e6",
     "reason": "the lexer stops advancing through its input"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Equality mutation",
     "line": "if (c is ' ' or '\\t')",
+    "commit": "e4b6f0d9f55a",
+    "print": "4f0d27c1c5c1659d",
     "reason": "skipping blanks never stops"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Logical mutation",
     "line": "private static bool WordChar(int c) => c != EndOfFile && !\"\\n \\t#;&|^$=`'{}()<>\".Contains((char)c, StringComparison.Ordinal);",
+    "commit": "e4b6f0d9f55a",
+    "print": "9ea0356064942513",
     "reason": "end of file counts as a word character"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Statement mutation",
     "line": "return;",
+    "commit": "e4b6f0d9f55a",
+    "print": "04605af6e7e7573f",
+    "reason": "skipping blanks never stops"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "e4b6f0d9f55a",
+    "print": "0e113092b5c6c727",
+    "reason": "skipping blanks never stops"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "e4b6f0d9f55a",
+    "print": "1a2bb0c27e4bbd17",
+    "reason": "skipping blanks never stops"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "e4b6f0d9f55a",
+    "print": "e96b757c9f24e8db",
+    "reason": "skipping blanks never stops"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "e4b6f0d9f55a",
+    "print": "aefca65e49c88be8",
     "reason": "skipping blanks never stops"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Arithmetic mutation",
     "line": "RcTree? At(int i) => values[first + i];",
+    "commit": "e4b6f0d9f55a",
+    "print": "ba9f968f1a452bd9",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "RcTree? At(int i) => values[first + i];",
+    "commit": "e4b6f0d9f55a",
+    "print": "5d2436091bcf4a3e",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "RcTree? At(int i) => values[first + i];",
+    "commit": "e4b6f0d9f55a",
+    "print": "6724be5be02c152a",
+    "reason": "the automaton cycles between states"
+  },
+  {
+    "file": "RcParser.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "RcTree? At(int i) => values[first + i];",
+    "commit": "e4b6f0d9f55a",
+    "print": "41bbfae9288c3cb8",
     "reason": "the automaton cycles between states"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Negate expression",
     "line": "if (++top >= MaxDepth)",
+    "commit": "e4b6f0d9f55a",
+    "print": "ad64f556bdde3d18",
     "reason": "the automaton cycles between states"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Equality mutation",
     "line": "if (n > RcTables.Flag)",
+    "commit": "e4b6f0d9f55a",
+    "print": "aba48d6e8f70fb1d",
     "reason": "the automaton cycles between states"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Negate expression",
     "line": "if (n > RcTables.Flag)",
+    "commit": "c6ffb3c1f2b4",
+    "print": "aba48d6e8f70fb1d",
     "reason": "every parse is a syntax error that reads no token, so interactive rc parses again at the same newline forever"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Equality mutation",
     "line": "state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];",
+    "commit": "e4b6f0d9f55a",
+    "print": "c759c8433a1b8b94",
     "reason": "the automaton cycles between states"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Boolean mutation",
     "line": "while (true)",
+    "commit": "e4b6f0d9f55a",
+    "print": "2c3822a46b5156a5",
     "reason": "the parse loop restarts without consuming input"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Negate expression",
     "line": "while (true)",
+    "commit": "e4b6f0d9f55a",
+    "print": "2c3822a46b5156a5",
     "reason": "the parse loop restarts without consuming input"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Block removal mutation",
     "line": "while (p.Child[1] is not null) {",
+    "commit": "a7a1813182c9",
+    "print": "66aaaeaa79422625",
     "reason": "the automaton cycles between states"
   },
   {
     "file": "RcShell.Ops.cs",
     "mutator": "Logical mutation",
     "line": "if (process.Pid == mypid && !trapped && Vlook(\"sigexit\") is { Fn: not null } trap)",
+    "commit": "e4b6f0d9f55a",
+    "print": "ee1a3dbbfece007c",
     "reason": "sigexit runs again for every exit"
   },
   {
     "file": "RcShell.Ops.cs",
     "mutator": "Boolean mutation",
     "line": "trapped = true;",
+    "commit": "e4b6f0d9f55a",
+    "print": "2170865316f17011",
     "reason": "sigexit calls itself as it exits"
   },
   {
     "file": "RcShell.Simple.cs",
     "mutator": "Statement mutation",
     "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "4223bca85736f6ed",
     "reason": "the arguments left behind become a for loop's list, one more each time round"
   },
   {
-    "file": "RcShell.cs",
-    "mutator": "Logical mutation",
-    "line": "if (type == RcRedir.Open && Clobbers(runq!.Redir, from))",
-    "reason": "pushredir moves descriptors without end"
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "e9ed01ac7f50b10a",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
   },
   {
-    "file": "RcShell.cs",
-    "mutator": "Negate expression",
-    "line": "if (type == RcRedir.Open && Clobbers(runq!.Redir, from))",
-    "reason": "pushredir moves descriptors without end"
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "c07d2251f352e816",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "749add3299b9aef9",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "35894809fcfed11a",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "9da1c14115d4d630",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "086ee045c44a2825",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "d7d435f0e0544f62",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "91224bcb5349f053",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "0932a5396b569823",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "d9a4de2fda27a60c",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "e4b6f0d9f55a",
+    "print": "1c5e5280eca1f801",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
   },
   {
     "file": "RcShell.cs",
     "mutator": "Boolean mutation",
     "line": "return false;",
+    "commit": "e4b6f0d9f55a",
+    "print": "1895ed3c369411c3",
     "reason": "every redirection is moved, again and again"
   },
   {
     "file": "RcShell.cs",
     "mutator": "Equality mutation",
     "line": "while (r.Next != rp.Next)",
+    "commit": "e4b6f0d9f55a",
+    "print": "0a399387b911dcf8",
     "reason": "shuffleredir's walk never finds its end"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Logical mutation",
     "line": "internal static bool IdChar(int c) => c > ' ' && !\"!\\\"#$%&'()+,-./:;<=>?@[\\\\]^`{|}~\".Contains((char)c, StringComparison.Ordinal);",
+    "commit": "a7a1813182c9",
+    "print": "58310f779ef6f9a9",
     "reason": "end of file counts as a name character after $"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Logical mutation",
     "line": "while (LastC != '\\n' && LastC != EndOfFile)",
+    "commit": "a7a1813182c9",
+    "print": "f16726d9ebc5ef9d",
     "reason": "skipping the rest of a bad line never stops"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Boolean mutation",
     "line": "Eof = true;",
+    "commit": "a7a1813182c9",
+    "print": "2db58c32eacc4a6a",
     "reason": "rc never sees end of file and reads it forever"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Equality mutation",
     "line": "if (peekc != EndOfFile)",
+    "commit": "a7a1813182c9",
+    "print": "ba5c68914fecce78",
     "reason": "the lexer returns end of file without reading or setting Eof, so rc reads it forever"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Negate expression",
     "line": "if (Eof)",
+    "commit": "a7a1813182c9",
+    "print": "7a16b5fdedda314a",
     "reason": "the lexer returns end of file without reading or setting Eof, so rc reads it forever"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Block removal mutation",
     "line": "if (future == EndOfFile) {",
+    "commit": "a7a1813182c9",
+    "print": "b4439d6d949ee936",
     "reason": "NextCAsync never reads, so rc sees end of file forever without Eof"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Equality mutation",
     "line": "if (symbol == NoSymbol)",
+    "commit": "a7a1813182c9",
+    "print": "d364a22deb293f4a",
     "reason": "the parser never asks the lexer for a token and cycles through its states"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Conditional (true) mutation",
     "line": "state = RcTables.Checks[state = RcTables.Actions[go + states[top] + 1]] == -symbolOfRule ? state : RcTables.Actions[go];",
+    "commit": "a7a1813182c9",
+    "print": "c759c8433a1b8b94",
     "reason": "the goto lands in a state that keeps reducing"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Block removal mutation",
     "line": "if (symbol == NoSymbol) {",
+    "commit": "64b9a462511e",
+    "print": "1ef829f42eaaa597",
     "reason": "the parser never asks the lexer for a token and cycles through its states"
   },
   {
     "file": "Process.cs",
     "mutator": "Statement mutation",
     "line": "t++;",
+    "commit": "228e1f9c4502",
+    "print": "b4528ed31bbdc9d2",
+    "reason": "Tokenize never moves past a separator"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Statement mutation",
+    "line": "t++;",
+    "commit": "228e1f9c4502",
+    "print": "d7f7f2c093f7170a",
+    "reason": "Tokenize never moves past a separator"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Statement mutation",
+    "line": "t++;",
+    "commit": "228e1f9c4502",
+    "print": "76f35243155c5403",
     "reason": "Tokenize never moves past a separator"
   },
   {
     "file": "Process.cs",
     "mutator": "Statement mutation",
     "line": "token.Append(line[t++]);",
+    "commit": "228e1f9c4502",
+    "print": "51d660d902cdf2c0",
     "reason": "Tokenize never moves past a token character"
   },
   {
     "file": "RcParser.cs",
     "mutator": "Boolean mutation",
     "line": "return (false, result);",
+    "commit": "cbacd24f812f",
+    "print": "a5808f667ec0e6f7",
     "reason": "end of file reads as a parsed line, so rc parses end of file forever"
   },
   {
     "file": "RamFs.cs",
     "mutator": "Equality mutation",
     "line": "for (int done = 0; done < reply.Length;)",
+    "commit": "a43d40362586",
+    "print": "0f8aeca6478fda7b",
     "reason": "a read that has filled its reply keeps reading nothing"
   },
   {
     "file": "RamFs.cs",
     "mutator": "Equality mutation",
     "line": "if (node.Blocks.TryGetValue(at / BlockSize, out byte[]? block) && within < block.Length)",
+    "commit": "a43d40362586",
+    "print": "6f0e5ed219d86996",
     "reason": "a block that ends before the offset gives no bytes, so the read never advances"
   },
   {
     "file": "RamFs.cs",
     "mutator": "Logical mutation",
     "line": "if (node.Blocks.TryGetValue(at / BlockSize, out byte[]? block) && within < block.Length)",
+    "commit": "a43d40362586",
+    "print": "6f0e5ed219d86996",
     "reason": "a block that ends before the offset gives no bytes, so the read never advances"
   },
   {
     "file": "RamFs.cs",
     "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
     "line": "done += n;",
+    "commit": "a43d40362586",
+    "print": "86ce3c8579fef77c",
+    "reason": "the block loop moves backwards and never reaches its end"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+    "line": "done += n;",
+    "commit": "a43d40362586",
+    "print": "1e62282fc7f4e65f",
     "reason": "the block loop moves backwards and never reaches its end"
   },
   {
     "file": "RamFs.cs",
     "mutator": "Equality mutation",
     "line": "for (int done = 0; done < data.Length;)",
+    "commit": "a43d40362586",
+    "print": "cedeb67b5a439080",
     "reason": "a write that has copied everything keeps copying nothing"
   },
   {
     "file": "RamFs.cs",
     "mutator": "Arithmetic mutation",
     "line": "int within = (int)(at % BlockSize);",
+    "commit": "a43d40362586",
+    "print": "f8ae9ff451020df9",
+    "reason": "an offset past the block gives a count of nothing or less, so the block loop never advances"
+  },
+  {
+    "file": "RamFs.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "int within = (int)(at % BlockSize);",
+    "commit": "a43d40362586",
+    "print": "fd958c3139b4e18b",
     "reason": "an offset past the block gives a count of nothing or less, so the block loop never advances"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Negate expression",
     "line": "if (LastWord)",
+    "commit": "2c1ab5cc3d28",
+    "print": "00b99c2992bd18c1",
     "reason": "a caret is inserted before every word without reading it, so the lexer returns carets forever"
   },
   {
     "file": "RcLexer.cs",
     "mutator": "Equality mutation",
     "line": "if (future == EndOfFile)",
+    "commit": "dedec1acb5e8",
+    "print": "7cc73d95506e7273",
     "reason": "NextCAsync reads only when it already holds a character, so rc sees end of file forever without Eof"
   },
   {
     "file": "Blk.cs",
     "mutator": "Arithmetic mutation",
     "line": "hi = mid - 1;",
+    "commit": "79ed536fad6d",
+    "print": "a59797c0152b1a0c",
     "reason": "the binary search's upper bound grows instead of shrinking, so it never ends"
   },
   {
     "file": "Blk.cs",
     "mutator": "Arithmetic mutation",
     "line": "lo = mid + 1;",
+    "commit": "79ed536fad6d",
+    "print": "7b01bd4757d58960",
     "reason": "the binary search's lower bound falls instead of rising, so it never ends"
   },
   {
     "file": "Blk.cs",
     "mutator": "Equality mutation",
     "line": "while (lo <= hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "4ec44c0eacf6360c",
     "reason": "the block search's loop condition no longer closes, and a test searching an empty block never finishes"
   },
   {
     "file": "Blk.cs",
     "mutator": "Negate expression",
     "line": "while (lo <= hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "4ec44c0eacf6360c",
     "reason": "the block search's loop condition no longer closes, and a test searching an empty block never finishes"
   },
   {
     "file": "Blk.cs",
     "mutator": "Arithmetic mutation",
     "line": "int mid = (lo + hi) / 2;",
+    "commit": "71fa94b4bbc2",
+    "print": "d34838566c556576",
     "reason": "the block search's midpoint leaves the range it is narrowing, and a test over it never finishes"
   },
   {
     "file": "Scan.cs",
     "mutator": "Negate expression",
     "line": "while (bi < b.MessageCount && Keys.Compare(Key, b.GetMessage(bi).Key) >= 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "0b0302eff13ae562",
     "reason": "entering a scan no longer stops skipping buffered messages, or never moves past one"
   },
   {
     "file": "Scan.cs",
     "mutator": "Statement mutation",
     "line": "bi++;",
+    "commit": "71fa94b4bbc2",
+    "print": "db4812637aff2fe9",
     "reason": "entering a scan never moves past the buffered message it is skipping"
   },
   {
     "file": "Scan.cs",
     "mutator": "Negate expression",
     "line": "if (leaf)",
+    "commit": "71fa94b4bbc2",
+    "print": "63e000d184120742",
+    "reason": "a scan takes its key from the wrong level and never advances past it"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Negate expression",
+    "line": "if (leaf)",
+    "commit": "71fa94b4bbc2",
+    "print": "1e72073aa3d8b68d",
     "reason": "a scan takes its key from the wrong level and never advances past it"
   },
   {
     "file": "Scan.cs",
     "mutator": "Equality mutation",
     "line": "for (int i = path.Length - 2; i >= 0; i--)",
+    "commit": "71fa94b4bbc2",
+    "print": "707cad8417d1271e",
+    "reason": "a scan applies buffered messages without advancing past them, so it gives the same key forever"
+  },
+  {
+    "file": "Scan.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int i = path.Length - 2; i >= 0; i--)",
+    "commit": "71fa94b4bbc2",
+    "print": "702462fcbddc0b7b",
     "reason": "a scan applies buffered messages without advancing past them, so it gives the same key forever"
   },
   {
     "file": "Scan.cs",
     "mutator": "Equality mutation",
     "line": "for (Level l = path[i]; l.B is { } b && l.Bi < b.MessageCount && Keys.Compare(m.Key, b.GetMessage(l.Bi).Key) == 0; l.Bi++)",
+    "commit": "71fa94b4bbc2",
+    "print": "6a0b466f95010f1b",
     "reason": "a scan applies buffered messages without advancing past them, so it gives the same key forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Object initializer mutation",
     "line": "path[0] = new Path { Ins = msg, Lo = npull, Hi = msg.Length, Size = sz };",
+    "commit": "71fa94b4bbc2",
+    "print": "d7e9a19accbbb34a",
     "reason": "the upsert's path loses the batch it pulls from, so no round makes progress and the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "while (b.Type == BlockType.Pivot && (b.ValueCount <= 1 || b.BufferFull(msg.Length, path[npath - 1].Size)))",
+    "commit": "71fa94b4bbc2",
+    "print": "3300b6c6bfa30c70",
     "reason": "the walk down from the root no longer stops where it should, so the upsert never pulls its messages and retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "while (b.Type == BlockType.Pivot && (b.ValueCount <= 1 || b.BufferFull(msg.Length, path[npath - 1].Size)))",
+    "commit": "71fa94b4bbc2",
+    "print": "3300b6c6bfa30c70",
     "reason": "the walk down from the root no longer stops where it should, so the upsert never pulls its messages and retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "return rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "commit": "b63f6d544399",
+    "print": "7d60b3bbce10c23b",
     "reason": "every round is taken for a degenerate root, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "return rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "commit": "b63f6d544399",
+    "print": "7d60b3bbce10c23b",
     "reason": "every round is taken for a degenerate root, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Boolean mutation",
     "line": "return false;",
+    "commit": "b63f6d544399",
+    "print": "15614a682e547ab0",
+    "reason": "an emptied tree counts as degenerate, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Boolean mutation",
+    "line": "return false;",
+    "commit": "b63f6d544399",
+    "print": "c839082b40e735cc",
+    "reason": "an emptied tree counts as degenerate, so the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Boolean mutation",
+    "line": "return false;",
+    "commit": "b63f6d544399",
+    "print": "6841d37cfd57b13e",
     "reason": "an emptied tree counts as degenerate, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "while (npull != msg.Length || degen);",
+    "commit": "71fa94b4bbc2",
+    "print": "339755487572342c",
     "reason": "the upsert's retry loop no longer ends when every message is pulled"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "for (int i = 1; i <= b.ValueCount; i++)",
+    "commit": "71fa94b4bbc2",
+    "print": "265c4daa543884c6",
     "reason": "victim's loop over a pivot's children never ends or never chooses one, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Conditional (true) mutation",
     "line": "byte[]? next = i < b.ValueCount ? b.GetValue(i).Key : null;",
+    "commit": "71fa94b4bbc2",
+    "print": "af25a6a3435d30cd",
     "reason": "victim gives every message to the first child, so the upsert walks into a block that never takes them and retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "byte[]? next = i < b.ValueCount ? b.GetValue(i).Key : null;",
+    "commit": "71fa94b4bbc2",
+    "print": "af25a6a3435d30cd",
     "reason": "victim gives every message to the first child, so the upsert walks into a block that never takes them and retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "for (; j < b.MessageCount; j++)",
+    "commit": "71fa94b4bbc2",
+    "print": "5f3654a98263ffc6",
     "reason": "victim reads past a pivot's buffer, so the walk it chooses never takes the messages and the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "if (next is not null && Keys.Compare(m.Key, next) >= 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "00f162a0be906e0d",
     "reason": "victim's split of the buffer between children is lost, so the upsert walks into a block that never takes the messages and retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "if (next is not null && Keys.Compare(m.Key, next) >= 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "00f162a0be906e0d",
     "reason": "victim's split of the buffer between children is lost, so the upsert walks into a block that never takes the messages and retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
     "line": "cursz += MessageSize(m);",
+    "commit": "71fa94b4bbc2",
+    "print": "e0b788f255834655",
     "reason": "victim measures a child's messages as shrinking, so it never chooses one and the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "if (cursz > maxsz)",
+    "commit": "71fa94b4bbc2",
+    "print": "fc9e5d183b82454c",
     "reason": "victim never chooses the child with the most messages, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "if (cursz > maxsz)",
+    "commit": "71fa94b4bbc2",
+    "print": "fc9e5d183b82454c",
     "reason": "victim never chooses the child with the most messages, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "while (lo <= hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "7a2b0acee681a2ce",
     "reason": "fastupsert's binary search loop condition no longer closes, so it never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "while (lo <= hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "7a2b0acee681a2ce",
     "reason": "fastupsert's binary search loop condition no longer closes, so it never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Arithmetic mutation",
     "line": "int mid = (lo + hi) / 2;",
+    "commit": "71fa94b4bbc2",
+    "print": "9f66220fb38699ad",
     "reason": "fastupsert's binary search midpoint leaves its range, so it never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Arithmetic mutation",
     "line": "hi = mid - 1;",
+    "commit": "71fa94b4bbc2",
+    "print": "822e8938ca958419",
     "reason": "fastupsert's binary search upper bound grows instead of shrinking, so it never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Arithmetic mutation",
     "line": "lo = mid + 1;",
+    "commit": "71fa94b4bbc2",
+    "print": "fb610e8107e98b03",
     "reason": "fastupsert's binary search lower bound falls instead of rising, so it never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "while (i < b.ValueCount || j < up.Hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "b515993a1045cfd5",
     "reason": "updateleaf's loop over values and messages never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "while (i < b.ValueCount || j < up.Hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "b515993a1045cfd5",
     "reason": "updateleaf's loop over values and messages never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "while (i < b.ValueCount || j < up.Hi)",
+    "commit": "71fa94b4bbc2",
+    "print": "b515993a1045cfd5",
     "reason": "updateleaf's loop over values and messages never ends"
   },
   {
     "file": "Tree.cs",
     "mutator": "Boolean mutation",
     "line": "bool full = false;",
+    "commit": "71fa94b4bbc2",
+    "print": "14a4a729ccdd55af",
+    "reason": "updatepiv starts out full, pulls nothing, and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Boolean mutation",
+    "line": "bool full = false;",
+    "commit": "71fa94b4bbc2",
+    "print": "372fbc55ddb16cb8",
+    "reason": "updatepiv starts out full, pulls nothing, and the upsert retries forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Boolean mutation",
+    "line": "bool full = false;",
+    "commit": "71fa94b4bbc2",
+    "print": "f0db3e2967404439",
     "reason": "updatepiv starts out full, pulls nothing, and the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "24667ac9e557b531",
     "reason": "updatepiv stops copying the pivot's own messages or never advances past one"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "24667ac9e557b531",
     "reason": "updatepiv stops copying the pivot's own messages or never advances past one"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "while (Pull(up, j, out u, ref full, spc) && Keys.Compare(key, u.Key) == 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "051d0ae0a59cfe39",
     "reason": "updatepiv's pull of the parent's messages for one key never ends, or never starts, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "while (Pull(up, j, out u, ref full, spc) && Keys.Compare(key, u.Key) == 0)",
+    "commit": "71fa94b4bbc2",
+    "print": "051d0ae0a59cfe39",
     "reason": "updatepiv's pull of the parent's messages for one key never ends, or never starts, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Statement mutation",
     "line": "j++;",
+    "commit": "71fa94b4bbc2",
+    "print": "2ae5e6285fab58d6",
+    "reason": "updatepiv pulls the same parent message forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Statement mutation",
+    "line": "j++;",
+    "commit": "71fa94b4bbc2",
+    "print": "5f65fcdec2b0262b",
+    "reason": "updatepiv pulls the same parent message forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Statement mutation",
+    "line": "j++;",
+    "commit": "71fa94b4bbc2",
+    "print": "79675b958e44d932",
     "reason": "updatepiv pulls the same parent message forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "while (Pull(up, j, out Message u, ref full, spc))",
+    "commit": "71fa94b4bbc2",
+    "print": "93e9f7284a1f4ab5",
     "reason": "updatepiv's pull of the parent's remaining messages never ends, or never starts, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Statement mutation",
     "line": "UpdateLeaf(path[at - 1], p);",
+    "commit": "71fa94b4bbc2",
+    "print": "ed716480f6133516",
     "reason": "a leaf the flush reaches is never rewritten, so its messages are never pulled and the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "if (at == 1 && pp?.Left is not null && pp.Right is null && pp.Npull == p.B.MessageCount",
+    "commit": "71fa94b4bbc2",
+    "print": "4594563c3de88631",
     "reason": "the root gives way to its child at the wrong time, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "&& (p.B.ValueCount == 1 || (pp.Op == PathOp.Merge && p.B.ValueCount == 2)))",
+    "commit": "71fa94b4bbc2",
+    "print": "dc42713a932c443c",
     "reason": "the root gives way to its child at the wrong time, so the upsert retries forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Block removal mutation",
     "line": "&& (p.B.ValueCount == 1 || (pp.Op == PathOp.Merge && p.B.ValueCount == 2))) {",
+    "commit": "71fa94b4bbc2",
+    "print": "45b98c9056f3f403",
     "reason": "the root never gives way to its only child, so the upsert retries forever"
   },
   {
     "file": "Blk.cs",
     "mutator": "Equality mutation",
     "line": "public bool LeafFull(int needed) => (2 * (ValueCount + 1)) + ValueSize + needed > LeafSpace;",
+    "commit": "0b2ebd891186",
+    "print": "ea93b0d9f3f01355",
     "reason": "every leaf with room counts as full, so upserts split leaves forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "line": "if (!Pull(up, j, out Message u, ref full, spc - sz) || Keys.Compare(m.Key, u.Key) <= 0)",
+    "commit": "0b2ebd891186",
+    "print": "24667ac9e557b531",
     "reason": "once the parent's next message does not fit, updatepiv stops advancing through its own messages and loops forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Logical mutation",
     "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "commit": "0b2ebd891186",
+    "print": "82c50e4917f374ca",
     "reason": "the split never moves to its right half, or does so before it has taken anything, so the leaf it leaves is as full as before and the upsert splits it forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Negate expression",
     "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "commit": "0b2ebd891186",
+    "print": "82c50e4917f374ca",
     "reason": "the split never moves to its right half, or does so before it has taken anything, so the leaf it leaves is as full as before and the upsert splits it forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "commit": "0b2ebd891186",
+    "print": "82c50e4917f374ca",
     "reason": "the split never moves to its right half, or does so before it has taken anything, so the leaf it leaves is as full as before and the upsert splits it forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "line": "if (!p.B.LeafFull(path[at - 1].Size))",
+    "commit": "0b2ebd891186",
+    "print": "a9fd1bb94c984248",
     "reason": "leaves are split when they have room and rewritten when they do not, so upserts never settle"
   },
   {
     "file": "Arena.cs",
     "mutator": "Statement mutation",
     "line": "blocks.Add(Free.TakeLowest()!.Value);",
+    "commit": "be9ddb0f1e8e",
+    "print": "8612fd616f2fb4f2",
     "reason": "compression takes blocks for the log without keeping them, so it never has enough and loops forever"
   },
   {
     "file": "FileDevice.cs",
     "mutator": "Statement mutation",
     "line": "throw new GefsException(\"i/o error\");",
+    "commit": "be9ddb0f1e8e",
+    "print": "5ab29cc8e9402f8d",
     "reason": "a read past the end gets no bytes and goes round forever"
   },
   {
     "file": "Scan.cs",
     "mutator": "Statement mutation",
     "line": "path[^1].Vi++;",
+    "commit": "4f6fc5be08f0",
+    "print": "d562ff92f646898c",
     "reason": "a scan never moves past the leaf value it gave, so it gives the same key forever"
   },
   {
     "file": "Scan.cs",
     "mutator": "Statement mutation",
     "line": "path[i - 1].Vi++;",
+    "commit": "24421736887e",
+    "print": "3423edc73f279a07",
     "reason": "a scan drops an exhausted level without moving the level above on, so it reloads the same block forever"
   },
   {
     "file": "Tree.cs",
     "mutator": "Conditional (false) mutation",
     "line": "int dh = path[0].Left is not null ? 1 : path[1].Left is not null ? 0 : -1;",
+    "commit": "522fba345959",
+    "print": "ec9a38eab406325c",
     "reason": "a split that makes a new root no longer adds a level, so the recorded height falls short of the tree and an upsert walking it never finishes"
   },
   {
     "file": "GefsFs.cs",
     "mutator": "Equality mutation",
     "line": "for (int done = 0; done < reply.Length;)",
+    "commit": "80c2c1d67774",
+    "print": "c0974720d50638d7",
     "reason": "the read loop takes nothing once the reply is full, so it never reaches past its end"
   },
   {
     "file": "MountConnection.cs",
     "mutator": "Statement mutation",
     "line": "Free(r);",
+    "commit": "98e8d4757dea",
+    "print": "1659fa79138608f0",
     "reason": "with no tag freed, the search for a free tag never ends once the tag cycle has used them all"
   },
   {
     "file": "MountConnection.cs",
     "mutator": "Statement mutation",
     "line": "tags.Remove(r.Tag);",
+    "commit": "98e8d4757dea",
+    "print": "8fecdaf1315fee12",
     "reason": "with no tag freed, the search for a free tag never ends once the tag cycle has used them all"
   },
   {
     "file": "MountConnection.cs",
     "mutator": "Statement mutation",
     "line": "reading = null;",
+    "commit": "98e8d4757dea",
+    "print": "4f5b238cd1318c21",
+    "reason": "the reader takes the frame it has already muxed again, forever"
+  },
+  {
+    "file": "MountConnection.cs",
+    "mutator": "Statement mutation",
+    "line": "reading = null;",
+    "commit": "98e8d4757dea",
+    "print": "795c76a13f0c1281",
     "reason": "the reader takes the frame it has already muxed again, forever"
   },
   {
     "file": "MountConnection.cs",
     "mutator": "Statement mutation",
     "line": "queue.Remove(answered);",
+    "commit": "98e8d4757dea",
+    "print": "10be35f1e9540780",
     "reason": "every answered request stays queued, and the tag cycle's search of the queue for each reply grows past the bound"
-  },
-  {
-    "file": "MountConnection.cs",
-    "mutator": "Statement mutation",
-    "line": "await task;",
-    "reason": "the signal is set before the task ends, so a caller asleep for the reader wakes at once and sleeps again, forever"
   },
   {
     "file": "MountConnection.cs",
     "mutator": "Equality mutation",
     "line": "while (nextTag is 0 or NoTag || tags.Contains(nextTag));",
+    "commit": "e1709ff28cd0",
+    "print": "7cd645f92465a090",
     "reason": "the search for a free tag passes over every tag, forever"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "while (At(s, p) is ' ' or '\\t' or '\\n' or '\\f' or '\\r' or '\\v')",
+    "commit": "a8151595b7d6",
+    "print": "a3eb5f3518258e5c",
     "reason": "the white space strtol skips is skipped forever past the end of the string"
   },
   {
     "file": "Libc.cs",
     "mutator": "Statement mutation",
     "line": "p++;",
+    "commit": "a8151595b7d6",
+    "print": "c448885275031222",
     "reason": "the white space strtol skips is never passed"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Block removal mutation",
     "line": "while (last.Next is not null) {",
+    "commit": "eb03a662c8ee",
+    "print": "6be5339a9f48ee66",
     "reason": "ndbcat's walk to the last file never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Block removal mutation",
     "line": "while (last.Line == last.Entry) {",
+    "commit": "eb03a662c8ee",
+    "print": "62cf85dd20dad8bc",
     "reason": "ndbreorder's walk to the end of the line never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Block removal mutation",
     "line": "while (nt.Entry != last.Line) {",
+    "commit": "eb03a662c8ee",
+    "print": "4b7c6b9b6f5a796c",
     "reason": "ndbreorder's walk to the line before never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Block removal mutation",
     "line": "while (nt.Entry is not null) {",
+    "commit": "eb03a662c8ee",
+    "print": "2d99841278578629",
     "reason": "ndbreorder's walk to the end of the entry never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Block removal mutation",
     "line": "while (prev.Line != x) {",
+    "commit": "eb03a662c8ee",
+    "print": "b72006403846b831",
     "reason": "ndbreorder's walk to the tuple before x never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Equality mutation",
     "line": "if (nt.Entry == a)",
+    "commit": "eb03a662c8ee",
+    "print": "c881c74106338014",
+    "reason": "ndbsubstitute points every tuple at b, so the entry becomes a ring that its walks never leave"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Equality mutation",
+    "line": "if (nt.Entry == a)",
+    "commit": "eb03a662c8ee",
+    "print": "834bd48794ae38cb",
     "reason": "ndbsubstitute points every tuple at b, so the entry becomes a ring that its walks never leave"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Block removal mutation",
     "line": "while (end.Entry is not null) {",
+    "commit": "eb03a662c8ee",
+    "print": "32c87bfa31b9cf47",
     "reason": "ndbsubstitute's walk to the end of b never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "3bd3404261a39f96",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "98631cddb56e537c",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "c6379fa25783af97",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "3e961961374116aa",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "4e47c7c8fea184eb",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "72019cca342a3fe4",
+    "reason": "the tuple parser walks back over the line and never reaches its end"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "24cc8d1a112975ef",
     "reason": "the tuple parser walks back over the line and never reaches its end"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Statement mutation",
     "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "3bd3404261a39f96",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "98631cddb56e537c",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "c6379fa25783af97",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "3e961961374116aa",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "4e47c7c8fea184eb",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "72019cca342a3fe4",
+    "reason": "the tuple parser no longer moves along the line"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "cp++;",
+    "commit": "eb03a662c8ee",
+    "print": "24cc8d1a112975ef",
     "reason": "the tuple parser no longer moves along the line"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Logical mutation",
     "line": "while (line[cp] is not ('\\n' or '\"'))",
+    "commit": "eb03a662c8ee",
+    "print": "a974199e17a9836b",
     "reason": "a quoted value's loop never ends"
   },
   {
     "file": "Ip.cs",
     "mutator": "Statement mutation",
     "line": "i++;",
+    "commit": "eb03a662c8ee",
+    "print": "bc9c8092b968d575",
     "reason": "%M's walk over the mask's all-ones bytes never moves"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Statement mutation",
     "line": "break;",
+    "commit": "eb03a662c8ee",
+    "print": "e70e5fa07d8628b1",
+    "reason": "ndbfindattr goes round the line's ring for ever"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "eb03a662c8ee",
+    "print": "8940738dd4805b3a",
+    "reason": "ndbfindattr goes round the line's ring for ever"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "eb03a662c8ee",
+    "print": "732b37c695d98db0",
+    "reason": "ndbfindattr goes round the line's ring for ever"
+  },
+  {
+    "file": "Ndb.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "eb03a662c8ee",
+    "print": "c9a312ac0672f0c3",
     "reason": "ndbfindattr goes round the line's ring for ever"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Equality mutation",
     "line": "if (a is null)",
+    "commit": "eb03a662c8ee",
+    "print": "dcb5871f2d3755ba",
     "reason": "ndbconcatenate walks an entry that is not there, and the search that called it never ends"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Equality mutation",
     "line": "while (line[cp] is not ('=' or '\\n') && !IsWhite(line[cp]))",
+    "commit": "eb03a662c8ee",
+    "print": "ae3dc9c01a7569bc",
     "reason": "the attribute's loop never moves past the line's end"
   },
   {
     "file": "Ndb.cs",
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "line": "while (line[cp] is not ('=' or '\\n') && !IsWhite(line[cp]))",
+    "commit": "eb03a662c8ee",
+    "print": "ae3dc9c01a7569bc",
     "reason": "the attribute's loop stops at once, so the parser never moves along the line"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Negate expression",
     "line": "while (line[cp] is not ('=' or '\\n') && !IsWhite(line[cp]))",
+    "commit": "eb03a662c8ee",
+    "print": "ae3dc9c01a7569bc",
     "reason": "the attribute's loop stops at once, so the parser never moves along the line"
   },
   {
     "file": "Ndb.cs",
     "mutator": "Equality mutation",
     "line": "if (line[cp] == '=')",
+    "commit": "eb03a662c8ee",
+    "print": "d64bd69b0ab0f631",
     "reason": "a tuple's value is never taken, so the parser never moves along the line"
   },
   {
     "file": "ConsDevice.cs",
     "mutator": "String mutation",
     "line": "[\"pid\"] = () => Number(caller.Pid),",
+    "commit": "b63f6d544399",
+    "print": "7d12315fcd5caeec",
     "reason": "pid reads as zeros, so a reader reading to the end never finishes"
   },
   {
     "file": "Process.cs",
     "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
     "line": "t += 2;",
+    "commit": "b63f6d544399",
+    "print": "aea52e6086a84533",
     "reason": "tokenize steps back over the doubled quote it reads, and so reads it forever"
   },
   {
     "file": "Attr.cs",
     "mutator": "Block removal mutation",
     "line": "while (a is not null && a.Type == AttrType.Query && Find(all, a.Name) is not null) {",
+    "commit": "b63f6d544399",
+    "print": "a413f162febeac3a",
     "reason": "the loop dropping leading queries no longer moves past them"
   },
   {
     "file": "Attr.cs",
     "mutator": "Block removal mutation",
     "line": "if (l.Next.Type == AttrType.Query && Find(all, l.Next.Name) is not null) {",
+    "commit": "b63f6d544399",
+    "print": "1ae5a6bc6467379a",
     "reason": "the loop dropping later queries no longer moves past them"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Conditional (false) mutation",
     "line": "Srv.Dirread(r, n => n > 0 ? null : factotum);",
+    "commit": "b63f6d544399",
+    "print": "5741d489f4756ec8",
     "reason": "the root's listing gives factotum at every offset, so a read to its end never ends"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Equality mutation",
     "line": "Srv.Dirread(r, n => n > 0 ? null : factotum);",
+    "commit": "b63f6d544399",
+    "print": "5741d489f4756ec8",
     "reason": "the root's listing gives factotum at every offset, so a read to its end never ends"
   },
   {
     "file": "Fcall.cs",
     "mutator": "Arithmetic mutation",
     "line": "byte[] rest = await ReadnAsync(process, fd, (int)len - 4);",
+    "commit": "b63f6d544399",
+    "print": "1d194e3a9800c010",
     "reason": "read9pmsg waits for 8 bytes more than the message holds"
   },
   {
     "file": "Mntgen.cs",
     "mutator": "Statement mutation",
     "line": "await fs.WalkAndCloneAsync(r, Fswalk1, Fsclone);",
+    "commit": "b63f6d544399",
+    "print": "3d77278e79ee5184",
     "reason": "a walk is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "Up.Fork(Srvforker | flags, async child =>",
+    "commit": "b63f6d544399",
+    "print": "1d6734bb3822899b",
     "reason": "the work forked is never run, so its request is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await fn();",
+    "commit": "b63f6d544399",
+    "print": "dada1903ea50274a",
     "reason": "the work forked is never run, so its request is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Conditional (true) mutation",
     "line": "int start = r.Offset == 0 ? 0 : r.Fid!.Dirindex;",
+    "commit": "b63f6d544399",
+    "print": "4fa7ff083ee05461",
     "reason": "each read of a directory starts it again, so a read to its end never ends"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await Forker(",
+    "commit": "b63f6d544399",
+    "print": "c1f169d6eb0c1f2d",
     "reason": "the server is never started, so nothing is answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "started.SetResult();",
+    "commit": "b63f6d544399",
+    "print": "3aeb9feede7e464d",
     "reason": "postsrv waits for a start that is never signalled"
   },
   {
     "file": "Srv.cs",
     "mutator": "Negate expression",
     "line": "if (r.Type == MessageTypes.Tflush && !Rflush(r))",
+    "commit": "b63f6d544399",
+    "print": "d5396f7d80041584",
     "reason": "every reply but a flush's is dropped"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await Up.WriteAsync(Outfd, Fcall.ConvS2M(reply));",
+    "commit": "b63f6d544399",
+    "print": "c059de575fe8b567",
     "reason": "no reply is written"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "wlock.Release();",
+    "commit": "b63f6d544399",
+    "print": "7a0530e0bbe1af47",
     "reason": "the write lock is never let go, so the second reply waits forever"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await RespondAsync(r, e);",
+    "commit": "b63f6d544399",
+    "print": "84ad2daa97ffb683",
     "reason": "a request in error is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "rlock.Release();",
+    "commit": "b63f6d544399",
+    "print": "40cb5654169c7802",
     "reason": "the read lock is never let go, so the second request waits forever"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await DispatchAsync(r);",
+    "commit": "b63f6d544399",
+    "print": "151368603b913455",
     "reason": "no request is dispatched, so none is answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "slock.Release();",
+    "commit": "b63f6d544399",
+    "print": "0b76de1edc378c49",
+    "reason": "the server lock is never let go, so the second request waits forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "slock.Release();",
+    "commit": "b63f6d544399",
+    "print": "6cdd73bbbd45678a",
+    "reason": "the server lock is never let go, so the second request waits forever"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "slock.Release();",
+    "commit": "b63f6d544399",
+    "print": "119ddf9424f25907",
     "reason": "the server lock is never let go, so the second request waits forever"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "f7b37efb867b15a6",
+    "reason": "a version is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "edf87df91647a983",
+    "reason": "a version is never answered"
+  },
+  {
+    "file": "Srv.cs",
+    "mutator": "Statement mutation",
+    "line": "await RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "bf5ba72ae0310981",
     "reason": "a version is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await (Attach?.Invoke(r) ?? RespondAsync(r, null));",
+    "commit": "b63f6d544399",
+    "print": "65b0716987ad5616",
     "reason": "an attach is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await Walk!(r);",
+    "commit": "b63f6d544399",
+    "print": "adf4060d09e9fbd8",
     "reason": "a walk is never answered"
   },
   {
     "file": "FogKernel.cs",
     "mutator": "Statement mutation",
     "line": "collecting.Release();",
+    "commit": "b63f6d544399",
+    "print": "f694777513d124ed",
     "reason": "the next collection waits forever for the one before to let go"
   },
   {
     "file": "MountTree.cs",
     "mutator": "Statement mutation",
     "line": "break;",
+    "commit": "b63f6d544399",
+    "print": "1d21ac39896089ab",
+    "reason": "a directory read at its end is read again forever"
+  },
+  {
+    "file": "MountTree.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "b63f6d544399",
+    "print": "466d073db4fd1564",
+    "reason": "a directory read at its end is read again forever"
+  },
+  {
+    "file": "MountTree.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "b63f6d544399",
+    "print": "412e8914c47ead91",
     "reason": "a directory read at its end is read again forever"
   },
   {
     "file": "MountTree.cs",
     "mutator": "Statement mutation",
     "line": "records.AddRange(read.Data.Span);",
+    "commit": "b63f6d544399",
+    "print": "7f4dd6021d612c97",
     "reason": "the offset never moves, so the directory is read from its start forever"
   },
   {
     "file": "Srv.cs",
     "mutator": "Equality mutation",
     "line": "int start = r.Offset == 0 ? 0 : r.Fid!.Dirindex;",
+    "commit": "b63f6d544399",
+    "print": "4fa7ff083ee05461",
     "reason": "each read after the first starts the directory again, so a read to its end never ends"
   },
   {
     "file": "Srv.cs",
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "for (NinePSharp.Messages.Stat? d; (d = gen(start)) is { } entry; start++)",
+    "commit": "b63f6d544399",
+    "print": "ca7138ac1358fc62",
     "reason": "the entries before the first are asked for, and the server dies of it unanswered"
   },
   {
     "file": "Keyboard.cs",
     "mutator": "Boolean mutation",
     "line": "bool eol = true;",
+    "commit": "b63f6d544399",
+    "print": "e383939306717f8f",
     "reason": "once the input has ended, a cooked read that never ends its line reads nothing for ever"
   },
   {
     "file": "Keyboard.cs",
     "mutator": "Statement mutation",
     "line": "lk.Release();",
+    "commit": "b63f6d544399",
+    "print": "274378349950e183",
+    "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Statement mutation",
+    "line": "lk.Release();",
+    "commit": "b63f6d544399",
+    "print": "42c611b8b94c2d1b",
+    "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Statement mutation",
+    "line": "lk.Release();",
+    "commit": "b63f6d544399",
+    "print": "ac36c952311f1c46",
+    "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Statement mutation",
+    "line": "lk.Release();",
+    "commit": "b63f6d544399",
+    "print": "317b637f82bbc1fb",
+    "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
+  },
+  {
+    "file": "Keyboard.cs",
+    "mutator": "Statement mutation",
+    "line": "lk.Release();",
+    "commit": "b63f6d544399",
+    "print": "74cfb12284218790",
     "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
   },
   {
     "file": "Keyboard.cs",
     "mutator": "Conditional (false) mutation",
     "line": "a = space < 0 ? -1 : a + space + 1;",
+    "commit": "b63f6d544399",
+    "print": "a0288b2599ba7e23",
     "reason": "consctl's words are never got past, so its write never ends"
   },
   {
     "file": "Keyboard.cs",
     "mutator": "Equality mutation",
     "line": "a = space < 0 ? -1 : a + space + 1;",
+    "commit": "b63f6d544399",
+    "print": "a0288b2599ba7e23",
     "reason": "consctl's words are never got past, so its write never ends"
   },
   {
     "file": "Keyboard.cs",
     "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
     "line": "a = space < 0 ? -1 : a + space + 1;",
+    "commit": "b63f6d544399",
+    "print": "a0288b2599ba7e23",
     "reason": "consctl's words are never got past, so its write never ends"
   },
   {
     "file": "Keyboard.cs",
     "mutator": "Arithmetic mutation",
     "line": "a = space < 0 ? -1 : a + space + 1;",
+    "commit": "b63f6d544399",
+    "print": "a0288b2599ba7e23",
     "reason": "consctl's words are never got past, so its write never ends"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await fs.ReleaseAsync();",
+    "commit": "b63f6d544399",
+    "print": "715ed174dffbb13d",
+    "reason": "a confirm's writer that keeps the server while it runs the rpc it answered takes the server again, which it already holds"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.ReleaseAsync();",
+    "commit": "b63f6d544399",
+    "print": "e5eba4496f912721",
+    "reason": "a confirm's writer that keeps the server while it runs the rpc it answered takes the server again, which it already holds"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.ReleaseAsync();",
+    "commit": "b63f6d544399",
+    "print": "4a438d916bb31c1d",
     "reason": "a confirm's writer that keeps the server while it runs the rpc it answered takes the server again, which it already holds"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Equality mutation",
     "line": "if (nmatch++ < ki.Skip)",
+    "commit": "b63f6d544399",
+    "print": "09ee2bf73f35feca",
     "reason": "each key of the listing is the first, so ctl's listing never ends"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "7c80dc1d5789ef72",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "9928cffa59eea1bb",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "dc0711525f10b6d0",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "f7d0ca1dcfaadb17",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "66b473295bd36e14",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "b93ce3d54c389723",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "31a8cfbf207c9e03",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "dcf086d9393f1dd8",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "96900a38c8774a8d",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "d764190a972a7629",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "274fc3a9c8bad30c",
+    "reason": "a request left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fs.RespondAsync(r, null);",
+    "commit": "b63f6d544399",
+    "print": "f21c2aa44da5ab6e",
     "reason": "a request left unanswered keeps its client waiting for ever"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await RpcwriteAsync(r);",
+    "commit": "b63f6d544399",
+    "print": "80c0ce17d133eb6a",
     "reason": "an rpc write left unanswered keeps its client waiting for ever"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await fs.RespondAsync(r, Readlist(s!, (i, n) => Keylist(s!, i, n), r));",
+    "commit": "b63f6d544399",
+    "print": "07c5bb16521e8057",
     "reason": "a read of ctl left unanswered keeps its client waiting for ever"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await FsrpcioAsync(r);",
+    "commit": "b63f6d544399",
+    "print": "f9638193d3c39118",
+    "reason": "an rpc read left unanswered keeps its client waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await FsrpcioAsync(r);",
+    "commit": "b63f6d544399",
+    "print": "7c06aa02359c277a",
     "reason": "an rpc read left unanswered keeps its client waiting for ever"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await fs.RespondAsync(r, Errstr);",
+    "commit": "b63f6d544399",
+    "print": "41ed5786a8548fa6",
     "reason": "a write of ctl left unanswered keeps its client waiting for ever"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Logical mutation",
     "line": "if (lb.Wait.Count == 0 || lb.Rp == lb.Wp)",
+    "commit": "b63f6d544399",
+    "print": "96e4221a1c77c2fc",
     "reason": "a log read is answered with a message there is not, and the read that logged waits for ever"
   },
   {
     "file": "Authsrv.cs",
     "mutator": "Statement mutation",
     "line": "await up.WriteAsync(fd, ConvTR2M(tr));",
+    "commit": "b63f6d544399",
+    "print": "a31be29785b9ab2b",
     "reason": "the auth server waits for ever for a request never sent"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "f21cc3fd9593a055",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "b5256537df515c39",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "cc6e082abbcb041a",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "62cc5ad91ee0274e",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "8065c856a17681f3",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "a56b087c60325da6",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "51161f68e52f38a2",
+    "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "b63f6d544399",
+    "print": "ab38db904a99c25b",
     "reason": "findkey's skip passed by, every key of ctl's listing is the first, and the listing never ends"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "fss.Lock.Release();",
+    "commit": "b63f6d544399",
+    "print": "aab8d040a9f33b67",
+    "reason": "a conversation's lock never let go leaves its next rpc waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "fss.Lock.Release();",
+    "commit": "b63f6d544399",
+    "print": "795e06c811cce818",
+    "reason": "a conversation's lock never let go leaves its next rpc waiting for ever"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "fss.Lock.Release();",
+    "commit": "b63f6d544399",
+    "print": "5bdcdfaad3b6e98b",
     "reason": "a conversation's lock never let go leaves its next rpc waiting for ever"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Conditional (false) mutation",
     "line": "int sp = Array.IndexOf(buf, (byte)' ', 0, nul < 0 ? buf.Length : nul);",
+    "commit": "b63f6d544399",
+    "print": "cb3e55646e8e0a46",
     "reason": "An rpc written without a NUL is searched for its space over a count of -1, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes."
   },
   {
     "file": "Factotum.cs",
     "mutator": "Conditional (true) mutation",
     "line": "fss.Verb = Encoding.UTF8.GetString(buf, 0, sp >= 0 ? sp : nul >= 0 ? nul : buf.Length);",
+    "commit": "b63f6d544399",
+    "print": "e18cbddd32a5f948",
     "reason": "A verb without a space, as read is, is taken over a count of -1, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes."
   },
   {
     "file": "RcShell.cs",
     "mutator": "Null coalescing mutation (remove left)",
     "line": "await PushopenAsync(await Dup1Async(from) ?? Closed, to);",
+    "commit": "0f96f33eb5cb",
+    "print": "c31d673ccb64d439",
     "reason": "the descriptor a waiting dup would clobber is moved to none, which a redirection waiting to run also sets, so pushopen moves it again until the stack overflows"
   },
   {
     "file": "RcShell.System.cs",
     "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
     "line": "private ValueTask<int?> Dup1Async(int a) => DupAsync(a, -1);",
+    "commit": "0f96f33eb5cb",
+    "print": "193a4e2da12d08c9",
     "reason": "the descriptor a waiting dup would clobber is moved onto 1, which a redirection waiting to run sets, so pushopen moves it again until the stack overflows"
   },
   {
     "file": "Arguments.cs",
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "for (; next < argv.Count && argv[next].Length > 1 && argv[next][0] == '-'; next++)",
+    "commit": "0f96f33eb5cb",
+    "print": "4a5a03241c1f2e67",
     "reason": "after a flag that takes the next argument, the index steps back onto the flag, so mntgen -s, run as the kernel boots, reads it again for ever"
   },
   {
     "file": "Arguments.cs",
     "mutator": "PreIncrementExpression to PreDecrementExpression mutation",
     "line": "return next + 1 < argv.Count ? argv[++next] : null;",
+    "commit": "0f96f33eb5cb",
+    "print": "34ebe782a6444c72",
     "reason": "a flag's value is taken from before the flag, and the index stepped back onto the flag reads it again for ever, as mntgen -s does as the kernel boots"
   },
   {
     "file": "Waiting.cs",
     "mutator": "Statement mutation",
     "line": "await task;",
+    "commit": "0f96f33eb5cb",
+    "print": "9e8f12b8187a294c",
     "reason": "every wait ends at once, so a reader of an empty pipe goes round its loop for ever"
   },
   {
     "file": "Pak.cs",
     "mutator": "Statement mutation",
     "line": "i++;",
+    "commit": "c4d3912684ae",
+    "print": "f2dae5c998d19959",
+    "reason": "strtomp's scan never moves past the blank or the digit it is on, and goes round for ever without yielding"
+  },
+  {
+    "file": "Pak.cs",
+    "mutator": "Statement mutation",
+    "line": "i++;",
+    "commit": "c4d3912684ae",
+    "print": "b7ef4ddd11807cf5",
     "reason": "strtomp's scan never moves past the blank or the digit it is on, and goes round for ever without yielding"
   },
   {
     "file": "Attr.cs",
     "mutator": "Block removal mutation",
     "line": "while (a is not null && a.Name == name) {",
+    "commit": "c4d3912684ae",
+    "print": "20c4f3ec6f6c02b6",
     "reason": "_delattr never steps past the first attribute of the name, and goes round for ever without yielding"
   },
   {
     "file": "Attr.cs",
     "mutator": "Block removal mutation",
     "line": "if (l.Next.Name == name) {",
+    "commit": "c4d3912684ae",
+    "print": "9515c33befa3b298",
     "reason": "_delattr neither drops an attribute of the name nor steps past it, and goes round for ever without yielding"
   },
   {
     "file": "Attr.cs",
     "mutator": "Block removal mutation",
     "line": "else {",
+    "commit": "c4d3912684ae",
+    "print": "bc26d40c9fed54e4",
     "reason": "the walk down the list never steps past an attribute it keeps, and goes round for ever without yielding"
   },
   {
     "file": "RcShell.cs",
     "mutator": "Equality mutation",
     "line": "if (rp.To == fd)",
+    "commit": "adad0ca0932d",
+    "print": "9b630d74074c267e",
     "reason": "every descriptor is taken as clobbered, so pushopen moves it again and again until the stack overflows"
   },
   {
     "file": "RcShell.Fork.cs",
     "mutator": "Arithmetic mutation",
     "line": "child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);",
+    "commit": "adad0ca0932d",
+    "print": "bd4b64dd927049f2",
+    "reason": "the child starts at the instruction that forked it, the &, backquote or subshell, so it forks again, without end"
+  },
+  {
+    "file": "RcShell.Fork.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);",
+    "commit": "adad0ca0932d",
+    "print": "0c1f8b70238736f7",
+    "reason": "the child starts at the instruction that forked it, the &, backquote or subshell, so it forks again, without end"
+  },
+  {
+    "file": "RcShell.Fork.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);",
+    "commit": "adad0ca0932d",
+    "print": "70dcb47a215dab98",
     "reason": "the child starts at the instruction that forked it, the &, backquote or subshell, so it forks again, without end"
   },
   {
     "file": "RcShell.Fork.cs",
     "mutator": "Bitwise mutation",
     "line": "long pid = process.Fork(RforkFlags.Fdg | RforkFlags.Rend, async forked =>",
+    "commit": "127f75c933fa",
+    "print": "a8d511b3dca1d3d6",
     "reason": "the child shares the shell's descriptors, so each one pushopen dups to is one a redirection waiting to run sets, and it moves it again until the stack overflows"
   },
   {
     "file": "Libauth.cs",
     "mutator": "Boolean mutation",
     "line": "while (true)",
+    "commit": "b99993b6a4be",
+    "print": "0e333dd948a801dc",
+    "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
+  },
+  {
+    "file": "Libauth.cs",
+    "mutator": "Boolean mutation",
+    "line": "while (true)",
+    "commit": "b99993b6a4be",
+    "print": "c6ee61939072f559",
     "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
   },
   {
     "file": "Libauth.cs",
     "mutator": "Negate expression",
     "line": "while (true)",
+    "commit": "b99993b6a4be",
+    "print": "0e333dd948a801dc",
+    "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
+  },
+  {
+    "file": "Libauth.cs",
+    "mutator": "Negate expression",
+    "line": "while (true)",
+    "commit": "b99993b6a4be",
+    "print": "c6ee61939072f559",
     "reason": "dorpc answers ok without asking factotum, so fauth_proxy writes to the conversation without end"
   },
   {
     "file": "Pak.cs",
     "mutator": "Arithmetic mutation",
     "line": "BigInteger q = r0 / r1;",
+    "commit": "3633bd2ce560",
+    "print": "66d3e1b4b70a64f7",
     "reason": "mpinvert's remainders grow rather than shrink, so the extended gcd never reaches zero"
   },
   {
     "file": "Pak.cs",
     "mutator": "Arithmetic mutation",
     "line": "(r0, r1) = (r1, r0 - (q * r1));",
+    "commit": "3633bd2ce560",
+    "print": "b819c66df3194a6a",
     "reason": "mpinvert's remainders grow, or shrink by next to nothing, so the extended gcd never reaches zero"
   },
   {
     "file": "Process.cs",
     "mutator": "Negate expression",
     "line": "while (t < line.Length && Separator(line[t]))",
+    "commit": "fb2163bdf813",
+    "print": "2280fe5528690f52",
     "reason": "tokenize's skip runs on past the line's end, counting through every int until the index fails, for each line it reads"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await WalkAndCloneAsync(r, Walk1, Clone);",
+    "commit": "f6f1b5fdf72e",
+    "print": "c46e0c186da160b1",
     "reason": "a walk by walk1 is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
+    "commit": "f6f1b5fdf72e",
+    "print": "904598bd464e5ee4",
     "reason": "an open is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await RespondAsync(r, r.Fid is null ? Eunknownfid : null);",
+    "commit": "f6f1b5fdf72e",
+    "print": "8fd0f018d01d38ff",
     "reason": "a clunk is never answered"
   },
   {
     "file": "Srv.cs",
     "mutator": "Null coalescing mutation (left to right)",
     "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
+    "commit": "f6f1b5fdf72e",
+    "print": "904598bd464e5ee4",
     "reason": "an open is answered without the server's own open, so the file is never readied and its client (the secstore scenarios) waits forever"
   },
   {
     "file": "Srv.cs",
     "mutator": "Null coalescing mutation (remove left)",
     "line": "await (Open?.Invoke(r) ?? RespondAsync(r, null));",
+    "commit": "f6f1b5fdf72e",
+    "print": "904598bd464e5ee4",
     "reason": "an open is answered without the server's own open, so the file is never readied and its client (the secstore scenarios) waits forever"
   },
   {
     "file": "Libc.cs",
     "mutator": "Statement mutation",
     "line": "f.Out.Add(fmt[p++]);",
+    "commit": "0123dad1b7e9",
+    "print": "87edbff4b7976447",
     "reason": "sprint's copy of the format's text never reaches the %"
   },
   {
     "file": "Libc.cs",
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "f.Out.Add(fmt[p++]);",
+    "commit": "0123dad1b7e9",
+    "print": "87edbff4b7976447",
     "reason": "sprint's copy of the format's text never reaches the %"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "if (c is >= '0' and <= '9')",
+    "commit": "0123dad1b7e9",
+    "print": "752697faf12bedd9",
     "reason": "strtod takes the NULs past the number as digits, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Logical mutation",
     "line": "if (c is >= '0' and <= '9')",
+    "commit": "0123dad1b7e9",
+    "print": "752697faf12bedd9",
     "reason": "strtod takes the NULs past the number as digits, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "if (c is '\\t' or '\\n' or '\\v' or '\\f' or '\\r' or ' ' && state == 0)",
+    "commit": "0123dad1b7e9",
+    "print": "1ffcab093fe2ff14",
     "reason": "strtod skips the NULs past the number as blanks, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Logical mutation",
     "line": "if (c is '\\t' or '\\n' or '\\v' or '\\f' or '\\r' or ' ' && state == 0)",
+    "commit": "0123dad1b7e9",
+    "print": "1ffcab093fe2ff14",
     "reason": "strtod skips the NULs past the number as blanks, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Negate expression",
     "line": "if (c is '\\t' or '\\n' or '\\v' or '\\f' or '\\r' or ' ' && state == 0)",
+    "commit": "0123dad1b7e9",
+    "print": "1ffcab093fe2ff14",
     "reason": "strtod skips the NULs past the number as blanks, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Negate expression",
     "line": "else if (c is 'e' or 'E' && state is 2 or 4)",
+    "commit": "0123dad1b7e9",
+    "print": "d50d53903e5b7c81",
     "reason": "strtod takes each NUL past the number as an exponent's e, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Arithmetic mutation",
     "line": "return n < Tab.Length ? 1 / Tab[n] : 1 / (Pow10(n / 2) * Pow10(n - (n / 2)));",
+    "commit": "0123dad1b7e9",
+    "print": "3f90852b74db9e68",
     "reason": "pow10 recurses on a half that does not shrink"
   },
   {
     "file": "Libc.cs",
     "mutator": "Arithmetic mutation",
     "line": "return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));",
+    "commit": "0123dad1b7e9",
+    "print": "6f7ae9d4e3cad46f",
     "reason": "pow10 recurses on a half that does not shrink"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));",
+    "commit": "0123dad1b7e9",
+    "print": "6f7ae9d4e3cad46f",
     "reason": "pow10 recurses on a half that does not shrink"
   },
   {
     "file": "Libc.cs",
     "mutator": "Conditional (false) mutation",
     "line": "return n < Tab.Length ? Tab[n] : Pow10(n / 2) * Pow10(n - (n / 2));",
+    "commit": "0123dad1b7e9",
+    "print": "6f7ae9d4e3cad46f",
     "reason": "pow10 recurses on a half that does not shrink"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "if (n < 0 || n >= Nsignif)",
+    "commit": "0123dad1b7e9",
+    "print": "314e810f614e53f0",
     "reason": "xadd's carry runs off its digits, and xdtoa's conversion back never settles"
   },
   {
     "file": "Libc.cs",
     "mutator": "Negate expression",
     "line": "if (n < 0 || n >= Nsignif)",
+    "commit": "0123dad1b7e9",
+    "print": "314e810f614e53f0",
     "reason": "xadd's carry runs off its digits, and xdtoa's conversion back never settles"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "for (int b = n; b >= 0; b--)",
+    "commit": "0123dad1b7e9",
+    "print": "bc4dee460b314b22",
+    "reason": "the carry or borrow never stops, or xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int b = n; b >= 0; b--)",
+    "commit": "0123dad1b7e9",
+    "print": "b0a29d0750b11347",
     "reason": "the carry or borrow never stops, or xdtoa's conversion back never settles"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "if (c <= '9')",
+    "commit": "0123dad1b7e9",
+    "print": "e2a4485abbae4c96",
     "reason": "a 9 carries, so xdtoa's conversion back never settles"
   },
   {
     "file": "Libc.cs",
     "mutator": "Boolean mutation",
     "line": "return false;",
+    "commit": "0123dad1b7e9",
+    "print": "0b603df9edc2e576",
+    "reason": "a carry or borrow that ends is taken as one that went past the first digit, so xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Boolean mutation",
+    "line": "return false;",
+    "commit": "0123dad1b7e9",
+    "print": "3a24391637991be1",
+    "reason": "a carry or borrow that ends is taken as one that went past the first digit, so xdtoa's conversion back never settles"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Boolean mutation",
+    "line": "return false;",
+    "commit": "0123dad1b7e9",
+    "print": "59797bd4cb83b567",
     "reason": "a carry or borrow that ends is taken as one that went past the first digit, so xdtoa's conversion back never settles"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "for (int i = 0; i < n; i++)",
+    "commit": "0123dad1b7e9",
+    "print": "51c795db79ca1cb4",
     "reason": "Pad's loop does not end for a negative count"
   },
   {
     "file": "Libc.cs",
     "mutator": "Arithmetic mutation",
     "line": "private static double Strtod(char[] digits, int e) => double.Parse($\"{new string(digits)}e{e - Nsignif + 1}\", CultureInfo.InvariantCulture);",
+    "commit": "0123dad1b7e9",
+    "print": "cf07c58171c299d3",
     "reason": "xdtoa's digits are read back at the wrong exponent, so its conversion back never settles"
   },
   {
     "file": "Libc.cs",
     "mutator": "Equality mutation",
     "line": "while (At(s, p) is ' ' or '\\t' or '\\n' or '\\f' or '\\r' or '\\v')",
+    "commit": "0123dad1b7e9",
+    "print": "a3eb5f3518258e5c",
     "reason": "strtol skips the NULs past the number as blanks, without end"
   },
   {
     "file": "Libc.cs",
     "mutator": "Statement mutation",
     "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "a7000cb666d6150d",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "d646af7bef5b7be6",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "d66bf0dcb6ec915d",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "3c2d6bcfda72ac10",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "64d9220a6304ce4e",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "1c92ad47bbcdb27a",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "e41afdf3bb2da8f6",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "94c46a8489e6e76a",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "51001182117e1153",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "97b5feb370a18efd",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "40ad04db70a4ec34",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "071123a5f61026ee",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "5edd6e8534c5cf24",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "a04c68cd6c5f46b4",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "25a202776e8c0225",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "30b28938019d0688",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "afd6114f391c0092",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "a768a7f9211b4cb2",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "232753c5687110f4",
+    "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
+  },
+  {
+    "file": "Libc.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "0123dad1b7e9",
+    "print": "491a10954c56944f",
     "reason": "strtod's loop goes on past the number's end, each NUL a token of none of its states"
   },
   {
     "file": "Libc.cs",
     "mutator": "Statement mutation",
     "line": "p++;",
+    "commit": "0123dad1b7e9",
+    "print": "c448885275031222",
     "reason": "strtol's skip of blanks stays on the first"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Equality mutation",
     "line": "if (ocount < Bsize)",
+    "commit": "b2a075190ffd",
+    "print": "dc66d5c5d790f93f",
     "reason": "Bputc flushes an empty buffer and tries again, never putting the byte"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Negate expression",
     "line": "if (ocount < Bsize)",
+    "commit": "b2a075190ffd",
+    "print": "dc66d5c5d790f93f",
     "reason": "Bputc flushes an empty buffer and tries again, never putting the byte"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Block removal mutation",
     "line": "if (ocount < Bsize) {",
+    "commit": "b2a075190ffd",
+    "print": "e4fa8d08eba58018",
     "reason": "Bputc never puts the byte and flushes forever"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Equality mutation",
     "line": "for (int p = 0; p < data.Length;)",
+    "commit": "b2a075190ffd",
+    "print": "e407e2c3f01b63d8",
     "reason": "Bwrite at the end of data copies nothing and writes the buffer forever"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Equality mutation",
     "line": "if (n == 0)",
+    "commit": "b2a075190ffd",
+    "print": "1d020ad2538cf2c8",
     "reason": "Bwrite writes the buffer while it has room and never copies into it"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Equality mutation",
     "line": "if (ocount == 0)",
+    "commit": "b2a075190ffd",
+    "print": "b007fdff2f8ef9f2",
     "reason": "Bflush of a full buffer writes nothing, so Bputc flushes it forever"
   },
   {
     "file": "Tm.cs",
     "mutator": "Statement mutation",
     "line": "s++;",
+    "commit": "840333604c49",
+    "print": "31ffcebf4fd598ca",
+    "reason": "rdname's skip over the blanks before a name never moves past the first"
+  },
+  {
+    "file": "Tm.cs",
+    "mutator": "Statement mutation",
+    "line": "s++;",
+    "commit": "840333604c49",
+    "print": "daa885d2cfbc83db",
     "reason": "rdname's skip over the blanks before a name never moves past the first"
   },
   {
     "file": "Sort.cs",
     "mutator": "Statement mutation",
     "line": "b++;",
+    "commit": "2836ab947c52",
+    "print": "db963ac67f18e73c",
     "reason": "rsort4 sorts the same partitions on the same byte forever"
   },
   {
     "file": "Sort.cs",
     "mutator": "Equality mutation",
     "line": "for (int i = 0; i < ntemp; i++)",
+    "commit": "2836ab947c52",
+    "print": "4ae4fc9fedc39321",
     "reason": "done names one temporary file more, past the length tdir allows, and calls itself again"
   },
   {
     "file": "Sort.cs",
     "mutator": "Statement mutation",
     "line": "process.Exits(xs);",
+    "commit": "2836ab947c52",
+    "print": "f56a2a6df686e630",
     "reason": "done goes on to sort after it has ended, and ends again on each error"
   },
   {
     "file": "Export.cs",
     "mutator": "String mutation",
     "line": "var env = new NinePDir(\"env\");",
+    "commit": "630b2a37c234",
+    "print": "a2ecb4c7447bd1a5",
     "reason": "without /env the server function cannot write rstatus, and the session never ends"
   },
   {
     "file": "Export.cs",
     "mutator": "Statement mutation",
     "line": "root.AddChild(env);",
+    "commit": "630b2a37c234",
+    "print": "122a5a22641d084a",
     "reason": "without /env the server function cannot write rstatus, and the session never ends"
   },
   {
     "file": "Export.cs",
     "mutator": "String mutation",
     "line": "=> Encoding.UTF8.GetBytes(await read(ct) ?? string.Empty);",
+    "commit": "630b2a37c234",
+    "print": "ff35c87bae40a8e9",
     "reason": "a terminal at its end that gives a line forever is read forever"
   },
   {
     "file": "Rcpu.cs",
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "for (; i < args.Length && args[i].StartsWith('-'); i++)",
+    "commit": "630b2a37c234",
+    "print": "30314a3106c7dd7f",
     "reason": "the options are read backwards from the first forever"
   },
   {
     "file": "Process.cs",
     "mutator": "UnaryMinusExpression to UnaryPlusExpression mutation",
     "line": "=> await PReadAsync(fd, count, -1, cancellationToken);",
+    "commit": "f466eef77d20",
+    "print": "42b5143e4d8e9340",
     "reason": "a read at offset 1 gives the same bytes again, and a program reading to the end never meets it"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "41e48c22f20a2e27",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "5f5a30810185f6ad",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "899e5101c2d09bcb",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "429a0739d8b2e463",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "e5b11e43f9219469",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "8e16ac6400ad3f14",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "dcae5ceb3fcaf5c6",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "5e8d6698097e8f6a",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "edc90ba50e51d22d",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "2fbf0589df063adb",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "3a2b686bf83e3ecd",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "cd154115041b7575",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "21fccfb712973036",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "31954542c209137c",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "fa3d975f47b88370",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "243d176075eefc99",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "7e1b125ac6156a52",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "528c9d455c94bed9",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "4a26c3508b1e6854",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "71fe848bda983b54",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "ee617d1c1333d464",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "47c1a5bde3e83556",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "15d21e99f16cc50a",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "dff3122e994d7e1b",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "632e1948c09243f8",
+    "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "54bdd493b712",
+    "print": "82e1ed116ab374a7",
     "reason": "an rpc write answered is answered again as a write of ctl, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
   },
   {
     "file": "Factotum.cs",
     "mutator": "Statement mutation",
     "line": "await fss.Lock.WaitAsync();",
+    "commit": "54bdd493b712",
+    "print": "36000d73404bb295",
+    "reason": "a conversation's lock let go that was never taken is over its count, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fss.Lock.WaitAsync();",
+    "commit": "54bdd493b712",
+    "print": "64f70c9167ed4a10",
+    "reason": "a conversation's lock let go that was never taken is over its count, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
+  },
+  {
+    "file": "Factotum.cs",
+    "mutator": "Statement mutation",
+    "line": "await fss.Lock.WaitAsync();",
+    "commit": "54bdd493b712",
+    "print": "6c95f042de0d302e",
     "reason": "a conversation's lock let go that was never taken is over its count, which throws in factotum's server; the process serving the conversation is gone and the client waits for a reply that never comes"
   },
   {
     "file": "Rcpu.cs",
     "mutator": "PreIncrementExpression to PreDecrementExpression mutation",
     "line": "user = args[++i];",
+    "commit": "ab9615e4f5c6",
+    "print": "988b44745b584a2d",
     "reason": "-u after another option takes the option before it as its value and steps back onto -u, so the options are read again forever"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Block removal mutation",
     "line": "if (await BflushAsync() == Beof) {",
+    "commit": "dadaa1c51298",
+    "print": "94564c41c9fe6ed0",
     "reason": "a put whose flush fails flushes again, and a write that keeps failing never lets it end"
   },
   {
     "file": "Biobuf.cs",
     "mutator": "Boolean mutation",
     "line": "(inactive, ocount) = (true, Bsize);",
+    "commit": "dadaa1c51298",
+    "print": "57560b6ee8d6f585",
     "reason": "a buffer left active after a failed write is full, so each put flushes and fails again for ever"
   },
   {
     "file": "Read.cs",
     "mutator": "Equality mutation",
     "line": "for (long m = 0; m < Count;)",
+    "commit": "dadaa1c51298",
+    "print": "444ae01fa521640d",
     "reason": "read -c reads once more past its count, a read of nothing that waits on a pipe for what may never come"
   },
   {
     "file": "Srv.cs",
     "mutator": "Statement mutation",
     "line": "await (Write?.Invoke(r) ?? RespondAsync(r, \"write prohibited\"));",
+    "commit": "dadaa1c51298",
+    "print": "b39220394cfb085d",
     "reason": "a write left unanswered keeps its client waiting for ever"
   },
   {
     "file": "Test.cs",
     "mutator": "String mutation",
     "line": "[\"-s\"] = async b => await DirstatAsync(b) is { Length: > 0 },",
+    "commit": "dadaa1c51298",
+    "print": "3d8a11eec54671fd",
     "reason": "test -s is never true, and a script waiting with it for a file to fill waits for ever"
   },
   {
     "file": "Regexp.cs",
     "mutator": "Block removal mutation",
     "line": "while (n.Left!.Op == TCat) {",
+    "commit": "450426811911",
+    "print": "b663b3471d40f7f5",
     "reason": "a concatenation left unrotated is rotated again for ever"
   },
   {
     "file": "Regexp.cs",
     "mutator": "Boolean mutation",
     "line": "literal = false;",
+    "commit": "450426811911",
+    "print": "3e2cbf9dfbce825a",
     "reason": "every rune is literal, the end's 0 among them, so the parse never reaches its end"
   },
   {
     "file": "Regexp.cs",
     "mutator": "Boolean mutation",
     "line": "(literal, rune) = (false, 0);",
+    "commit": "450426811911",
+    "print": "61b9771c962c1024",
     "reason": "the end's 0 is literal, a rune like any other, so the parse never reaches its end"
   },
   {
     "file": "Regexp.cs",
     "mutator": "Boolean mutation",
     "line": "peek = false;",
+    "commit": "450426811911",
+    "print": "a8171e5956d68570",
     "reason": "a token peeked at is given again for ever"
   },
   {
     "file": "Regexp.cs",
     "mutator": "Negate expression",
     "line": "if (literal)",
+    "commit": "450426811911",
+    "print": "2ab080627e74a6cf",
     "reason": "the end's 0, not literal, is taken for a rune, so the parse never reaches its end"
   },
   {
     "file": "Grep.cs",
     "mutator": "Statement mutation",
     "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "c48c61ec3ebfe782",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "c57c4f17ea03a178",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "15c3007af87bb9b6",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "be36b8eac6c7d980",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "328d15c4e78279b0",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "124051a1491af497",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "1eb906bf5907f069",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "0c4071ec58120bbf",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "d9c2e9ad7e970be9",
+    "reason": "a token not shifted is read again for ever"
+  },
+  {
+    "file": "Grep.cs",
+    "mutator": "Statement mutation",
+    "line": "Shift();",
+    "commit": "7cab480955e0",
+    "print": "c724d346604b3daf",
     "reason": "a token not shifted is read again for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Equality mutation",
     "line": "if (p0 <= m && p1 > m)",
+    "commit": "7cab480955e0",
+    "print": "808bd0b38ea37b4e",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Logical mutation",
     "line": "if (p0 <= m && p1 > m)",
+    "commit": "7cab480955e0",
+    "print": "808bd0b38ea37b4e",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Negate expression",
     "line": "if (p0 <= m && p1 > m)",
+    "commit": "7cab480955e0",
+    "print": "808bd0b38ea37b4e",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Arithmetic mutation",
     "line": "return Re2or(Rclass(p0, m), Rclass(m + 1, p1));",
+    "commit": "7cab480955e0",
+    "print": "90572828321b39bf",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Bitwise mutation",
     "line": "if ((p0 & ~m) != (p1 & ~m))",
+    "commit": "7cab480955e0",
+    "print": "972aa6f483a3ab00",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "BitwiseNotExpression to un-BitwiseNotExpression mutation",
     "line": "if ((p0 & ~m) != (p1 & ~m))",
+    "commit": "7cab480955e0",
+    "print": "972aa6f483a3ab00",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Equality mutation",
     "line": "if ((p0 & ~m) != (p1 & ~m))",
+    "commit": "7cab480955e0",
+    "print": "972aa6f483a3ab00",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Bitwise mutation",
     "line": "if ((p0 & m) != 0)",
+    "commit": "7cab480955e0",
+    "print": "96a62ea2c8a9d2fc",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Equality mutation",
     "line": "if ((p0 & m) != 0)",
+    "commit": "7cab480955e0",
+    "print": "96a62ea2c8a9d2fc",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Arithmetic mutation",
     "line": "return Re2or(Rclass(p0, p0 | m), Rclass((p0 | m) + 1, p1));",
+    "commit": "7cab480955e0",
+    "print": "68f699c79bd72869",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Bitwise mutation",
     "line": "return Re2or(Rclass(p0, p0 | m), Rclass((p0 | m) + 1, p1));",
+    "commit": "7cab480955e0",
+    "print": "68f699c79bd72869",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Bitwise mutation",
     "line": "if ((p1 & m) != m)",
+    "commit": "7cab480955e0",
+    "print": "9234d4cdda2da9aa",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Equality mutation",
     "line": "if ((p1 & m) != m)",
+    "commit": "7cab480955e0",
+    "print": "9234d4cdda2da9aa",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Arithmetic mutation",
     "line": "return Re2or(Rclass(p0, (p1 & ~m) - 1), Rclass(p1 & ~m, p1));",
+    "commit": "7cab480955e0",
+    "print": "edb27e2e91073cb5",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Bitwise mutation",
     "line": "return Re2or(Rclass(p0, (p1 & ~m) - 1), Rclass(p1 & ~m, p1));",
+    "commit": "7cab480955e0",
+    "print": "edb27e2e91073cb5",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "BitwiseNotExpression to un-BitwiseNotExpression mutation",
     "line": "return Re2or(Rclass(p0, (p1 & ~m) - 1), Rclass(p1 & ~m, p1));",
+    "commit": "7cab480955e0",
+    "print": "edb27e2e91073cb5",
     "reason": "a range not broken where it should be is broken again into itself, and rclass recurses for ever"
   },
   {
     "file": "Grep.cs",
     "mutator": "Block removal mutation",
     "line": "if (r.Gen == gen) {",
+    "commit": "7cab480955e0",
+    "print": "4cde4cb5a35ef7a1",
     "reason": "addcase visits a node again, and a cycle of alternations for ever"
   },
   {
     "file": "Aescbc.cs",
     "mutator": "Equality mutation",
     "line": "for (byte[] more; (more = await BreadAsync(Buf)).Length > 0;)",
+    "commit": "5c395b47691a",
+    "print": "abd73fd32aefcf97",
+    "reason": "a read at the end of the input gives nothing, and the loop reads again without end"
+  },
+  {
+    "file": "Aescbc.cs",
+    "mutator": "Equality mutation",
+    "line": "for (byte[] more; (more = await BreadAsync(Buf)).Length > 0;)",
+    "commit": "5c395b47691a",
+    "print": "14795a45daa21f3e",
     "reason": "a read at the end of the input gives nothing, and the loop reads again without end"
   },
   {
     "file": "AwkRun.cs",
     "mutator": "Equality mutation",
     "line": "if (n <= 0)",
+    "commit": "86c45cbebd22",
+    "print": "d9488f859f8e5dc6",
     "reason": "ipow halves n to 0 and calls itself again for 0, without end, until the stack overflows"
   },
   {
     "file": "AwkTran.cs",
     "mutator": "Logical mutation",
     "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "bf5ae13e9f1c317d",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Logical mutation",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "338c186a1295ab23",
     "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
   },
   {
     "file": "AwkTran.cs",
     "mutator": "Negate expression",
     "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "bf5ae13e9f1c317d",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Negate expression",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "338c186a1295ab23",
     "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
   },
   {
     "file": "AwkTran.cs",
     "mutator": "Equality mutation",
     "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "bf5ae13e9f1c317d",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Equality mutation",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "338c186a1295ab23",
     "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
   },
   {
     "file": "AwkTran.cs",
     "mutator": "Bitwise mutation",
     "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "bf5ae13e9f1c317d",
+    "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Bitwise mutation",
+    "line": "else if ((vp.Tval & Rec) != 0 && !donerec)",
+    "commit": "86c45cbebd22",
+    "print": "338c186a1295ab23",
     "reason": "a read of a field rebuilds the record, whose rebuild reads its fields, until the stack overflows"
   },
   {
     "file": "AwkTran.cs",
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "line": "for (int i = 1; i <= nfloc.Fval; i++)",
+    "commit": "86c45cbebd22",
+    "print": "712fdf86de723d24",
     "reason": "the rebuild counts down to $0, whose read rebuilds the record again, until the stack overflows"
   },
   {
     "file": "Du.cs",
     "mutator": "Logical mutation",
     "line": "if (d.Name is \".\" or \"..\" || !cache.Add((d.Qid.Path, d.Type, d.Dev)))",
+    "commit": "86c45cbebd22",
+    "print": "66709223c5734c2d",
     "reason": "du goes again into a directory it has seen, round a cycle, until the stack overflows"
   },
   {
     "file": "Du.cs",
     "mutator": "Statement mutation",
     "line": "continue;",
+    "commit": "86c45cbebd22",
+    "print": "cdd60a5b6eadf2bf",
+    "reason": "du goes again into a directory it has seen, round a cycle, until the stack overflows"
+  },
+  {
+    "file": "Du.cs",
+    "mutator": "Statement mutation",
+    "line": "continue;",
+    "commit": "86c45cbebd22",
+    "print": "c2a62157b369be22",
     "reason": "du goes again into a directory it has seen, round a cycle, until the stack overflows"
   },
   {
     "file": "Read.cs",
     "mutator": "Statement mutation",
     "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "e72a88ee4828f3e7",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "c17ba75fc209819c",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "2b9fa5196f3a66d0",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "14b49fdf3ef39d3e",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "2ffcce04e4cb3df5",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "0d225894ad1509ae",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "da6f1e5cfa70f0f6",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "c5d40f09ab698ef1",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "ce0486c5263d99e3",
+    "reason": "a read at the end gives nothing, and read reads again without end"
+  },
+  {
+    "file": "Read.cs",
+    "mutator": "Statement mutation",
+    "line": "break;",
+    "commit": "86c45cbebd22",
+    "print": "7387d0277eb6ccc9",
     "reason": "a read at the end gives nothing, and read reads again without end"
   },
   {
     "file": "Sed.cs",
     "mutator": "Equality mutation",
     "line": "if (p != addr)",
+    "commit": "86c45cbebd22",
+    "print": "5e4cc14e4f5f0956",
     "reason": "the end of the input is taken as an empty last line again and again, so sed writes lines without end"
   },
   {
     "file": "RcShell.Fork.cs",
     "mutator": "Statement mutation",
     "line": "await CloseAsync(sidefd);",
+    "commit": "6a656c192e53",
+    "print": "9eaaf33f05cdce67",
     "reason": "the shell keeps the pipe's other end, so whatever reads it never sees its end and waits for good"
   },
   {
     "file": "RcShell.Trap.cs",
     "mutator": "Statement mutation",
     "line": "--trap[i];",
+    "commit": "6a656c192e53",
+    "print": "02ad05ec59ef53d6",
     "reason": "the trap's count is never taken down, so its function runs again without end"
   },
   {
     "file": "Secstore.cs",
     "mutator": "Equality mutation",
     "line": "for (int cur = 0; cur < memfile.Length;)",
+    "commit": "ad73d86f2a50",
+    "print": "e6a5d6c48737f4c1",
     "reason": "at the end an empty line is found again, so secstore writes it to factotum without end"
   },
   {
     "file": "Secstore.cs",
     "mutator": "Arithmetic mutation",
     "line": "int end = next < 0 ? memfile.Length : next + 1;",
+    "commit": "ad73d86f2a50",
+    "print": "59222f3c5b805bf3",
     "reason": "a line is cut before its newline, which is found again, so secstore writes nothing to factotum without end"
   }
 ]
