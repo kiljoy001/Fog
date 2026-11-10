@@ -109,15 +109,19 @@ public sealed class ServerSteps(StoreContext context)
 
     [Given(@"^(\w+) attaches to ""(.*)""$")]
     [When(@"^(\w+) attaches to ""(.*)""$")]
-    public void WhenAttaches(string user, string aname) => context.Files = context.Server!.Attach(aname);
+    public void WhenAttaches(string user, string aname) => context.Files = context.Server!.Attach(aname, user);
 
     [Then(@"^attaching to ""(.*)"" fails with ""(.*)""$")]
-    public void ThenAttachFails(string aname, string error)
-        => Assert.Equal(error, Assert.Throws<GefsException>(() => context.Server!.Attach(aname)).Message);
+    public void ThenAttachFails(string aname, string error) => ThenUserAttachFails("adm", aname, error);
+
+    [Then(@"^(\w+) attaching to ""(.*)"" fails with ""(.*)""$")]
+    public void ThenUserAttachFails(string user, string aname, string error)
+        => Assert.Equal(error, Assert.Throws<GefsException>(() => context.Server!.Attach(aname, user)).Message);
 
     [When(@"^(\d+) (?:more )?seconds? pass(?:es)?$")]
     public void WhenTimePasses(int seconds) => context.Clock.Advance(TimeSpan.FromSeconds(seconds));
 
+    [Given(@"^the server (snapshots|forks) (\w+) as (\w+)$")]
     [When(@"^the server (snapshots|forks) (\w+) as (\w+)$")]
     public void WhenSnaps(string how, string label, string name) => context.Server!.Snap(label, name, how == "forks");
 
@@ -186,7 +190,7 @@ public sealed class ServerSteps(StoreContext context)
     [When(@"^(\d+) users each write (\d+) files at once, half through ""(\w+)"" and half through ""(\w+)""$")]
     public void WhenWritersRace(int writers, int files, string first, string second)
     {
-        GefsFs[] trees = [context.Server!.Attach(first), context.Server.Attach(second)];
+        GefsFs[] trees = [context.Server!.Attach(first, "adm"), context.Server.Attach(second, "adm")];
         Task[] running = [.. Enumerable.Range(0, writers).Select(w => Task.Run(() =>
         {
             GefsFs fs = trees[w * 2 / writers];
@@ -206,7 +210,7 @@ public sealed class ServerSteps(StoreContext context)
     {
         foreach (var (label, writers) in new[] { ("main", Enumerable.Range(0, 4)), ("work", Enumerable.Range(4, 4)) })
         {
-            GefsFs fs = context.Server!.Attach(label);
+            GefsFs fs = context.Server!.Attach(label, "adm");
             string[] names = [.. writers.SelectMany(w => Enumerable.Range(0, 20).Select(f => $"w{w}-{f}"))];
             Assert.Equal(names.Order(), Run(fs.ReadDirectoryAsync(fs.Root, default)).Select(e => e.Name).Order());
             foreach (string name in names)

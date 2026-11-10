@@ -14,8 +14,10 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
   bumps its directory's.
 
   Users are each in a group of their own name; bob is in dev too and glenda in sys. As in gefs
-  for a group with no leader named, any member of a group may act as its leader. Members of adm
-  may give files away. Times are in seconds. Paths are walked from the root, and
+  for a group with no leader named, any member of a group may act as its leader. Only an attach
+  with gefs's permit, which a member of adm gets by attaching to a name starting with %, may give
+  files away, and no permission is checked through it; %adm is adm acting through one. Times are
+  in seconds. Paths are walked from the root, and
   names list in key order: shorter names first.
 
   Background:
@@ -192,7 +194,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
   @FOG_GEFS_607
   Scenario Outline: Opening needs the permission its mode asks for
     When adm creates file plan in the root with mode 0600 at time 200
-    And adm sets plan's mode to <mode>, group to <group> and owner to <owner> at time 200
+    And %adm sets plan's mode to <mode>, group to <group> and owner to <owner> at time 200
     Then <who> opening plan to <how> <result>
 
     Examples:
@@ -280,7 +282,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
   Scenario Outline: A wstat changes what it names, and records who changed it
     When adm creates file notes in the root with mode 0644 at time 200
     And adm writes "hello, world" to notes at offset 0 at time 300
-    And adm sets <change> of notes at time 400
+    And %adm sets <change> of notes at time 400
     Then notes is a file "notes" owned by <owner> in group <group>, mode <mode>, version 2, modified at <mtime>, <length> bytes long, last changed by adm
     And the store has not committed since it was reamed
 
@@ -314,7 +316,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     When adm creates directory usr in the root with mode d0775 at time 200
     And adm creates file notes in usr with mode 0644 at time 200
     And adm creates file other in usr with mode 0644 at time 200
-    And adm sets usr/notes's mode to 0664, group to dev and owner to bob at time 200
+    And %adm sets usr/notes's mode to 0664, group to dev and owner to bob at time 200
     Then <who> setting <change> of <what> fails with "<error>"
     And usr/notes is a file "notes" owned by bob in group dev, mode 0664, version 1, modified at 200
 
@@ -345,7 +347,7 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
   Scenario Outline: A wstat that names what is already there needs no permission, and records who sent it
     When adm creates directory usr in the root with mode d0775 at time 200
     And adm creates file notes in usr with mode 0644 at time 200
-    And adm sets usr/notes's mode to 0664, group to dev and owner to bob at time 200
+    And %adm sets usr/notes's mode to 0664, group to dev and owner to bob at time 200
     And glenda sets <change> of usr/notes at time 300
     Then usr/notes is a file "notes" owned by bob in group dev, mode 0664, version 2, modified at 200, 0 bytes long, last changed by glenda
 
@@ -359,9 +361,9 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | the name to notes |
 
   @FOG_GEFS_609
-  Scenario Outline: The owner, a group leader or a member of adm may change a mode or a group
+  Scenario Outline: The owner, a group leader or the permit may change a mode or a group
     When adm creates file notes in the root with mode 0644 at time 200
-    And adm sets notes's mode to 0644, group to <from> and owner to <owner> at time 200
+    And %adm sets notes's mode to 0644, group to <from> and owner to <owner> at time 200
     And <who> sets the <field> to <value> of notes at time 300
     Then notes's <field> is <value>
 
@@ -372,13 +374,13 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
       | glenda | adm  | adm    | mode  | 0600  |
       | bob    | dev  | bob    | group | bob   |
       | adm    | dev  | bob    | group | bob   |
-      | glenda | adm  | adm    | group | sys   |
+      | glenda | adm  | %adm   | group | sys   |
 
   @FOG_GEFS_609
   Scenario: An owner or group may be named in as many bytes as a file
     When adm creates file notes in the root with mode 0644 at time 200
-    And adm sets the owner to a name of 244 bytes of notes at time 300
-    And adm sets the group to a name of 244 bytes of notes at time 300
+    And %adm sets the owner to a name of 244 bytes of notes at time 300
+    And %adm sets the group to a name of 244 bytes of notes at time 300
     Then notes's owner is a name of 244 bytes
     And notes's group is a name of 244 bytes
 
@@ -388,3 +390,37 @@ Feature: A mounted tree serves files and directories, after 9front's gefs
     And adm sets nothing of notes
     Then the store has committed once since it was reamed
     And notes is a file "notes" owned by adm in group adm, mode 0644, version 0, modified at 200
+
+  @FOG_GEFS_610
+  Scenario Outline: Without the permit a member of adm may not give a file away
+    When adm creates file notes in the root with mode 0644 at time 200
+    Then adm setting <change> of notes fails with "<error>"
+    And notes is a file "notes" owned by adm in group adm, mode 0644, version 0, modified at 200
+
+    Examples:
+      | change              | error                |
+      | the owner to glenda | wstat -- not owner   |
+      | the group to sys    | wstat -- not in group |
+
+  @FOG_GEFS_610
+  Scenario Outline: Through the permit no permission is checked
+    When adm creates directory usr in the root with mode d0775 at time 200
+    And adm creates file notes in usr with mode 0644 at time 200
+    And %adm sets usr/notes's mode to 0000, group to dev and owner to bob at time 200
+    And %adm sets usr's mode to d0500, group to dev and owner to bob at time 200
+    Then <who> opening usr/notes to read and write <result>
+
+    Examples:
+      | who    | result                         |
+      | %adm   | succeeds                       |
+      | adm    | fails with "permission denied" |
+
+  @FOG_GEFS_610
+  Scenario: Through the permit a file may be made and removed in a directory no one may write
+    When adm creates directory usr in the root with mode d0775 at time 200
+    And %adm sets usr's mode to d0500, group to dev and owner to bob at time 200
+    And %adm creates file notes in usr with mode 0644 at time 300
+    Then usr lists notes
+    And adm removing usr/notes fails with "permission denied"
+    When %adm removes usr/notes
+    Then usr lists nothing

@@ -58,13 +58,18 @@ public sealed class GefsServer : IDisposable
     }
 
     // fsattach: a leading % dropped, and no name meaning main. Dump is reserved, so never a label.
-    public GefsFs Attach(string aname)
+    // The user must be one the table has; a name starting with % gives the permit, to adm's members.
+    public GefsFs Attach(string aname, string user) => Permit(Mount(aname, user), aname, user);
+
+    // The tree an attach names, for a user the table has, before any authentication is checked.
+    public GefsFs Mount(string aname, string user)
     {
         string label = aname.StartsWith('%') ? aname[1..] : aname;
         label = label.Length == 0 ? "main" : label;
+        GefsFs fs;
         lock (store.Gate)
         {
-            if (!served.TryGetValue(label, out GefsFs? fs))
+            if (!served.TryGetValue(label, out fs!))
             {
                 if (store.FindLabel(label) is null)
                 {
@@ -74,9 +79,20 @@ public sealed class GefsServer : IDisposable
                 fs = new GefsFs(store, label, $"#M{Interlocked.Increment(ref mounts)}", inGroup, clock);
                 served[label] = fs;
             }
+        }
 
+        return HasUser(user) ? fs : throw new GefsException("user does not exist");
+    }
+
+    // The permit for an attach whose name starts with %: refused to a user not in adm.
+    public GefsFs Permit(GefsFs fs, string aname, string user)
+    {
+        if (!aname.StartsWith('%'))
+        {
             return fs;
         }
+
+        return inGroup(user, "adm") ? fs.Permitted() : throw new GefsException("permission denied");
     }
 
     // The console's snap: a new name for the snapshot a label names, or with mutable a tree forked
@@ -103,6 +119,12 @@ public sealed class GefsServer : IDisposable
 
         (device as IDisposable)?.Dispose();
     }
+
+    // name2user: a user is in the group of its own name only if the table has it, as ingroup finds u == g.
+    internal bool HasUser(string user) => inGroup(user, user);
+
+    // aincv(&fs->nextqid, 1): a qid for an auth file, from the store's count.
+    internal Task<long> NewQidAsync() => store.Writer.Run(store.NewQid);
 
     // A failed commit leaves the store read only, holding why, and the next tick finds it so.
     private void Tick()

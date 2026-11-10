@@ -17,8 +17,10 @@ public sealed class StoreContext
 
     internal GefsServer? Server { get; set; }
 
-    // Users are each in a group of their own name; bob is in dev too and glenda in sys.
-    public static bool InGroup(string user, string group) => user == group || (Groups.TryGetValue(user, out string[]? groups) && groups.Contains(group));
+    // Users are each in a group of their own name; bob is in dev too and glenda in sys. The table
+    // has every user but stranger.
+    public static bool InGroup(string user, string group)
+        => user != "stranger" && (user == group || (Groups.TryGetValue(user, out string[]? groups) && groups.Contains(group)));
 
     public void At(long seconds) => Clock.SetUtcNow(DateTimeOffset.FromUnixTimeSeconds(seconds));
 }

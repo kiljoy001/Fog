@@ -9,10 +9,10 @@ namespace NinePSharp.Fog.Gefs;
 // so a handle alone finds it. A file's data lives in blocks under its qid and offset.
 public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 {
+    internal const int Read = 4;
+    internal const int Write = 2;
+    internal const int Exec = 1;
     private const long B = Format.BlockSize;
-    private const int Read = 4;
-    private const int Write = 2;
-    private const int Exec = 1;
     private const uint Directory = 0x80000000;
     private const uint Append = 0x40000000;
     private const uint Exclusive = 0x20000000;
@@ -30,7 +30,10 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     private readonly string owner;
     private readonly Func<string, string, bool> inGroup;
     private readonly TimeProvider clock;
-    private readonly HashSet<long> exclusive = [];
+    private readonly HashSet<long> exclusive;
+
+    // A fid attached through a name starting with %, which no permission check refuses.
+    private readonly bool permit;
 
     // inGroup says whether a user is in a group; every user is in the group of its own name.
     internal GefsFs(Store store, string label, string device, Func<string, string, bool> inGroup, TimeProvider clock)
@@ -41,14 +44,28 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         this.clock = clock;
         tree = store.Mount(label);
         owner = Find(tree, 0).Dir.User;
+        exclusive = [];
+    }
+
+    // The same tree, attached with the permit: its files, and the exclusive files open, are the tree's.
+    private GefsFs(GefsFs plain)
+    {
+        store = plain.store;
+        device = plain.device;
+        inGroup = plain.inGroup;
+        clock = plain.clock;
+        tree = plain.tree;
+        owner = plain.owner;
+        exclusive = plain.exclusive;
+        permit = true;
     }
 
     public ResourceHandle Root => Reading(view => Handle(Find(view, 0).Dir));
 
-    private long Now => Store.Nanoseconds(clock);
-
     // A snapshot's tree, or a store whose commit failed, takes no changes.
-    private bool ReadOnly => tree.ReadOnly || store.Broken;
+    internal bool ReadOnly => tree.ReadOnly || store.Broken;
+
+    private long Now => Store.Nanoseconds(clock);
 
     public ValueTask<ResourceHandle?> WalkAsync(ResourceHandle directory, string name, CancellationToken cancellationToken)
         => ValueTask.FromResult(Reading(view =>
@@ -221,6 +238,32 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
 
         return stat.EncodedLength;
     }
+
+    // fsattach's f.permit, given to an attach whose name starts with %.
+    internal GefsFs Permitted() => new(this);
+
+    // A file's entry, as a fid's dent holds it.
+    internal Dir Entry(ResourceHandle handle) => Reading(view => Find(view, Qid(handle)).Dir);
+
+    // readdir's scan: a directory's entries in key order, each with its key, after the key given.
+    internal List<(byte[] Key, Dir Dir)> Entries(ResourceHandle directory, byte[]? after)
+        => Reading(view =>
+        {
+            Scan scan = Under(view, KeyType.Entry, Qid(directory));
+            var entries = new List<(byte[] Key, Dir Dir)>();
+            while (scan.Next())
+            {
+                if (after is null || scan.Key.AsSpan().SequenceCompareTo(after) > 0)
+                {
+                    entries.Add((scan.Key, Dir.Read(scan.Key, scan.Value)));
+                }
+            }
+
+            return entries;
+        });
+
+    // fsaccess, as the 9P server asks it of a fid.
+    internal bool Allows(Dir d, string user, int bits) => Allowed(d, user, bits);
 
     private static long Qid(ResourceHandle handle) => (long)handle.Identity.Path;
 
@@ -407,10 +450,10 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
     }
 
     // Whether the user may make the changes: a rename needs the directory's write, a length the
-    // file's, a mode or time its owner or group leader, an owner adm, and a group membership.
+    // file's, a mode or time its owner or group leader, an owner the permit, and a group membership.
     private void WstatPermitted(Dir d, string user, bool rename, bool length, bool modeOrTime, bool owner, string? group)
     {
-        bool permitted = inGroup(user, "adm");
+        bool permitted = permit;
         if (rename && !Allowed(Find(tree, Parent(tree, d.Qid.Path)).Dir, user, Write))
         {
             throw Refused("permission denied");
@@ -535,9 +578,15 @@ public sealed class GefsFs : IResourceDataOperations, IResourceWStatOperations
         }
     }
 
-    // fsaccess: the owner's bits, then the group's, then everyone's; none gets only everyone's.
+    // fsaccess: anything to the permit, else the owner's bits, then the group's, then everyone's;
+    // none gets only everyone's.
     private bool Allowed(Dir d, string user, int bits)
     {
+        if (permit)
+        {
+            return true;
+        }
+
         if (user != "none" && ((user == d.User && Grants(d.Mode, bits, 6)) || (inGroup(user, d.Group) && Grants(d.Mode, bits, 3))))
         {
             return true;

@@ -172,3 +172,24 @@ Feature: A store serves its trees by attach name, commits every five seconds and
     When the file is opened as a store
     Then the open fails
     And nothing holds the file open
+
+  @FOG_GEFS_708
+  Scenario Outline: An attach whose name starts with % has the permit, given only to a member of adm
+    Then <who> attaching to "<aname>" fails with "<error>"
+
+    Examples:
+      | who      | aname  | error               |
+      | glenda   | %main  | permission denied   |
+      | glenda   | %      | permission denied   |
+      | stranger | main   | user does not exist |
+      | stranger | %main  | user does not exist |
+      | stranger | monday | attach -- bad specifier |
+
+  @FOG_GEFS_708
+  Scenario: A member of adm attached through % may give a file away, and attached otherwise may not
+    When adm attaches to "main"
+    And adm creates file notes in the root with mode 0644 at time 200
+    Then adm setting the owner to glenda of notes fails with "wstat -- not owner"
+    When adm attaches to "%main"
+    And adm sets the owner to glenda of notes at time 300
+    Then notes's owner is glenda

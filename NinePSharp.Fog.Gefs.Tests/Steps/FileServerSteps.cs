@@ -74,15 +74,15 @@ public sealed class FileServerSteps(StoreContext context)
         Assert.Equal(expected, Bounded.Run(() => Fs.ReadDirectoryAsync(Resolve(path), default)).Select(e => e.Name));
     }
 
-    [When(@"^(\w+) sets the root's mode to (d?\d+) at time (\d+)$")]
+    [When(@"^(%?\w+) sets the root's mode to (d?\d+) at time (\d+)$")]
     public void WhenRootMode(string user, string mode, long time)
     {
         At(time);
         WStat(Fs.Root, user, ResourceWStat.Unchanged() with { Mode = Mode(mode) });
     }
 
-    [Given(@"^(\w+) creates (file|directory) (\S+) in (.+) with mode (d?\d+) at time (\d+)$")]
-    [When(@"^(\w+) creates (file|directory) (\S+) in (.+) with mode (d?\d+) at time (\d+)$")]
+    [Given(@"^(%?\w+) creates (file|directory) (\S+) in (.+) with mode (d?\d+) at time (\d+)$")]
+    [When(@"^(%?\w+) creates (file|directory) (\S+) in (.+) with mode (d?\d+) at time (\d+)$")]
     public void WhenCreates(string user, string kind, string name, string path, string mode, long time)
     {
         At(time);
@@ -93,7 +93,7 @@ public sealed class FileServerSteps(StoreContext context)
     public void WhenServerCreates(string kind, string name)
         => Bounded.Run(() => Fs.CreateAsync(Fs.Root, name, kind == "directory", default));
 
-    [When(@"^(\w+) creates files (.+) in (.+) with mode (\d+) at time (\d+)$")]
+    [When(@"^(%?\w+) creates files (.+) in (.+) with mode (\d+) at time (\d+)$")]
     public void WhenCreatesMany(string user, string names, string path, string mode, long time)
     {
         foreach (string name in names.Replace(" and ", ", ", StringComparison.Ordinal).Split(", "))
@@ -102,7 +102,7 @@ public sealed class FileServerSteps(StoreContext context)
         }
     }
 
-    [When(@"^(\w+) creates an? (append-only|exclusive) file (\S+) in (.+) with mode (\d+) at time (\d+)$")]
+    [When(@"^(%?\w+) creates an? (append-only|exclusive) file (\S+) in (.+) with mode (\d+) at time (\d+)$")]
     public void WhenCreatesSpecial(string user, string kind, string name, string path, string mode, long time)
     {
         At(time);
@@ -110,13 +110,13 @@ public sealed class FileServerSteps(StoreContext context)
         Clunk(user, open);
     }
 
-    [When(@"^(\w+) creates a file named in (\d+) bytes in the root$")]
+    [When(@"^(%?\w+) creates a file named in (\d+) bytes in the root$")]
     public void WhenCreatesLong(string user, int length) => Create(user, Fs.Root, new string('n', length), 0b110_100_100);
 
-    [When(@"^(\w+) creates a file named with a space in the root$")]
+    [When(@"^(%?\w+) creates a file named with a space in the root$")]
     public void WhenCreatesSpaced(string user) => Create(user, Fs.Root, "a b", 0b110_100_100);
 
-    [Then(@"^(\w+) creating (.+) fails with ""(.*)""$")]
+    [Then(@"^(%?\w+) creating (.+) fails with ""(.*)""$")]
     public void ThenCreateFails(string user, string what, string error)
     {
         var (name, path, mode) = what switch
@@ -133,11 +133,11 @@ public sealed class FileServerSteps(StoreContext context)
         Assert.Equal(error, refused.Message);
     }
 
-    [Given(@"^(\w+) writes ""(.*)"" to (\S+) at offset (\d+) at time (\d+)$")]
-    [When(@"^(\w+) writes ""(.*)"" to (\S+) at offset (\d+) at time (\d+)$")]
+    [Given(@"^(%?\w+) writes ""(.*)"" to (\S+) at offset (\d+) at time (\d+)$")]
+    [When(@"^(%?\w+) writes ""(.*)"" to (\S+) at offset (\d+) at time (\d+)$")]
     public void WhenWritesText(string user, string text, string path, ulong offset, long time) => Write(user, path, offset, Encoding.ASCII.GetBytes(text), time);
 
-    [When(@"^(\w+) writes (\d+) bytes to (\S+) at offset (\d+) at time (\d+)$")]
+    [When(@"^(%?\w+) writes (\d+) bytes to (\S+) at offset (\d+) at time (\d+)$")]
     public void WhenWritesBytes(string user, int count, string path, ulong offset, long time)
     {
         byte[] data = [.. Enumerable.Range(0, count).Select(i => (byte)((i * 7) + 3))];
@@ -160,35 +160,36 @@ public sealed class FileServerSteps(StoreContext context)
     [Then(@"^reading the (\d+) bytes of (\S+) at offset (\d+) gives what was written$")]
     public void ThenReadsAll(uint count, string path, ulong offset) => Assert.Equal(written[path], Read(path, offset, count));
 
-    [Then(@"^(\w+) writing to (\S+) opened only for reading fails with ""(.*)""$")]
+    [Then(@"^(%?\w+) writing to (\S+) opened only for reading fails with ""(.*)""$")]
     public void ThenWriteRefused(string user, string path, string error)
     {
         ResourceOpenHandle open = Open(user, path, NinePConstants.OREAD);
-        Assert.Equal(error, Assert.Throws<IOException>(() => Bounded.Run(() => Fs.WriteAsync(open, 0, new byte[1], Context(user), default))).Message);
+        Assert.Equal(error, Assert.Throws<IOException>(() => Bounded.Run(() => FsOf(user).WriteAsync(open, 0, new byte[1], Context(user), default))).Message);
     }
 
-    [When(@"^(\w+) removes (\S+)$")]
-    public void WhenRemoves(string user, string path) => Bounded.Run(() => Fs.RemoveAsync(Resolve(path), null, Context(user), default));
+    [When(@"^(%?\w+) removes (\S+)$")]
+    public void WhenRemoves(string user, string path) => Bounded.Run(() => FsOf(user).RemoveAsync(Resolve(path), null, Context(user), default));
 
     [Then(@"^statting the removed (\S+) fails with ""(.*)""$")]
     public void ThenStatRemoved(string path, string error)
         => Assert.Equal(error, Assert.Throws<IOException>(() => Bounded.Run(() => Fs.StatAsync(seen[path], default))).Message);
 
-    [Then(@"^(\w+) removing (.+) fails with ""(.*)""$")]
+    [Then(@"^(%?\w+) removing (.+) fails with ""(.*)""$")]
     public void ThenRemoveFails(string user, string path, string error)
         => Assert.Equal(error, Assert.Throws<IOException>(() => WhenRemoves(user, path)).Message);
 
-    [When(@"^(\w+) opens (\S+) with truncation$")]
+    [When(@"^(%?\w+) opens (\S+) with truncation$")]
     public void WhenTruncates(string user, string path) => Clunk(user, Open(user, path, NinePConstants.OWRITE | NinePConstants.OTRUNC));
 
-    [When(@"^(\w+) sets (\S+)'s mode to (\d+), group to (\w+) and owner to (\w+) at time (\d+)$")]
+    [Given(@"^(%?\w+) sets (\S+)'s mode to (d?\d+), group to (\w+) and owner to (\w+) at time (\d+)$")]
+    [When(@"^(%?\w+) sets (\S+)'s mode to (d?\d+), group to (\w+) and owner to (\w+) at time (\d+)$")]
     public void WhenSetsAll(string user, string path, string mode, string group, string owner, long time)
     {
         At(time);
         WStat(Resolve(path), user, ResourceWStat.Unchanged() with { Mode = Mode(mode), Group = group, User = owner });
     }
 
-    [Then(@"^(\w+) opening (.+) to (read|write|run|read with truncation|read and write) (succeeds|fails with "".*"")$")]
+    [Then(@"^(%?\w+) opening (.+) to (read|write|run|read with truncation|read and write) (succeeds|fails with "".*"")$")]
     public void ThenOpening(string user, string path, string how, string result)
     {
         byte mode = how switch
@@ -209,20 +210,20 @@ public sealed class FileServerSteps(StoreContext context)
         }
     }
 
-    [When(@"^(\w+) opens (\S+) to be removed on close, and closes it$")]
+    [When(@"^(%?\w+) opens (\S+) to be removed on close, and closes it$")]
     public void WhenRemovesOnClose(string user, string path) => Clunk(user, Open(user, path, NinePConstants.OREAD | NinePConstants.ORCLOSE));
 
-    [Then(@"^(\w+) opening (\S+) to be removed on close fails with ""(.*)""$")]
+    [Then(@"^(%?\w+) opening (\S+) to be removed on close fails with ""(.*)""$")]
     public void ThenRemoveOnCloseFails(string user, string path, string error)
         => Assert.Equal(error, Assert.Throws<IOException>(() => Open(user, path, NinePConstants.OREAD | NinePConstants.ORCLOSE)).Message);
 
-    [When(@"^(\w+) opens (\S+) to read$")]
+    [When(@"^(%?\w+) opens (\S+) to read$")]
     public void WhenOpensToRead(string user, string path) => opened[path] = Open(user, path, NinePConstants.OREAD);
 
-    [When(@"^(\w+) closes (\S+)$")]
+    [When(@"^(%?\w+) closes (\S+)$")]
     public void WhenCloses(string user, string path) => Clunk(user, opened[path]);
 
-    [When(@"^(\w+) renames (\S+) to (\S+) at time (\d+)$")]
+    [When(@"^(%?\w+) renames (\S+) to (\S+) at time (\d+)$")]
     public void WhenRenames(string user, string path, string name, long time)
     {
         At(time);
@@ -230,17 +231,17 @@ public sealed class FileServerSteps(StoreContext context)
         WStat(renamed, user, ResourceWStat.Unchanged() with { Name = name });
     }
 
-    [When(@"^(\w+) sets (the .+|a name of \d+ bytes) of (\S+) at time (\d+)$")]
+    [When(@"^(%?\w+) sets (the .+|a name of \d+ bytes) of (\S+) at time (\d+)$")]
     public void WhenSets(string user, string change, string path, long time)
     {
         At(time);
         WStat(Resolve(path), user, Change(change));
     }
 
-    [When(@"^(\w+) sets nothing of (\S+)$")]
+    [When(@"^(%?\w+) sets nothing of (\S+)$")]
     public void WhenSetsNothing(string user, string path) => WStat(Resolve(path), user, ResourceWStat.Unchanged());
 
-    [Then(@"^(\w+) setting (.+) of (\S+) fails with ""(.*)""$")]
+    [Then(@"^(%?\w+) setting (.+) of (\S+) fails with ""(.*)""$")]
     public void ThenSetFails(string user, string change, string path, string error)
         => Assert.Equal(error, Assert.Throws<ResourceWStatRejectedException>(() => WStat(Resolve(path), user, Change(change))).Message);
 
@@ -287,11 +288,14 @@ public sealed class FileServerSteps(StoreContext context)
         };
     }
 
+    // A user written %adm acts through an attach to %main, which has gefs's permit.
+    private GefsFs FsOf(string user) => user.StartsWith('%') ? Fs.Permitted() : Fs;
+
     private void Serve() => context.Files = new GefsFs(context.Store!, "main", "gefs/main", StoreContext.InGroup, context.Clock);
 
     private void At(long time) => context.At(time);
 
-    private ResourceOperationContext Context(string user) => new(new ResourceOperationId("test", ++sequence), 1, user);
+    private ResourceOperationContext Context(string user) => new(new ResourceOperationId("test", ++sequence), 1, user.TrimStart('%'));
 
     private ResourceHandle? Walk(ResourceHandle from, string name) => Bounded.Run(() => Fs.WalkAsync(from, name, default));
 
@@ -318,19 +322,19 @@ public sealed class FileServerSteps(StoreContext context)
     private ResourceStat Stat(string path) => Bounded.Run(() => Fs.StatAsync(Resolve(path), default));
 
     private ResourceOpenHandle Create(string user, ResourceHandle directory, string name, uint mode)
-        => Bounded.Run(() => Fs.CreateAndOpenAsync(directory, name, mode, NinePConstants.ORDWR, Context(user), default));
+        => Bounded.Run(() => FsOf(user).CreateAndOpenAsync(directory, name, mode, NinePConstants.ORDWR, Context(user), default));
 
-    private ResourceOpenHandle Open(string user, string path, byte mode) => Bounded.Run(() => Fs.OpenAsync(Resolve(path), mode, Context(user), default));
+    private ResourceOpenHandle Open(string user, string path, byte mode) => Bounded.Run(() => FsOf(user).OpenAsync(Resolve(path), mode, Context(user), default));
 
-    private void Clunk(string user, ResourceOpenHandle open) => Bounded.Run(() => Fs.ClunkAsync(open, Context(user), default));
+    private void Clunk(string user, ResourceOpenHandle open) => Bounded.Run(() => FsOf(user).ClunkAsync(open, Context(user), default));
 
-    private void WStat(ResourceHandle at, string user, ResourceWStat stat) => Bounded.Run(() => Fs.WStatAsync(at, stat, Context(user), default));
+    private void WStat(ResourceHandle at, string user, ResourceWStat stat) => Bounded.Run(() => FsOf(user).WStatAsync(at, stat, Context(user), default));
 
     private void Write(string user, string path, ulong offset, byte[] data, long time)
     {
         At(time);
         ResourceOpenHandle open = Open(user, path, NinePConstants.OWRITE);
-        Assert.Equal((uint)data.Length, Bounded.Run(() => Fs.WriteAsync(open, offset, data, Context(user), default)));
+        Assert.Equal((uint)data.Length, Bounded.Run(() => FsOf(user).WriteAsync(open, offset, data, Context(user), default)));
         Clunk(user, open);
     }
 

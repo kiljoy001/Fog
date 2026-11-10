@@ -36,7 +36,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
     {
         var (device, server) = Ream();
         server.Snap("main", "work", true);
-        GefsFs[] trees = [server.Attach("main"), server.Attach("work")];
+        GefsFs[] trees = [server.Attach("main", "adm"), server.Attach("work", "adm")];
         Task[] tasks = [.. Enumerable.Range(0, 4).Select(i => Task.Run(() => WriteAsync(trees[i / 2], $"f{i}", $"file {i}", create: true))), Task.Run(server.Sync)];
         await Task.WhenAll(tasks);
         server.Dispose();
@@ -44,7 +44,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
         using GefsServer reopened = Reopen(device, out Store store);
         foreach (var (label, first) in new[] { ("main", 0), ("work", 2) })
         {
-            GefsFs fs = reopened.Attach(label);
+            GefsFs fs = reopened.Attach(label, "adm");
             string[] names = (await fs.ReadDirectoryAsync(fs.Root, default)).Select(e => e.Name).ToArray();
             Specification.Assert(names.SequenceEqual(new[] { $"f{first}", $"f{first + 1}" }), $"{label} holds {string.Join(", ", names)}");
             for (int i = first; i < first + 2; i++)
@@ -62,7 +62,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
     {
         var (_, server) = Ream();
         server.Snap("main", "monday", false);
-        GefsFs[] served = await Task.WhenAll(Task.Run(() => server.Attach("monday")), Task.Run(() => server.Attach("monday")));
+        GefsFs[] served = await Task.WhenAll(Task.Run(() => server.Attach("monday", "adm")), Task.Run(() => server.Attach("monday", "adm")));
         Specification.Assert(ReferenceEquals(served[0], served[1]), "two attaches to monday served two trees");
         server.Dispose();
     };
@@ -71,15 +71,15 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
     public void WhenWriteRacesSnapshot() => race = async () =>
     {
         var (device, server) = Ream();
-        GefsFs main = server.Attach("main");
+        GefsFs main = server.Attach("main", "adm");
         await WriteAsync(main, "notes", "first", create: true);
         server.Sync();
         await Task.WhenAll(Task.Run(() => WriteAsync(main, "notes", "secnd", create: false)), Task.Run(() => server.Snap("main", "monday", false)), Task.Run(server.Sync));
         server.Dispose();
 
         using GefsServer reopened = Reopen(device, out Store store);
-        string before = await ReadAsync(reopened.Attach("monday"), "notes");
-        string after = await ReadAsync(reopened.Attach("main"), "notes");
+        string before = await ReadAsync(reopened.Attach("monday", "adm"), "notes");
+        string after = await ReadAsync(reopened.Attach("main", "adm"), "notes");
         Specification.Assert(before is "first" or "secnd", $"monday's notes hold \"{before}\"");
         Specification.Assert(after == "secnd", $"main's notes hold \"{after}\"");
         Accounting.Check(store);
@@ -90,7 +90,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
     {
         const int Size = 2 * Format.BlockSize;
         var (device, server) = Ream();
-        GefsFs main = server.Attach("main");
+        GefsFs main = server.Attach("main", "adm");
         await WriteAsync(main, "notes", new string('a', Size), create: true);
         server.Sync();
         Task<string>[] reads = [Task.Run(() => ReadAsync(main, "notes", Size)), Task.Run(() => ReadAsync(main, "notes", Size))];
@@ -118,7 +118,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
     public void WhenAsksRaceCommit() => race = async () =>
     {
         var (device, server) = Ream();
-        GefsFs main = server.Attach("main");
+        GefsFs main = server.Attach("main", "adm");
         await WriteAsync(main, "notes", "first", create: true);
         server.Sync();
         ResourceHandle file = (await main.WalkAsync(main.Root, "notes", default))!;
@@ -133,7 +133,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
         server.Dispose();
 
         using GefsServer reopened = Reopen(device, out Store store);
-        string text = await ReadAsync(reopened.Attach("main"), "notes");
+        string text = await ReadAsync(reopened.Attach("main", "adm"), "notes");
         Specification.Assert(text == "third", $"main's notes hold \"{text}\"");
         Accounting.Check(store);
     };
@@ -143,7 +143,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
     {
         const int Size = 2 * Format.BlockSize;
         var (device, server) = Ream(room: 2);
-        GefsFs main = server.Attach("main");
+        GefsFs main = server.Attach("main", "adm");
         Task commits = Task.Run(() =>
         {
             server.Sync();
@@ -153,7 +153,7 @@ public sealed class GefsInterleavingSteps(IReqnrollOutputHelper output)
         server.Dispose();
 
         using GefsServer reopened = Reopen(device, out Store store);
-        GefsFs fs = reopened.Attach("main");
+        GefsFs fs = reopened.Attach("main", "adm");
         foreach (var (name, letter) in new[] { ("f0", 'a'), ("f1", 'b') })
         {
             string text = await ReadAsync(fs, name, Size);

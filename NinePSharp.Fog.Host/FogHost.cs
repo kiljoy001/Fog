@@ -42,7 +42,7 @@ public sealed class FogHost : IDisposable
             : GefsServer.Open(settings.StorePath, table.InGroup, settings.Clock);
         try
         {
-            GefsFs main = store.Attach(string.Empty);
+            GefsFs main = store.Attach(string.Empty, settings.Owner);
             var kernel = new FogKernel(settings.Programs, main, main.Root, settings.Owner, settings.Loaders)
             {
                 Clock = settings.Clock,
