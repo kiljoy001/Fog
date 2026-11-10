@@ -251,15 +251,18 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
 - The root is one host's gefs store until it is replicated, as the architecture describes.
 - Fog has no `$cputype`: in place of `bind /$cputype/bin /bin`, the store's `/bin` is bound on
   `/bin` with creation, so a program copied there is kept. `#/` has no `boot` directory.
-- The store is served in the host's own process rather than by gefs speaking 9P on
-  `/srv/boot`; its files stat as the mount driver's, device `M`.
+- The root is the store served in the host's own process, reached as `#R`, rather than gefs's
+  `/srv/boot` mounted on `/root`; its files stat as the mount driver's, device `M`. The store is
+  also posted in `/srv/boot` and served over 9P there as `gefs -s` serves it, each attach
+  authenticated through the host owner's factotum, as gefs without `-A`.
+- Gefs's 9P server refuses a read or write of a fid not opened for it with `resource in use`,
+  where gefs reads or writes it unchecked, and refuses an auth file walked, opened, made in or
+  removed with `invalid fid type`, where gefs would fault.
 - The store's `/adm/users` is read at boot and by the host's `users` command, as gefs reads it,
   but Fog's files name their users rather than numbering them, so a user and a group are found by
   name, and group leaders are checked only to exist. A store reamed before Fog read its users has
   no `/adm/users`, and each user is then the only member of its own group. The host reams it with
   the group `sys`, whose members may write the store's `/bin`.
-- Every member of `adm` may change a file's owner and group, where gefs permits that only through
-  an attach whose name starts with `%`, as `%main`.
 - The host's boot is the end of bootrc for a cpu server and init's cpustart: the host owner's
   factotum with `-S`, then Fog's `/rc/bin/cpurc`, which is 9front's without the devices, usb,
   swap, partitions, ip configuration, dns, timesync, apm and `/cfg` Fog does not have, and starts
@@ -274,15 +277,14 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   its names from the attached root when needed.
 - A mount connection stays open until its server hangs up; unmounting does not close it.
 - A walk the server refuses reports that the file does not exist, rather than the server's words.
-- `mount` with an authentication descriptor waits for factotum (slice 6).
 - A note reaches a process as one of its kernel calls returns, or interrupts one it is blocked in;
   a program that makes no calls does not see a note until it makes one, since a managed program
   cannot be stopped between instructions as 9front's clock interrupt stops one.
 - `#p` serves `args`, `note`, `noteid` and `notepg` for each process, and lists no `trace`.
 - `#|` makes pipes only through `pipe`; it cannot yet be bound by name, as `bind '#|' dir` binds
   a new pipe's `data` and `data1` on 9front.
-- `mount` without `-n` mounts unauthenticated until factotum (slice 6), as 9front's does to a
-  server that needs no authentication; `-k` is taken and not used.
+- `mount` and newns have no getkey: a key factotum lacks is not asked for, and the
+  authentication fails.
 - `mount -N` becomes none through `/dev/user`, as Fog names no device by `#`.
 - `#c/bintime` reads the host's clock, and its time cannot be set through it.
 - `#c/cons` writes to the host's console, its standard error, as devcons's writes go to the

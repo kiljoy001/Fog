@@ -64,3 +64,30 @@ Feature: A first session on a Fog host booted from its gefs store
     When fog runs "-u ken -c 'cp app.wasm /bin/app'" in that directory with $PASS "kenpw"
     Then fog prints "cp: can't create /bin/app: permission denied" on its standard error
     And fog exits 1
+
+  @FOG_HOST_009
+  Scenario: A session may mount the store from /srv/boot, authenticated by its factotum, but may not give a file away
+    When fog runs "-u glenda -c 'mount /srv/boot /n/u; ls -d /n/u/usr/glenda; chgrp -u bootes /n/u/usr/glenda'"
+    Then fog prints "/n/u/usr/glenda"
+    And fog prints "chgrp: can't wstat /n/u/usr/glenda: wstat -- not owner" on its standard error
+
+  @FOG_HOST_009
+  Scenario: Only a member of adm may mount the store with the permit
+    When fog runs "-u glenda -c 'mount /srv/boot /n/u %main'"
+    Then fog prints "mount: mount /n/u: permission denied" on its standard error
+
+  @FOG_HOST_009
+  Scenario: A mount of the store that does not authenticate is refused
+    When fog runs "-u glenda -c 'mount -n /srv/boot /n/u'"
+    Then fog prints "mount: mount /n/u: attach -- unknown user or failed authentication" on its standard error
+
+  @FOG_HOST_009
+  Scenario: mount -k narrows the key factotum authenticates with, and mount says when factotum has none, leaving gefs's factotum out of phase
+    When fog runs "-u glenda -c 'mount -k ''dom=elsewhere'' /srv/boot /n/u'"
+    Then fog prints "mount: auth_proxy: auth_proxy rpc write: no key matches dom=elsewhere proto=dp9ik dom=fog role=client" on its standard error
+    And fog prints "mount: mount /n/u: auth phase error" on its standard error
+
+  @FOG_HOST_009
+  Scenario: A namespace file mounts the store authenticated through the factotum newns opened
+    When fog runs "-u glenda -c 'echo ''mount /srv/boot /n/b'' >$home/ns; auth/newns -a -n $home/ns ls -d /n/b/usr/glenda'"
+    Then fog prints "/n/b/usr/glenda"

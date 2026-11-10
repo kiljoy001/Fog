@@ -220,9 +220,19 @@ public sealed class FirstSessionSteps
         await Init.WriteAsync(f, Encoding.UTF8.GetBytes(string.Join('\n', lines) + "\n"));
         await Init.CloseAsync(f);
         Assert.Equal("refreshed users\n", await host!.RefreshUsersAsync());
-        await Init.CloseAsync(await Init.CreateAsync($"/usr/{user}", NinePConstants.OREAD, (uint)NinePConstants.FileMode9P.DMDIR | 0b111_101_101));
-        NinePSharp.Messages.Stat d = Process.NullDir;
-        await Init.WStatAsync($"/usr/{user}", new NinePSharp.Messages.Stat(0, d.Type, d.Dev, d.Qid, d.Mode, d.Atime, d.Mtime, d.Length, d.Name, user, user, d.Muid));
+
+        // gefs(8)'s recipe, as the host owner: the store mounted with the permit, and the home
+        // made and given away.
+        string script = $"""
+            mount /srv/boot /n/u %main
+            mkdir /n/u/usr/{user}
+            chgrp -u {user} /n/u/usr/{user}
+            chgrp {user} /n/u/usr/{user}
+
+            """;
+        Init.Fork(RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nameg, child => child.ExecAsync("/bin/rc", ["rc", "-c", script]));
+        string status = (await Init.WaitAsync()).Message;
+        Assert.True(status.Length == 0, $"{status}\n{console.Text}");
     }
 
     private async Task<string> ReadAsync(string path)

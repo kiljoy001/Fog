@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\NinePSharp.Fog.Commands\NinePSharp.Fog.Commands.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Gefs\NinePSharp.Fog.Gefs.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Kernel\NinePSharp.Fog.Kernel.csproj" />
   </ItemGroup>

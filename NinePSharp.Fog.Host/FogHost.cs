@@ -7,7 +7,8 @@ namespace NinePSharp.Fog.Host;
 
 // The host's boot: its root is a gefs store in a file, opened as gefs opens its device, or reamed
 // as gefs -r reams one when the file does not exist. A file that exists is never reamed. The
-// store's users are read from its /adm/users, as gefs loads them, and then init runs the boot.
+// store's users are read from its /adm/users, as gefs loads them; the store is posted in /srv/boot,
+// served over 9P as gefs -s serves it, and then init runs the boot.
 public sealed class FogHost : IDisposable
 {
     // /adm/users is read as gefs reads it, and refused from 1 MiB.
@@ -65,6 +66,8 @@ public sealed class FogHost : IDisposable
                 await host.InstallAsync(path, text);
             }
 
+            await host.PostAsync();
+
             if (settings.Boot.Count > 0)
             {
                 await host.RunBootAsync(settings.Boot);
@@ -98,6 +101,30 @@ public sealed class FogHost : IDisposable
 
     // Commits what the store holds, as gefs does when it halts.
     public void Dispose() => store.Dispose();
+
+    // readn: n bytes, or fewer at the end.
+    private static async Task<byte[]> ReadnAsync(Process process, int fd, int n)
+    {
+        var all = new List<byte>();
+        for (ReadOnlyMemory<byte> more; all.Count < n && !(more = await process.ReadAsync(fd, n - all.Count)).IsEmpty;)
+        {
+            all.AddRange(more.Span);
+        }
+
+        return [.. all];
+    }
+
+    private static async Task WriteAsync(Process process, int fd, byte[] reply)
+    {
+        try
+        {
+            await process.WriteAsync(fd, reply);
+        }
+        catch (SyscallException error)
+        {
+            throw new IOException(error.Message);
+        }
+    }
 
     // What gefs reams for its user, with sys, whose members may write the store's /bin.
     private async Task ReamAsync(string owner)
@@ -194,6 +221,22 @@ public sealed class FogHost : IDisposable
             return false;
         }
     }
+
+    // bootrc's bootfs: {gefs -s <[0=1] &} | echo 0 >/srv/boot. A process of init's serves one end of
+    // a pipe, as gefs does its standard input, and the other is posted in /srv/boot.
+    private async Task PostAsync()
+    {
+        (int served, int posted) = await Init.PipeAsync();
+        int srv = await Init.CreateAsync("/srv/boot", NinePConstants.OWRITE, 0b110_110_110);
+        await Init.WriteAsync(srv, Encoding.UTF8.GetBytes($"{posted}"));
+        await Init.CloseAsync(srv);
+        await Init.CloseAsync(posted);
+        Init.Fork(RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nowait, gefs => ServeAsync(gefs, served));
+        await Init.CloseAsync(served);
+    }
+
+    private Task ServeAsync(Process gefs, int fd)
+        => new GefsConn(store, n => ReadnAsync(gefs, fd, n), reply => WriteAsync(gefs, fd, reply), () => FactotumAuth.NewAsync(gefs)).ServeAsync();
 
     // init's console on its descriptors 0, 1 and 2, as 9front's init opens #c/cons, and the boot
     // run to its end.

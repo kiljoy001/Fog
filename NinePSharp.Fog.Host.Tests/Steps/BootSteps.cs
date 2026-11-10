@@ -4,6 +4,7 @@ using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
 using NinePSharp.Fog.Kernel.Tests.Support;
 using NinePSharp.Messages;
+using NinePSharp.Namespaces;
 using Reqnroll;
 using Xunit;
 
@@ -222,6 +223,21 @@ public sealed class BootSteps : IDisposable
 
     [Then("the kernel's network and console are the host's")]
     public void ThenDevices() => Assert.True(ReferenceEquals(network, host!.Kernel.Host) && ReferenceEquals(console, host.Kernel.Console));
+
+    [Then(@"^authenticating on ""(.*)"" for ""(.*)"" fails with ""(.*)""$")]
+    public async Task ThenFauthFails(string path, string aname, string error)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.ORDWR);
+        Assert.Equal(error, (await Assert.ThrowsAsync<SyscallException>(() => Init.FauthAsync(fd, aname).AsTask())).Message);
+        await Init.CloseAsync(fd);
+    }
+
+    [Then(@"^mounting ""(.*)"" on ""(.*)"" without authenticating fails with ""(.*)""$")]
+    public async Task ThenMountFails(string path, string old, string error)
+    {
+        int fd = await Init.OpenAsync(path, NinePConstants.ORDWR);
+        Assert.Equal(error, (await Assert.ThrowsAsync<SyscallException>(() => Init.MountAsync(fd, -1, old, MountFlags.Replace, string.Empty).AsTask())).Message);
+    }
 
     [Then(@"^the boot fails with ""(.*)""$")]
     public void ThenBootFails(string message) => Assert.Equal(message, failure?.Message);

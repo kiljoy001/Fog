@@ -13,7 +13,9 @@ Feature: The host boots the kernel on a gefs store kept in a file
   gefs does when it is not permissive. A store reamed before the host read its users has no
   /adm/users, and each user is then in only the group of its own name. At each boot the host
   writes the files its settings give, as 9front's installer copies them, and init then runs the
-  boot's program with the console as its descriptors 0 to 2, keeping how it ended.
+  boot's program with the console as its descriptors 0 to 2, keeping how it ended. Before the
+  boot, the store is posted in /srv/boot and served over 9P there as gefs -s serves it, each attach
+  authenticated through factotum, mounted from /srv/factotum where /mnt/factotum is not.
 
   Background:
     Given a host whose store file is in a new directory
@@ -165,3 +167,10 @@ Feature: The host boots the kernel on a gefs store kept in a file
     When the host boots
     Then reading "/dev/nvram" gives "sealed"
     And the kernel's network and console are the host's
+
+  @FOG_HOST_009
+  Scenario: The store is posted in /srv/boot, where an attach is authenticated through factotum
+    When the host boots
+    Then "/srv/boot" belongs to the host owner
+    And authenticating on "/srv/boot" for "main" fails with "file does not exist: '/mnt/factotum'"
+    And mounting "/srv/boot" on "/n" without authenticating fails with "attach -- unknown user or failed authentication"
