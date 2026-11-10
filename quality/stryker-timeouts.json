@@ -3950,5 +3950,13 @@
     "commit": "6a656c192e53",
     "print": "17d9f17946648224",
     "reason": "read -c writes an empty read at the end of its input and reads again without end"
+  },
+  {
+    "file": "RcShell.Trap.cs",
+    "mutator": "PreDecrementExpression to PreIncrementExpression mutation",
+    "line": "--trap[i];",
+    "commit": "6a656c192e53",
+    "print": "02ad05ec59ef53d6",
+    "reason": "the trap's count goes up rather than down, so its function runs again without end"
   }
 ]
