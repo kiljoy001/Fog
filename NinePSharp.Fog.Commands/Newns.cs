@@ -6,10 +6,10 @@ using NinePSharp.Namespaces;
 namespace NinePSharp.Fog.Commands;
 
 // libauth's newns and addns, as 9front's newns.c: a namespace built, or added to, from a file of
-// bind, mount, unmount, cd, chdev, clear and . lines, each argument's $names read from #e. Fog has
-// no factotum yet, so a mount is made without authentication, as famount makes one when fauth
-// fails; and no #c/drivers, so chdev always fails as newns.c fails it without one. Each fails by
-// throwing what it would leave in errstr.
+// bind, mount, unmount, cd, chdev, clear and . lines, each argument's $names read from #e. A mount
+// is authenticated through the factotum opened as the build began, as famount does. Fog has no
+// #c/drivers, so chdev always fails as newns.c fails it without one. Each fails by throwing what it
+// would leave in errstr.
 public static class Newns
 {
     private const int AnameLen = 28;
@@ -43,6 +43,7 @@ public static class Newns
 
         // Stryker disable once Bitwise : nothing is read or written on the rpc, which is closed before anything could exec
         int afd = await ns.TryOpenAsync("/mnt/factotum/rpc", NinePConstants.ORDWR | NinePConstants.OCEXEC);
+        ns.Rpc = afd >= 0 ? new Libauth.AuthRpc(process, afd) : null;
         try
         {
             // Stryker disable once Bitwise : Fog's #c has no drivers to open
@@ -236,6 +237,9 @@ public static class Newns
     {
         // Stryker disable once Unary : the build sets it before anything reads it
         public int Drivers { get; set; } = -1;
+
+        // The rpc to factotum famount authenticates through, if factotum could be opened.
+        public Libauth.AuthRpc? Rpc { get; set; }
 
         public async Task<int> TryOpenAsync(string name, int mode)
         {
@@ -446,7 +450,8 @@ public static class Newns
             process.Exits("chdev requested, but could not open #c/drivers");
         }
 
-        // famount: the file server on the file, mounted without authentication.
+        // famount: the file server on the file, authenticated through factotum if it asks to be,
+        // and mounted.
         private async Task MountAsync(string fn, IReadOnlyList<string> args, MountFlags flags)
         {
             int fd;
@@ -467,10 +472,44 @@ public static class Newns
             }
 
             string aname = args.Count == 3 ? args[2] : string.Empty;
-            if (!await TryAsync(() => process.MountAsync(fd, -1, args[1], flags, aname).AsTask(), $"{fn}: mount: {string.Join(' ', args)}"))
+            int afd = await FauthAsync(fd, aname);
+            if (!await TryAsync(() => process.MountAsync(fd, afd, args[1], flags, aname).AsTask(), $"{fn}: mount: {string.Join(' ', args)}"))
             {
                 await process.CloseAsync(fd);
             }
+
+            if (afd >= 0)
+            {
+                await process.CloseAsync(afd);
+            }
+        }
+
+        // fauth, and fauth_proxy through the build's rpc; the auth file, or -1 if there is none.
+        private async Task<int> FauthAsync(int fd, string aname)
+        {
+            int afd;
+            try
+            {
+                afd = await process.FauthAsync(fd, aname);
+            }
+            catch (SyscallException)
+            {
+                return -1;
+            }
+
+            if (Rpc is { } rpc)
+            {
+                try
+                {
+                    await Libauth.FauthProxyAsync(afd, rpc, null, "proto=p9any role=client");
+                }
+                catch (SyscallException)
+                {
+                    // famount mounts all the same, and the server refuses the attach if it must.
+                }
+            }
+
+            return afd;
         }
 
         private async Task<bool> TryAsync(Func<Task> call, string? what)

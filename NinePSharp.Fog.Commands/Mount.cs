@@ -5,8 +5,9 @@ using NinePSharp.Namespaces;
 
 namespace NinePSharp.Fog.Commands;
 
-// mount(1), as 9front's mount.c. Until Fog has factotum, there is no fauth to authenticate with, so
-// a mount without -n goes on unauthenticated, as 9front's does to a server that needs none.
+// mount(1), as 9front's mount.c: unless -n, the server is asked to authenticate the caller, through
+// factotum, before it attaches; a server that needs no authentication refuses, and the mount goes
+// on without it. No getkey prompts for a key factotum lacks.
 public static class Mount
 {
     private const string Usage = "usage: mount [-a|-b] [-cCnNq] [-k keypattern] /srv/service dir [spec]\n";
@@ -14,7 +15,7 @@ public static class Mount
     public static async Task MainAsync(Process process, IReadOnlyList<string> argv)
     {
         var arguments = new Arguments(argv);
-        (MountFlags flag, bool qflag, bool asnone) = await FlagsAsync(process, arguments);
+        (MountFlags flag, bool qflag, bool asnone, bool noauth, string keyspec) = await FlagsAsync(process, arguments);
         IReadOnlyList<string> args = arguments.Rest();
         string spec = string.Empty;
         if (args.Count == 3)
@@ -54,7 +55,14 @@ public static class Mount
         });
         try
         {
-            await process.MountAsync(fd, -1, args[1], flag, spec);
+            if (noauth)
+            {
+                await process.MountAsync(fd, -1, args[1], flag, spec);
+            }
+            else
+            {
+                await Amount0Async(process, fd, args[1], flag, spec, keyspec);
+            }
         }
         catch (SyscallException error)
         {
@@ -64,11 +72,46 @@ public static class Mount
         process.Exits(null);
     }
 
-    // The flags, as mount.c's ARGBEGIN takes them: the mount's, -q and -N; -k's value is needed.
-    private static async Task<(MountFlags Flag, bool Qflag, bool Asnone)> FlagsAsync(Process process, Arguments arguments)
+    // amount0: fauth, and if the server gave an auth file, factotum proxied through it as the
+    // client; then the mount, authenticated by it, and the auth file closed.
+    private static async Task Amount0Async(Process process, int fd, string mntpt, MountFlags flags, string aname, string keyspec)
+    {
+        int afd;
+        try
+        {
+            afd = await process.FauthAsync(fd, aname);
+        }
+        catch (SyscallException)
+        {
+            await process.MountAsync(fd, -1, mntpt, flags, aname);
+            return;
+        }
+
+        try
+        {
+            await Libauth.AuthProxyAsync(process, afd, null, $"proto=p9any role=client {keyspec}");
+        }
+        catch (SyscallException error)
+        {
+            await process.WriteAsync(2, Encoding.UTF8.GetBytes($"mount: auth_proxy: {error.Message}\n"));
+        }
+
+        try
+        {
+            await process.MountAsync(fd, afd, mntpt, flags, aname);
+        }
+        finally
+        {
+            await process.CloseAsync(afd);
+        }
+    }
+
+    // The flags, as mount.c's ARGBEGIN takes them: the mount's, -k's keyspec, -q, -N and -n.
+    private static async Task<(MountFlags Flag, bool Qflag, bool Asnone, bool Noauth, string Keyspec)> FlagsAsync(Process process, Arguments arguments)
     {
         MountFlags flag = MountFlags.Replace;
-        bool qflag = false, asnone = false;
+        bool qflag = false, asnone = false, noauth = false;
+        string keyspec = string.Empty;
         foreach (char c in arguments.Flags())
         {
             switch (c)
@@ -87,17 +130,23 @@ public static class Mount
                     flag |= MountFlags.Cache;
                     break;
                 case 'k':
-                    if (arguments.Value() is null)
+                    if (arguments.Value() is not { } value)
                     {
                         // Stryker disable once Statement : no value for -k leaves no arguments either, which is usage all the same
                         await UsageAsync(process);
+                    }
+                    else
+                    {
+                        keyspec = value;
                     }
 
                     break;
                 case 'N':
                     asnone = true;
+                    noauth = true;
                     break;
                 case 'n':
+                    noauth = true;
                     break;
                 case 'q':
                     qflag = true;
@@ -108,7 +157,7 @@ public static class Mount
             }
         }
 
-        return (flag, qflag, asnone);
+        return (flag, qflag, asnone, noauth, keyspec);
     }
 
     // procsetuser of none, which writes #c/user, which Fog, naming no devices by #, binds on /dev.

@@ -296,11 +296,12 @@ public sealed class NewnsTests : IAsyncLifetime
     [Fact]
     public async Task ANoteWhileTheFileRunsIsTheCallersToCatch()
     {
-        // A note the caller catches interrupts the mount waiting for the server's version.
-        Assert.Equal("a", await MountInterruptedAsync(c => c.Notify(note => note == "test")));
+        // A note the caller catches interrupts fauth waiting for the server's version, and then the
+        // mount, which sends Tversion again, waiting for it in turn.
+        Assert.Equal("a", await MountInterruptedAsync(c => c.Notify(note => note == "test"), 2));
 
         // One it does not ends the process.
-        Assert.StartsWith("exited: ", await MountInterruptedAsync(_ => { }), StringComparison.Ordinal);
+        Assert.StartsWith("exited: ", await MountInterruptedAsync(_ => { }, 1), StringComparison.Ordinal);
     }
 
     private static async Task<string> EnvAsync(Process p, string name) => await ReadAsync(p, $"/env/{name}");
@@ -336,7 +337,8 @@ public sealed class NewnsTests : IAsyncLifetime
         return Encoding.UTF8.GetString([.. all]);
     }
 
-    private async Task<string> MountInterruptedAsync(Action<Process> notify)
+    // Each Tversion the build sends, read from the server's end, answered by a note.
+    private async Task<string> MountInterruptedAsync(Action<Process> notify, int versions)
     {
         (int read, int written) = await init.PipeAsync();
         string? result = null;
@@ -346,8 +348,12 @@ public sealed class NewnsTests : IAsyncLifetime
             await Newns.AddnsAsync(c, "glenda", await FileAsync($"mount /fd/{written} /tmp/c\nbind /tmp/a /tmp/b\n"));
             result = await ReadAsync(c, "/tmp/b/f");
         });
-        Assert.False((await init.ReadAsync(read, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).IsEmpty);
-        kernel.Processes[pid].PostNote("test");
+        for (int i = 0; i < versions; i++)
+        {
+            Assert.False((await init.ReadAsync(read, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).IsEmpty);
+            kernel.Processes[pid].PostNote("test");
+        }
+
         string message = (await init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(5))).Message;
         await init.CloseAsync(read);
         await init.CloseAsync(written);

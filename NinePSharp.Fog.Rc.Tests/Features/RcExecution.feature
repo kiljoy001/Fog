@@ -7826,6 +7826,44 @@ Feature: rc runs scripts as 9front rc does
       /bin
       """
 
+  @FOG_RC_RUN_330
+  Scenario: chgrp sets each file's group, or with -u or -o its owner, and says which it cannot change
+    When rc runs the script
+      """
+      rm -rf /tmp/cg; mkdir /tmp/cg; cd /tmp/cg
+      >f
+      fn owners { x=`{ls -l $1}; echo $x(4) $x(5) }
+      chgrp glenda f && echo changed
+      owners f
+      chgrp -u glenda f && chgrp -o glenda f && chgrp -uo glenda f && echo changed again
+      owners f
+      chgrp glenda /nonesuch f
+      ~ $status 'chgrp '[0-9]*': can''t wstat' && echo wstat status
+      chgrp -u glenda /nonesuch
+      ~ $status 'chgrp '[0-9]*': can''t wstat' && echo wstat status again
+      chgrp
+      ~ $status 'chgrp '[0-9]*': usage' && echo usage status
+      chgrp -x glenda f
+      ~ $status 'chgrp '[0-9]*': usage' && echo usage again
+      chgrp glenda && echo no files
+      """
+    Then it prints
+      """
+      changed
+      glenda glenda
+      changed again
+      glenda glenda
+      chgrp: can't wstat /nonesuch: file does not exist: '/nonesuch'
+      wstat status
+      chgrp: can't wstat /nonesuch: file does not exist: '/nonesuch'
+      wstat status again
+      usage: chgrp [ -uo ] group file ....
+      usage status
+      usage: chgrp [ -uo ] group file ....
+      usage again
+      no files
+      """
+
   @FOG_RC_RUN_254
   Scenario: chmod sets a mode in octal or by who, op and permissions, and says which it cannot take
     When rc runs the script

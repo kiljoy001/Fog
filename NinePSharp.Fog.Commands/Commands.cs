@@ -20,6 +20,7 @@ public static class Commands
         ["basename"] = Basename.MainAsync,
         ["bind"] = Bind.MainAsync,
         ["cat"] = Cat.MainAsync,
+        ["chgrp"] = Chgrp.MainAsync,
         ["chmod"] = Chmod.MainAsync,
         ["cleanname"] = Cleanname.MainAsync,
         ["cmp"] = Cmp.MainAsync,
