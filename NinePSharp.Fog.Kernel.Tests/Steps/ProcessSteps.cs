@@ -37,6 +37,14 @@ public sealed class ProcessSteps
     [Given(@"^the file ""(.*)"" holds ""(.*)""$")]
     public Task GivenFileHolds(string path, string contents) => WriteAsync(path, Unescape(contents));
 
+    [Given(@"^the file ""(.*)"" holds ""(.*)"" with the permissions (\d+)$")]
+    public async Task GivenFileHoldsWithPermissions(string path, string contents, string permissions)
+    {
+        int fd = await init!.CreateAsync(path, NinePConstants.OWRITE, Convert.ToUInt32(permissions, 8));
+        await init.WriteAsync(fd, Encoding.UTF8.GetBytes(Unescape(contents)));
+        await init.CloseAsync(fd);
+    }
+
     [Given(@"^the file ""(.*)"" holds ""(.*)"" and (\d+) more bytes$")]
     public Task GivenFileHoldsMore(string path, string contents, int more) => WriteAsync(path, Unescape(contents) + new string('x', more));
 

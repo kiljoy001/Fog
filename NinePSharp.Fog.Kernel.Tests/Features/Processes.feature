@@ -166,6 +166,18 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
     Then exec fails with "file does not exist: '/bin/nonesuch'"
 
   @FOG_KERNEL_002
+  Scenario Outline: Exec of a file or an interpreter its user may not execute fails as open does
+    Given the file "/tmp/interpreter" holds "#!/bin/true\n" with the permissions <interpreter>
+    And the file "/tmp/script" holds "#!/tmp/interpreter\n" with the permissions <script>
+    When a process runs "/tmp/script"
+    Then exec fails with "permission denied: '<refused>'"
+
+    Examples:
+      | script | interpreter | refused          |
+      | 0644   | 0755        | /tmp/script      |
+      | 0755   | 0644        | /tmp/interpreter |
+
+  @FOG_KERNEL_002
   Scenario Outline: Exec of a directory fails
     When a process runs "<path>"
     Then exec fails with "<error>"

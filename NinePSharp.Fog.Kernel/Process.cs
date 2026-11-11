@@ -1296,7 +1296,14 @@ public sealed partial class Process
             throw new SyscallException(Errors.Name(path, Elements(path).Length, Errors.ExecDirectory));
         }
 
-        return await plane.OpenAsync(file, NinePConstants.OEXEC, kernel.Context(Pid, User), CancellationToken.None);
+        try
+        {
+            return await plane.OpenAsync(file, NinePConstants.OEXEC, kernel.Context(Pid, User), CancellationToken.None);
+        }
+        catch (IOException error)
+        {
+            throw new SyscallException(Named(path, error.Message));
+        }
     }
 
     private async Task<NamespaceChannel> ResolveAsync(string path)
