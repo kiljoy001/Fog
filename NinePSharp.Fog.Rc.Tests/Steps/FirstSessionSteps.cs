@@ -165,8 +165,50 @@ public sealed class FirstSessionSteps
     [When(@"^fog runs ""([^""]*)"" and is given glenda's secstore password$")]
     public Task WhenFogRunsWithSecstorePasswordAsync(string args) => RunFogAsync(args, null, [SecstorePassword]);
 
+    [Then(@"^drawterm prints ""(.*)""$")]
     [Then(@"^fog prints ""(.*)""$")]
     public void ThenFogPrints(string text) => Assert.True(fogOutput.Text.TrimEnd('\n') == Unescape(text), FogFailure());
+
+    // drawterm without graphics calls the host as a terminal with no window system does, its auth
+    // server and secstore the host's forwarded 567 and 5356, and its console given glenda's
+    // secstore password a line for each time it is asked.
+    [When(@"^drawterm runs ""([^""]*)"" and is given glenda's secstore password twice$")]
+    public async Task WhenDrawtermRunsAsync(string args)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("drawterm") { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        string[] words =
+        [
+            "-G",
+            "-h", $"tcp!127.0.0.1!{network.HostPort(17019)}",
+            "-a", $"tcp!127.0.0.1!{network.HostPort(567)}",
+            "-s", $"tcp!127.0.0.1!{network.HostPort(5356)}",
+            .. Words(args),
+        ];
+        foreach (string word in words)
+        {
+            start.ArgumentList.Add(word);
+        }
+
+        // An empty namespace directory, so that drawterm finds no plan9port factotum of the machine's.
+        fogDirectory ??= Directory.CreateTempSubdirectory("fog-local-").FullName;
+        start.Environment["NAMESPACE"] = fogDirectory;
+        using System.Diagnostics.Process drawterm = System.Diagnostics.Process.Start(start)!;
+        await drawterm.StandardInput.WriteAsync($"{SecstorePassword}\n{SecstorePassword}\n");
+        await drawterm.StandardInput.FlushAsync();
+        Task output = drawterm.StandardOutput.BaseStream.CopyToAsync(fogOutput);
+        Task errors = drawterm.StandardError.BaseStream.CopyToAsync(fogErrors);
+        try
+        {
+            await drawterm.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+            await Task.WhenAll(output, errors);
+            fogExit = drawterm.ExitCode;
+        }
+        catch (TimeoutException error)
+        {
+            drawterm.Kill();
+            throw new TimeoutException(FogFailure(), error);
+        }
+    }
 
     [Then(@"^fog's terminal shows ""(.*)""$")]
     public void ThenTerminalShows(string text) => Assert.True(fogTerminal.Text == Unescape(text), FogFailure());

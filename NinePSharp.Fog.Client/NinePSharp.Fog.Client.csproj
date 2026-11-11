@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dp9ik.P9Auth" Version="0.4.1" />
-    <PackageReference Include="Dp9ik.Tls" Version="0.4.1" />
+    <PackageReference Include="Dp9ik.P9Auth" Version="0.4.2" />
+    <PackageReference Include="Dp9ik.Tls" Version="0.4.2" />
     <PackageReference Include="NinePSharp.Server" Version="$(NinePSharpVersion)" />
   </ItemGroup>
 

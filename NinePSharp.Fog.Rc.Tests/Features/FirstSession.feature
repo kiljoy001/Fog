@@ -103,6 +103,17 @@ Feature: A first session on a Fog host booted from its gefs store
     Then fog prints "key proto=pass server=example user=glenda !password?"
     And fog's terminal shows "secstore password: \nsecstore password: \n"
 
+  # drawterm logs in with the dp9ik key in the file it fetches from secstore, and has served no
+  # /dev/secstore since 2016, forgetting the file once it has logged in; so the profile starts
+  # factotum, whose secstore asks on drawterm's console for the password again, and says on it
+  # whose store it logged in to.
+  @FOG_LOGIN_009
+  Scenario: A drawterm session's factotum takes the user's keys from secstore
+    Given glenda's secstore on the host holds the file "factotum" with "key proto=dp9ik dom=fog user=glenda !password=secretpw\nkey proto=pass server=example user=glenda !password=x"
+    And fog has run "-u glenda -c /sys/lib/newuser"
+    When drawterm runs "-u glenda -c 'cat /mnt/factotum/ctl'" and is given glenda's secstore password twice
+    Then drawterm prints "secstore password: \nsecstore password: \nsecstore\nkey proto=dp9ik dom=fog user=glenda !password?\nkey proto=pass server=example user=glenda !password?"
+
   @FOG_HOST_009
   Scenario: A session may mount the store from /srv/boot, authenticated by its factotum, but may not give a file away
     When fog runs "-u glenda -c 'mount /srv/boot /n/u; ls -d /n/u/usr/glenda; chgrp -u bootes /n/u/usr/glenda'"
