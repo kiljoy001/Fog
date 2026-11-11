@@ -43,6 +43,7 @@ Feature: The user table is parsed from /adm/users as gefs's user.c parses it
       | -3:a::\n3:b::\n       | is not |
       | 12:a::\n1:b::\n       | is not |
       | 1:a::\n12:b::\n       | is not |
+      | 2:a::\n12:b::\n       | is not |
 
   @FOG_GEFS_902
   Scenario: A user is found by the first line of its name, and a member by the last
@@ -73,6 +74,7 @@ Feature: The user table is parsed from /adm/users as gefs's user.c parses it
       | 1:glenda::\n# no\n2:sys\n       | syntax error        | /adm/users:3: missing ':' after name\n        |
       | 1:glenda::\n2:sys:\n            | syntax error        |                                               |
       | 1:glenda::\n2:sys:bob:\n        | user does not exist | /adm/users:2: leader bob does not exist\n     |
+      | 1:glenda:bob:\n2:sys\n          | user does not exist | /adm/users:1: leader bob does not exist\n     |
       | 1:glenda::\n2:sys::glenda,bob\n | user does not exist | /adm/users:2: user bob does not exist\n       |
 
   @FOG_GEFS_903

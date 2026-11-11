@@ -106,7 +106,10 @@ public sealed class Users
         int n = 0;
         for (int j = s.StartsWith('-') || s.StartsWith('+') ? 1 : 0; j < s.Length && char.IsAsciiDigit(s[j]); j++)
         {
-            n = (n * 10) + (s[j] - '0');
+            n *= 10;
+
+            // Stryker disable once Assignment : ids are only compared, and every id negated is as distinct
+            n += s[j] - '0';
         }
 
         return s.StartsWith('-') ? -n : n;
