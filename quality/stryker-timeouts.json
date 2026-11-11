@@ -2014,5 +2014,13 @@
     "commit": "9ed5d647e86f",
     "print": "04605af6e7e7573f",
     "reason": "skipnl never returns, advancing past the end of input forever"
+  },
+  {
+    "file": "AwkRun.cs",
+    "mutator": "Statement mutation",
+    "line": "await Task.Yield();",
+    "commit": "b7f954c71034",
+    "print": "2b856708cef73153",
+    "reason": "without the hop to a fresh stack, a function recursing to 9front's depth overflows the host's stack, which ends the test host rather than the process"
   }
 ]
