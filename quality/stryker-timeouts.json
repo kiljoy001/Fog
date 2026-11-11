@@ -1920,6 +1920,14 @@
     "reason": "srand counts down through two billion steps before i wraps, so each awk start takes minutes and only then is rand's sequence wrong"
   },
   {
+    "file": "AwkRun.cs",
+    "mutator": "Equality mutation",
+    "line": "else if (y.Csub == Ctemp)",
+    "commit": "9ed5d647e86f",
+    "print": "279de9f1c80ff2ee",
+    "reason": "call passes what is not a temporary by reference and marks it a copy, True among them, which every awk is given and whose loops then never end, as t.for1's for (;;) and t.fun2's while"
+  },
+  {
     "file": "AwkTran.cs",
     "mutator": "Bitwise mutation",
     "line": "if ((vp.Tval & Fld) != 0 && !donefld)",
