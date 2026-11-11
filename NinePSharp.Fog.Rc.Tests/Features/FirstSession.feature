@@ -65,6 +65,17 @@ Feature: A first session on a Fog host booted from its gefs store
     Then fog prints "cp: can't create /bin/app: permission denied" on its standard error
     And fog exits 1
 
+  # The profile starts factotum for a call from a terminal with no window system, as fog's is, and
+  # factotum's secstore asks on the terminal for the password; the session that ran newuser was
+  # asked too, and was given nothing.
+  @FOG_LOGIN_009
+  Scenario: A session's factotum takes the user's keys from secstore
+    Given glenda's secstore on the host holds the file "factotum" with "key proto=pass server=example user=glenda !password=x"
+    And fog has run "-u glenda -c /sys/lib/newuser"
+    When fog runs "-u glenda -c 'cat /mnt/factotum/ctl'" and is given glenda's secstore password
+    Then fog prints "key proto=pass server=example user=glenda !password?"
+    And fog's terminal shows "secstore password: \nsecstore password: \n"
+
   @FOG_HOST_009
   Scenario: A session may mount the store from /srv/boot, authenticated by its factotum, but may not give a file away
     When fog runs "-u glenda -c 'mount /srv/boot /n/u; ls -d /n/u/usr/glenda; chgrp -u bootes /n/u/usr/glenda'"

@@ -20,11 +20,15 @@ public sealed class FirstSessionSteps
 {
     // The host owner's password, which the auth server knows and the host's nvram holds the key of.
     private const string OwnerPassword = "bootespw";
+
+    // glenda's secstore password, which secuser sets and the session's console gives.
+    private const string SecstorePassword = "secstorepw";
     private readonly string directory = Path.Combine(Path.GetTempPath(), $"fog-session-{Guid.NewGuid():N}");
     private readonly Dictionary<string, string> passwords = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource stopping = new();
     private readonly Recorded fogOutput = new();
     private readonly Recorded fogErrors = new();
+    private readonly Recorded fogTerminal = new();
     private readonly FakeHostConsole console = new();
     private readonly FakeHostNetwork network = new();
     private FogHost? host;
@@ -107,17 +111,41 @@ public sealed class FirstSessionSteps
 
     [Given(@"^fog has run ""([^""]*)""$")]
     [When(@"^fog runs ""([^""]*)""$")]
-    public Task WhenFogRunsAsync(string args) => RunFogAsync(args, null);
+    public Task WhenFogRunsAsync(string args) => RunFogAsync(args, null, []);
 
     [Given(@"^fog has run ""([^""]*)"" in that directory$")]
     [When(@"^fog runs ""([^""]*)"" in that directory$")]
-    public Task WhenFogRunsInDirectoryAsync(string args) => RunFogAsync(args, null);
+    public Task WhenFogRunsInDirectoryAsync(string args) => RunFogAsync(args, null, []);
 
     [When(@"^fog runs ""([^""]*)"" in that directory with \$PASS ""([^""]*)""$")]
-    public Task WhenFogRunsWithPassAsync(string args, string pass) => RunFogAsync(args, pass);
+    public Task WhenFogRunsWithPassAsync(string args, string pass) => RunFogAsync(args, pass, []);
+
+    // secuser makes glenda's account as the host owner, answering its prompts on the host's
+    // console, and secstore puts the file in it through the secstored cpurc started.
+    [Given(@"^glenda's secstore on the host holds the file ""(.*)"" with ""(.*)""$")]
+    public async Task GivenSecstoreFileAsync(string file, string text)
+    {
+        console.Type($"{SecstorePassword}\n{SecstorePassword}\n\n\n\n\n");
+        await RunAsOwnerAsync($"""
+            auth/secuser glenda </dev/cons >/dev/null
+            cd /tmp
+            echo '{Unescape(text)}' >{file}
+            echo {SecstorePassword} | auth/secstore -i -s tcp!127.0.0.1!5356 -u glenda -p {file}
+            while(! test -s /adm/secstore/store/glenda/{file}) sleep 0.1
+            test -s /adm/secstore/store/glenda/{file}
+
+            """);
+    }
+
+    // The session's console gives glenda's secstore password to the first read of it.
+    [When(@"^fog runs ""([^""]*)"" and is given glenda's secstore password$")]
+    public Task WhenFogRunsWithSecstorePasswordAsync(string args) => RunFogAsync(args, null, [SecstorePassword]);
 
     [Then(@"^fog prints ""(.*)""$")]
     public void ThenFogPrints(string text) => Assert.True(fogOutput.Text.TrimEnd('\n') == Unescape(text), FogFailure());
+
+    [Then(@"^fog's terminal shows ""(.*)""$")]
+    public void ThenTerminalShows(string text) => Assert.True(fogTerminal.Text == Unescape(text), FogFailure());
 
     [Then(@"^fog prints ""(.*)"" on its standard error$")]
     public void ThenFogPrintsError(string text) => Assert.True(fogErrors.Text.Contains(Unescape(text), StringComparison.Ordinal), FogFailure());
@@ -146,7 +174,7 @@ public sealed class FirstSessionSteps
             ["rc/bin/cpurc"] = Services.Cpurc,
             ["rc/bin/service/tcp17019"] = Services.Tcp17019,
             ["sys/lib/newuser"] = Services.Newuser,
-            ["lib/ndb/local"] = $"authdom={domain} auth=127.0.0.1\n",
+            ["lib/ndb/local"] = $"ipnet={domain} ip=127.0.0.0 ipmask=255.0.0.0\n\tauth=127.0.0.1\n\tauthdom={domain}\n",
         };
         host = await FogHost.BootAsync(new FogHostSettings(StoreFile, owner)
         {
@@ -230,6 +258,12 @@ public sealed class FirstSessionSteps
             chgrp {user} /n/u/usr/{user}
 
             """;
+        await RunAsOwnerAsync(script);
+    }
+
+    // An rc script run by the host owner in a namespace of its own, which must succeed.
+    private async Task RunAsOwnerAsync(string script)
+    {
         Init.Fork(RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nameg, child => child.ExecAsync("/bin/rc", ["rc", "-c", script]));
         string status = (await Init.WaitAsync()).Message;
         Assert.True(status.Length == 0, $"{status}\n{console.Text}");
@@ -249,9 +283,11 @@ public sealed class FirstSessionSteps
     }
 
     // fog as a user runs it, its $cpu and $auth the host's forwarded 17019 and 567, and $PASS the
-    // password of the user -u names, unless the scenario gives another.
-    private async Task RunFogAsync(string args, string? pass)
+    // password of the user -u names, unless the scenario gives another; its console gives the
+    // lines typed and then its end.
+    private async Task RunFogAsync(string args, string? pass, string[] typed)
     {
+        var lines = new Queue<string>(typed);
         string[] words = Words(args);
         string user = words[Array.IndexOf(words, "-u") + 1];
         var local = new Local
@@ -269,15 +305,15 @@ public sealed class FirstSessionSteps
             },
             LoginName = user,
             ReadPassword = (_, _) => ValueTask.FromResult<string?>(null),
-            ReadConsole = _ => ValueTask.FromResult<string?>(null),
-            WriteConsole = (data, ct) => fogOutput.WriteAsync(data, ct),
+            ReadConsole = _ => ValueTask.FromResult(lines.TryDequeue(out string? line) ? line + "\n" : null),
+            WriteConsole = (data, ct) => fogTerminal.WriteAsync(data, ct),
             Drives = new Dictionary<string, string>(StringComparer.Ordinal),
         };
         fogExit = await Rcpu.RunAsync(words, local, stopping.Token).WaitAsync(TimeSpan.FromSeconds(60));
     }
 
     private string FogFailure()
-        => $"fog exited {fogExit}; its output:\n{fogOutput.Text}\nits errors:\n{fogErrors.Text}\nthe host's console:\n{console.Text}\nits processes: {string.Join(' ', host?.Kernel.Processes.Values.Select(p => p.Text) ?? [])}";
+        => $"fog exited {fogExit}; its output:\n{fogOutput.Text}\nits errors:\n{fogErrors.Text}\nits terminal:\n{fogTerminal.Text}\nthe host's console:\n{console.Text}\nits processes: {string.Join(' ', host?.Kernel.Processes.Values.Select(p => p.Text) ?? [])}";
 
     // The host owner's Nvrsafe, its dp9ik key from the password the auth server knows.
     private byte[] Nvram()

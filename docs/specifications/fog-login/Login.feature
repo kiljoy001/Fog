@@ -212,9 +212,9 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     Then it prints "kept"
 
   @FOG_LOGIN_009
-  Scenario: drawterm's secstore file is loaded into the session's factotum
-    Given glenda's secstore holds the file "factotum" with "key proto=pass server=example user=glenda !password=x"
-    When drawterm runs "-h fog -a fog -s fog -u glenda" and is given both passwords
+  Scenario: A drawterm session's factotum takes the user's keys from secstore
+    Given glenda's secstore holds the file "factotum" with "key proto=dp9ik dom=fog user=glenda !password=secretpw\nkey proto=pass server=example user=glenda !password=x"
+    When drawterm runs "-h fog -a fog -s fog -u glenda" and is given glenda's secstore password twice
     Then the session's "/mnt/factotum/ctl" lists "key proto=pass server=example user=glenda !password?"
 
   @FOG_LOGIN_010

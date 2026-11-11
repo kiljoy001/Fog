@@ -108,11 +108,14 @@ program. As on a 9front CPU server:
 - `auth/secstored` runs as the host owner as the domain's secure store. It announces
   `tcp!*!5356` itself, as 9front's does, and keeps its files on gefs under `/adm/secstore`. A
   user's secstore password is set with `auth/secuser`.
-- In a session, the user's own factotum is started by `lib/profile`, as `newuser` writes it for
-  `service=cpu`: drawterm, which has already fetched the user's `factotum` file from secstore,
-  gives it at `/mnt/term/dev/secstore` and the profile loads it into `auth/factotum -n`;
-  otherwise `auth/factotum` fetches the file from secstore itself, asking for the secstore
-  password on `/dev/cons`.
+- In a session from a terminal with no window system, the user's own factotum is started by
+  `lib/profile`, as `newuser` writes it for `service=cpu`: `auth/factotum` fetches the user's
+  `factotum` file from secstore itself, asking for the secstore password on `/dev/cons`, raw
+  through `/dev/consctl`. secstore dials `$auth`, which cs finds as 9front's does, in the
+  `ipnet` of the site's `/lib/ndb/local` that holds the host's address. The profile's other
+  branch, loading `/mnt/term/dev/secstore` into `auth/factotum -n`, is `newuser`'s for an older
+  drawterm: since 2016 drawterm serves no `/dev/secstore` and forgets the file once it has
+  logged in with the key it holds, so its session's factotum asks for the password again.
 
 Factotum's protocols are ported as they are needed: `p9any`, `dp9ik` (from `p9sk1.c`) and `pass`
 first. `p9sk1` is left out, since Fog's auth server speaks only dp9ik.
@@ -221,6 +224,9 @@ The scripts need what the kernel does not have yet:
 5. Serve 9P on the conversation, as `exportfs -r /` does, from a tree of its own:
    - `/dev/cons`: reads are the terminal's lines, in the console's own cooked mode; writes go to
      the terminal;
+   - `/dev/consctl`: as kbdfs's, `rawon` makes the terminal raw, what is typed read without
+     being echoed, and `rawoff` cooked again, as it is once the last open of it is closed or
+     the session ends; anything else is `invalid argument`;
    - `/fd/10`, `/fd/11`, `/fd/12`: the local standard input, output and error;
    - `/mnt/cpunote/data`: an interrupt from the terminal (Ctrl-C, or Ctrl-Break on Windows) is
      read here as `interrupt`;
