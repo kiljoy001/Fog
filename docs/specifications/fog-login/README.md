@@ -4,9 +4,10 @@ Status: design; the host booting the kernel on gefs, the mount driver, notes wit
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
-is rc and files: installing an application is `cp`, starting it is running it, and looking at it
-is reading `/mnt/{app}`. Fog adds no commands of its own for logging in; the commands that manage
-applications are rc scripts in Fog's `/bin`, the same for every client.
+is rc and files: installing an application is `cp` and `chmod +x`, starting it is running it,
+and looking at it is reading `/mnt/{app}`, once the WASM profile serves an application's files.
+Fog adds no commands of its own for logging in; the commands that manage applications are rc
+scripts in Fog's `/bin`, the same for every client.
 
 Three clients reach the same listener:
 
@@ -44,6 +45,7 @@ PSK suites, keyed by the dp9ik session secret.
 PS C:\work> fog -h fog.example
 password:
 term% cp app.wasm /bin/app
+term% chmod +x /bin/app
 term% app &
 term% cat /mnt/app/status
 term% ^D

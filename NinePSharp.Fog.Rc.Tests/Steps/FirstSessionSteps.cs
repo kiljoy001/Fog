@@ -8,6 +8,7 @@ using NinePSharp.Fog.Commands;
 using NinePSharp.Fog.Host;
 using NinePSharp.Fog.Kernel;
 using NinePSharp.Fog.Rc.Tests.Support;
+using NinePSharp.Fog.Wasm;
 using Reqnroll;
 using Xunit;
 using static NinePSharp.Fog.Rc.Tests.Support.FogWords;
@@ -109,6 +110,16 @@ public sealed class FirstSessionSteps
         File.WriteAllText(Path.Combine(fogDirectory, name), Unescape(text));
     }
 
+    [Given(@"^fog's local directory holds the WASM applications ""(.*)"" and ""(.*)""$")]
+    public void GivenLocalApplications(string a, string b)
+    {
+        fogDirectory ??= Directory.CreateTempSubdirectory("fog-local-").FullName;
+        foreach (string name in new[] { a, b })
+        {
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Data", "wasm", name), Path.Combine(fogDirectory, name));
+        }
+    }
+
     [Given(@"^fog has run ""([^""]*)""$")]
     [When(@"^fog runs ""([^""]*)""$")]
     public Task WhenFogRunsAsync(string args) => RunFogAsync(args, null, []);
@@ -185,6 +196,7 @@ public sealed class FirstSessionSteps
             Host = network,
             Console = console,
             Nvram = new HostNvram(Nvram()),
+            Loaders = [new WasmLoader(TimeProvider.System).LoadAsync],
         });
         Assert.True(host.BootStatus.Length == 0, host.BootStatus);
 

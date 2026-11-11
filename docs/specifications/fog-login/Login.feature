@@ -158,9 +158,9 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
       | -u glenda extra |
 
   @FOG_LOGIN_006
-  Scenario: An application installed from a session runs as a process and serves its files
+  Scenario: An application installed from a session runs as a process of the session
     Given the local directory holds the WASM application "app.wasm"
-    When the shell runs "fog -h fog -u glenda -c 'cp app.wasm /bin/app; app'"
+    When the shell runs "fog -h fog -u glenda -c 'cp app.wasm /bin/app; chmod +x /bin/app; app'"
     Then "/bin/app" on Fog holds the application's bytes
     And it runs as a process of the session
 

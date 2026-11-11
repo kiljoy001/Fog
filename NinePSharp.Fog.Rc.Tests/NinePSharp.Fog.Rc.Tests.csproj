@@ -25,10 +25,12 @@
     <ProjectReference Include="..\NinePSharp.Fog.Auth\NinePSharp.Fog.Auth.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Client\NinePSharp.Fog.Client.csproj" />
     <ProjectReference Include="..\NinePSharp.Fog.Host\NinePSharp.Fog.Host.csproj" />
+    <ProjectReference Include="..\NinePSharp.Fog.Wasm\NinePSharp.Fog.Wasm.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\NinePSharp.Fog.Wasm.Tests\Fixtures\echo-args.wasm;..\NinePSharp.Fog.Wasm.Tests\Fixtures\exit-3.wasm" LinkBase="Data\wasm" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

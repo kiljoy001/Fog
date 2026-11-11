@@ -56,6 +56,16 @@ Feature: A first session on a Fog host booted from its gefs store
     And fog runs "-u glenda -c 'ls /bin/app'"
     Then fog prints "/bin/app"
 
+  # rc runs an application copied into /bin as it runs any program: exec knows WASM by its preamble,
+  # and the application is a process of the session, with its arguments, its descriptors and a wait
+  # message for rc. cp keeps the local file's mode, as 9front's does, so the copy is made executable.
+  @FOG_LOGIN_006
+  Scenario: An application installed from a session runs as a process of the session
+    Given fog's local directory holds the WASM applications "echo-args.wasm" and "exit-3.wasm"
+    When fog runs "-u glenda -c 'cp echo-args.wasm /bin/app; cp exit-3.wasm /bin/fails; /bin/app; chmod +x /bin/app /bin/fails; cmp echo-args.wasm /bin/app; app one two; fails; echo $status | sed ''s/ [0-9]+:/ N:/'''" in that directory
+    Then fog prints "app\none\ntwo\nfails N: wasm-exit 3"
+    And fog prints "/bin/app: permission denied: '/bin/app'" on its standard error
+
   @FOG_LOGIN_007
   Scenario: A user not in sys cannot install an application
     Given "ken" has been added as gefs adds a user
