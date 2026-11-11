@@ -182,6 +182,9 @@ public sealed class RcExecutionSteps
     [Then(@"^the file server was attached as ""(.*)"" to ""(.*)""$")]
     public void ThenAttached(string user, string tree) => Assert.Contains((user, tree), server!.Attaches);
 
+    [Then("the file server was asked to authenticate no one")]
+    public void ThenNoAuths() => Assert.Empty(server!.Auths);
+
     // 9front's clock cannot be set, so this runs on Fog alone.
     [Given(@"^the clock reads (\d+)$")]
     public void GivenClockReads(long seconds) => (clock.Now, fogOnly) = (DateTimeOffset.FromUnixTimeSeconds(seconds), true);

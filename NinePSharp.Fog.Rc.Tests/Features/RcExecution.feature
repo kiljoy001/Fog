@@ -5965,6 +5965,7 @@ Feature: rc runs scripts as 9front rc does
       not none
       """
     And the file server was attached as "none" to "work"
+    And the file server was asked to authenticate no one
 
   @FOG_RC_RUN_226
   Scenario: mount -c lets files be made in the mount, which takes none without it

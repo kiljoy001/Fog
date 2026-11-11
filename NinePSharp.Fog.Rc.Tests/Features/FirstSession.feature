@@ -140,3 +140,16 @@ Feature: A first session on a Fog host booted from its gefs store
   Scenario: A namespace file mounts the store authenticated through the factotum newns opened
     When fog runs "-u glenda -c 'echo ''mount /srv/boot /n/b'' >$home/ns; auth/newns -a -n $home/ns ls -d /n/b/usr/glenda'"
     Then fog prints "/n/b/usr/glenda"
+
+  # chgrp without -u changes only the group; the owner it leaves would be a gift gefs refuses.
+  @FOG_HOST_009
+  Scenario: chgrp gives a file of the user's to a group they are in, keeping its owner
+    When fog runs "-u glenda -c 'cd; >f; chgrp sys f; x=`{ls -l f}; echo $x(4) $x(5)'"
+    Then fog prints "glenda sys"
+
+  # newns opens factotum's rpc on the lowest free descriptor, which is 0 when its input is closed,
+  # and authenticates through it all the same.
+  @FOG_HOST_009
+  Scenario: newns authenticates through factotum's rpc when it opens on descriptor 0
+    When fog runs "-u glenda -c 'echo ''mount /srv/boot /n/b'' >$home/ns; auth/newns -a -n $home/ns ls -d /n/b/usr/glenda <[0=]'"
+    Then fog prints "/n/b/usr/glenda"
