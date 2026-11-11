@@ -24,17 +24,12 @@ namespace NinePSharp.Fog.Rc.Tests.Steps;
 [Scope(Feature = "Stock 9front rcpu runs rc on Fog through tcp17019")]
 public sealed class RcpuLoginSteps
 {
-    private const string Domain = "fog";
-
     // rc's prompt on Fog, as rcmain sets it when the profile sets none.
     private const string FogPrompt = "% ";
 
     // secstored's port on Fog, and the host's port forwarded to 9front's 5356.
     private const int FogSecstore = 17380;
-    private const int NineFrontSecstore = 17381;
     private const string SecstorePassword = "secstorepw";
-    private static readonly SemaphoreSlim Booting = new(1, 1);
-    private static NineFrontTerminal? terminal;
     private static bool nineFrontSecstored;
     private readonly FakeHostNetwork host = new();
     private readonly FakeHostConsole console = new();
@@ -71,16 +66,6 @@ public sealed class RcpuLoginSteps
 
     private int Port => host.HostPort(17019);
 
-    [AfterTestRun]
-    public static async Task StopTerminalAsync()
-    {
-        if (terminal is not null)
-        {
-            await terminal.DisposeAsync();
-            terminal = null;
-        }
-    }
-
     [Given(@"^a Fog host listening on tcp port 17019, and the auth server for the domain ""fog"" on 567$")]
     public async Task GivenHostAsync()
     {
@@ -107,7 +92,7 @@ public sealed class RcpuLoginSteps
         init.Fork(RforkFlags.Proc | RforkFlags.Fdg, child => child.ExecAsync("/bin/auth/factotum", ["auth/factotum", "-n", "-p", "-s", "factotum"]));
         Assert.Equal(string.Empty, (await init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(5))).Message);
         int ctl = await init.OpenAsync("/mnt/factotum/ctl", NinePConstants.OWRITE);
-        await init.WriteAsync(ctl, Encoding.UTF8.GetBytes($"key proto=dp9ik user={user} dom={Domain} !password={password}"));
+        await init.WriteAsync(ctl, Encoding.UTF8.GetBytes($"key proto=dp9ik user={user} dom={NineFront.Domain} !password={password}"));
         await init.CloseAsync(ctl);
         init.Fork(RforkFlags.Proc, child => child.ExecAsync("/bin/aux/listen", ["aux/listen", "-q", "-d", "/tmp/svc", "-a", "127.0.0.1", "tcp"]));
         Assert.Equal(string.Empty, (await init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(5))).Message);
@@ -120,15 +105,15 @@ public sealed class RcpuLoginSteps
     [Given(@"^9front's ""(.*)"" holds ""(.*)""$")]
     public async Task GivenNineFrontFileAsync(string path, string text)
     {
-        NineFrontTerminal t = await TerminalAsync();
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
         await t.RunAsync($"echo '{text}' >{path}");
     }
 
     [When(@"^9front runs ""(.*)""$")]
     public async Task WhenNineFrontRunsAsync(string command)
     {
-        NineFrontTerminal t = await TerminalAsync();
-        await KeyAsync(t, "glenda", passwords["glenda"]);
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
+        await NineFront.KeyAsync(t, "glenda", passwords["glenda"]);
         string line = Dialed(command);
         string all;
         try
@@ -167,7 +152,7 @@ public sealed class RcpuLoginSteps
     [When(@"^9front runs ""(.*)"" and gives glenda's secstore password$")]
     public async Task WhenNineFrontRunsWithSecstorePasswordAsync(string command)
     {
-        NineFrontTerminal t = await TerminalAsync();
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
         string line = command.Replace("tcp!fog!5356", $"tcp!10.0.2.2!{host.HostPort(FogSecstore)}", StringComparison.Ordinal);
         await t.SendLineAsync($"@{{{line}}} >/tmp/rout >[2]/tmp/rerr; st=$status; cat /tmp/rout; echo '#errors'; cat /tmp/rerr; echo '#status' $st");
         await t.ExpectAsync("secstore password: ", TimeSpan.FromSeconds(60));
@@ -185,7 +170,7 @@ public sealed class RcpuLoginSteps
     {
         string line = command
             .Replace("tcp!fog!5356", $"tcp!127.0.0.1!{FogSecstore}", StringComparison.Ordinal)
-            .Replace("tcp!9front!5356", $"tcp!127.0.0.1!{NineFrontSecstore}", StringComparison.Ordinal);
+            .Replace("tcp!9front!5356", $"tcp!127.0.0.1!{NineFront.Secstore}", StringComparison.Ordinal);
         Collect(await RunOnFogAsync($"@{{echo {SecstorePassword} | {line}}} >/tmp/rout >[2]/tmp/rerr; st=$status; cat /tmp/rout; echo '#errors'; cat /tmp/rerr; echo '#status' $st"));
     }
 
@@ -213,7 +198,7 @@ public sealed class RcpuLoginSteps
     [Given(@"^glenda's secstore on 9front holds the file ""(.*)"" with ""(.*)""$")]
     public async Task GivenNineFrontSecstoreFileAsync(string file, string text)
     {
-        NineFrontTerminal t = await TerminalAsync();
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
         if (!nineFrontSecstored)
         {
             // The live CD's /adm is the CD's; secuser makes the store in a directory before it.
@@ -243,8 +228,8 @@ public sealed class RcpuLoginSteps
     [When(@"^9front runs rcpu as ""(.*)"" with the password ""(.*)""$")]
     public async Task WhenNineFrontRunsWithPasswordAsync(string user, string password)
     {
-        NineFrontTerminal t = await TerminalAsync();
-        await KeyAsync(t, user, password);
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
+        await NineFront.KeyAsync(t, user, password);
         await t.SendLineAsync($"rcpu -h tcp!10.0.2.2!{Port} -u {user} -c 'echo in'");
         printed = await t.ExpectAsync("!Adding key: ", TimeSpan.FromSeconds(60));
     }
@@ -252,8 +237,8 @@ public sealed class RcpuLoginSteps
     [When(@"^9front runs ""(.*)"" interactively$")]
     public async Task WhenNineFrontRunsInteractivelyAsync(string command)
     {
-        NineFrontTerminal t = await TerminalAsync();
-        await KeyAsync(t, "glenda", passwords["glenda"]);
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
+        await NineFront.KeyAsync(t, "glenda", passwords["glenda"]);
         await t.SendLineAsync(Dialed(command));
         interactive = true;
         printed = await t.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(60));
@@ -263,17 +248,17 @@ public sealed class RcpuLoginSteps
     [When(@"^it types ""(.*)"" and then Del$")]
     public async Task WhenTypesThenDelAsync(string line)
     {
-        await terminal!.SendLineAsync(line);
+        await NineFront.Terminal!.SendLineAsync(line);
         string name = line.Split(' ')[0];
         await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == name), $"{name} did not start on Fog");
-        await terminal.TypeAsync("\x7f");
+        await NineFront.Terminal.TypeAsync("\x7f");
     }
 
     [When(@"^9front runs ""(.*)"" in the background$")]
     public async Task WhenNineFrontRunsInBackgroundAsync(string command)
     {
-        NineFrontTerminal t = await TerminalAsync();
-        await KeyAsync(t, "glenda", passwords["glenda"]);
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
+        await NineFront.KeyAsync(t, "glenda", passwords["glenda"]);
         await t.RunAsync($"{Dialed(command)} >/tmp/rout >[2]/tmp/rerr &");
         await UntilAsync(() => kernel.Processes.Values.Any(p => p.Text == "sleep"), "sleep did not start on Fog");
         string group = await ReadFileAsync($"/proc/{kernel.Processes.Values.First(p => p.Text == "sleep").Pid}/noteid");
@@ -296,7 +281,7 @@ public sealed class RcpuLoginSteps
     // tcp(3)'s hangup of the call to Fog, as the call ends when its client is killed: tlsclient and
     // exportfs each make a note group of their own, so no one note reaches all of the client.
     [When(@"^9front hangs up the client's call$")]
-    public Task WhenCallHungUpAsync() => terminal!.RunAsync(
+    public Task WhenCallHungUpAsync() => NineFront.Terminal!.RunAsync(
         $"for(c in /net/tcp/[0-9]*) if(~ `{{cat $c/remote}} 10.0.2.2!{Port}) echo hangup >$c/ctl");
 
     [When(@"^a client connects to 17019 and sends ""(.*)""$")]
@@ -373,8 +358,8 @@ public sealed class RcpuLoginSteps
     [When(@"^9front's rcpu calls from the directory ""(.*)"" with the command ""(.*)""$")]
     public async Task WhenNineFrontCallsFromAsync(string directory, string command)
     {
-        NineFrontTerminal t = await TerminalAsync();
-        await KeyAsync(t, "glenda", passwords["glenda"]);
+        NineFrontTerminal t = await NineFront.TerminalAsync(host);
+        await NineFront.KeyAsync(t, "glenda", passwords["glenda"]);
         await t.RunAsync($"mkdir -p /tmp/term{directory["/mnt/term".Length..]}; bind -c /tmp/term /mnt/term");
         printed = await t.RunAsync($"@{{cd {directory}; rcpu -h tcp!10.0.2.2!{Port} -u glenda -c '{command}'}} >[2=1]", TimeSpan.FromSeconds(60));
     }
@@ -586,7 +571,7 @@ public sealed class RcpuLoginSteps
     public void ThenStatus(string text) => Assert.True(System.Text.RegularExpressions.Regex.Replace(status, @"^(\S+ \d+: )+", string.Empty) == text, Failure());
 
     [Then(@"^the host closes the call$")]
-    public void ThenClosed() => Assert.Equal($"dp9ik@{Domain}\0", closed);
+    public void ThenClosed() => Assert.Equal($"dp9ik@{NineFront.Domain}\0", closed);
 
     [Then(@"^no process is started for the call$")]
     public async Task ThenNoProcessAsync()
@@ -600,16 +585,16 @@ public sealed class RcpuLoginSteps
     [Then(@"^factotum asks for the key again$")]
     public async Task ThenAsksAgainAsync()
     {
-        Assert.Contains($"dom={Domain}", await terminal!.ExpectAsync("\n", TimeSpan.FromSeconds(10)), StringComparison.Ordinal);
-        await terminal.ExpectAsync("password: ", TimeSpan.FromSeconds(10));
-        await terminal.SendLineAsync(passwords["glenda"]);
-        Assert.Contains("in", await terminal.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(60)), StringComparison.Ordinal);
+        Assert.Contains($"dom={NineFront.Domain}", await NineFront.Terminal!.ExpectAsync("\n", TimeSpan.FromSeconds(10)), StringComparison.Ordinal);
+        await NineFront.Terminal.ExpectAsync("password: ", TimeSpan.FromSeconds(10));
+        await NineFront.Terminal.SendLineAsync(passwords["glenda"]);
+        Assert.Contains("in", await NineFront.Terminal.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(60)), StringComparison.Ordinal);
     }
 
     [Then(@"^rc on Fog is interrupted and prompts again$")]
     public async Task ThenPromptsAgainAsync()
     {
-        printed = await terminal!.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(30));
+        printed = await NineFront.Terminal!.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(30));
         await UntilAsync(() => !kernel.Processes.Values.Any(p => p.Text == "sleep"), "sleep was not interrupted");
     }
 
@@ -617,8 +602,8 @@ public sealed class RcpuLoginSteps
     [Then(@"^typing ""(.*)"" prints ""(.*)""$")]
     public async Task ThenTypingPrintsAsync(string line, string text)
     {
-        await terminal!.SendLineAsync(line);
-        printed = await terminal.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(30));
+        await NineFront.Terminal!.SendLineAsync(line);
+        printed = await NineFront.Terminal.ExpectAsync(FogPrompt, TimeSpan.FromSeconds(30));
         Assert.True(printed[(printed.IndexOf('\n', StringComparison.Ordinal) + 1)..].TrimEnd('\n') == Unescape(text), Failure());
     }
 
@@ -651,15 +636,8 @@ public sealed class RcpuLoginSteps
 
         if (interactive)
         {
-            await terminal!.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(30));
+            await NineFront.Terminal!.ExpectAsync(NineFrontTerminal.Prompt, TimeSpan.FromSeconds(30));
         }
-    }
-
-    // The terminal's factotum holding only this key for the domain.
-    private static async Task KeyAsync(NineFrontTerminal t, string user, string password)
-    {
-        await t.RunAsync($"echo 'delkey proto=dp9ik dom={Domain}' >/mnt/factotum/ctl >[2]/dev/null");
-        await t.RunAsync($"echo 'key proto=dp9ik dom={Domain} user={user} !password={password}' >/mnt/factotum/ctl");
     }
 
     // What the command left after #errors and #status, split.
@@ -726,41 +704,8 @@ public sealed class RcpuLoginSteps
         }
     }
 
-    // The terminal, booted once for the run and put in Fog's auth domain: the live CD does not
-    // configure its interface and its /lib/ndb is read-only, and cs and factotum are started again
-    // so that both see the auth domain.
-    private async Task<NineFrontTerminal> TerminalAsync()
-    {
-        if (NineFrontTerminal.Unavailable is string reason)
-        {
-            throw new InvalidOperationException(reason);
-        }
-
-        await Booting.WaitAsync();
-        try
-        {
-            if (terminal is null)
-            {
-                NineFrontTerminal t = await NineFrontTerminal.BootAsync((host.HostPort(NineFrontSecstore), 5356));
-                await t.RunAsync("ip/ipconfig");
-                await t.RunAsync("cp /lib/ndb/local /tmp/ndblocal");
-                await t.RunAsync($"echo 'authdom={Domain} auth=tcp!10.0.2.2!{host.HostPort(567)}' >>/tmp/ndblocal");
-                await t.RunAsync("bind /tmp/ndblocal /lib/ndb/local");
-                await t.RunAsync("ndb/cs");
-                await t.RunAsync("auth/factotum");
-                terminal = t;
-            }
-
-            return terminal;
-        }
-        finally
-        {
-            Booting.Release();
-        }
-    }
-
     private string Failure()
-        => $"printed:\n{printed}\nerrors:\n{errors}\nstatus: {status}\nconsole: {console.Text}\nprocesses: {string.Join(" | ", kernel.Processes.Values.Select(p => $"{p.Pid}:{p.Text}:{p.Args}:{p.User}"))}\n9front:\n{terminal?.Transcript(2000)}";
+        => $"printed:\n{printed}\nerrors:\n{errors}\nstatus: {status}\nconsole: {console.Text}\nprocesses: {string.Join(" | ", kernel.Processes.Values.Select(p => $"{p.Pid}:{p.Text}:{p.Args}:{p.User}"))}\n9front:\n{NineFront.Terminal?.Transcript(2000)}";
 
     private async Task<bool> AnsweredAsync()
     {
