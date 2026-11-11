@@ -182,7 +182,13 @@ Feature: A user logs in to Fog and gets rc, from 9front, drawterm or any shell
     Given the host owner's factotum is at "/srv/factotum"
     When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'cat /dev/user'"
     Then it prints "glenda"
-    And the host owner's factotum logged the dp9ik authentication of "glenda"
+
+  @FOG_LOGIN_008
+  Scenario: A ticket the host owner's key does not open is refused, and factotum logs the failure
+    Given the host's sealed key store holds a key the auth server does not know for the host owner
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'cat /dev/user'"
+    Then the call is refused
+    And the host owner's factotum logged "failure auth server protocol botch"
 
   @FOG_LOGIN_008
   Scenario: A capability is used once

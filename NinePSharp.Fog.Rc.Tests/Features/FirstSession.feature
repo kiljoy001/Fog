@@ -75,6 +75,23 @@ Feature: A first session on a Fog host booted from its gefs store
     Then fog prints "cp: can't create /bin/app: permission denied" on its standard error
     And fog exits 1
 
+  # Stock rcpu logs in to the host booted from its store: the listener's tlssrv authenticates the
+  # call through the host owner's factotum, whose key -S read from the host's sealed key store, and
+  # auth_chuid spends the capability factotum made, so the session is the user's.
+  @FOG_LOGIN_008
+  Scenario: Stock 9front rcpu logs in through the host owner's factotum
+    When 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'cat /dev/user'"
+    Then 9front prints "glenda"
+
+  # A ticket the key does not open decrypts to no ticket at all, so dp9ik's server finds it is not
+  # one for the server, and factotum logs the failure, as 9front's does without -d.
+  @FOG_LOGIN_008
+  Scenario: A call whose ticket the host owner's key does not open is refused, and the host owner's factotum logs why
+    When the host stops and boots again, its sealed key made from a password the auth server does not know
+    And 9front runs "rcpu -h tcp!fog!17019 -u glenda -c 'cat /dev/user'"
+    Then 9front prints "tlsclient: auth_proxy: auth_proxy short read" on its standard error
+    And the host owner's factotum logged "failure auth server protocol botch"
+
   # The profile starts factotum for a call from a terminal with no window system, as fog's is, and
   # factotum's secstore asks on the terminal for the password; the session that ran newuser was
   # asked too, and was given nothing.

@@ -7,8 +7,10 @@ using NinePSharp.Fog.Client;
 using NinePSharp.Fog.Commands;
 using NinePSharp.Fog.Host;
 using NinePSharp.Fog.Kernel;
+using NinePSharp.Fog.Namespaces.Tests.Support;
 using NinePSharp.Fog.Rc.Tests.Support;
 using NinePSharp.Fog.Wasm;
+using NinePSharp.Namespaces;
 using Reqnroll;
 using Xunit;
 using static NinePSharp.Fog.Rc.Tests.Support.FogWords;
@@ -36,6 +38,9 @@ public sealed class FirstSessionSteps
     private TcpListener? authsrv;
     private string owner = "bootes";
     private string domain = "fog";
+    private string sealedPassword = OwnerPassword;
+    private string nineFrontOutput = string.Empty;
+    private string nineFrontErrors = string.Empty;
     private string? fogDirectory;
     private int? fogExit;
 
@@ -79,6 +84,14 @@ public sealed class FirstSessionSteps
 
     [Given("the host has booted")]
     public async Task GivenBootedAsync() => await BootAsync();
+
+    [When("the host stops and boots again, its sealed key made from a password the auth server does not know")]
+    public async Task WhenRestartedWithAnotherKeyAsync()
+    {
+        sealedPassword = "otherpw";
+        await StopAsync();
+        await BootAsync();
+    }
 
     [When("the host stops and boots again on the same store")]
     public async Task WhenRestartedAsync()
@@ -157,6 +170,54 @@ public sealed class FirstSessionSteps
 
     [Then(@"^fog's terminal shows ""(.*)""$")]
     public void ThenTerminalShows(string text) => Assert.True(fogTerminal.Text == Unescape(text), FogFailure());
+
+    [When(@"^9front runs ""(.*)""$")]
+    public async Task WhenNineFrontRunsAsync(string command)
+    {
+        NineFrontTerminal t = await NineFront.TerminalAsync(network);
+        await NineFront.KeyAsync(t, "glenda", passwords["glenda"]);
+        string line = command.Replace("tcp!fog!17019", $"tcp!10.0.2.2!{network.HostPort(17019)}", StringComparison.Ordinal);
+        string all = await t.RunAsync($"@{{{line}}} >/tmp/rout >[2]/tmp/rerr; cat /tmp/rout; echo '#errors'; cat /tmp/rerr", TimeSpan.FromSeconds(60));
+        int e = all.LastIndexOf("#errors\n", StringComparison.Ordinal);
+        Assert.True(e >= 0, all);
+        (nineFrontOutput, nineFrontErrors) = (all[..e], all[(e + "#errors\n".Length)..]);
+    }
+
+    [Then(@"^9front prints ""(.*)""$")]
+    public void ThenNineFrontPrints(string text) => Assert.True(nineFrontOutput.TrimEnd('\n') == Unescape(text), NineFrontFailure());
+
+    [Then(@"^9front prints ""(.*)"" on its standard error$")]
+    public void ThenNineFrontPrintsError(string text) => Assert.True(nineFrontErrors.Contains(Unescape(text), StringComparison.Ordinal), NineFrontFailure());
+
+    // The host owner reads the log of the factotum the boot posted until it holds the line, each
+    // read giving a line and waiting for the next.
+    [Then(@"^the host owner's factotum logged ""(.*)""$")]
+    public async Task ThenFactotumLoggedAsync(string text)
+    {
+        string log = string.Empty;
+        Init.Fork(RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nameg, async child =>
+        {
+            await child.MountAsync(await child.OpenAsync("/srv/factotum", NinePConstants.ORDWR), -1, "/mnt", MountFlags.Before, string.Empty);
+            int f = await child.OpenAsync("/mnt/factotum/log", NinePConstants.OREAD);
+            while (!log.Contains(Unescape(text), StringComparison.Ordinal))
+            {
+                log += Encoding.UTF8.GetString((await child.ReadAsync(f, 8192)).Span);
+            }
+
+            child.Exits(null);
+        });
+        string status;
+        try
+        {
+            status = (await Init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(10))).Message;
+        }
+        catch (TimeoutException)
+        {
+            status = "timed out";
+        }
+
+        Assert.True(status.Length == 0, $"{status}; the log holds:\n{log}");
+    }
 
     [Then(@"^fog prints ""(.*)"" on its standard error$")]
     public void ThenFogPrintsError(string text) => Assert.True(fogErrors.Text.Contains(Unescape(text), StringComparison.Ordinal), FogFailure());
@@ -324,16 +385,20 @@ public sealed class FirstSessionSteps
         fogExit = await Rcpu.RunAsync(words, local, stopping.Token).WaitAsync(TimeSpan.FromSeconds(60));
     }
 
+    private string NineFrontFailure()
+        => $"9front printed:\n{nineFrontOutput}\nits errors:\n{nineFrontErrors}\nthe host's console:\n{console.Text}\n9front:\n{NineFront.Terminal?.Transcript(2000)}";
+
     private string FogFailure()
         => $"fog exited {fogExit}; its output:\n{fogOutput.Text}\nits errors:\n{fogErrors.Text}\nits terminal:\n{fogTerminal.Text}\nthe host's console:\n{console.Text}\nits processes: {string.Join(' ', host?.Kernel.Processes.Values.Select(p => p.Text) ?? [])}";
 
-    // The host owner's Nvrsafe, its dp9ik key from the password the auth server knows.
+    // The host owner's Nvrsafe, its dp9ik key from the password the auth server knows, unless the
+    // scenario sealed another.
     private byte[] Nvram()
     {
         var safe = new Nvrsafe();
         Authsrv.Safecpy(safe.Authid, owner);
         Authsrv.Safecpy(safe.Authdom, domain);
-        Authkey.Passtokey(OwnerPassword).K.AesKey.CopyTo(safe.Aesmachkey, 0);
+        Authkey.Passtokey(sealedPassword).K.AesKey.CopyTo(safe.Aesmachkey, 0);
         safe.Machsum = Authsrv.Nvcsum(safe.Machkey);
         safe.Configsum = Authsrv.Nvcsum(safe.Config);
         safe.Authidsum = Authsrv.Nvcsum(safe.Authid);
