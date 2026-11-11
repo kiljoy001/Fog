@@ -194,10 +194,30 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
     When fog runs "-u glenda -c 'echo to the terminal >/dev/cons; read </dev/cons; read </dev/cons; read </dev/cons || echo at the end'"
     Then fog prints "to the terminal\nfirst line\nsecond\nat the end"
 
+  # As kbdfs's consctl, each write is read from its start, and the terminal is cooked again when the
+  # last fid consctl is open on is clunked.
   @FOG_LOGIN_005
-  Scenario: fog serves the terminal for reading and writing, standard input for reading, and its output and errors for writing
-    When fog runs "-u glenda -c 'ls -l /mnt/term/dev/cons /mnt/term/fd/1? | sed ''s/ .* / /'''"
-    Then fog prints "--rw-rw-rw- /mnt/term/dev/cons\n--r--r--r-- /mnt/term/fd/10\n---w--w--w- /mnt/term/fd/11\n---w--w--w- /mnt/term/fd/12"
+  Scenario: rc makes fog's terminal raw and cooked through /dev/consctl
+    When fog runs "-u glenda -c '{echo rawon >/mnt/term/dev/consctl; echo -n rawoff; echo -n rawon} >/mnt/term/dev/consctl'"
+    Then fog exits 0
+    And fog's terminal was made raw, cooked, raw and cooked
+
+  @FOG_LOGIN_005
+  Scenario: fog's consctl refuses what is neither rawon nor rawoff
+    When fog runs "-u glenda -c 'echo -n rawof >/mnt/term/dev/consctl'"
+    Then fog prints "echo: write error: invalid argument" on its standard error
+    And fog's terminal was made cooked
+
+  @FOG_LOGIN_005
+  Scenario: fog's terminal is cooked again when the call ends with consctl open
+    Given fog runs "-u glenda -c '{echo -n rawon; sleep 100} >/mnt/term/dev/consctl'" until rc is running
+    When the host drops fog's call
+    Then fog's terminal was made raw and cooked
+
+  @FOG_LOGIN_005
+  Scenario: fog serves the terminal for reading and writing, its control for writing, standard input for reading, and its output and errors for writing
+    When fog runs "-u glenda -c 'ls -l /mnt/term/dev/cons* /mnt/term/fd/1? | sed ''s/ .* / /'''"
+    Then fog prints "--rw-rw-rw- /mnt/term/dev/cons\n---w--w--w- /mnt/term/dev/consctl\n--r--r--r-- /mnt/term/fd/10\n---w--w--w- /mnt/term/fd/11\n---w--w--w- /mnt/term/fd/12"
 
   @FOG_LOGIN_005
   Scenario: fog logs in as the local login name when it is given no user

@@ -48,6 +48,9 @@ public sealed class RcpuLoginSteps
     private readonly Queue<string> fogTyped = new();
     private readonly Queue<string> fogConsole = new();
     private readonly List<string> fogAsked = [];
+
+    // raw or cooked, for each time the session made fog's terminal one.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> fogRaw = new();
     private readonly Dictionary<string, string> fogDrives = new(StringComparer.Ordinal);
     private FogKernel kernel = null!;
     private Process init = null!;
@@ -519,6 +522,15 @@ public sealed class RcpuLoginSteps
     [Then(@"^fog's local directory holds ""(.*)"" with ""(.*)""$")]
     public void ThenLocalFile(string name, string text) => Assert.Equal(Unescape(text), File.ReadAllText(Path.Combine(fogDirectory!, name)));
 
+    // As "raw, cooked and raw": each time, in turn, the session made the terminal raw or cooked.
+    [Then(@"^fog's terminal was made (.*)$")]
+    public async Task ThenTerminalMadeAsync(string made)
+    {
+        string[] expected = made.Replace(" and ", ", ", StringComparison.Ordinal).Split(", ");
+        await UntilAsync(() => fogRaw.Count >= expected.Length, $"the terminal was made only {string.Join(' ', fogRaw)}");
+        Assert.Equal(expected, fogRaw);
+    }
+
     [Then(@"^the terminal was asked ""(.*)"" twice$")]
     public void ThenAskedTwice(string prompt) => Assert.Equal([prompt, prompt], fogAsked);
 
@@ -824,6 +836,7 @@ public sealed class RcpuLoginSteps
                 return ValueTask.FromResult(fogTyped.Count > 0 ? fogTyped.Dequeue() : null);
             },
             ReadConsole = _ => ValueTask.FromResult(fogConsole.Count > 0 ? fogConsole.Dequeue() + "\n" : null),
+            Raw = on => fogRaw.Enqueue(on ? "raw" : "cooked"),
             WriteConsole = (data, ct) => fogOutput.WriteAsync(data, ct),
             Interrupts = fogInterrupts.Reader,
             Drives = fogDrives,

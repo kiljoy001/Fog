@@ -25,6 +25,9 @@ public sealed class Local
     // Reads a line the terminal has cooked, its newline included, or gives null at its end.
     public required Func<CancellationToken, ValueTask<string?>> ReadConsole { get; init; }
 
+    // Makes the terminal raw, what is typed read without being echoed, or cooked again.
+    public Action<bool> Raw { get; init; } = _ => { };
+
     // Writes to the terminal.
     public required Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> WriteConsole { get; init; }
 

@@ -11,21 +11,31 @@ using NinePSharp.Server.Identity;
 namespace NinePSharp.Fog.Client;
 
 // The tree fog serves on the conversation, as rcpu's client serves its namespace with exportfs:
-// the terminal at /dev/cons, the standard streams at /fd/10, 11 and 12, interrupts at
-// /mnt/cpunote/data, rc's status at /env/rstatus, and the local files at /root.
+// the terminal at /dev/cons and its control at /dev/consctl, the standard streams at /fd/10, 11
+// and 12, interrupts at /mnt/cpunote/data, rc's status at /env/rstatus, and the local files at
+// /root.
 internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
 {
     private const uint ReadWrite = 0b110_110_110;
 
     private readonly NinePFSDispatcher server;
     private readonly NinePFile rstatus = new("rstatus") { Mode = ReadWrite };
+    private readonly Local local;
+    private readonly Device consctl;
+
+    // The fids consctl is open on, by session.
+    private readonly HashSet<(string Session, uint Fid)> consctls = [];
 
     public Export(Local local, CancellationToken hangup)
     {
+        this.local = local;
+
         // Stryker disable once String : the root's own name is never served; a walk starts at it
         var root = new NinePDir("/");
         var dev = new NinePDir("dev");
         dev.AddChild(new Device("cons", ct => Read(local.ReadConsole, ct), local.WriteConsole, hangup));
+        consctl = new Device("consctl", null, (data, _) => Consctl(data.Span), hangup);
+        dev.AddChild(consctl);
         root.AddChild(dev);
         var fd = new NinePDir("fd");
         fd.AddChild(new Device("10", async ct => await ReadAsync(local.Input, ct), null, hangup));
@@ -49,10 +59,32 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
 
     public string Status => Encoding.UTF8.GetString(rstatus.ReadAsync(0, (uint)rstatus.Length, CancellationToken.None).Result);
 
-    public Task<object> DispatchAsync(string sessionId, NinePMessage message, NinePDialect dialect, X509Certificate2? certificate = null)
-        => server.DispatchAsync(sessionId, message, dialect, certificate);
+    // Each message served, consctl's opens and clunks counted as kbdfs counts them.
+    public async Task<object> DispatchAsync(string sessionId, NinePMessage message, NinePDialect dialect, X509Certificate2? certificate = null)
+    {
+        object reply = await server.DispatchAsync(sessionId, message, dialect, certificate);
+        switch (message)
+        {
+            case NinePMessage.MsgTopen open when reply is Ropen opened && opened.Qid.Path == consctl.GetStat(dialect).Qid.Path:
+                lock (consctls)
+                {
+                    consctls.Add((sessionId, open.Item.Fid));
+                }
 
-    public Task CloseSessionAsync(string sessionId) => server.CloseSessionAsync(sessionId);
+                break;
+            case NinePMessage.MsgTclunk clunk:
+                Closed(f => f == (sessionId, clunk.Item.Fid));
+                break;
+        }
+
+        return reply;
+    }
+
+    public async Task CloseSessionAsync(string sessionId)
+    {
+        await server.CloseSessionAsync(sessionId);
+        Closed(f => f.Session == sessionId);
+    }
 
     // /root: the tree from / or, on Windows, a directory of the drives.
     private static INinePNode Files(Local local)
@@ -87,6 +119,41 @@ internal sealed class Export : INinePFSDispatcher, INinePSessionLifecycle
 
         // Stryker disable once Statement : the console's streams are unbuffered, so the flush has nothing to send
         await stream.FlushAsync(ct);
+    }
+
+    // kbdfs's consctl: rawon makes the terminal raw and rawoff cooked again, each read from the
+    // start of the write.
+    private ValueTask Consctl(ReadOnlySpan<byte> p)
+    {
+        if (p.StartsWith("rawon"u8))
+        {
+            local.Raw(true);
+        }
+        else if (p.StartsWith("rawoff"u8))
+        {
+            local.Raw(false);
+        }
+        else
+        {
+            throw new ArgumentException("invalid argument");
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    // The terminal is cooked again once the last fid consctl is open on is clunked.
+    private void Closed(Predicate<(string Session, uint Fid)> which)
+    {
+        bool cooked;
+        lock (consctls)
+        {
+            cooked = consctls.RemoveWhere(which) > 0 && consctls.Count == 0;
+        }
+
+        if (cooked)
+        {
+            local.Raw(false);
+        }
     }
 
     // A file whose reads and writes are the machine's, each read the next of what it gives, and

@@ -85,6 +85,44 @@ public sealed class ConsoleLocalTests
         Assert.Equal("p: \n", console.Errors.ToString());
     }
 
+    // While the terminal is raw a line of it is read as the password is, without a prompt, and once
+    // it is cooked again a line is read as before.
+    [Fact]
+    public async Task AtATerminalARawLineIsTypedKeyByKey()
+    {
+        var console = new FakeConsole { In = new StringReader("cooked\n") };
+        foreach (char c in "abx")
+        {
+            console.Keys.Enqueue(Key(ConsoleKey.A, c));
+        }
+
+        console.Keys.Enqueue(Key(ConsoleKey.Backspace, '\b'));
+        console.Keys.Enqueue(Key(ConsoleKey.Enter, '\r'));
+        Local local = ConsoleLocal.Create(console);
+        local.Raw(true);
+        Assert.Equal("ab\n", await local.ReadConsole(CancellationToken.None));
+        local.Raw(false);
+        Assert.Equal("cooked\n", await local.ReadConsole(CancellationToken.None));
+        Assert.Equal(string.Empty, console.Errors.ToString());
+        Assert.Empty(console.Keys);
+    }
+
+    [Fact]
+    public async Task OtherwiseARawLineIsALineOfTheTerminalWithItsEchoOff()
+    {
+        var console = new FakeConsole { IsInputRedirected = true, HasTty = true, Tty = new StringReader("raw\ncooked\n") };
+        Local local = ConsoleLocal.Create(console);
+        local.Raw(true);
+        Assert.Equal("raw\n", await local.ReadConsole(CancellationToken.None));
+        Assert.Equal(["-echo", "echo"], console.Sttys);
+        local.Raw(false);
+        Assert.Equal("cooked\n", await local.ReadConsole(CancellationToken.None));
+        local.Raw(true);
+        Assert.Null(await local.ReadConsole(CancellationToken.None));
+        Assert.Equal(["-echo", "echo", "-echo", "echo"], console.Sttys);
+        Assert.Equal(string.Empty, console.Errors.ToString());
+    }
+
     [Fact]
     public async Task TheConsolesStreamsDirectoryEnvironmentAndUserAreFogs()
     {
