@@ -175,6 +175,9 @@ public sealed class BootSteps : IDisposable
     [Then(@"^""(.*)"" has the mode (\d+)$")]
     public async Task ThenMode(string path, string mode) => Assert.Equal(Convert.ToUInt32(mode, 8), (await Init.StatAsync(path)).Mode & 0b111_111_111);
 
+    [Given(@"^the host is to install ""([^""]*)"" holding ""([^""]*)""$")]
+    public void GivenFile(string path, string text) => files[path] = Unescape(text);
+
     [Given(@"^the host is to install ""(.*)"" holding ""(.*)"" and ""(.*)"" holding ""(.*)""$")]
     public void GivenFiles(string first, string firstText, string second, string secondText)
     {
@@ -185,29 +188,13 @@ public sealed class BootSteps : IDisposable
     // The boot's program writes its arguments where its descriptors 1 and 2 are, and to 3, which
     // only shows if init gave it more than the console's three.
     [Given(@"^the host is to run ""(.*)"" at boot, a program that writes its arguments to descriptors 1 and 2 and to 3, and exits ""(.*)""$")]
-    public void GivenBoot(string argv, string status)
-    {
-        boot = argv.Split(' ');
-        programs = new Dictionary<string, ProgramMain>
-        {
-            [boot[0]] = async (process, args) =>
-            {
-                byte[] line = Encoding.UTF8.GetBytes(string.Join(' ', args) + "\n");
-                foreach (int fd in new[] { 1, 2, 3 })
-                {
-                    try
-                    {
-                        await process.WriteAsync(fd, line);
-                    }
-                    catch (SyscallException)
-                    {
-                    }
-                }
+    public void GivenBoot(string argv, string status) => Boot(argv, status, false);
 
-                process.Exits(status);
-            },
-        };
-    }
+    [Given(@"^the host is to run ""(.*)"" at boot, a program that writes its arguments to descriptors 1 and 2 and to 3, closes its descriptor 0, and exits ""(.*)""$")]
+    public void GivenBootClosing(string argv, string status) => Boot(argv, status, true);
+
+    [Then(@"^init's descriptor (\d+) is ""(.*)""$")]
+    public async Task ThenInitDescriptor(int fd, string path) => Assert.Equal(path, await Init.Fd2PathAsync(fd));
 
     [Then(@"^the console shows ""(.*)""$")]
     public void ThenConsole(string text) => Assert.Equal(Unescape(text), console.Written);
@@ -249,6 +236,35 @@ public sealed class BootSteps : IDisposable
     }
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\t", "\t", StringComparison.Ordinal);
+
+    private void Boot(string argv, string status, bool closing)
+    {
+        boot = argv.Split(' ');
+        programs = new Dictionary<string, ProgramMain>
+        {
+            [boot[0]] = async (process, args) =>
+            {
+                byte[] line = Encoding.UTF8.GetBytes(string.Join(' ', args) + "\n");
+                foreach (int fd in new[] { 1, 2, 3 })
+                {
+                    try
+                    {
+                        await process.WriteAsync(fd, line);
+                    }
+                    catch (SyscallException)
+                    {
+                    }
+                }
+
+                if (closing)
+                {
+                    await process.CloseAsync(0);
+                }
+
+                process.Exits(status);
+            },
+        };
+    }
 
     private async Task WriteAsync(string path, byte[] contents)
     {

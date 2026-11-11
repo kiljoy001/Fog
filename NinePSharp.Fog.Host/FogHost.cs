@@ -188,7 +188,8 @@ public sealed class FogHost : IDisposable
         }
     }
 
-    // A file the installer copies, in directories made where missing, executable as a script is.
+    // A file the installer copies, in directories made where missing, executable as a script is; a
+    // file already there is truncated by the create, as the kernel's create truncates one.
     private async Task InstallAsync(string path, string text)
     {
         string[] elements = path.Split('/');
@@ -202,9 +203,7 @@ public sealed class FogHost : IDisposable
             }
         }
 
-        int f = await ExistsAsync($"{at}/{elements[^1]}")
-            ? await Init.OpenAsync($"{at}/{elements[^1]}", NinePConstants.OWRITE | NinePConstants.OTRUNC)
-            : await Init.CreateAsync($"{at}/{elements[^1]}", NinePConstants.OWRITE, 0b111_111_101);
+        int f = await Init.CreateAsync($"{at}/{elements[^1]}", NinePConstants.OWRITE, 0b111_111_101);
         await Init.WriteAsync(f, Encoding.UTF8.GetBytes(text));
         await Init.CloseAsync(f);
     }

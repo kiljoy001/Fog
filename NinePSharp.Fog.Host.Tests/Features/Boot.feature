@@ -149,12 +149,24 @@ Feature: The host boots the kernel on a gefs store kept in a file
     And the host restarts
     Then reading "/root/sys/lib/new/user" gives "#!/bin/rc\necho new\n"
 
+  # The installer's file is written and closed before init opens the console, and the boot's
+  # descriptors are its own, so what it closes init still holds.
+  # The installer writes in the store at /root, which bootrc mounts without creation, and not at /,
+  # where the kernel's devices are bound before the store.
+  @FOG_HOST_006
+  Scenario: The installer's files are written only in the store, which forbids a new directory at its top
+    Given the host is to install "env/site" holding "not the kernel's"
+    When the host boots
+    Then the boot fails with "mounted directory forbids creation: '/root/env'"
+
   @FOG_HOST_007
   Scenario: init runs the boot once the namespace is built, its descriptors 0 to 2 the console, and the host keeps how it ended
-    Given the host is to run "boot one two" at boot, a program that writes its arguments to descriptors 1 and 2 and to 3, and exits "done"
+    Given the host is to install "lib/greeting" holding "hello"
+    And the host is to run "boot one two" at boot, a program that writes its arguments to descriptors 1 and 2 and to 3, closes its descriptor 0, and exits "done"
     When the host boots
     Then the console shows "boot one two\nboot one two\n"
     And the boot status ends with "done"
+    And init's descriptor 0 is "/dev/cons"
 
   @FOG_HOST_007
   Scenario: A boot that runs nothing leaves the status empty
