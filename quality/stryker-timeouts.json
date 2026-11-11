@@ -1990,5 +1990,29 @@
     "commit": "6a656c192e53",
     "print": "02ad05ec59ef53d6",
     "reason": "the trap's count goes up rather than down, so its function runs again without end"
+  },
+  {
+    "file": "RcGlob.cs",
+    "mutator": "Logical mutation",
+    "line": "for (; At(p, pi) != stop && At(p, pi) != '\\0'; si = NextUtf(s, si), pi = NextUtf(p, pi))",
+    "commit": "9ed5d647e86f",
+    "print": "6fe4b8dffd3e28da",
+    "reason": "match steps past the pattern's end, where At gives NUL, which is never also the stop, so the loop never ends"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Logical mutation",
+    "line": "internal static bool IdChar(int c) => c > ' ' && !\"!\\\"#$%&'()+,-./:;<=>?@[\\\\]^`{|}~\".Contains((char)c, StringComparison.Ordinal);",
+    "commit": "9ed5d647e86f",
+    "print": "58310f779ef6f9a9",
+    "reason": "every character, end of input too, is a name character, so a word after $ never ends"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "9ed5d647e86f",
+    "print": "04605af6e7e7573f",
+    "reason": "skipnl never returns, advancing past the end of input forever"
   }
 ]
