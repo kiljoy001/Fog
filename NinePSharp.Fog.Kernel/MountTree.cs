@@ -143,11 +143,14 @@ internal sealed class MountTree
 
     // mntopen: a clone of the file's fid, opened, which the open file keeps until it is closed; the
     // open file's qid is the one the open gave, as mntopencreate sets the channel's. What is done
-    // to the open file is done through its fid, so the tree need not know that qid.
+    // to the open file is done through its fid, so the tree need not know that qid. A directory,
+    // though, is read again from its channel rather than through the fid as mntread reads it, so it
+    // keeps the qid it was walked to: a union's open gives its first member's, as drawterm's /dev
+    // gives #c's, which may be another directory's.
     public async Task<ResourceOpenHandle> OpenAsync(ResourceHandle resource, byte mode, CancellationToken cancellationToken)
     {
         (uint fid, uint iounit, Qid qid) = await OpenFidAsync(resource, mode, cancellationToken);
-        return Open(Handle(qid), fid, iounit, mode);
+        return Open((qid.Type & QidType.QTDIR) != 0 ? resource : Handle(qid), fid, iounit, mode);
     }
 
     // mntcreate: a clone of the directory's fid becomes the created file, open.

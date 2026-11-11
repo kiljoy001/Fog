@@ -101,6 +101,10 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
     // An open of this file is refused with this error.
     public (string File, string Error)? Refusal { get; set; }
 
+    // An open of the file gives the qid of the other, or of the root for "/": as a clone file's
+    // gives its conversation's, or drawterm's union /dev #c's.
+    public (string File, string As)? OpensAs { get; set; }
+
     // Done once the connection has ended, as the server sees its end of file.
     public Task Ended => serving;
 
@@ -221,6 +225,7 @@ public sealed class FileServerHarness : INinePFSDispatcher, INinePSessionLifecyc
         Track(message, reply);
         return reply switch
         {
+            Ropen open when message is NinePMessage.MsgTopen asked && OpensAs is { } other && opened.GetValueOrDefault(asked.Item.Fid) == other.File => new Ropen(open.Tag, (other.As == "/" ? Root : Root.WalkAsync(other.As, CancellationToken.None).Result!).GetStat(dialect).Qid, open.Iounit),
             Ropen open when IoUnit is { } unit => new Ropen(open.Tag, open.Qid, unit),
             Rcreate created when IoUnit is { } unit => new Rcreate(created.Tag, created.Qid, unit),
             Rread read when ReadLimit is { } limit && read.Count > limit => new Rread(read.Tag, read.Data[..limit]),

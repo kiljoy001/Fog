@@ -889,7 +889,8 @@ public sealed partial class Process
 
     // procfds: the process's dot, then each open descriptor as procfdprint prints it: its number,
     // mode, device and its number, qid, iounit, offset and name. All of it is the channel's, its qid
-    // as its open gave it, so no file's server is asked, and one that does not answer holds nothing up.
+    // as its open gave it, or a mounted directory's as its walk gave it, so no file's server is
+    // asked, and one that does not answer holds nothing up.
     internal async Task<string> FdsAsync()
     {
         var text = new StringBuilder($"{Clean(NameOf(process.CurrentDirectory))}\n");

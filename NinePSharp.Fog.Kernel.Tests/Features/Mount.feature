@@ -30,6 +30,21 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     Then reading "/n/notes" gives "hello"
     And the names in "/n" are "docs notes"
 
+  # Fog reads a directory again from the channel it was opened on, not through the open's fid as
+  # mntread does, so an open directory keeps the qid it was walked to.
+  @FOG_KERNEL_043
+  Scenario: A directory whose open gives another qid is read as the directory walked to
+    Given the server's directory "docs" holds "readme", and an open of it gives the root's qid, as drawterm's union /dev does
+    When the process mounts descriptor 3 on "/n"
+    Then the names in "/n/docs" are "readme"
+
+  @FOG_KERNEL_043
+  Scenario: A file whose open gives another qid takes it
+    Given the server's tree holds the files "clone" and "ctl", an open of the first giving the qid of the second, as a clone file's gives its conversation's
+    When the process mounts descriptor 3 on "/n"
+    And the process opens "/n/clone" and keeps it open
+    Then the qid /proc gives for what it kept open is that of "/n/ctl"
+
   @FOG_KERNEL_043
   Scenario: The descriptor is closed once it is mounted
     When the process mounts descriptor 3 on "/n"

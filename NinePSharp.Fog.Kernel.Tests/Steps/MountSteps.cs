@@ -38,6 +38,38 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
         server.Root.AddChild(new NinePDir(directory));
     }
 
+    [Given(@"^the server's directory ""(.*)"" holds ""(.*)"", and an open of it gives the root's qid, as drawterm's union /dev does$")]
+    public async Task GivenUnionDirectory(string directory, string file)
+    {
+        var dir = (NinePDir)(await server.Root.WalkAsync(directory, CancellationToken.None))!;
+        dir.AddChild(new NinePFile(file, []));
+        server.OpensAs = (directory, "/");
+    }
+
+    [Given(@"^the server's tree holds the files ""(.*)"" and ""(.*)"", an open of the first giving the qid of the second, as a clone file's gives its conversation's$")]
+    public void GivenOpensAs(string file, string other)
+    {
+        server.Root.AddChild(new NinePFile(file, []));
+        server.Root.AddChild(new NinePFile(other, []));
+        server.OpensAs = (file, other);
+    }
+
+    // The qid procfdprint gives for the descriptor kept open, against the one a stat gives the file.
+    [Then(@"^the qid /proc gives for what it kept open is that of ""(.*)""$")]
+    public async Task ThenProcQid(string path)
+    {
+        int fd = await Init.OpenAsync($"/proc/{Init.Pid}/fd", NinePConstants.OREAD);
+        var fds = new StringBuilder();
+        for (ReadOnlyMemory<byte> b; !(b = await Init.ReadAsync(fd, 8192)).IsEmpty;)
+        {
+            fds.Append(Encoding.UTF8.GetString(b.Span));
+        }
+
+        await Init.CloseAsync(fd);
+        string line = fds.ToString().Split('\n').Single(l => l.StartsWith($"{kept,3} ", StringComparison.Ordinal));
+        Assert.Contains($"({(await Init.StatAsync(path)).Qid.Path:x16} ", line, StringComparison.Ordinal);
+    }
+
     [Given(@"^the process has the client end of a connection to it as descriptor (\d+)$")]
     public async Task GivenConnection(int fd)
     {
