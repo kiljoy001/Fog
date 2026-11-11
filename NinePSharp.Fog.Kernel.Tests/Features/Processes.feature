@@ -11,7 +11,7 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
   A failed walk names the path as far as the element that failed, as 9front's namec does.
 
   Background:
-    Given a kernel whose /bin holds the managed programs "true", "false", "args", "return" and "crash"
+    Given a kernel whose /bin holds the managed programs "true", "false", "args", "return", "crash" and "deep"
     And whose loader claims images beginning "\0img ", reads at most 64 bytes of them, refuses "bad" and runs the rest as "args"
 
   @FOG_KERNEL_001
@@ -34,6 +34,20 @@ Feature: Programs run as Plan 9 processes on Fog's namespace
   Scenario: A program that throws exits as a trapped process does
     When a process runs "/bin/crash"
     Then its parent's wait message for it is "crash <pid>: sys: boom"
+
+  # A program faults past its stack where .NET would overflow it, which would end all of Fog, and
+  # dies of it at once, its frames dropped and not unwound; the kernel's pprint says on descriptor 2
+  # what it died of. 9front's note gives the fault's addresses too, which Fog has none of.
+  @FOG_KERNEL_001
+  Scenario: A program that runs out of stack dies of the fault past it
+    When a process runs "/bin/deep"
+    Then its parent's wait message for it is "deep <pid>: sys: trap: fault write"
+
+  @FOG_KERNEL_001
+  Scenario: The kernel says on descriptor 2 that a program died of the fault past its stack
+    When a process runs "/bin/deep" with its descriptor 2 the file "/tmp/err"
+    Then its parent's wait message for it is "deep <pid>: sys: trap: fault write"
+    And the file "/tmp/err" reads "deep <pid>: suicide: sys: trap: fault write\n"
 
   @FOG_KERNEL_001
   Scenario: A child that exits before exec carries its parent's name

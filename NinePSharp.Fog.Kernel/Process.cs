@@ -12,8 +12,10 @@ public sealed partial class Process
     private const int HeaderSize = 256;
     private const int MaxInterpreterArguments = 32;
     private const int MaxIndirection = 8;
+    private const string Fault = "sys: trap: fault write";
     private static readonly byte[] Managed = "\0fog "u8.ToArray();
     private readonly Channel<Waitmsg> waits = Channel.CreateUnbounded<Waitmsg>();
+    private readonly TaskCompletionSource faulted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly FogKernel kernel;
     private readonly VProcess process;
     private readonly Process? parent;
@@ -841,6 +843,20 @@ public sealed partial class Process
     [DoesNotReturn]
     public void Exits(string? status) => throw new ExitException(status ?? string.Empty);
 
+    /// <summary>
+    /// The fault past the process's stack, met by a program that recurses as deep as its input takes
+    /// it where its stack would overflow, since .NET's own overflow ends all of Fog. The process dies of
+    /// it as 9front's does, with no stack left for a handler, and the kernel says on descriptor 2 what
+    /// it died of; 9front's note gives the fault's addresses too, which Fog has none of. As pexit, it
+    /// never returns, and the frames it leaves are dropped, not unwound, as unwinding thousands of them
+    /// takes minutes.
+    /// </summary>
+    public Task FaultAsync()
+    {
+        faulted.TrySetResult();
+        return new TaskCompletionSource().Task;
+    }
+
     public async Task<Waitmsg> WaitAsync(CancellationToken cancellationToken = default)
     {
         using Return returning = new(this, "Await");
@@ -1336,24 +1352,51 @@ public sealed partial class Process
 
     private async Task RunAsync(Func<Process, Task> body)
     {
+        Task<string> running = StatusAsync(body);
         string status;
-        try
+        if (await Task.WhenAny(running, faulted.Task) == running)
         {
-            await body(this);
-            status = "main";
+            status = await running;
         }
-        catch (ExitException exit)
+        else
         {
-            status = exit.Message;
-        }
-        catch (Exception error)
-        {
-            status = "sys: " + error.Message;
+            status = Fault;
+            await PprintAsync($"suicide: {status}\n");
         }
 
         Exit();
         await kernel.Table.TerminateAsync(Pid);
         parent?.Deliver(new Waitmsg(Pid, status.Length == 0 ? string.Empty : $"{Text} {Pid}: {status}"));
+    }
+
+    private async Task<string> StatusAsync(Func<Process, Task> body)
+    {
+        try
+        {
+            await body(this);
+            return "main";
+        }
+        catch (ExitException exit)
+        {
+            return exit.Message;
+        }
+        catch (Exception error)
+        {
+            return "sys: " + error.Message;
+        }
+    }
+
+    // pprint: the message on the process's descriptor 2 after its name and pid, or nowhere if that
+    // descriptor is not open or not written.
+    private async Task PprintAsync(string message)
+    {
+        try
+        {
+            await WriteAsync(2, Encoding.UTF8.GetBytes($"{Text} {Pid}: {message}"));
+        }
+        catch (SyscallException)
+        {
+        }
     }
 
     private void Deliver(Waitmsg message) => waits.Writer.TryWrite(message);

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel.Tests.Support;
@@ -24,7 +25,7 @@ public sealed class ProcessSteps
     private TimeSpan slept;
     private Task<string>? sleeping;
 
-    [Given(@"^a kernel whose /bin holds the managed programs ""true"", ""false"", ""args"", ""return"" and ""crash""$")]
+    [Given(@"^a kernel whose /bin holds the managed programs ""true"", ""false"", ""args"", ""return"", ""crash"" and ""deep""$")]
     public void GivenAKernel() => programs = Programs();
 
     [Given(@"^whose loader claims images beginning ""\\0img "", reads at most 64 bytes of them, refuses ""bad"" and runs the rest as ""args""$")]
@@ -105,6 +106,21 @@ public sealed class ProcessSteps
 
     [When(@"^a process runs ""(.*)"" with arguments ""(.*)""$")]
     public Task WhenRunsWithArguments(string path, string arguments) => RunAsync(path, arguments.Split(' '));
+
+    [When(@"^a process runs ""(.*)"" with its descriptor 2 the file ""(.*)""$")]
+    public async Task WhenRunsWithErrors(string path, string errors)
+    {
+        child = init!.Fork(RforkFlags.Fdg, async process =>
+        {
+            await process.DupAsync(await process.CreateAsync(errors, NinePConstants.OWRITE, 0b110_110_110), 2);
+            await process.ExecAsync(path, [path]);
+        });
+        waited = await init.WaitAsync().WaitAsync(Bound);
+    }
+
+    [Then(@"^the file ""(.*)"" reads ""(.*)""$")]
+    public async Task ThenFileReads(string path, string contents)
+        => Assert.Equal(Unescape(contents).Replace("<pid>", child.ToString(), StringComparison.Ordinal), await ReadAsync(init!, path));
 
     [When(@"^a process forks a child that exits with ""(.*)""$")]
     public async Task WhenForksExiting(string status)
@@ -409,6 +425,18 @@ public sealed class ProcessSteps
 
     private static string Unescape(string text) => text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\0", "\0", StringComparison.Ordinal);
 
+    // Recurses until its stack runs short, as a program that recurses as deep as its input takes it,
+    // and faults there.
+    private static async Task DeepAsync(Process process)
+    {
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            await process.FaultAsync();
+        }
+
+        await DeepAsync(process);
+    }
+
     private async Task WriteAsync(string path, string contents)
     {
         int fd = await init!.CreateAsync(path, NinePConstants.OWRITE, 0b111_111_101);
@@ -487,5 +515,6 @@ public sealed class ProcessSteps
             return Task.CompletedTask;
         },
         ["crash"] = (process, argv) => throw new InvalidOperationException("boom"),
+        ["deep"] = (process, argv) => DeepAsync(process),
     };
 }

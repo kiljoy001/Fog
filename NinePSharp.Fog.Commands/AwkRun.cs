@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using NinePSharp.Constants;
 using NinePSharp.Fog.Kernel;
@@ -77,8 +78,35 @@ public sealed partial class Awk
         await CloseallAsync();
     }
 
-    // execute: the node, and the statements after it, until a jump or an expression's value.
+    // A program that recurses as deep as its input takes it goes on where its thread's stack runs
+    // short on another's, and faults past Maxdepth executes deep, as 9front's faults past its stack;
+    // there is no stack left for awk's handler, so what it buffered is lost and only the kernel says
+    // what it died of.
     private async Task<Cell> ExecuteAsync(Node? u)
+    {
+        if (++depth > Maxdepth)
+        {
+            await process.FaultAsync();
+        }
+
+        try
+        {
+            // Stryker disable once Boolean : a yield at each execute keeps the stack as short, only slower
+            if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+            {
+                await Task.Yield();
+            }
+
+            return await StatementsAsync(u);
+        }
+        finally
+        {
+            depth--;
+        }
+    }
+
+    // execute: the node, and the statements after it, until a jump or an expression's value.
+    private async Task<Cell> StatementsAsync(Node? u)
     {
         if (u is null)
         {

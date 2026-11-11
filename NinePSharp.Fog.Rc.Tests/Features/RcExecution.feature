@@ -11525,6 +11525,28 @@ Feature: rc runs scripts as 9front rc does
       1024
       """
 
+  @FOG_RC_RUN_331
+  Scenario: awk dies of the fault past its stack where a function recurses deeper than 9front's stack lets it, what it buffered lost
+    Given 9front's trap gives its registers' addresses, which Fog has none of, so this runs on Fog alone
+    When rc runs the script
+      """
+      fn s { awk -v 'n='$1 'function s(n) { return n == 0 ? 0 : n + s(n - 1) } BEGIN { print n, s(n) }' }
+      s 11780
+      s 11781 >[2]/tmp/err
+      echo $status | sed 's/ [0-9]+:/ N:/'
+      sed 's/ [0-9]+:/ N:/' /tmp/err
+      awk 'function s(n) { return n == 0 ? 0 : n + s(n - 1) } BEGIN { print "before"; printf "unflushed "; print s(20000) }' >[2]/dev/null
+      awk 'function t(n) { if (n == 0) return 0; x = t(n - 1); return x + 1 } BEGIN { print t(14264) }'
+      """
+    Then it prints
+      """
+      11780 69390090
+      awk N: sys: trap: fault write
+      awk N: suicide: sys: trap: fault write
+      before
+      14264
+      """
+
   @FOG_RC_RUN_287
   Scenario: grep's classes are ranges of runes as byte ranges, sorted and merged, its alternations tables of bytes, and its pattern files read line by line
     When rc runs the script

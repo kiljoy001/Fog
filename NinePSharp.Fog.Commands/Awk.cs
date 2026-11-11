@@ -12,6 +12,10 @@ namespace NinePSharp.Fog.Commands;
 public sealed partial class Awk
 {
     private const int Recsize = 8 * 1024;
+
+    // As deep as a function that recurses through an expression, as s(n) = n + s(n - 1), goes in
+    // 9front's stack, which takes s to 11780 levels; frames of other shapes take more or less of it.
+    private const int Maxdepth = 47127;
     private const int Nsymtab = 50;
     private const int Maxfld = 200;
     private const int FopenMax = 40;
@@ -80,6 +84,7 @@ public sealed partial class Awk
     // Stryker disable once String : RunMainAsync names it argv[0] before anything is said
     private string cmdname = "awk";
     private int compileTime = 2;
+    private int depth;
     private bool safe;
     private string? exitstatus;
 
