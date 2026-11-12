@@ -2022,5 +2022,29 @@
     "commit": "b7f954c71034",
     "print": "2b856708cef73153",
     "reason": "without the hop to a fresh stack, a function recursing to 9front's depth overflows the host's stack, which ends the test host rather than the process"
+  },
+  {
+    "file": "Process.cs",
+    "mutator": "Block removal mutation",
+    "line": "catch (ExitException exit) {",
+    "commit": "b7f954c71034",
+    "print": "f185691dd4b3e472",
+    "reason": "a process that exits is given no status, so its run faults on it before the process is terminated, and whoever waits for it waits forever"
+  },
+  {
+    "file": "FogHost.cs",
+    "mutator": "Equality mutation",
+    "line": "for (ReadOnlyMemory<byte> got; (got = await Init.ReadAsync(f, 8192)).Length > 0;)",
+    "commit": "b7f954c71034",
+    "print": "66981411278195e6",
+    "reason": "the users file is read on past its end, where each read gives nothing, forever"
+  },
+  {
+    "file": "FogHost.cs",
+    "mutator": "Statement mutation",
+    "line": "await process.WriteAsync(fd, reply);",
+    "commit": "b7f954c71034",
+    "print": "8668e9e3c457c3f2",
+    "reason": "gefs answers nothing, and a client of the store waits for its answer forever, as a 9P client does"
   }
 ]

@@ -417,6 +417,16 @@ Feature: mount speaks 9P to a file server over a descriptor, as 9front's devmnt 
     And reading "/n/notes" gives "hello"
 
   @FOG_KERNEL_081
+  Scenario: An authentication given up before any mount lets the connection go once its descriptor is closed
+    Given the server authenticates
+    When the process authenticates on descriptor 3 for "main"
+    And the process closes the authentication descriptor
+    Then the server clunked the authentication's fid
+    And the server is still connected
+    And descriptor 3 can be closed
+    And the server sees the end of the connection
+
+  @FOG_KERNEL_081
   Scenario Outline: mount refuses an authentication descriptor that is not one on the connection
     Given the server authenticates
     And <afd>

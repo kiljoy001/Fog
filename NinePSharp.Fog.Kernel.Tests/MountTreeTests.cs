@@ -155,6 +155,16 @@ public sealed class MountTreeTests : IAsyncDisposable
         Assert.Contains(b, server.Clunked);
     }
 
+    [Fact]
+    public async Task AnAuthenticationsTreeIsLetGoWithoutClunkingTheFidItsChannelClunked()
+    {
+        (MountTree tree, ResourceOpenHandle channel) = await Bounded(MountTree.AuthAsync(await ConnectAsync(), "#M0", "glenda", "main"));
+        await Bounded(tree.ClunkAsync(channel));
+        await Bounded(tree.CloseAsync());
+
+        Assert.Equal([tree.RootFid], server.Clunked);
+    }
+
     public ValueTask DisposeAsync() => server.DisposeAsync();
 
     private static Task<T> Bounded<T>(Task<T> task) => task.WaitAsync(KernelDriver.Bound);
@@ -164,9 +174,12 @@ public sealed class MountTreeTests : IAsyncDisposable
     private static async Task<ResourceHandle> WalkAsync(MountTree tree, string name) => (await Bounded(tree.WalkAsync(tree.Root, name, default)))!;
 
     private async Task<MountTree> AttachAsync(int bound = 8)
+        => await Bounded(MountTree.AttachAsync(await ConnectAsync(), "#M0", NinePConstants.NoFid, "glenda", string.Empty, bound));
+
+    private async Task<MountConnection> ConnectAsync()
     {
         var connection = new MountConnection(server.Peer, server.Peer.Handle, server.Peer, () => ScriptedPeer.Context);
         await Bounded(connection.VersionAsync());
-        return await Bounded(MountTree.AttachAsync(connection, "#M0", NinePConstants.NoFid, "glenda", string.Empty, bound));
+        return connection;
     }
 }

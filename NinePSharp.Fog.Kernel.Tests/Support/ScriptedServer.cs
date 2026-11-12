@@ -99,6 +99,9 @@ internal sealed class ScriptedServer : IAsyncDisposable
         ushort tag = ScriptedPeer.Tag(request);
         switch (ScriptedPeer.Type(request))
         {
+            case MessageTypes.Tauth:
+                fids[new Tauth(request).Afid] = string.Empty;
+                return new Rauth(tag, new Qid(QidType.QTAUTH, 0, 0));
             case MessageTypes.Tattach:
                 fids[new Tattach(request).Fid] = string.Empty;
                 return new Rattach(tag, new Qid(QidType.QTDIR, 0, 0));
