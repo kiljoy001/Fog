@@ -215,6 +215,11 @@ Feature: Stock 9front rcpu runs rc on Fog through tcp17019
     Then fog's terminal was made raw and cooked
 
   @FOG_LOGIN_005
+  Scenario: fog's terminal is cooked again once consctl is clunked, while the session goes on
+    Given fog runs "-u glenda -c 'echo -n rawon >/mnt/term/dev/consctl; sleep 100'" until rc is running
+    Then fog's terminal was made raw and cooked
+
+  @FOG_LOGIN_005
   Scenario: fog serves the terminal for reading and writing, its control for writing, standard input for reading, and its output and errors for writing
     When fog runs "-u glenda -c 'ls -l /mnt/term/dev/cons* /mnt/term/fd/1? | sed ''s/ .* / /'''"
     Then fog prints "--rw-rw-rw- /mnt/term/dev/cons\n---w--w--w- /mnt/term/dev/consctl\n--r--r--r-- /mnt/term/fd/10\n---w--w--w- /mnt/term/fd/11\n---w--w--w- /mnt/term/fd/12"
