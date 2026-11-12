@@ -1,6 +1,6 @@
 # fog-login: rc on Fog from any shell
 
-Status: design; the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, `tlssrv` and `tcp17019` under `aux/listen`, through which stock 9front `rcpu` logs in, `secstored`, `secstore` and `secuser`, checked against 9front's in both directions, and dp9ik's client role in dp9ik.net (0.4.1), which logs in to Fog's `tcp17019` with its tickets from Fog's auth server, `fog`, which sends the script stock rcpu sends and serves the local console, streams and files, and a first session on the host booted from its store, with the user's `$home` and `newuser`'s profile, their factotum loaded from secstore, applications copied into `/bin` and run, stock `rcpu` authenticated through the host owner's factotum, and the commands `/bin` holds, from `ls` to `awk` and `diff`, are built: slices 1 to 11. A drawterm session waits on dp9ik.net's next release, whose TLS takes a client that signals no secure renegotiation, as drawterm's does not.
+Status: design; the host booting the kernel on gefs, the mount driver, notes with /proc and rc's traps, mount, rm, test and read, `#I` with tcp, `ndb/cs` and `aux/listen`, `#¤`, `#s` and factotum with `p9any`, `dp9ik` and `pass`, with the console's input and `hostowner` in `#c`, `tlssrv` and `tcp17019` under `aux/listen`, through which stock 9front `rcpu` logs in, `secstored`, `secstore` and `secuser`, checked against 9front's in both directions, and dp9ik's client role in dp9ik.net (0.4.1), which logs in to Fog's `tcp17019` with its tickets from Fog's auth server, `fog`, which sends the script stock rcpu sends and serves the local console, streams and files, and a first session on the host booted from its store, with the user's `$home` and `newuser`'s profile, their factotum loaded from secstore, applications copied into `/bin` and run, stock `rcpu` authenticated through the host owner's factotum, and the commands `/bin` holds, from `ls` to `awk` and `diff`, are built: slices 1 to 11. A drawterm session logs in too, on dp9ik.net 0.4.2, whose TLS takes a client that signals no secure renegotiation, as drawterm's does not.
 
 A user reaches Fog the way they reach a 9front CPU server: they get rc, running on Fog as a
 process like any other, with their own machine's files at `/mnt/term`. Everything they do there
@@ -130,23 +130,8 @@ prompt. 9front checks the answer with `secureidcheck`, a RADIUS client written f
 tokens, whose MD5-hidden password and unsigned replies RADIUS deployments have since had to
 move away from (Blast-RADIUS, CVE-2024-3596).
 
-Fog keeps the exchange and checks the answer with Keycloak instead:
-
-- An account needs the step when `secuser` marks it STA, or for every account under
-  `secstored -R`, as on 9front.
-- The answer is the code of the user's authenticator (TOTP, RFC 6238). secstored checks it with
-  Keycloak's direct grant, the Plan 9 user name as Keycloak's user, through a client whose
-  direct-grant flow validates the user name and the one-time code and asks no password: the
-  password was PAK's, and Keycloak never holds it.
-- Keycloak's address, realm, client and client secret are in the host's configuration, the
-  secret in the host's sealed key store, as the nvram is.
-- An account disabled in Keycloak, or a code it refuses, is refused as `secureidcheck`'s
-  refusals are, and logged as they are.
-- Stock 9front clients take part unchanged: the code is typed where a SecurID's would be.
-
-The device authorization grant (RFC 8628), which would let a user approve a login with
-whatever Keycloak enforces, passkeys among them, needs the server to show the user a URL,
-which 9front's clients have no place for; it is left for Fog's own client.
+Fog keeps the exchange, so stock 9front clients take part unchanged, but asks no RADIUS server:
+`secureidcheck` refuses every answer, as 9front's does when ndb holds no RADIUS secret.
 
 ## The network device
 
@@ -307,8 +292,7 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
   each way; when either way ends, both do. `tlssrv -c` is refused, as Fog has no certificates, and
   `-D` reports only the handshake's end, not each message. `#I` has no wstat, so the call is not
   given to the user `tlssrv -a` becomes.
-- STA's answer is checked with Keycloak, not RADIUS (see A second factor). Until slice 12,
-  `secureidcheck` refuses every answer, as 9front's does when ndb holds no RADIUS secret.
+- `secureidcheck` asks no RADIUS server and refuses every STA answer (see A second factor).
 - `putPW` writes an account when it is changed, where 9front's leaves it in a Biobuf that libbio
   flushes as the process exits.
 - `fog` has no `-p` (aan); a dropped connection ends the session.
@@ -335,8 +319,6 @@ to any Unix shell. Text and bytes cross the connection; PowerShell objects do no
     `wc`, `cp`, `mv`, `chmod`, `touch`, `tee`, `basename` and `cleanname`; then `date`, `tail`,
     `cmp`, `tr`, `uniq`, `seq`, `xd`, `du` and `ps`; then libregexp with `grep` and `sed`; then
     `sort`, `awk` and `diff`.
-12. A second factor: secstored's STA answer checked with Keycloak's direct grant, against a
-    Keycloak realm whose direct-grant flow takes a user name and a one-time code.
 
 Each slice follows the usual gate: features, then failing tests, then code, with mutation, and
 Coyote for the concurrency of the mount driver, `#I`, notes and factotum's processes.
