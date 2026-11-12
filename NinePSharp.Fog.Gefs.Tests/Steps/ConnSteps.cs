@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using NinePSharp.Fog.Gefs.Tests.Support;
+using NinePSharp.Messages;
 using Reqnroll;
 using Xunit;
 
@@ -71,6 +72,16 @@ public sealed class ConnSteps(StoreContext context)
         byte[] r = await Client.RpcAsync($"Tread {fid} {offset} {count}");
         Assert.StartsWith("Rread", NinePClient.Text(r), StringComparison.Ordinal);
         Assert.Equal(names == "nothing" ? [] : names.Split(' '), NinePClient.Stats(r).Select(stat => stat.Split(' ')[0]));
+    }
+
+    // The qid a walk gives the file and the one its stat gives: type, version and path.
+    [Then(@"^a walk from fid (\d+) to (\w+) and a stat of it give the same qid, of version (\d+)$")]
+    public async Task ThenSameQid(uint fid, string name, uint version)
+    {
+        NinePSharp.Constants.Qid walked = new Rwalk(await Client.RpcAsync($"Twalk {fid} 999 {name}")).Wqid[^1];
+        NinePSharp.Constants.Qid stated = new Rstat(await Client.RpcAsync("Tstat 999")).Stat.Qid;
+        Assert.Equal((walked.Type, walked.Version, walked.Path), (stated.Type, stated.Version, stated.Path));
+        Assert.Equal(version, stated.Version);
     }
 
     [When(@"^the clock reads (\d+)\.(\d) seconds$")]

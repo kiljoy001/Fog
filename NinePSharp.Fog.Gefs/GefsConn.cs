@@ -106,6 +106,8 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
                 _ => null,
             };
         }
+
+        // Stryker disable once Block : the method's default is null too
         catch (Exception error) when (error is not OutOfMemoryException)
         {
             return null;
@@ -122,6 +124,8 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
             NinePConstants.ORDWR => GefsFs.Read | GefsFs.Write,
             _ => GefsFs.Read | GefsFs.Exec,
         };
+
+        // Stryker disable once Conditional,Equality,Bitwise : only the bit to read is asked of an open's bits, which OTRUNC does not change
         return (mode & NinePConstants.OTRUNC) != 0 ? bits | GefsFs.Write : bits;
     }
 
@@ -263,6 +267,8 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
         }
 
         long path = await server.NewQidAsync();
+
+        // Stryker disable once String : an auth file's user is asked only once factotum is done, which sets it, or after a read that gave nothing, by an attach whose user the tree has, and no user is named nothing
         fids[m.Afid] = new Fid(null, null, string.Empty) { Number = m.Afid, Auth = rpc };
         return new Rauth(m.Tag, new NinePSharp.Constants.Qid(QidType.QTAUTH, 0, (ulong)path));
     }
@@ -447,6 +453,7 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
                 return [.. data];
             }
 
+            // Stryker disable once Boolean : a read that stops at an entry it has no room for sets this again, and one that does not ends the scan, so no read sees it after an entry
             s.Overflow = false;
             data.AddRange(stat);
             s.Last = key;
@@ -494,11 +501,14 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
         if (f.Auth is { } rpc)
         {
             await rpc.DisposeAsync();
+
+            // Stryker disable once Statement : an auth file has no tree, whose Fs refuses it as Etype too
             throw new IOException(Etype);
         }
 
         if (f.Fs.ReadOnly)
         {
+            // Stryker disable once Statement : the tree refuses to remove from a snapshot as read only too
             throw new IOException(Erdonly);
         }
 
@@ -557,6 +567,8 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
         if (f.Auth is { } rpc)
         {
             await rpc.DisposeAsync();
+
+            // Stryker disable once Statement : an auth file is never open, as its Fs refuses an open
             return;
         }
 
@@ -573,6 +585,7 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
         }
     }
 
+    // Stryker disable once Update : counting down names each operation of the connection apart as counting up does
     private ResourceOperationContext Context(Fid f) => new(new ResourceOperationId(session, ++sequence), 0, f.User);
 
     private sealed class Fid(GefsFs? fs, ResourceHandle? handle, string user)
@@ -580,8 +593,10 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
         public uint Number { get; set; }
 
         // The tree and file of a fid attached or walked to; an auth file has neither.
+        // Stryker disable once NullCoalescing : an auth file's Fs is asked only before its Handle, which refuses it as Etype too
         public GefsFs Fs => fs ?? throw new IOException(Etype);
 
+        // Stryker disable once NullCoalescing : an auth file's Handle is asked only after its Fs, which refuses it first
         public ResourceHandle Handle { get => handle ?? throw new IOException(Etype); set => handle = value; }
 
         public string User { get; set; } = user;

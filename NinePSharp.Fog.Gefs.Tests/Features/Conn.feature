@@ -44,6 +44,7 @@ Feature: A store is served over 9P, as gefs's fs.c serves a connection
       | 7     | 101  | invalid message                      |
       | 8217  | 100  | read message: message size too large |
       | 6     | 100  | read message: message size too large |
+      | 11    | 110  | invalid message                      |
 
   @FOG_GEFS_711
   Scenario: A message the client sends no Tversion before hangs up the connection
@@ -83,6 +84,7 @@ Feature: A store is served over 9P, as gefs's fs.c serves a connection
     When the client sends:
       | message                    | reply                                          |
       | Tauth 100 glenda main      | Rauth auth                                     |
+      | Tread 100 0 6              | Rread proof?                                   |
       | Tread 100 0 100            | Rread proof?                                   |
       | Twrite 100 0 glenda        | Rwrite 6                                       |
       | Tattach 1 100 glenda main  | Rattach dir                                    |
@@ -231,6 +233,18 @@ Feature: A store is served over 9P, as gefs's fs.c serves a connection
       | Tstat 9                  | Rerror unknown fid                 |
 
   @FOG_GEFS_714
+  Scenario: A file opened to execute may be read, as gefs gives an open to execute the bit to read
+    Given the client has versioned the connection with a message size of 8216
+    And adm creates file run in the root with mode 0755 at time 200
+    And adm writes "hello" to run at offset 0 at time 200
+    And the client has attached fid 1 as glenda to "main"
+    When the client sends:
+      | message                  | reply                              |
+      | Twalk 1 2 run            | Rwalk file                         |
+      | Topen 2 3                | Ropen file 8216                    |
+      | Tread 2 0 10             | Rread hello                        |
+
+  @FOG_GEFS_714
   Scenario: A file opened or made to be removed on close goes when its fid is clunked, or removed, a directory even with files in it as gefs removes one
     Given the client has versioned the connection with a message size of 8216
     And adm creates directory tmp in the root with mode d0777 at time 200
@@ -309,6 +323,14 @@ Feature: A store is served over 9P, as gefs's fs.c serves a connection
       | stat                                                    |
       | late glenda adm glenda 644 0 301 301 ffff ffffffff     |
       | early glenda adm glenda 644 0 300 300 ffff ffffffff    |
+
+  @FOG_GEFS_715
+  Scenario: A stat gives the file's qid, its version counting the file's changes
+    Given the client has versioned the connection with a message size of 8216
+    And adm creates file notes in the root with mode 0644 at time 200
+    And adm writes "hello" to notes at offset 0 at time 200
+    And the client has attached fid 1 as glenda to "main"
+    Then a walk from fid 1 to notes and a stat of it give the same qid, of version 1
 
   @FOG_GEFS_715
   Scenario: A directory is read from its start at offset 0, and on from where the last read stopped
