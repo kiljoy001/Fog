@@ -2046,5 +2046,109 @@
     "commit": "b7f954c71034",
     "print": "8668e9e3c457c3f2",
     "reason": "gefs answers nothing, and a client of the store waits for its answer forever, as a 9P client does"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+    "line": "cursz += MessageSize(m);",
+    "commit": "b7f954c71034",
+    "print": "e0b788f255834655",
+    "reason": "victim counts each child's messages less than nothing, chooses no child, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "for (; j < b.MessageCount; j++)",
+    "commit": "b7f954c71034",
+    "print": "5f3654a98263ffc6",
+    "reason": "victim counts no message for any child, chooses none, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "for (int i = 1; i <= b.ValueCount; i++)",
+    "commit": "b7f954c71034",
+    "print": "265c4daa543884c6",
+    "reason": "victim weighs no child, or not the last, which may hold every message, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "if (cursz > maxsz)",
+    "commit": "b7f954c71034",
+    "print": "fc9e5d183b82454c",
+    "reason": "victim chooses no child, or the one with the least, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (cursz > maxsz)",
+    "commit": "b7f954c71034",
+    "print": "fc9e5d183b82454c",
+    "reason": "victim chooses no child, or the one with the least, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "if (next is not null && Keys.Compare(m.Key, next) >= 0)",
+    "commit": "b7f954c71034",
+    "print": "00f162a0be906e0d",
+    "reason": "victim counts the messages of the wrong child, chooses one that has none to take, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (next is not null && Keys.Compare(m.Key, next) >= 0)",
+    "commit": "b7f954c71034",
+    "print": "00f162a0be906e0d",
+    "reason": "victim counts the messages of the wrong child, chooses one that has none to take, so the flush toward a child frees no room and the insert tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "while (b.Type == BlockType.Pivot && (b.ValueCount <= 1 || b.BufferFull(msg.Length, path[npath - 1].Size)))",
+    "commit": "b7f954c71034",
+    "print": "3300b6c6bfa30c70",
+    "reason": "an insert into a full buffer goes down to no child to flush, so it never finds room and tries again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "return rb.Type == BlockType.Pivot && rb.ValueCount == 1;",
+    "commit": "b7f954c71034",
+    "print": "7d60b3bbce10c23b",
+    "reason": "every pivot root, not just a merged one with one child, is gone round again for, forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "while (Pull(up, j, out Message u, ref full, spc))",
+    "commit": "b7f954c71034",
+    "print": "93e9f7284a1f4ab5",
+    "reason": "the loop goes on while no message can be pulled, which past the last one is ever after"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Equality mutation",
+    "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "commit": "b7f954c71034",
+    "print": "82c50e4917f374ca",
+    "reason": "the split gives one half every entry, so it makes no room and the insert splits again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Logical mutation",
+    "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "commit": "b7f954c71034",
+    "print": "82c50e4917f374ca",
+    "reason": "the split gives one half every entry, so it makes no room and the insert splits again forever"
+  },
+  {
+    "file": "Tree.cs",
+    "mutator": "Negate expression",
+    "line": "if (d == l && (i == b.ValueCount - 2 || (i >= 2 && copied >= halfsz)))",
+    "commit": "b7f954c71034",
+    "print": "82c50e4917f374ca",
+    "reason": "the split gives one half every entry, so it makes no room and the insert splits again forever"
   }
 ]
