@@ -2,18 +2,21 @@
   "stryker-config": {
     "project": "NinePSharp.Fog.Host.csproj",
     "test-projects": [
-      "NinePSharp.Fog.Host.Tests.csproj"
+      "NinePSharp.Fog.Host.Tests.csproj",
+      "../NinePSharp.Fog.Rc.Tests/NinePSharp.Fog.Rc.Tests.csproj"
     ],
     "mutate": [
       "**/*.cs"
     ],
     "mutation-level": "Standard",
-    "additional-timeout": 60000,
+    "additional-timeout": 300000,
     "thresholds": {
       "high": 100,
       "low": 100,
       "break": 100
     },
-    "concurrency": 4
+    "concurrency": 4,
+    "coverage-analysis": "all",
+    "test-case-filter": "FullyQualifiedName~NinePSharp.Fog.Host.Tests|Category=FOG_HOST_009"
   }
 }

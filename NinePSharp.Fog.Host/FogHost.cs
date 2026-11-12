@@ -122,6 +122,7 @@ public sealed class FogHost : IDisposable
         }
         catch (SyscallException error)
         {
+            // Stryker disable once Statement : a write to the pipe fails only once the client's end is closed, where gefs's next read ends the connection as the failed write would, and the host keeps no reason it hung up
             throw new IOException(error.Message);
         }
     }

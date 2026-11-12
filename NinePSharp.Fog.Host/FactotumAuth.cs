@@ -61,6 +61,8 @@ internal sealed class FactotumAuth(Process process, int fd) : IGefsAuth
         {
             return (await Libauth.AuthGetinfoAsync(rpc)).Cuid;
         }
+
+        // Stryker disable once Block : the method's default is null too
         catch (SyscallException)
         {
             return null;

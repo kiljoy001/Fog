@@ -196,6 +196,9 @@ public sealed class BootSteps : IDisposable
     [Then(@"^init's descriptor (\d+) is ""(.*)""$")]
     public async Task ThenInitDescriptor(int fd, string path) => Assert.Equal(path, await Init.Fd2PathAsync(fd));
 
+    [Then(@"^init has no descriptor (\d+)$")]
+    public async Task ThenNoInitDescriptor(int fd) => await Assert.ThrowsAsync<SyscallException>(async () => await Init.Fd2PathAsync(fd));
+
     [Then(@"^the console shows ""(.*)""$")]
     public void ThenConsole(string text) => Assert.Equal(Unescape(text), console.Written);
 

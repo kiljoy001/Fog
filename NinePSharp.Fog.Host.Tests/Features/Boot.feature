@@ -149,7 +149,8 @@ Feature: The host boots the kernel on a gefs store kept in a file
     And the host restarts
     Then reading "/root/sys/lib/new/user" gives "#!/bin/rc\necho new\n"
 
-  # The installer's file is written and closed before init opens the console, and the boot's
+  # The installer's file, /srv/boot and the end of the pipe posted there are closed before init opens
+  # the console, so init holds the console alone, as its descriptors 0 to 2, and the boot's
   # descriptors are its own, so what it closes init still holds.
   # The installer writes in the store at /root, which bootrc mounts without creation, and not at /,
   # where the kernel's devices are bound before the store.
@@ -167,6 +168,9 @@ Feature: The host boots the kernel on a gefs store kept in a file
     Then the console shows "boot one two\nboot one two\n"
     And the boot status ends with "done"
     And init's descriptor 0 is "/dev/cons"
+    And init's descriptor 1 is "/dev/cons"
+    And init's descriptor 2 is "/dev/cons"
+    And init has no descriptor 3
 
   @FOG_HOST_007
   Scenario: A boot that runs nothing leaves the status empty
