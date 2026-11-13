@@ -133,6 +133,9 @@ public sealed class FirstSessionSteps
         }
     }
 
+    [Given(@"^the host owner has run ""(.*)""$")]
+    public Task GivenOwnerRanAsync(string script) => RunAsOwnerAsync(script);
+
     [Given(@"^fog has run ""([^""]*)""$")]
     [When(@"^fog runs ""([^""]*)""$")]
     public Task WhenFogRunsAsync(string args) => RunFogAsync(args, null, []);

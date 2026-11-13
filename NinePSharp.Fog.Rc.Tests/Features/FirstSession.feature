@@ -147,6 +147,14 @@ Feature: A first session on a Fog host booted from its gefs store
     When fog runs "-u glenda -c 'cd; >f; chgrp sys f; x=`{ls -l f}; echo $x(4) $x(5)'"
     Then fog prints "glenda sys"
 
+  # chgrp -u changes only the owner, which a member of adm may give away with the permit; the group
+  # it leaves is the file's.
+  @FOG_HOST_009
+  Scenario: The host owner gives a file away with chgrp -u, keeping its group
+    Given the host owner has run "mount /srv/boot /n/u %main; >/n/u/usr/glenda/f; chgrp sys /n/u/usr/glenda/f; chgrp -u glenda /n/u/usr/glenda/f"
+    When fog runs "-u glenda -c 'x=`{ls -l /usr/glenda/f}; echo $x(4) $x(5)'"
+    Then fog prints "glenda sys"
+
   # newns opens factotum's rpc on the lowest free descriptor, which is 0 when its input is closed,
   # and authenticates through it all the same.
   @FOG_HOST_009
