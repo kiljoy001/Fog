@@ -506,6 +506,7 @@ public sealed class GefsConn(GefsServer server, Func<int, Task<byte[]>> readn, F
             throw new IOException(Etype);
         }
 
+        // Stryker disable once Block : as the statement within
         if (f.Fs.ReadOnly)
         {
             // Stryker disable once Statement : the tree refuses to remove from a snapshot as read only too
