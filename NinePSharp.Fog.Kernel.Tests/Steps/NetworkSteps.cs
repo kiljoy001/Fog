@@ -206,7 +206,7 @@ public sealed class NetworkSteps(KernelDriver driver) : IAsyncDisposable
     public async Task ThenNames(string path, string names)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(names, string.Join(' ', (await Init.DirReadAsync(fd)).Select(entry => entry.Name).Order(StringComparer.Ordinal)));
+        Assert.Equal(names, string.Join(' ', (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name).Order(StringComparer.Ordinal)));
         await Init.CloseAsync(fd);
     }
 

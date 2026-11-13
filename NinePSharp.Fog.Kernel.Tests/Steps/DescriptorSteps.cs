@@ -69,7 +69,7 @@ public sealed class DescriptorSteps(KernelDriver driver)
     public async Task WhenLists(string path)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        IReadOnlyList<NinePSharp.Messages.Stat> entries = await driver.Init.DirReadAsync(fd);
+        IReadOnlyList<NinePSharp.Messages.Stat> entries = await KernelDriver.ListAsync(driver.Init, fd);
         listed = string.Join(' ', entries.Select(entry => entry.Name));
         permissions = string.Join(' ', entries.Select(entry => Convert.ToString(entry.Mode, 8).PadLeft(4, '0')));
         await driver.Init.CloseAsync(fd);

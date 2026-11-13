@@ -89,7 +89,7 @@ public sealed class ConsoleSteps(KernelDriver driver)
     public async Task WhenLists(string path)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        listed = string.Join(' ', (await driver.Init.DirReadAsync(fd)).Select(entry => entry.Name));
+        listed = string.Join(' ', (await KernelDriver.ListAsync(driver.Init, fd)).Select(entry => entry.Name));
     }
 
     [When(@"^the process forks a child that reads ""(.*)"" and ""(.*)""$")]

@@ -81,7 +81,7 @@ public sealed partial class CapSteps(KernelDriver driver)
     public async Task ThenNames(string path, string names)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(names, string.Join(' ', (await Init.DirReadAsync(fd)).Select(entry => entry.Name)));
+        Assert.Equal(names, string.Join(' ', (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name)));
         await Init.CloseAsync(fd);
     }
 
@@ -89,7 +89,7 @@ public sealed partial class CapSteps(KernelDriver driver)
     public async Task ThenNamesInclude(string path, string first, string second)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        string[] names = [.. (await Init.DirReadAsync(fd)).Select(entry => entry.Name!)];
+        string[] names = [.. (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name!)];
         Assert.Contains(first, names);
         Assert.Contains(second, names);
         await Init.CloseAsync(fd);

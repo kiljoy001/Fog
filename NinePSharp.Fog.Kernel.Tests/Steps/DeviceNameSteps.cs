@@ -63,7 +63,7 @@ public sealed class DeviceNameSteps(KernelDriver driver)
     public async Task ThenNamesInclude(string path, string name)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Contains(name, (await Init.DirReadAsync(fd)).Select(entry => entry.Name));
+        Assert.Contains(name, (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name));
         await Init.CloseAsync(fd);
     }
 

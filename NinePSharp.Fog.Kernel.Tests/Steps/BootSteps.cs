@@ -86,7 +86,7 @@ public sealed class BootSteps(KernelDriver driver)
     public async Task ThenNames(string path, string names)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        IEnumerable<string> listed = (await driver.Init.DirReadAsync(fd)).Select(entry => entry.Name!).Distinct().Order(StringComparer.Ordinal);
+        IEnumerable<string> listed = (await KernelDriver.ListAsync(driver.Init, fd)).Select(entry => entry.Name!).Distinct().Order(StringComparer.Ordinal);
         Assert.Equal(names, string.Join(' ', listed));
     }
 

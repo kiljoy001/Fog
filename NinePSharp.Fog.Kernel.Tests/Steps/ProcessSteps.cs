@@ -266,7 +266,7 @@ public sealed class ProcessSteps
         => ForkAsync(with, flag, async child =>
         {
             int fd = await child.OpenAsync(path, NinePConstants.OREAD);
-            childListed = (await child.DirReadAsync(fd)).Select(entry => entry.Name!).ToArray();
+            childListed = (await KernelDriver.ListAsync(child, fd)).Select(entry => entry.Name!).ToArray();
         });
 
     [When(@"^it forks a child (with|without) (RF\w+) that runs ""(.*)""$")]
@@ -402,7 +402,7 @@ public sealed class ProcessSteps
     public async Task ThenParentLists(string names, string path)
     {
         int fd = await init!.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(names, string.Join(' ', (await init.DirReadAsync(fd)).Select(entry => entry.Name)));
+        Assert.Equal(names, string.Join(' ', (await KernelDriver.ListAsync(init, fd)).Select(entry => entry.Name)));
         await init.CloseAsync(fd);
     }
 
@@ -410,7 +410,7 @@ public sealed class ProcessSteps
     public async Task ThenHoldsOnce(string path, string name)
     {
         int fd = await init!.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Single((await init.DirReadAsync(fd)).Where(entry => entry.Name == name));
+        Assert.Single((await KernelDriver.ListAsync(init, fd)).Where(entry => entry.Name == name));
         await init.CloseAsync(fd);
     }
 

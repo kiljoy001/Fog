@@ -452,7 +452,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
         try
         {
-            return (await Init.DirReadAsync(fd)).Select(entry => entry.Name!).Order(StringComparer.Ordinal).ToList();
+            return (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name!).Order(StringComparer.Ordinal).ToList();
         }
         finally
         {

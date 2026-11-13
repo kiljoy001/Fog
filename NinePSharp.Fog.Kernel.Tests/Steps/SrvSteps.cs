@@ -222,7 +222,7 @@ public sealed class SrvSteps(KernelDriver driver)
     public Task WhenLists(string path) => RecordAsync(async () =>
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        await Init.DirReadAsync(fd);
+        await KernelDriver.ListAsync(Init, fd);
     });
 
     [When(@"^the process stats ""(.*)""$")]
@@ -238,7 +238,7 @@ public sealed class SrvSteps(KernelDriver driver)
     public async Task ThenNames(string path, string names)
     {
         int fd = await Init.OpenAsync(Expand(path), NinePConstants.OREAD);
-        Assert.Equal(Expand(names).Split(' '), (await Init.DirReadAsync(fd)).Select(entry => entry.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(Expand(names).Split(' '), (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name).Order(StringComparer.Ordinal));
         await Init.CloseAsync(fd);
     }
 
@@ -267,7 +267,7 @@ public sealed class SrvSteps(KernelDriver driver)
 
     [Then(@"^the names in what ""(.*)"" holds are ""(.*)""$")]
     public async Task ThenKeptNames(string name, string names)
-        => Assert.Equal(Expand(names).Split(' '), (await Init.DirReadAsync(kept[name])).Select(entry => entry.Name).Order(StringComparer.Ordinal));
+        => Assert.Equal(Expand(names).Split(' '), (await KernelDriver.ListAsync(Init, kept[name])).Select(entry => entry.Name).Order(StringComparer.Ordinal));
 
     [Then(@"^""(.*)"" belongs to ""(.*)"" with the mode (\d+)$")]
     public async Task ThenOwned(string path, string user, string mode)

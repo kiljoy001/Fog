@@ -256,7 +256,7 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     public async Task WhenLists(string path)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD).AsTask().WaitAsync(Bound);
-        await Init.DirReadAsync(fd);
+        await KernelDriver.ListAsync(Init, fd);
         await Init.CloseAsync(fd);
     }
 
@@ -463,7 +463,7 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     public async Task ThenNames(string path, string names)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD).AsTask().WaitAsync(Bound);
-        Assert.Equal(names, string.Join(' ', (await Init.DirReadAsync(fd)).Select(entry => entry.Name!).Order(StringComparer.Ordinal)));
+        Assert.Equal(names, string.Join(' ', (await KernelDriver.ListAsync(Init, fd)).Select(entry => entry.Name!).Order(StringComparer.Ordinal)));
     }
 
     [Then(@"^descriptor (\d+) is not open$")]

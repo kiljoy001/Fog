@@ -50,7 +50,7 @@ public sealed class FilesSteps(KernelDriver driver)
     public async Task GivenOpenForReading(string path) => Assert.Equal(0, await driver.Init.OpenAsync(path, NinePConstants.OREAD));
 
     [Given("it has listed descriptor 0")]
-    public async Task GivenListed() => Assert.NotEmpty(await driver.Init.DirReadAsync(0));
+    public async Task GivenListed() => Assert.NotEmpty(await KernelDriver.ListAsync(driver.Init, 0));
 
     [When(@"^the process binds ""(.*)"" onto ""([^""]*)""$")]
     public Task WhenBinds(string name, string old) => CallAsync(() => driver.Init.BindAsync(name, old, MountFlags.Replace).AsTask());
@@ -215,7 +215,7 @@ public sealed class FilesSteps(KernelDriver driver)
     public async Task ThenListingName(string path, string name)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal([Expand(name)], (await driver.Init.DirReadAsync(fd)).Select(e => e.Name));
+        Assert.Equal([Expand(name)], (await KernelDriver.ListAsync(driver.Init, fd)).Select(e => e.Name));
     }
 
     [Then(@"^the call fails with ""(.*)""$")]
@@ -223,7 +223,7 @@ public sealed class FilesSteps(KernelDriver driver)
 
     [Then(@"^listing descriptor 0 gives ""(.*)""$")]
     public async Task ThenListingDescriptor(string names)
-        => Assert.Equal(names, string.Join(' ', (await driver.Init.DirReadAsync(0)).Select(e => e.Name)));
+        => Assert.Equal(names, string.Join(' ', (await KernelDriver.ListAsync(driver.Init, 0)).Select(e => e.Name)));
 
     [Then(@"^the seek returns (\d+)$")]
     public void ThenSeekReturns(long expected) => Assert.Equal(expected, position);
@@ -238,7 +238,7 @@ public sealed class FilesSteps(KernelDriver driver)
     public async Task ThenListing(string path, string names)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(names, string.Join(' ', (await driver.Init.DirReadAsync(fd)).Select(e => e.Name)));
+        Assert.Equal(names, string.Join(' ', (await KernelDriver.ListAsync(driver.Init, fd)).Select(e => e.Name)));
     }
 
     [Then(@"^the parent still has descriptor 0$")]
