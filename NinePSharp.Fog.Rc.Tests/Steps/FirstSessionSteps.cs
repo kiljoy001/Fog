@@ -376,11 +376,21 @@ public sealed class FirstSessionSteps
         await RunAsOwnerAsync(script);
     }
 
-    // An rc script run by the host owner in a namespace of its own, which must succeed.
+    // An rc script run by the host owner in a namespace of its own, which must succeed within a
+    // minute, as fog must: a mount whose authentication never ends fails the scenario.
     private async Task RunAsOwnerAsync(string script)
     {
         Init.Fork(RforkFlags.Proc | RforkFlags.Fdg | RforkFlags.Nameg, child => child.ExecAsync("/bin/rc", ["rc", "-c", script]));
-        string status = (await Init.WaitAsync()).Message;
+        string status;
+        try
+        {
+            status = (await Init.WaitAsync().WaitAsync(TimeSpan.FromSeconds(60))).Message;
+        }
+        catch (TimeoutException)
+        {
+            status = "timed out";
+        }
+
         Assert.True(status.Length == 0, $"{status}\n{console.Text}");
     }
 
