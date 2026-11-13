@@ -43,6 +43,8 @@ public static class Newns
 
         // Stryker disable once Bitwise : nothing is read or written on the rpc, which is closed before anything could exec
         int afd = await ns.TryOpenAsync("/mnt/factotum/rpc", NinePConstants.ORDWR | NinePConstants.OCEXEC);
+
+        // Stryker disable once Conditional : an rpc on no descriptor fails its first write as a bad fd, so famount mounts all the same, as it does with none
         ns.Rpc = afd >= 0 ? new Libauth.AuthRpc(process, afd) : null;
         try
         {
