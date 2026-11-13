@@ -1,4 +1,12 @@
+using System.Buffers.Binary;
+using System.Net;
+using System.Net.Sockets;
+using Microsoft.Extensions.Logging.Abstractions;
+using NinePSharp.Constants;
 using NinePSharp.Fog.Client;
+using NinePSharp.Interfaces;
+using NinePSharp.Messages;
+using NinePSharp.Server;
 using Xunit;
 
 namespace NinePSharp.Fog.Rc.Tests;
@@ -81,9 +89,62 @@ public sealed class RcpuTests
         Assert.Equal(expected, Rcpu.Directory(local));
     }
 
-    private static Local Local(Func<string, string?> environment, string directory = "/", Dictionary<string, string>? drives = null) => new()
+    // A host whose 9P stops making sense, here with a message shorter than its header, is no longer
+    // served, though the call has not ended: the session is closed, and a read fog was waiting on
+    // for it, of its standard input, is given up.
+    [Fact]
+    public async Task AReadIsGivenUpWhenTheHostsMessagesStopMakingSense()
     {
-        Input = Stream.Null,
+        var input = new WaitingStream();
+        var export = new Export(Local(_ => null, input: input), CancellationToken.None);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var host = new TcpClient();
+        await host.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using TcpClient call = await listener.AcceptTcpClientAsync();
+        Task served = new NinePConnectionProcessor(NullLogger.Instance, export).ProcessStreamAsync(call.GetStream(), null, new NinePConnectionProcessor.ClientSession(), CancellationToken.None);
+        NetworkStream h = host.GetStream();
+        foreach (ISerializable t in new ISerializable[]
+        {
+            new Tversion(NinePConstants.NoTag, 8192, "9P2000"),
+            new Tattach(1, 0, NinePConstants.NoFid, "glenda", string.Empty),
+            new Twalk(2, 0, 1, ["fd", "10"]),
+            new Topen(3, 1, NinePConstants.OREAD),
+        })
+        {
+            await SendAsync(h, t);
+            Assert.NotEqual((byte)MessageTypes.Rerror, (await ReplyAsync(h))[4]);
+        }
+
+        await SendAsync(h, new Tread(4, 1, 0, 8192));
+        await input.Reading.WaitAsync(TimeSpan.FromSeconds(30));
+        byte[] runt = new byte[NinePConstants.HeaderSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(runt, 3);
+        await h.WriteAsync(runt);
+        await input.GivenUp.WaitAsync(TimeSpan.FromSeconds(30));
+        await served.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    private static async Task SendAsync(Stream s, ISerializable message)
+    {
+        byte[] bytes = new byte[message.Size];
+        message.WriteTo(bytes);
+        await s.WriteAsync(bytes);
+    }
+
+    private static async Task<byte[]> ReplyAsync(Stream s)
+    {
+        byte[] size = new byte[4];
+        await s.ReadExactlyAsync(size);
+        byte[] reply = new byte[BinaryPrimitives.ReadUInt32LittleEndian(size)];
+        size.CopyTo(reply, 0);
+        await s.ReadExactlyAsync(reply.AsMemory(4));
+        return reply;
+    }
+
+    private static Local Local(Func<string, string?> environment, string directory = "/", Dictionary<string, string>? drives = null, Stream? input = null) => new()
+    {
+        Input = input ?? Stream.Null,
         Output = Stream.Null,
         Error = Stream.Null,
         Directory = directory,
@@ -94,4 +155,53 @@ public sealed class RcpuTests
         WriteConsole = (_, _) => ValueTask.CompletedTask,
         Drives = drives ?? new Dictionary<string, string>(),
     };
+
+    // Standard input with nothing to give: a read waits until it is given up.
+    private sealed class WaitingStream : Stream
+    {
+        private readonly TaskCompletionSource reading = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource givenUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Reading => reading.Task;
+
+        public Task GivenUp => givenUp.Task;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            reading.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                givenUp.TrySetResult();
+                throw;
+            }
+
+            return 0;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 }
