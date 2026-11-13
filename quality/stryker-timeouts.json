@@ -2158,5 +2158,13 @@
     "commit": "f4331e668b55",
     "print": "10be35f1e9540780",
     "reason": "the answered request stays in the queue and every later reply searches past it, so the count that sees a tag used again, the one test that tells, slows quadratically past the timeout; it is killed once given time to finish"
+  },
+  {
+    "file": "Diff.cs",
+    "mutator": "MultiplyAssignmentExpression to DivideAssignmentExpression mutation",
+    "line": "for (int i = 1; i <= n; i *= 2)",
+    "commit": "f4331e668b55",
+    "print": "29d90a3221722b2e",
+    "reason": "the gap halved from 1 is 0, which never passes n, so shellsort's loop for its first gap never ends"
   }
 ]
