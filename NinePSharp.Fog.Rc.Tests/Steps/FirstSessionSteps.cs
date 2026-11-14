@@ -293,6 +293,9 @@ public sealed class FirstSessionSteps
             ["sys/lib/newuser"] = Services.Newuser,
             ["lib/ndb/local"] = $"ipnet={domain} ip=127.0.0.0 ipmask=255.0.0.0\n\tauth=127.0.0.1\n\tauthdom={domain}\n",
         };
+
+        // Within a minute, so a boot whose cpurc never ends, as one whose backquote's pipe is never
+        // closed, fails its scenario rather than hangs the run.
         host = await FogHost.BootAsync(new FogHostSettings(StoreFile, owner)
         {
             StoreBlocks = 4096,
@@ -303,7 +306,7 @@ public sealed class FirstSessionSteps
             Console = console,
             Nvram = new HostNvram(Nvram()),
             Loaders = [new WasmLoader(TimeProvider.System).LoadAsync],
-        });
+        }).WaitAsync(TimeSpan.FromSeconds(60));
         Assert.True(host.BootStatus.Length == 0, host.BootStatus);
 
         // listen announces tcp17019 in a process of its own after cpurc has ended.
