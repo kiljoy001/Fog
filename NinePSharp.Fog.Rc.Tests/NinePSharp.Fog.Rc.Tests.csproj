@@ -28,6 +28,13 @@
     <ProjectReference Include="..\NinePSharp.Fog.Wasm\NinePSharp.Fog.Wasm.csproj" />
   </ItemGroup>
 
+  <!-- The test host's heap stops at 4 GB, as the suite needs some 300 MB: a mutant that grows a
+       table without end runs out of memory in seconds, failing its test or crashing its host,
+       rather than taking the gate's memory for minutes beside the other mutants' hosts. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.HeapHardLimit" Value="4294967296" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\NinePSharp.Fog.Wasm.Tests\Fixtures\echo-args.wasm;..\NinePSharp.Fog.Wasm.Tests\Fixtures\exit-3.wasm" LinkBase="Data\wasm" CopyToOutputDirectory="PreserveNewest" />
