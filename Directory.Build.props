@@ -22,4 +22,17 @@
     </PackageReference>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
   </ItemGroup>
+
+  <!-- Every test project runs its tests in order of their names, wherever it is checked out. -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <Compile Condition="'$(MSBuildProjectName)' != 'NinePSharp.Fog.Kernel.Tests'" Include="$(MSBuildThisFileDirectory)NinePSharp.Fog.Kernel.Tests/Support/NameOrder.cs" Link="Support/NameOrder.cs" />
+    <AssemblyAttribute Include="Xunit.TestCollectionOrdererAttribute">
+      <_Parameter1>NinePSharp.Fog.Kernel.Tests.Support.NameOrder</_Parameter1>
+      <_Parameter2>$(MSBuildProjectName)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="Xunit.TestCaseOrdererAttribute">
+      <_Parameter1>NinePSharp.Fog.Kernel.Tests.Support.NameOrder</_Parameter1>
+      <_Parameter2>$(MSBuildProjectName)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

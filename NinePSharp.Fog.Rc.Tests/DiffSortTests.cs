@@ -7,6 +7,8 @@ namespace NinePSharp.Fog.Rc.Tests;
 // around them left where they are.
 public sealed class DiffSortTests
 {
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
@@ -16,7 +18,7 @@ public sealed class DiffSortTests
     [InlineData(25)]
     [InlineData(64)]
     [InlineData(100)]
-    public void SortOrdersByValueThenSerial(int n)
+    public async Task SortOrdersByValueThenSerial(int n)
     {
         var random = new Random(n);
         for (int round = 0; round < 20; round++)
@@ -31,7 +33,9 @@ public sealed class DiffSortTests
             }
 
             Diff.Line[] unsorted = [.. f];
-            Diff.Sort(f, 0, n);
+
+            // On the pool, so a sort that never ends fails its test, not hangs the run.
+            await Task.Run(() => Diff.Sort(f, 0, n)).WaitAsync(Bound);
             Assert.Equal(unsorted[1..(n + 1)].OrderBy(l => l.Value).ThenBy(l => l.Serial), f[1..(n + 1)]);
             Assert.Equal((unsorted[0], unsorted[n + 1], unsorted[n + 2]), (f[0], f[n + 1], f[n + 2]));
         }
