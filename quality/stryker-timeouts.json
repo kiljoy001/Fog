@@ -2166,5 +2166,21 @@
     "commit": "f4331e668b55",
     "print": "29d90a3221722b2e",
     "reason": "the gap halved from 1 is 0, which never passes n, so shellsort's loop for its first gap never ends"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Negate expression",
+    "line": "if (i > nfields)",
+    "commit": "6f8665a0e806",
+    "print": "5e474659fc7ca624",
+    "reason": "the field table doubles at every field setting a field meets, which changes no output until the heap runs out; it ends by out of memory, as a failed test or a crashed test host, or by its test's bound, whichever comes first"
+  },
+  {
+    "file": "AwkTran.cs",
+    "mutator": "Negate expression",
+    "line": "if (i > nfields)",
+    "commit": "6f8665a0e806",
+    "print": "da8367cd2a6a90bc",
+    "reason": "the field table doubles at every field splitting a record by a regular expression meets, which changes no output until the heap runs out; it ends by out of memory, as a failed test or a crashed test host, or by its test's bound, whichever comes first"
   }
 ]
