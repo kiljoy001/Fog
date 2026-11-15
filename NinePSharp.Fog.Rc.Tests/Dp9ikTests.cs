@@ -342,18 +342,18 @@ public sealed class Dp9ikTests : IAsyncLifetime
         await KeyAsync("/tmp/a", "key proto=dp9ik user=glenda dom=fog confirm=yes !password=glendapw");
         int confirm = await init.OpenAsync("/tmp/a/factotum/confirm", NinePConstants.ORDWR);
         Conv client = await ConvAsync("/tmp/a", "proto=p9any role=client");
-        await init.WriteAsync(client.Fd, "write dp9ik@fog\0"u8.ToArray());
+        await init.WriteAsync(client.Fd, "write dp9ik@fog\0"u8.ToArray()).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Task<ReadOnlyMemory<byte>> waiting = init.ReadAsync(client.Fd, 8192).AsTask();
         string asked = Encoding.UTF8.GetString((await init.ReadAsync(confirm, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Span);
-        await init.WriteAsync(confirm, Encoding.UTF8.GetBytes($"{asked.Split(' ')[1]} answer=yes"));
+        await init.WriteAsync(confirm, Encoding.UTF8.GetBytes($"{asked.Split(' ')[1]} answer=yes")).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("ok", Encoding.UTF8.GetString((await waiting.WaitAsync(TimeSpan.FromSeconds(5))).Span));
 
         Conv server = await ConvAsync("/tmp/a", "proto=p9any role=server");
         await server.CallAsync("read");
-        await init.WriteAsync(server.Fd, "write dp9ik fog\0"u8.ToArray());
+        await init.WriteAsync(server.Fd, "write dp9ik fog\0"u8.ToArray()).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         waiting = init.ReadAsync(server.Fd, 8192).AsTask();
         asked = Encoding.UTF8.GetString((await init.ReadAsync(confirm, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Span);
-        await init.WriteAsync(confirm, Encoding.UTF8.GetBytes($"{asked.Split(' ')[1]} answer=yes"));
+        await init.WriteAsync(confirm, Encoding.UTF8.GetBytes($"{asked.Split(' ')[1]} answer=yes")).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("ok", Encoding.UTF8.GetString((await waiting.WaitAsync(TimeSpan.FromSeconds(5))).Span));
 
         // The protocol's own toosmall, needkey and error come through as they are.
@@ -589,11 +589,11 @@ public sealed class Dp9ikTests : IAsyncLifetime
         await KeyAsync("/tmp/a", "key proto=dp9ik user=bob dom=fog confirm=yes !password=bobpassw");
         int confirm = await init.OpenAsync("/tmp/a/factotum/confirm", NinePConstants.ORDWR);
         byte[] pakreq = await PakreqAsync(client, server);
-        await client.Process.WriteAsync(client.Fd, (byte[])[.. "write "u8, .. pakreq]);
+        await client.Process.WriteAsync(client.Fd, (byte[])[.. "write "u8, .. pakreq]).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Task<ReadOnlyMemory<byte>> waiting = client.Process.ReadAsync(client.Fd, 8192).AsTask();
         string asked = Encoding.UTF8.GetString((await init.ReadAsync(confirm, 8192).AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Span);
         Assert.Contains("user=bob", asked, StringComparison.Ordinal);
-        await init.WriteAsync(confirm, Encoding.UTF8.GetBytes($"{asked.Split(' ')[1]} answer=yes"));
+        await init.WriteAsync(confirm, Encoding.UTF8.GetBytes($"{asked.Split(' ')[1]} answer=yes")).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("ok", Encoding.UTF8.GetString((await waiting.WaitAsync(TimeSpan.FromSeconds(5))).Span));
     }
 
@@ -1312,7 +1312,7 @@ public sealed class Dp9ikTests : IAsyncLifetime
         // The verb and its argument written, and the answer read: its first word, and what follows.
         public async Task<(string Status, byte[] Data)> CallAsync(string verb, byte[]? arg = null, int count = 8192)
         {
-            await process.WriteAsync(fd, arg is null ? Encoding.UTF8.GetBytes(verb) : [.. Encoding.UTF8.GetBytes(verb + " "), .. arg]);
+            await process.WriteAsync(fd, arg is null ? Encoding.UTF8.GetBytes(verb) : [.. Encoding.UTF8.GetBytes(verb + " "), .. arg]).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
             byte[] r = (await process.ReadAsync(fd, count).AsTask().WaitAsync(TimeSpan.FromSeconds(10))).ToArray();
             int space = Array.IndexOf(r, (byte)' ');
             return space < 0 ? (Encoding.UTF8.GetString(r), []) : (Encoding.UTF8.GetString(r, 0, space), r[(space + 1)..]);
