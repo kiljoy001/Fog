@@ -134,7 +134,7 @@ public static class FogDispatcherFuzz
                     }
 
                     case 1:
-                        dispatcher.CloseSessionAsync(Session).GetAwaiter().GetResult();
+                        dispatcher.CloseSessionAsync(Session).WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
                         exists = ready = false;
                         owners.Clear();
                         continue;
@@ -260,7 +260,9 @@ public static class FogDispatcherFuzz
         }
         finally
         {
-            dispatcher.CloseSessionAsync(Session).GetAwaiter().GetResult();
+            // A request left unanswered is already a finding; the close that drains it is bounded too, so
+            // the finding fails the run rather than hangs it.
+            dispatcher.CloseSessionAsync(Session).WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
         }
 
         return (commits, TotalEffects(effects));

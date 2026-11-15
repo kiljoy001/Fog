@@ -156,7 +156,7 @@ public static class FogFileFuzz
         }
         finally
         {
-            dispatcher.CloseSessionAsync("fuzz").GetAwaiter().GetResult();
+            dispatcher.CloseSessionAsync("fuzz").WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
         }
     }
 
