@@ -21,7 +21,7 @@ public sealed class FileStatusSteps(KernelDriver driver)
     public async Task GivenOpen(string path) => Assert.Equal(0, await driver.Init.OpenAsync(path, NinePConstants.ORDWR));
 
     [When(@"^it preads (\d+) bytes at offset (-?\d+)$")]
-    public async Task WhenPread(int count, long offset) => read = Encoding.UTF8.GetString((await driver.Init.PReadAsync(0, count, offset)).Span);
+    public async Task WhenPread(int count, long offset) => read = Encoding.UTF8.GetString((await driver.Init.PReadAsync(0, count, offset).AsTask().WaitAsync(KernelDriver.Bound)).Span);
 
     [Given(@"^it pwrites ""(.*)"" at offset (-?\d+)$")]
     [When(@"^it pwrites ""(.*)"" at offset (-?\d+)$")]
@@ -87,13 +87,13 @@ public sealed class FileStatusSteps(KernelDriver driver)
     public void ThenPread(string text) => Assert.Equal(text, read);
 
     [Then(@"^reading descriptor 0 gives ""(.*)""$")]
-    public async Task ThenReadingDescriptor(string text) => Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(0, 100)).Span));
+    public async Task ThenReadingDescriptor(string text) => Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(0, 100).AsTask().WaitAsync(KernelDriver.Bound)).Span));
 
     [Then(@"^reading ""(.*)"" gives ""(.*)""$")]
     public async Task ThenReadingPath(string path, string text)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(fd, 100)).Span));
+        Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(fd, 100).AsTask().WaitAsync(KernelDriver.Bound)).Span));
         await driver.Init.CloseAsync(fd);
     }
 
@@ -114,7 +114,7 @@ public sealed class FileStatusSteps(KernelDriver driver)
 
     [Then(@"^preading (\d+) bytes at (\d+) gives the bytes (.*)$")]
     public async Task ThenPreading(int count, long offset, string bytes)
-        => Assert.Equal(bytes.Split(' ').Select(byte.Parse).ToArray(), (await driver.Init.PReadAsync(0, count, offset)).ToArray());
+        => Assert.Equal(bytes.Split(' ').Select(byte.Parse).ToArray(), (await driver.Init.PReadAsync(0, count, offset).AsTask().WaitAsync(KernelDriver.Bound)).ToArray());
 
     [Then(@"^preading (\d+) bytes at (\d+) fails with ""(.*)""$")]
     public async Task ThenPreadingFails(int count, long offset, string message)

@@ -229,7 +229,7 @@ public sealed class FilesSteps(KernelDriver driver)
     public void ThenSeekReturns(long expected) => Assert.Equal(expected, position);
 
     [Then(@"^reading descriptor 0 gives ""(.*)""$")]
-    public async Task ThenReadingGives(string text) => Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(0, 100)).Span));
+    public async Task ThenReadingGives(string text) => Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(0, 100).AsTask().WaitAsync(KernelDriver.Bound)).Span));
 
     [Then(@"^reading ""(.*)"" gives ""(.*)""$")]
     public async Task ThenReadingPathGives(string path, string text) => Assert.Equal(text, await ReadAsync(driver.Init, path));
@@ -299,7 +299,7 @@ public sealed class FilesSteps(KernelDriver driver)
     private static async Task<string> ReadAsync(Process process, string path)
     {
         int fd = await process.OpenAsync(path, NinePConstants.OREAD);
-        string text = Encoding.UTF8.GetString((await process.ReadAsync(fd, 100)).Span);
+        string text = Encoding.UTF8.GetString((await process.ReadAsync(fd, 100).AsTask().WaitAsync(KernelDriver.Bound)).Span);
         await process.CloseAsync(fd);
         return text;
     }

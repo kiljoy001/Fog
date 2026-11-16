@@ -125,7 +125,7 @@ public sealed class BootSteps(KernelDriver driver)
     private async Task<string> ReadAsync(string path)
     {
         int fd = await driver.Init.OpenAsync(path, NinePConstants.OREAD);
-        string contents = Encoding.UTF8.GetString((await driver.Init.ReadAsync(fd, 8192)).Span);
+        string contents = Encoding.UTF8.GetString((await driver.Init.ReadAsync(fd, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Span);
         await driver.Init.CloseAsync(fd);
         return contents;
     }

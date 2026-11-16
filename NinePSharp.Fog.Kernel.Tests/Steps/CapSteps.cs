@@ -55,7 +55,7 @@ public sealed partial class CapSteps(KernelDriver driver)
     public Task WhenReads(string path) => RecordAsync(async () =>
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        await Init.ReadAsync(fd, 64);
+        await Init.ReadAsync(fd, 64).AsTask().WaitAsync(KernelDriver.Bound);
     });
 
     [When(@"^the process writes (\d+) bytes to ""(.*)""$")]

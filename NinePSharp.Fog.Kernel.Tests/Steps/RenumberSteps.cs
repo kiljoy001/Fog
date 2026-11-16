@@ -16,7 +16,7 @@ public sealed class RenumberSteps(KernelDriver driver)
     public async Task GivenTwoOpen(string first, string second)
     {
         Assert.Equal(0, await driver.Init.OpenAsync(first, NinePConstants.OREAD));
-        await driver.Init.ReadAsync(0, 2);
+        await driver.Init.ReadAsync(0, 2).AsTask().WaitAsync(KernelDriver.Bound);
         Assert.Equal(1, await driver.Init.OpenAsync(second, NinePConstants.OREAD));
     }
 
@@ -42,7 +42,7 @@ public sealed class RenumberSteps(KernelDriver driver)
     }
 
     [Then(@"^reading descriptor (\d+) gives ""(.*)""$")]
-    public async Task ThenReading(int fd, string text) => Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(fd, 100)).Span));
+    public async Task ThenReading(int fd, string text) => Assert.Equal(text, Encoding.UTF8.GetString((await driver.Init.ReadAsync(fd, 100).AsTask().WaitAsync(KernelDriver.Bound)).Span));
 
     [Then(@"^reading descriptor (\d+) fails with ""(.*)""$")]
     public async Task ThenReadingFails(int fd, string message)

@@ -83,7 +83,7 @@ public sealed class ConsDeviceTests
         int fd = await init.OpenAsync("/dev/cons", NinePSharp.Constants.NinePConstants.OREAD);
         Assert.Equal(0, (await init.ReadAsync(fd, 0).AsTask().WaitAsync(TimeSpan.FromSeconds(1))).Length);
         console.Type("typed\n");
-        Assert.Equal("typed\n", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 10)).Span));
+        Assert.Equal("typed\n", System.Text.Encoding.UTF8.GetString((await init.ReadAsync(fd, 10).AsTask().WaitAsync(TimeSpan.FromSeconds(3))).Span));
 
         int user = await init.OpenAsync("/dev/user", NinePSharp.Constants.NinePConstants.OWRITE);
         await init.WriteAsync(user, "none"u8.ToArray());
@@ -178,11 +178,7 @@ public sealed class ConsDeviceTests
         int ctl = await init.OpenAsync("/dev/consctl", NinePSharp.Constants.NinePConstants.OWRITE);
         Task<ReadOnlyMemory<byte>> read = init.ReadAsync(cons, 10).AsTask();
         console.Type("a");
-        while (console.Unread != 0)
-        {
-            await Task.Delay(1);
-        }
-
+        await DrainedAsync(console);
         Task closed = init.CloseAsync(ctl).AsTask();
         await Task.Delay(100);
         Assert.False(closed.IsCompleted);
@@ -336,14 +332,22 @@ public sealed class ConsDeviceTests
         console.Type(typed);
         using var cancel = new CancellationTokenSource();
         Task<ReadOnlyMemory<byte>> read = process.ReadAsync(fd, 10, cancel.Token).AsTask();
-        while (console.Unread != 0)
+        await DrainedAsync(console);
+        await Task.Delay(20);
+        await cancel.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read.WaitAsync(TimeSpan.FromSeconds(3)));
+    }
+
+    // Waits for a read to take what was typed, within a bound: a kernel that never reads the console
+    // fails the test rather than hangs it.
+    private static async Task DrainedAsync(Support.TypingConsole console)
+    {
+        for (int waited = 0; console.Unread != 0 && waited < 3000; waited++)
         {
             await Task.Delay(1);
         }
 
-        await Task.Delay(20);
-        await cancel.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read);
+        Assert.Equal(0, console.Unread);
     }
 
     private static async Task<string> ReadAsync(Process process, int fd, int count)

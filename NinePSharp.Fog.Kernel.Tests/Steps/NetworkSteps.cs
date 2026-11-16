@@ -162,7 +162,7 @@ public sealed class NetworkSteps(KernelDriver driver) : IAsyncDisposable
     public Task WhenChildReads() => ChildWaitsAsync(async (child, begun) =>
     {
         int data = await child.OpenAsync($"/net/tcp/{callNumber}/data", NinePConstants.ORDWR);
-        await child.ReadAsync(data, 64);
+        await child.ReadAsync(data, 64).AsTask().WaitAsync(KernelDriver.Bound);
         Task read = child.ReadAsync(data, 64).AsTask();
         begun();
         await read;
@@ -277,7 +277,7 @@ public sealed class NetworkSteps(KernelDriver driver) : IAsyncDisposable
     public async Task ThenLocalPastEnd(int offset)
     {
         int fd = await Init.OpenAsync($"/net/tcp/{callNumber}/local", NinePConstants.OREAD);
-        Assert.True((await Init.PReadAsync(fd, 128, offset)).IsEmpty);
+        Assert.True((await Init.PReadAsync(fd, 128, offset).AsTask().WaitAsync(KernelDriver.Bound)).IsEmpty);
         await Init.CloseAsync(fd);
     }
 
@@ -370,7 +370,7 @@ public sealed class NetworkSteps(KernelDriver driver) : IAsyncDisposable
     }
 
     private static async Task<string> ReadAsync(Process process, int fd)
-        => Encoding.UTF8.GetString((await process.PReadAsync(fd, 128, 0)).Span);
+        => Encoding.UTF8.GetString((await process.PReadAsync(fd, 128, 0).AsTask().WaitAsync(KernelDriver.Bound)).Span);
 
     private static async Task<string> ReadFileAsync(Process process, string path)
     {

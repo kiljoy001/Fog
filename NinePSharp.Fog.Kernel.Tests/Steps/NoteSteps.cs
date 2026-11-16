@@ -167,7 +167,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
     public void WhenLetGoRead(int count, string path) => childRead = child!.Do(async p =>
     {
         int fd = await p.OpenAsync(path, NinePConstants.OREAD);
-        return (await p.PReadAsync(fd, count, 0)).Length;
+        return (await p.PReadAsync(fd, count, 0).AsTask().WaitAsync(KernelDriver.Bound)).Length;
     });
 
     [When(@"^the child sets alarms of (\d+), (\d+) and (\d+) milliseconds$")]
@@ -379,7 +379,7 @@ public sealed class NoteSteps(KernelDriver driver) : IAsyncDisposable
         int fd = await process.OpenAsync(path, NinePConstants.OREAD);
         try
         {
-            return Encoding.UTF8.GetString((await process.ReadAsync(fd, 256)).Span);
+            return Encoding.UTF8.GetString((await process.ReadAsync(fd, 256).AsTask().WaitAsync(KernelDriver.Bound)).Span);
         }
         finally
         {

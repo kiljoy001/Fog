@@ -71,7 +71,7 @@ public sealed class DeviceNameSteps(KernelDriver driver)
     public async Task ThenReads(string path, string text)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(text, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 256)).Span));
+        Assert.Equal(text, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 256).AsTask().WaitAsync(KernelDriver.Bound)).Span));
         await Init.CloseAsync(fd);
     }
 
@@ -79,7 +79,7 @@ public sealed class DeviceNameSteps(KernelDriver driver)
     public async Task ThenNamespaceFile()
     {
         int fd = await Init.OpenAsync("/lib/namespace", NinePConstants.OREAD);
-        Assert.Equal(FogKernel.NamespaceFile, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 8192)).Span));
+        Assert.Equal(FogKernel.NamespaceFile, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Span));
         await Init.CloseAsync(fd);
     }
 

@@ -125,14 +125,14 @@ public sealed class SrvSteps(KernelDriver driver)
     public async Task WhenOpensClone()
     {
         clone = await Init.OpenAsync("/srv/clone", NinePConstants.OREAD);
-        board = Encoding.UTF8.GetString((await Init.ReadAsync(clone, 64)).Span);
+        board = Encoding.UTF8.GetString((await Init.ReadAsync(clone, 64).AsTask().WaitAsync(KernelDriver.Bound)).Span);
     }
 
     [When(@"^the process opens ""(.*)"" as the lease ""(.*)""$")]
     public async Task WhenOpensLease(string path, string lease)
     {
         int fd = await Init.OpenAsync(Expand(path), NinePConstants.OREAD);
-        leases[lease] = (fd, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 64)).Span));
+        leases[lease] = (fd, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 64).AsTask().WaitAsync(KernelDriver.Bound)).Span));
     }
 
     [When(@"^the process closes the lease ""(.*)""$")]
@@ -263,7 +263,7 @@ public sealed class SrvSteps(KernelDriver driver)
 
     [Then(@"^the lease ""(.*)"" read from offset (\d+) gives ""(.*)""$")]
     public async Task ThenLeaseFrom(string lease, int offset, string text)
-        => Assert.Equal(text, Encoding.UTF8.GetString((await Init.PReadAsync(leases[lease].Fd, 64, offset)).Span));
+        => Assert.Equal(text, Encoding.UTF8.GetString((await Init.PReadAsync(leases[lease].Fd, 64, offset).AsTask().WaitAsync(KernelDriver.Bound)).Span));
 
     [Then(@"^the names in what ""(.*)"" holds are ""(.*)""$")]
     public async Task ThenKeptNames(string name, string names)

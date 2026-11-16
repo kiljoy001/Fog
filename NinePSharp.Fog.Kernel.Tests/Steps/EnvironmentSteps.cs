@@ -57,7 +57,7 @@ public sealed class EnvironmentSteps(KernelDriver driver)
     public async Task ThenHolds(string path, string text)
     {
         int fd = await Init.OpenAsync(path, NinePConstants.OREAD);
-        Assert.Equal(text, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 128)).Span));
+        Assert.Equal(text, Encoding.UTF8.GetString((await Init.ReadAsync(fd, 128).AsTask().WaitAsync(KernelDriver.Bound)).Span));
         await Init.CloseAsync(fd);
     }
 

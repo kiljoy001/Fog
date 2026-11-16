@@ -60,7 +60,7 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
     {
         int fd = await Init.OpenAsync($"/proc/{Init.Pid}/fd", NinePConstants.OREAD);
         var fds = new StringBuilder();
-        for (ReadOnlyMemory<byte> b; !(b = await Init.ReadAsync(fd, 8192)).IsEmpty;)
+        for (ReadOnlyMemory<byte> b; !(b = await Init.ReadAsync(fd, 8192).AsTask().WaitAsync(KernelDriver.Bound)).IsEmpty;)
         {
             fds.Append(Encoding.UTF8.GetString(b.Span));
         }
@@ -479,7 +479,7 @@ public sealed class MountSteps(KernelDriver driver) : IAsyncDisposable
             node = (await node.WalkAsync(name, CancellationToken.None))!;
         }
 
-        Assert.Equal(contents, Encoding.UTF8.GetString(await node.ReadAsync(0, 8192, CancellationToken.None)));
+        Assert.Equal(contents, Encoding.UTF8.GetString(await node.ReadAsync(0, 8192, CancellationToken.None).WaitAsync(KernelDriver.Bound)));
     }
 
     [Then(@"^""(.*)"" is a (file|directory) of device ""(.)""$")]

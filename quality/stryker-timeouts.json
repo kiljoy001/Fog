@@ -1025,6 +1025,14 @@
   },
   {
     "file": "Keyboard.cs",
+    "mutator": "Statement mutation",
+    "line": "lk.Release();",
+    "commit": "fa21cce7a232",
+    "print": "274378349950e183",
+    "reason": "kbd's lock never let go leaves the next open, close, read or write of the console waiting for ever"
+  },
+  {
+    "file": "Keyboard.cs",
     "mutator": "Conditional (false) mutation",
     "line": "a = space < 0 ? -1 : a + space + 1;",
     "commit": "b63f6d544399",

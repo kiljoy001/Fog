@@ -104,7 +104,7 @@ public sealed class ProcessSteps
     }
 
     [Given("descriptor 3 has been read to the end")]
-    public async Task GivenReadToEnd() => Assert.False((await init!.ReadAsync(3, 8192)).IsEmpty);
+    public async Task GivenReadToEnd() => Assert.False((await init!.ReadAsync(3, 8192).AsTask().WaitAsync(KernelDriver.Bound)).IsEmpty);
 
     [Given(@"^a process that writes ""(.*)"" to ""(.*)""$")]
     public Task GivenProcessWrites(string contents, string path) => WriteAsync(path, contents);
@@ -366,7 +366,7 @@ public sealed class ProcessSteps
     public void ThenFails(string message) => Assert.Equal(message, failure);
 
     [Then("descriptor 3 is still open in the parent")]
-    public async Task ThenStillOpen() => Assert.Equal("d", Encoding.UTF8.GetString((await init!.ReadAsync(3, 1)).Span));
+    public async Task ThenStillOpen() => Assert.Equal("d", Encoding.UTF8.GetString((await init!.ReadAsync(3, 1).AsTask().WaitAsync(KernelDriver.Bound)).Span));
 
     [Then("descriptor 3 is closed in the parent")]
     public async Task ThenClosed()
@@ -387,14 +387,14 @@ public sealed class ProcessSteps
 
     [Then(@"^reading descriptor 3 gives ""(.*)""$")]
     public async Task ThenReadingThreeGives(string contents)
-        => Assert.Equal(contents, Encoding.UTF8.GetString((await init!.ReadAsync(3, 8192)).Span));
+        => Assert.Equal(contents, Encoding.UTF8.GetString((await init!.ReadAsync(3, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Span));
 
     [Then(@"^reading descriptor 3 two bytes at a time gives ""(.*)"", ""(.*)"", ""(.*)"" and then nothing$")]
     public async Task ThenReadingInPieces(string first, string second, string third)
     {
         foreach (string piece in new[] { first, second, third, string.Empty })
         {
-            Assert.Equal(piece, Encoding.UTF8.GetString((await init!.ReadAsync(3, 2)).Span));
+            Assert.Equal(piece, Encoding.UTF8.GetString((await init!.ReadAsync(3, 2).AsTask().WaitAsync(KernelDriver.Bound)).Span));
         }
     }
 
@@ -426,7 +426,7 @@ public sealed class ProcessSteps
     private static async Task<string> ReadAsync(Process process, string path)
     {
         int fd = await process.OpenAsync(path, NinePConstants.OREAD);
-        string contents = Encoding.UTF8.GetString((await process.ReadAsync(fd, 8192)).Span);
+        string contents = Encoding.UTF8.GetString((await process.ReadAsync(fd, 8192).AsTask().WaitAsync(KernelDriver.Bound)).Span);
         await process.CloseAsync(fd);
         return contents;
     }

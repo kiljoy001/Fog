@@ -266,7 +266,7 @@ public sealed class ConsoleSteps(KernelDriver driver)
     private static async Task<string> ReadAsync(Process process, string path, int count)
     {
         int fd = await process.OpenAsync(path, NinePConstants.OREAD);
-        string text = Encoding.UTF8.GetString((await process.ReadAsync(fd, count)).Span);
+        string text = Encoding.UTF8.GetString((await process.ReadAsync(fd, count).AsTask().WaitAsync(KernelDriver.Bound)).Span);
         await process.CloseAsync(fd);
         return text;
     }
