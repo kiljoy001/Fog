@@ -537,6 +537,14 @@
   },
   {
     "file": "Tree.cs",
+    "mutator": "Statement mutation",
+    "line": "j++;",
+    "commit": "fa21cce7a232",
+    "print": "2ae5e6285fab58d6",
+    "reason": "Absorb pulls the same following message for the key forever, so the leaf's update never ends"
+  },
+  {
+    "file": "Tree.cs",
     "mutator": "Equality mutation",
     "line": "if (at == 1 && pp?.Left is not null && pp.Right is null && pp.Npull == p.B.MessageCount",
     "commit": "71fa94b4bbc2",
