@@ -2198,5 +2198,45 @@
     "commit": "6f8665a0e806",
     "print": "da8367cd2a6a90bc",
     "reason": "the field table doubles at every field splitting a record by a regular expression meets, which changes no output until the heap runs out; it ends by out of memory, as a failed test or a crashed test host, or by its test's bound, whichever comes first"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Boolean mutation",
+    "line": "Eof = true;",
+    "commit": "fa21cce7a232",
+    "print": "2db58c32eacc4a6a",
+    "reason": "end of file is returned without Eof set, so rc reads it forever"
+  },
+  {
+    "file": "RcLexer.cs",
+    "mutator": "Negate expression",
+    "line": "while (LastC != '\\n' && LastC != EndOfFile)",
+    "commit": "fa21cce7a232",
+    "print": "f16726d9ebc5ef9d",
+    "reason": "the rest of a bad line is kept rather than skipped, and an error at the end of the input advances past it forever"
+  },
+  {
+    "file": "RcShell.Fork.cs",
+    "mutator": "Arithmetic mutation",
+    "line": "child.Start(child.runq!.Code, child.runq.Pc + 1, child.runq.Local, child.runq.Redir);",
+    "commit": "fa21cce7a232",
+    "print": "70dcb47a215dab98",
+    "reason": "the subshell's child starts at the instruction that forked it, so it forks again, without end"
+  },
+  {
+    "file": "RcShell.Simple.cs",
+    "mutator": "Statement mutation",
+    "line": "Poplist();",
+    "commit": "fa21cce7a232",
+    "print": "4223bca85736f6ed",
+    "reason": "the arguments left behind become a for loop's list, one more each time round"
+  },
+  {
+    "file": "RcShell.cs",
+    "mutator": "Statement mutation",
+    "line": "return;",
+    "commit": "fa21cce7a232",
+    "print": "114c59649d01c418",
+    "reason": "a thread's only redirection is linked to itself, so doredir follows the list round until the stack overflows"
   }
 ]
